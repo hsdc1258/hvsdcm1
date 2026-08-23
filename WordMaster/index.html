@@ -679,7 +679,7 @@ window.WORDMASTER_WORDS = [{"id":"d01-01","day":1,"number":1,"word":"provide","m
     }
     window.HvsAccount?.api('/api/answers/accept', {
       method: 'POST',
-      body: JSON.stringify({ app: 'wordmaster', questionId: item.id, questionLabel: item.word, answer: input }),
+      body: JSON.stringify({ app: 'wordmaster', questionId: item.id, questionLabel: item.word, baseAnswer: item.meaning, answer: input }),
     }).catch(() => {});
     renderQuiz();
     showToast('이 답을 정답 표현으로 저장했습니다.');
