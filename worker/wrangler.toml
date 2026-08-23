@@ -5,7 +5,7 @@ compatibility_date = "2026-05-22"
 [[d1_databases]]
 binding = "DB"
 database_name = "hvsdcm"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "0a6320b7-e7b7-4c9d-b13e-cab8ef423dea"
 
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"

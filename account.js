@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const script=document.currentScript, app=script?.dataset.app, storageKey=script?.dataset.key;
-  const API=localStorage.getItem('hvsdcm.api')||'https://api.hvsdcm1.xyz';
+  const API=localStorage.getItem('hvsdcm.api')||'https://hvsdcm-api.hvsdcm1.workers.dev';
   const token=localStorage.getItem('hvsdcm.token');
   const headers=()=>({'content-type':'application/json','authorization':'Bearer '+(localStorage.getItem('hvsdcm.token')||'')});
   if(!app||!storageKey)return;
