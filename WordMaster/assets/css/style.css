@@ -236,6 +236,8 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .review-count { font-size: 36px; font-weight: 900; letter-spacing: -0.05em; margin: 4px 0 2px; }
 .review-box p { color: #d9aaa9; font-size: 13px; line-height: 1.55; margin-bottom: 15px; }
 .review-box .secondary-btn { width: 100%; background: rgba(255,255,255,.04); }
+.review-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.review-actions .secondary-btn,.review-actions .ghost-btn { width:100%; }
 
 .quiz-wrap { max-width: 760px; margin: 0 auto; }
 .quiz-head { margin-bottom: 22px; }

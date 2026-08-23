@@ -427,7 +427,7 @@
 
         <aside class="card">
           <h2>누적 기록</h2>
-          <p class="card-sub">이 기기 브라우저 기준입니다.</p>
+          <p class="card-sub">계정 DB에 저장된 누적 기록입니다.</p>
           <div class="stat-list">
             <div class="stat-box"><span>총 풀이</span><strong>${s.attempts.toLocaleString()}</strong></div>
             <div class="stat-box"><span>정답률</span><strong>${s.accuracy}%</strong></div>
@@ -435,8 +435,8 @@
           <div class="review-box">
             <span class="section-label">오답 노트</span>
             <div class="review-count">${s.wrongCount}</div>
-            <p>한 번이라도 틀린 항목입니다. 재시험에서 맞히면 오답 노트에서 빠집니다.</p>
-            <button id="reviewBtn" class="secondary-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button>
+            <p>틀린 단어와 정답을 먼저 보며 외우거나, 다시 시험칠 수 있습니다.</p>
+            <div class="review-actions"><button id="wrongStudyBtn" class="ghost-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 보고 외우기</button><button id="reviewBtn" class="secondary-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button></div>
           </div>
         </aside>
       </section>
@@ -449,6 +449,7 @@
       });
     });
     document.getElementById('startQuizBtn').addEventListener('click', startRangeQuiz);
+    document.getElementById('wrongStudyBtn').addEventListener('click', renderStatsPage);
     document.getElementById('reviewBtn').addEventListener('click', () => startReviewQuiz());
     requestAnimationFrame(() => app.focus());
   }
@@ -596,9 +597,9 @@
       <section class="modal-page">
         <div class="page-title-row">
           <div>
-            <p class="eyebrow">LOCAL STUDY DATA</p>
+            <p class="eyebrow">ACCOUNT STUDY DATA</p>
             <h2>학습 기록</h2>
-            <p>오답과 사용자 정답 표현은 브라우저의 localStorage에 저장됩니다.</p>
+            <p>학습 기록은 계정 DB에 저장되며, 현재 브라우저에는 빠른 실행을 위한 사본만 보관됩니다.</p>
           </div>
           <button id="statsBackBtn" class="ghost-btn compact" type="button">홈</button>
         </div>
@@ -620,8 +621,8 @@
         <div class="card" style="margin-top:16px">
           <div class="page-title-row" style="margin-bottom:12px">
             <div>
-              <h2 style="margin-bottom:4px">오답 노트</h2>
-              <p>${wrongEntries.length}개 항목</p>
+              <h2 style="margin-bottom:4px">오답 암기 노트</h2>
+              <p>${wrongEntries.length}개 · 단어와 정답을 보며 외운 뒤 재시험하세요.</p>
             </div>
             <button id="statsReviewBtn" class="primary-btn" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
           </div>
