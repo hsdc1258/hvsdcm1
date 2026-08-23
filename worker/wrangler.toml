@@ -1,0 +1,11 @@
+name = "hvsdcm-api"
+main = "src/index.js"
+compatibility_date = "2026-05-22"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hvsdcm"
+database_id = "REPLACE_AFTER_D1_CREATE"
+
+[vars]
+ALLOWED_ORIGIN = "https://hvsdcm1.xyz"
