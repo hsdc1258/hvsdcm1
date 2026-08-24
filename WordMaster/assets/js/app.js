@@ -1,6 +1,10 @@
 (() => {
   'use strict';
 
+  // words.js의 정적 데이터와 localStorage 기반 학습 상태를 연결하는 화면 컨트롤러다.
+  // 데이터 불변식(50 DAY × 40개)은 루트 검증 스크립트에서 별도로 확인한다.
+  const EXPECTED_WORD_COUNT = 2000;
+  const MAX_DAY = 50;
   const WORDS = Array.isArray(window.WORDMASTER_WORDS) ? window.WORDMASTER_WORDS : [];
   const WORD_BY_ID = new Map(WORDS.map((item) => [item.id, item]));
   const STORAGE_KEY = 'wordmaster2000.quiz.v1';
@@ -66,7 +70,7 @@
   function clampDay(value) {
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return 1;
-    return Math.min(50, Math.max(1, n));
+    return Math.min(MAX_DAY, Math.max(1, n));
   }
 
   function shuffle(items) {
@@ -721,7 +725,7 @@
     }
   });
 
-  if (WORDS.length !== 2000) {
+  if (WORDS.length !== EXPECTED_WORD_COUNT) {
     app.innerHTML = `<div class="card"><h2>데이터 로드 오류</h2><p>단어 데이터가 ${WORDS.length}개만 로드되었습니다.</p></div>`;
   } else {
     renderHome();

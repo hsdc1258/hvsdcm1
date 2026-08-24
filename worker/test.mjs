@@ -1,0 +1,220 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import worker from './src/index.js';
+import {
+  clientIp,
+  createToken,
+  issueSession,
+  normalizeAnswer,
+  passwordHash,
+  readJson,
+  sha256,
+} from './src/lib.js';
+
+test('client IP uses the Cloudflare address and enforces a storage limit', () => {
+  const request = new Request('https://api.test', {
+    headers: { 'cf-connecting-ip': '2001:db8::1234' },
+  });
+  assert.equal(clientIp(request), '2001:db8::1234');
+  assert.equal(clientIp(new Request('https://api.test')), 'unknown');
+  assert.equal(clientIp(new Request('https://api.test', {
+    headers: { 'cf-connecting-ip': '   ' },
+  })), 'unknown');
+  assert.equal(clientIp(new Request('https://api.test', {
+    headers: { 'cf-connecting-ip': 'a'.repeat(100) },
+  })).length, 64);
+});
+
+test('issued sessions persist IP and device metadata without storing the raw token', async () => {
+  const calls = [];
+  const env = {
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...values) {
+            calls.push({ sql, values });
+            return { async run() { return { success: true }; } };
+          },
+        };
+      },
+    },
+  };
+  const request = new Request('https://api.test', {
+    headers: {
+      'cf-connecting-ip': '203.0.113.7',
+      'user-agent': 'Example Browser',
+    },
+  });
+  const rawToken = await issueSession(env, 7, 'user', request);
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /ip_address/u);
+  assert.equal(calls[0].values[7], '203.0.113.7');
+  assert.equal(calls[0].values[8], 'Example Browser');
+  assert.notEqual(calls[0].values[0], rawToken);
+});
+
+test('answer normalization is stable for spacing and punctuation', () => {
+  assert.equal(normalizeAnswer('  사회·문화 (현상)! '), '사회문화현상');
+  assert.equal(normalizeAnswer('Ａ-B_C'), 'abc');
+});
+
+test('hash helpers are deterministic and tokens are URL-safe', async () => {
+  assert.equal(
+    await sha256('hvsdcm'),
+    'ce64ad5e16daaa12f3ca200b1179791133d48ae2803c3c70f087e3b7e77c27ed',
+  );
+  assert.equal(await passwordHash('password', 'salt'), await passwordHash('password', 'salt'));
+  assert.match(createToken(), /^[A-Za-z0-9_-]{43}$/);
+});
+
+test('invalid JSON request bodies resolve to an empty object', async () => {
+  const request = new Request('https://example.test/api', {
+    method: 'POST',
+    body: '{broken',
+  });
+  assert.deepEqual(await readJson(request), {});
+});
+
+test('OPTIONS and unknown routes include CORS headers', async () => {
+  const env = { ALLOWED_ORIGIN: 'https://example.test' };
+  const options = await worker.fetch(new Request('https://api.test/api/me', {
+    method: 'OPTIONS',
+  }), env);
+  assert.equal(options.status, 204);
+  assert.equal(options.headers.get('access-control-allow-origin'), env.ALLOWED_ORIGIN);
+
+  const missing = await worker.fetch(new Request('https://api.test/not-found'), env);
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: 'Not found' });
+  assert.equal(missing.headers.get('access-control-allow-origin'), env.ALLOWED_ORIGIN);
+});
+
+test('admin login rejects an incorrect password before issuing a session', async () => {
+  const env = {
+    ADMIN_PASSWORD: 'correct-password',
+    ALLOWED_ORIGIN: 'https://example.test',
+  };
+  const response = await worker.fetch(new Request('https://api.test/api/admin/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'wrong-password' }),
+  }), env);
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: '비밀번호가 올바르지 않습니다.' });
+});
+
+test('admin session route returns device metadata without token hashes', async () => {
+  const timestamp = Date.now();
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        return {
+          bind() {
+            if (sql.includes('SELECT s.*, u.username')) {
+              return { async first() { return { token_hash: 'stored-admin-hash', role: 'admin', disabled: 0 }; } };
+            }
+            if (sql.includes('UPDATE sessions')) {
+              return { async run() { return { success: true }; } };
+            }
+            if (sql.includes('DELETE FROM sessions')) {
+              return { async run() { return { success: true }; } };
+            }
+            if (sql.includes('INNER JOIN users')) {
+              return {
+                async all() {
+                  return {
+                    results: [{
+                      user_id: 3,
+                      username: 'tester',
+                      created_at: timestamp - 1_000,
+                      expires_at: timestamp + 60_000,
+                      last_seen_at: timestamp,
+                      ip_address: '203.0.113.8',
+                      ip_fingerprint: '1234567890ab',
+                      user_agent: 'Example Browser',
+                    }],
+                  };
+                },
+              };
+            }
+            throw new Error(`Unexpected SQL in test: ${sql}`);
+          },
+        };
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/admin/sessions', {
+    headers: {
+      authorization: 'Bearer admin-token',
+      'cf-connecting-ip': '198.51.100.1',
+      'user-agent': 'Admin Browser',
+    },
+  }), env);
+  const data = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(data.sessions[0].active, true);
+  assert.equal(data.sessions[0].ip_address, '203.0.113.8');
+  assert.equal(data.sessions[0].ip_fingerprint, '1234567890ab');
+  assert.equal('ip_hash' in data.sessions[0], false);
+  assert.equal('token_hash' in data.sessions[0], false);
+});
+
+test('logout expires the session but preserves its audit record', async () => {
+  let updateCall;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        assert.match(sql, /UPDATE sessions/u);
+        assert.doesNotMatch(sql, /DELETE FROM sessions/u);
+        return {
+          bind(...values) {
+            updateCall = { sql, values };
+            return { async run() { return { success: true }; } };
+          },
+        };
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/logout', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer user-token',
+      'cf-connecting-ip': '203.0.113.9',
+      'user-agent': 'Logout Browser',
+    },
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.equal(updateCall.values[3], '203.0.113.9');
+  assert.equal(updateCall.values[4], 'Logout Browser');
+});
+
+test('unexpected server errors do not expose internal details', async () => {
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare() {
+        throw new Error('sensitive database detail');
+      },
+    },
+  };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await worker.fetch(new Request('https://api.test/api/me', {
+      headers: { authorization: 'Bearer example-token' },
+    }), env);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: '서버 오류' });
+  } finally {
+    console.error = originalError;
+  }
+});
