@@ -7,8 +7,8 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | Path | Purpose | Browser entrypoint | Persistent key |
 | --- | --- | --- | --- |
 | `/` | Home, drawer and account login | `assets/js/home.js` | account token/user keys |
-| `/WordMaster/` | 2,000-word meaning quiz | `WordMaster/assets/js/app.js` | `wordmaster2000.quiz.v1` |
-| `/smstudy/` | Social studies concepts and 78 KICE questions | `smstudy/assets/js/app.js` | `samun2027.study.v1` |
+| `/WordMaster/` | 2,000-word meaning quiz with personal error-rate/recent sorting | `WordMaster/assets/js/app.js` | `wordmaster2000.quiz.v1` |
+| `/smstudy/` | Social studies concepts and 78 sortable KICE questions | `smstudy/assets/js/app.js` | `samun2027.study.v1` |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
 | Worker | JSON API and D1 access | `worker/src/index.js` | D1 tables |
 
@@ -22,7 +22,7 @@ Requires Node.js 20 or newer. No root dependencies need to be installed.
 npm test
 ```
 
-The command checks every JavaScript file, local HTML asset references, the WordMaster 50 × 40 data shape, all 13 social-studies subunits and 78 image-backed questions, then runs Worker utility and routing tests.
+The command checks every JavaScript file, local HTML asset references, the WordMaster 50 × 40 data shape, all 13 social-studies subunits and 78 image-backed questions, shared study sorting behavior, then runs Worker utility and routing tests.
 
 For a static preview:
 

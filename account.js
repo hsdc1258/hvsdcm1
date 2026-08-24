@@ -7,8 +7,6 @@
   const app = script?.dataset.app;
   const storageKey = script?.dataset.key;
   const apiUrl = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
-  const originalStorageSet = Storage.prototype.setItem;
-  const originalStorageRemove = Storage.prototype.removeItem;
 
   if (!app || !storageKey) return;
 
@@ -83,18 +81,9 @@
     syncTimer = setTimeout(() => pushProgress(rawData), SYNC_DELAY_MS);
   }
 
-  // 두 학습 앱은 localStorage를 저장 인터페이스로 사용한다. 해당 키 변경만 감지해 서버에 보낸다.
-  Storage.prototype.setItem = function setItem(key, value) {
-    originalStorageSet.call(this, key, value);
-    if (this === localStorage && key === storageKey) scheduleProgressSync(value);
-  };
-
-  Storage.prototype.removeItem = function removeItem(key) {
-    originalStorageRemove.call(this, key);
-    if (this === localStorage && key === storageKey) scheduleProgressSync('{}');
-  };
-
-  window.HvsAccount = { api, app };
+  // 학습 앱이 저장을 마친 시점에만 명시적으로 호출한다. 브라우저 전체의
+  // Storage 프로토타입을 변경하지 않아 다른 기능의 저장 동작과 격리된다.
+  window.HvsAccount = { api, app, scheduleProgressSync };
 
   async function hydrateFromAccount() {
     try {
@@ -124,8 +113,7 @@
 
         const next = JSON.stringify(data);
         if (localStorage.getItem(storageKey) !== next) {
-          // 원격 데이터를 쓰는 동안 저장 감시기가 다시 서버에 올리지 않도록 원본 메서드를 쓴다.
-          originalStorageSet.call(localStorage, storageKey, next);
+          localStorage.setItem(storageKey, next);
           const loadMarker = `hvsdcm.loaded.${app}`;
           if (!sessionStorage.getItem(loadMarker)) {
             sessionStorage.setItem(loadMarker, '1');

@@ -10,19 +10,20 @@ The front end is static and requires no bundler. GitHub Pages serves the reposit
 2. A learning page loads `/account.js` with `data-app` and `data-key` attributes.
 3. `account.js` requires the account token, fetches remote progress and shared accepted answers, then hydrates the app-specific localStorage record.
 4. The app controller renders from static content plus that local record.
-5. Writes to the app's localStorage key are debounced for 350 ms and synchronized to `PUT /api/progress/:app`. Custom aliases are also sent to `/api/answers/accept`.
+5. Each app saves its local record and explicitly schedules a debounced 350 ms synchronization to `PUT /api/progress/:app`. Custom aliases are also sent to `/api/answers/accept`.
 
 The local record is a fast browser cache, while D1 is the cross-device source of truth. The one-time session marker `hvsdcm.loaded.<app>` prevents repeated reloads during hydration.
 
 ## Front-end ownership
 
 - `assets/`: home-only presentation and behavior.
+- `assets/js/study-utils.js`: shared HTML escaping, stable sorting and randomization for both learning apps.
 - `admin/assets/`: admin-only presentation and behavior.
 - `account.js`: shared authentication and synchronization adapter.
 - `WordMaster/assets/js/words.js`: vocabulary content only.
-- `WordMaster/assets/js/app.js`: WordMaster state, grading and rendering.
+- `WordMaster/assets/js/app.js`: WordMaster state, grading, personal error-rate metrics and rendering.
 - `smstudy/assets/js/data.js`: concept, source and question content only.
-- `smstudy/assets/js/app.js`: social-studies state, grading and rendering.
+- `smstudy/assets/js/app.js`: social-studies state, source error-rate sorting, grading and rendering.
 - `smstudy/assets/kice/`: question images referenced by stable question IDs.
 
 ## Worker ownership

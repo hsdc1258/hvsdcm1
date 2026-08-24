@@ -6,6 +6,7 @@
 }
 .brand-cluster .brand {
   min-width:0;
+  min-height:44px;
   padding-left:12px;
   border-left:1px solid rgba(255,255,255,.14)
 }
@@ -14,8 +15,8 @@
   height:40px
 }
 .landing-home-link {
-  width:40px;
-  height:40px;
+  width:44px;
+  height:44px;
   flex:none;
   display:grid;
   place-items:center;

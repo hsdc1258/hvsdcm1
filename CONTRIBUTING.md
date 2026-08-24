@@ -12,7 +12,7 @@
 ## Compatibility rules
 
 - Do not change `wordmaster` or `smstudy` API identifiers or their localStorage keys without a forward migration.
-- Preserve the load order `account.js` → content data → app controller.
+- Preserve the load order `account.js` → content data → shared study utilities → app controller.
 - Escape data inserted through `innerHTML`. Use `textContent` for untrusted single values.
 - External links opened in a new tab must use `rel="noopener"`.
 - Keep the home login `next` redirect same-origin.

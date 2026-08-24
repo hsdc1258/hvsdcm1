@@ -10,6 +10,14 @@
   const STORAGE_KEY = 'wordmaster2000.quiz.v1';
   const app = document.getElementById('app');
   const toast = document.getElementById('toast');
+  const studyUtils = window.HvsStudyUtils;
+
+  if (!studyUtils) {
+    app.innerHTML = '<div class="card"><h2>화면 로드 오류</h2><p>공통 학습 도구를 불러오지 못했습니다.</p></div>';
+    return;
+  }
+
+  const { SORT_MODES, escapeHtml, sortStudyItems } = studyUtils;
 
   const state = {
     view: 'home',
@@ -20,6 +28,7 @@
       questionCount: 'all',
       order: 'random',
     },
+    wrongOrder: 'recent',
   };
 
   let db = loadDb();
@@ -55,31 +64,15 @@
 
   function saveDb() {
     db.updatedAt = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
+    const serialized = JSON.stringify(db);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    window.HvsAccount?.scheduleProgressSync(serialized);
   }
 
   function clampDay(value) {
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return 1;
     return Math.min(MAX_DAY, Math.max(1, n));
-  }
-
-  function shuffle(items) {
-    const out = [...items];
-    for (let i = out.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
   }
 
   function normalizeText(value) {
@@ -265,6 +258,40 @@
     return WORDS.filter((item) => item.day >= lo && item.day <= hi);
   }
 
+  function compareWords(left, right) {
+    return left.day - right.day || left.number - right.number;
+  }
+
+  function personalWrongRate(item) {
+    const stats = db.stats[item.id];
+    return stats?.attempts ? ((stats.wrong || 0) / stats.attempts) * 100 : null;
+  }
+
+  function recentAttemptAt(item) {
+    return db.stats[item.id]?.lastAt || null;
+  }
+
+  function sortWords(items, order) {
+    return sortStudyItems(items, order, {
+      wrongRate: personalWrongRate,
+      recentAt: recentAttemptAt,
+      compareDefault: compareWords,
+    });
+  }
+
+  function renderSortOptions(selected, sequentialLabel = 'DAY 순서') {
+    const options = [
+      [SORT_MODES.RANDOM, '랜덤'],
+      [SORT_MODES.SEQUENTIAL, sequentialLabel],
+      [SORT_MODES.WRONG_HIGH, '오답률 높은 순'],
+      [SORT_MODES.WRONG_LOW, '오답률 낮은 순'],
+      [SORT_MODES.RECENT, '최근 풀이 순'],
+    ];
+    return options.map(([value, label]) => (
+      `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`
+    )).join('');
+  }
+
   function sessionLabel(session) {
     if (session.mode === 'review') return '오답 재시험';
     return session.startDay === session.endDay
@@ -285,8 +312,7 @@
     const order = orderSelect?.value || 'random';
     state.home = { startDay, endDay, questionCount: countChoice, order };
 
-    let pool = getRangeWords(startDay, endDay);
-    if (order === 'random') pool = shuffle(pool);
+    let pool = sortWords(getRangeWords(startDay, endDay), order);
     if (countChoice !== 'all') {
       const limit = Math.max(1, Number.parseInt(countChoice, 10) || pool.length);
       pool = pool.slice(0, Math.min(limit, pool.length));
@@ -295,9 +321,9 @@
     startSession(pool, { mode: 'range', startDay, endDay });
   }
 
-  function startReviewQuiz(ids = null) {
+  function startReviewQuiz(ids = null, order = SORT_MODES.RANDOM) {
     const sourceIds = ids || Object.keys(db.wrongBank);
-    const questions = shuffle(sourceIds.map((id) => WORD_BY_ID.get(id)).filter(Boolean));
+    const questions = sortWords(sourceIds.map((id) => WORD_BY_ID.get(id)).filter(Boolean), order);
     if (!questions.length) {
       showToast('현재 오답 노트가 비어 있습니다.');
       renderHome();
@@ -420,8 +446,7 @@
             <div class="select-wrap">
               <label for="orderMode">출제 순서</label>
               <select id="orderMode">
-                <option value="random" ${state.home.order === 'random' ? 'selected' : ''}>랜덤</option>
-                <option value="sequential" ${state.home.order === 'sequential' ? 'selected' : ''}>DAY 순서</option>
+                ${renderSortOptions(state.home.order)}
               </select>
             </div>
           </div>
@@ -592,10 +617,11 @@
     state.view = 'stats';
     state.session = null;
     const s = summaryStats();
-    const wrongEntries = Object.entries(db.wrongBank)
-      .map(([id, info]) => ({ item: WORD_BY_ID.get(id), info }))
-      .filter((x) => x.item)
-      .sort((a, b) => (b.info.lastWrongAt || 0) - (a.info.lastWrongAt || 0));
+    const wrongItems = Object.keys(db.wrongBank)
+      .map((id) => WORD_BY_ID.get(id))
+      .filter(Boolean);
+    const wrongEntries = sortWords(wrongItems, state.wrongOrder)
+      .map((item) => ({ item, info: db.wrongBank[item.id] }));
 
     app.innerHTML = `
       <section class="modal-page">
@@ -622,19 +648,25 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:16px">
-          <div class="page-title-row" style="margin-bottom:12px">
+        <div class="card wrong-note-card">
+          <div class="page-title-row wrong-note-head">
             <div>
-              <h2 style="margin-bottom:4px">오답 암기 노트</h2>
-              <p>${wrongEntries.length}개 · 단어와 정답을 보며 외운 뒤 재시험하세요.</p>
+              <h2>오답 암기 노트</h2>
+              <p>${wrongEntries.length}개 · 개인 풀이 기록 기준으로 정렬해 복습하세요.</p>
             </div>
-            <button id="statsReviewBtn" class="primary-btn" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
+            <div class="wrong-note-actions">
+              <label for="wrongSortMode">오답 정렬</label>
+              <select id="wrongSortMode">
+                ${renderSortOptions(state.wrongOrder)}
+              </select>
+              <button id="statsReviewBtn" class="primary-btn" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
+            </div>
           </div>
           ${wrongEntries.length ? `
             <div class="mistake-list">
               ${wrongEntries.slice(0, 200).map(({ item, info }) => `
                 <div class="mistake-row">
-                  <div class="mistake-word">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2,'0')} · 누적 오답 ${info.count || 1}회</small></div>
+                  <div class="mistake-word">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2,'0')} · 개인 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</small></div>
                   <div class="mistake-meaning">${escapeHtml(item.meaning)}<div class="user-wrong">최근 답: ${escapeHtml(info.lastAnswer || '(빈 답)')}</div></div>
                 </div>
               `).join('')}
@@ -645,7 +677,13 @@
     `;
 
     document.getElementById('statsBackBtn').addEventListener('click', renderHome);
-    document.getElementById('statsReviewBtn').addEventListener('click', () => startReviewQuiz());
+    document.getElementById('wrongSortMode').addEventListener('change', (event) => {
+      state.wrongOrder = event.target.value;
+      renderStatsPage();
+    });
+    document.getElementById('statsReviewBtn').addEventListener('click', () => (
+      startReviewQuiz(wrongEntries.map(({ item }) => item.id), state.wrongOrder)
+    ));
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('importFile').addEventListener('change', importData);
     document.getElementById('resetBtn').addEventListener('click', resetData);
