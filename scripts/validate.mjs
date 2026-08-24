@@ -160,9 +160,11 @@ function validateWordMasterData() {
 function validateSmStudyData() {
   const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
   const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
+  const explanationData = evaluateBrowserData('smstudy/assets/js/explanation-data.js', 'SMSTUDY_EXPLANATIONS');
   check(Boolean(data), 'smstudy: SMSTUDY_DATA export is missing');
   check(Boolean(notebookData), 'smstudy: SMSTUDY_NOTEBOOK export is missing');
-  if (!data || !notebookData) return;
+  check(Boolean(explanationData), 'smstudy: SMSTUDY_EXPLANATIONS export is missing');
+  if (!data || !notebookData || !explanationData) return;
 
   const subunits = data.UNITS.flatMap((unit) => unit.subs);
   const subunitIds = new Set(subunits.map((subunit) => subunit.id));
@@ -173,6 +175,7 @@ function validateSmStudyData() {
   check(data.QUESTION_ROWS.length === 78, `smstudy: expected 78 questions, found ${data.QUESTION_ROWS.length}`);
   check(questionIds.size === data.QUESTION_ROWS.length, 'smstudy: question IDs must be unique');
   check(data.QUESTIONS.length === data.QUESTION_ROWS.length, 'smstudy: derived question count mismatch');
+  check(data.CHOICE_MARKS.join('') === '12345', 'smstudy: answer choices must use plain 1-5 labels');
   const notebookIds = Object.keys(notebookData.NOTEBOOKS || {});
   check(notebookIds.length === 13, `smstudy: expected 13 concept notebooks, found ${notebookIds.length}`);
   check(notebookData.LEARNING_DESIGN?.steps?.length === 4, 'smstudy: learning design must contain four study steps');
@@ -181,6 +184,7 @@ function validateSmStudyData() {
   for (const subunit of subunits) {
     const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
     const notebook = notebookData.NOTEBOOKS?.[subunit.id];
+    const explanation = explanationData.GUIDES?.[subunit.id];
     check(questions.length === 6, `smstudy: ${subunit.id} must contain 6 questions`);
     check(subunit.sections.length > 0, `smstudy: ${subunit.id} has no concept sections`);
     check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
@@ -195,9 +199,13 @@ function validateSmStudyData() {
     check(notebook?.decision?.length >= 4, `smstudy: ${subunit.id} decision flow is too short`);
     check(notebook?.deepDive?.length >= 4, `smstudy: ${subunit.id} deep-dive notes are too short`);
     check(notebook?.recall?.length >= 3, `smstudy: ${subunit.id} recall practice is too short`);
+    check(Boolean(explanation?.focus && explanation?.correctReason && explanation?.wrongReason), `smstudy: ${subunit.id} explanation guide is incomplete`);
+    check(explanation?.checks?.length === 3, `smstudy: ${subunit.id} explanation guide must contain three checks`);
   }
 
   for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
+  check(Object.keys(explanationData.GUIDES || {}).length === 13, 'smstudy: expected 13 explanation guides');
+  check(Boolean(explanationData.EBS_PAST_EXAMS?.startsWith('https://www.ebsi.co.kr/')), 'smstudy: EBS explanation source link is missing');
 
   const referencedImages = new Set();
   for (const question of data.QUESTION_ROWS) {

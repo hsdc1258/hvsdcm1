@@ -16,9 +16,13 @@
     LEARNING_DESIGN,
     NOTEBOOKS
   } = window.SMSTUDY_NOTEBOOK || {};
+  const {
+    EBS_PAST_EXAMS,
+    GUIDES: EXPLANATION_GUIDES
+  } = window.SMSTUDY_EXPLANATIONS || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -110,8 +114,8 @@
     const options = [
       [SORT_MODES.RANDOM, '랜덤'],
       [SORT_MODES.SEQUENTIAL, sequentialLabel],
-      [SORT_MODES.WRONG_HIGH, '오답률 높은 순'],
-      [SORT_MODES.WRONG_LOW, '오답률 낮은 순'],
+      [SORT_MODES.WRONG_HIGH, '정답률 낮은 순'],
+      [SORT_MODES.WRONG_LOW, '정답률 높은 순'],
       [SORT_MODES.RECENT, '최근 풀이 순'],
     ];
     return options.map(([value, label]) => (
@@ -270,7 +274,7 @@
             <select id="qOrder">${renderSortOptions(state.order)}</select>
           </div>
         </div>
-        <p class="sort-note">오답률은 통사랑 집계, 최근 순은 내 풀이 기록을 기준으로 합니다.</p>
+        <p class="sort-note">정답률은 통사랑 문항별 집계, 최근 순은 내 풀이 기록을 기준으로 합니다.</p>
         <button id="startSelected" class="primary full" ${state.selected.size ? '' : 'disabled'}>
           선택 범위 퀴즈 (${state.selected.size}개 중단원)
         </button>
@@ -279,9 +283,9 @@
           <button id="clearAll" class="ghost">선택 해제</button>
         </div>
         <div class="review-card">
-          <h3>고오답률 기출</h3>
-          <p>통사랑 집계 오답률 35% 이상인 평가원 실기출만 모아 풉니다.</p>
-          <button id="weakQuiz" class="secondary full">고오답률 기출 풀기</button>
+          <h3>낮은 정답률 기출</h3>
+          <p>통사랑 집계 정답률 65% 이하인 평가원 실기출만 모아 풉니다.</p>
+          <button id="weakQuiz" class="secondary full">낮은 정답률 기출 풀기</button>
         </div>
         <div class="review-card">
           <h3>오답 복습</h3>
@@ -307,7 +311,7 @@
         <p class="eyebrow">READ → SOLVE → RETEST</p>
         <h1>만든 문제가 아니라,<br>평가원 원문으로.</h1>
         <p>2022~2026학년도 평가원 6월·9월 모의평가와 수능을 분석해 1~4단원, 13개 중단원별 실기출 78문항을 배치했습니다. 모든 문항은 평가원 원문 이미지와 정답표를 대조했고, 주관식 없이 5지선다로만 풉니다.</p>
-        <p class="copyright-note">문항 저작권: 한국교육과정평가원 · 비상업적 개인 학습용 발췌 · 오답률: 통사랑 문항별 정답률 데이터 기준</p>
+        <p class="copyright-note">문항 저작권: 한국교육과정평가원 · 비상업적 개인 학습용 발췌 · 정답률: 통사랑 문항별 집계 기준</p>
       </section>
       <section class="grid two">
         <div class="unit-list">${UNITS.map(renderUnit).join('')}</div>
@@ -475,9 +479,9 @@
 
   function renderExamAnalysis(id, note) {
     const questions = QUESTIONS.filter((question) => question.sub === id);
-    const averageWrongRate = Math.round(questions.reduce((sum, question) => sum + question.wrongRate, 0) / questions.length);
-    const hardest = questions.reduce((current, question) => question.wrongRate > current.wrongRate ? question : current);
-    const highWrongCount = questions.filter((question) => question.wrongRate >= 35).length;
+    const averageCorrectRate = Math.round(questions.reduce((sum, question) => sum + question.correctRate, 0) / questions.length);
+    const hardest = questions.reduce((current, question) => question.correctRate < current.correctRate ? question : current);
+    const lowCorrectCount = questions.filter((question) => question.correctRate <= 65).length;
     const patterns = note.patterns.map((pattern) => `
       <li>
         <div class="frequency-label"><strong>${esc(pattern.label)}</strong><span>${pattern.count}/6</span></div>
@@ -496,9 +500,9 @@
           <span class="analysis-scope">대표 문항 표본 · 전수 기출 통계 아님</span>
         </div>
         <div class="exam-stat-grid">
-          <div><small>평균 오답률</small><strong>${averageWrongRate}%</strong><span>${averageWrongRate >= 35 ? '고난도 단원' : averageWrongRate >= 25 ? '주의 단원' : '확보할 단원'}</span></div>
-          <div><small>고오답 문항</small><strong>${highWrongCount}<em>/6</em></strong><span>오답률 35% 이상</span></div>
-          <div><small>최고 오답률</small><strong>${hardest.wrongRate}%</strong><span>${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
+          <div><small>평균 정답률</small><strong>${averageCorrectRate}%</strong><span>${averageCorrectRate <= 65 ? '고난도 단원' : averageCorrectRate <= 75 ? '주의 단원' : '확보할 단원'}</span></div>
+          <div><small>저정답 문항</small><strong>${lowCorrectCount}<em>/6</em></strong><span>정답률 65% 이하</span></div>
+          <div><small>최저 정답률</small><strong>${hardest.correctRate}%</strong><span>${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
         </div>
         <p class="exam-insight">${esc(note.examInsight)}</p>
         <ol class="frequency-list">${patterns}</ol>
@@ -775,7 +779,7 @@
             <span class="question-kicker">평가원 원문 · ${esc(subunit.title)}</span>
             <div class="source-meta">
               <span>${esc(sourceLabel)} · ${question.number}번</span>
-              <strong>오답률 ${question.wrongRate}% <small>· 통사랑 집계</small></strong>
+              <strong>정답률 ${question.correctRate}% <small>· 통사랑 집계</small></strong>
             </div>
           </div>
           ${renderQuestionMedia(question)}
@@ -786,6 +790,39 @@
     bindQuestionImages(app);
     bindQuizEvents(question, session);
   }
+
+  function renderExplanationGuide(question, result, compact = false) {
+    const guide = EXPLANATION_GUIDES[question.sub];
+    if (!guide) return '';
+    const selectedAnswer = shownAnswer(question, result.input);
+    const selectedLabel = selectedAnswer === '(선택 없음)' ? selectedAnswer : `${selectedAnswer}번`;
+    const checks = guide.checks.map((checkItem) => `<li>${esc(checkItem)}</li>`).join('');
+    return `
+      <section class="solution-guide ${compact ? 'compact-guide' : ''}" aria-label="문항 해설">
+        <div class="solution-guide-head">
+          <span class="badge blue">평가원 정답 · EBS 해설 방식</span>
+          <small>${esc(guide.focus)}</small>
+        </div>
+        <div class="solution-reason correct-reason">
+          <h4>정답 ${question.answerNumber}번이 되는 판단</h4>
+          <p>${esc(guide.correctReason)}</p>
+        </div>
+        ${result.correct ? '' : `
+          <div class="solution-reason selected-reason">
+            <h4>내가 고른 ${esc(selectedLabel)}이 아닌 이유</h4>
+            <p>${esc(guide.wrongReason)}</p>
+          </div>`}
+        <div class="solution-checks">
+          <strong>원문 선지에서 다시 확인할 것</strong>
+          <ul>${checks}</ul>
+        </div>
+        <div class="solution-source">
+          <span>정답 번호는 평가원 정답표와 대조했습니다. 풀이는 EBS의 ‘정답 해설·오답 피하기’ 방식으로 핵심 기준을 재구성했습니다.</span>
+          <a href="${esc(EBS_PAST_EXAMS)}" target="_blank" rel="noopener noreferrer">EBSi 기출 해설 찾기</a>
+        </div>
+      </section>`;
+  }
+
   function renderWrongDiagnosis(question, result) {
     const subunit = SUB_BY_ID.get(question.sub);
     const savedReason = db.wrongBank[question.id]?.reason || '';
@@ -796,7 +833,7 @@
     return `
       <div class="wrong-diagnosis">
         <strong>${esc(question.sub)} · ${esc(subunit.title)}에서 틀렸습니다.</strong>
-        <p>내 답 ${esc(shownAnswer(question, result.input))}과 정답 ${esc(question.answer)}을 가른 표현을 원문 선지에서 찾은 뒤, 아래에서 실제 실수 원인을 남기세요. 번호가 아니라 판단 기준을 복습 기록에 저장합니다.</p>
+        <p>위 해설과 원문 선지를 대조한 뒤 실제 실수 원인을 남기세요. 번호가 아니라 판단 기준을 복습 기록에 저장합니다.</p>
         <div class="reason-options" role="group" aria-label="오답 원인 선택">${reasonButtons}</div>
       </div>`;
   }
@@ -811,12 +848,13 @@
           <div class="feedback-item"><small>평가원 정답</small><strong>${esc(question.answer)}</strong></div>
           <div class="feedback-item"><small>내 답</small><strong>${esc(shownAnswer(question, result.input))}</strong></div>
         </div>
-        <p class="explain">평가원 원문 정답표와 대조한 답입니다. 오답률 ${question.wrongRate}%는 통사랑 문항별 정답률 ${question.correctRate}%를 기준으로 계산했습니다.</p>
+        <p class="explain">평가원 원문 정답표와 대조한 답입니다. 통사랑 문항별 집계 정답률은 ${question.correctRate}%입니다.</p>
+        ${renderExplanationGuide(question, result)}
         ${result.correct ? '' : renderWrongDiagnosis(question, result)}
         <div class="feedback-actions">
           <a class="ghost compact source-link" href="${esc(question.source.question)}" target="_blank" rel="noopener">문제 원문 PDF</a>
           <a class="ghost compact source-link" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표 확인</a>
-          <a class="ghost compact source-link" href="https://tongsarang.kr/" target="_blank" rel="noopener">오답률 출처</a>
+          <a class="ghost compact source-link" href="https://tongsarang.kr/" target="_blank" rel="noopener">정답률 출처</a>
         </div>
       </div>`;
   }
@@ -834,7 +872,7 @@
       <article class="mistake-card">
         <div class="mistake-card-head">
           <div>
-            <span class="badge red">누적 오답 ${info.count || 1}회 · 출제 오답률 ${question.wrongRate}%</span>
+            <span class="badge red">누적 오답 ${info.count || 1}회 · 출제 정답률 ${question.correctRate}%</span>
             <h3>${question.sub} · ${esc(subunit.title)}</h3>
             <p>${question.year}학년도 ${esc(question.session)} ${question.number}번 · 평가원</p>
           </div>
@@ -846,6 +884,7 @@
           <span aria-hidden="true">→</span>
           <div><small>평가원 정답</small><strong class="answer-correct">${esc(question.answer)}</strong></div>
         </div>
+        ${renderExplanationGuide(question, { input, correct: false }, true)}
         <div class="mistake-diagnosis">
           <strong>${esc(subunit.unitId)}단원 · ${esc(subunit.title)} 취약 신호</strong>
           <p>${esc(repeatCopy)}</p>
@@ -983,7 +1022,7 @@
         <div class="page-head wrong-note-head">
           <div>
             <h2>오답 원문 분석 노트</h2>
-            <p>${wrongEntries.length}문제 · 출제 오답률이나 내 최근 풀이 기록으로 정렬해 복습합니다.</p>
+            <p>${wrongEntries.length}문제 · 출제 정답률이나 내 최근 풀이 기록으로 정렬해 복습합니다.</p>
           </div>
           <div class="wrong-note-actions">
             <label for="wrongSortMode">오답 정렬</label>
