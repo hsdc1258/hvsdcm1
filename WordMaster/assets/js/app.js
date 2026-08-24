@@ -455,7 +455,7 @@
     document.getElementById('startQuizBtn').addEventListener('click', startRangeQuiz);
     document.getElementById('wrongStudyBtn').addEventListener('click', renderStatsPage);
     document.getElementById('reviewBtn').addEventListener('click', () => startReviewQuiz());
-    requestAnimationFrame(() => app.focus());
+    requestAnimationFrame(() => app.focus({ preventScroll: true }));
   }
 
   function renderQuiz() {
