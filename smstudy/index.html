@@ -7,14 +7,18 @@
   <meta name="description" content="2022~2026학년도 평가원 사회·문화 실기출 78문항과 1~4단원 개념 학습·오답 복습 웹앱">
   <title>평가원 사회·문화 기출 회독</title>
   <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/site-nav.css">
 
 </head>
 <body>
   <div class="app-shell">
     <header class="site-header">
-      <button id="homeLogo" class="brand" type="button" aria-label="홈으로">
-        <span class="brand-mark">社</span><span class="brand-copy"><strong>SOCIETY · CULTURE</strong><small>KICE PAST EXAM LOOP</small></span>
-      </button>
+      <div class="brand-cluster">
+        <a class="landing-home-link society" href="/" aria-label="메인 랜딩 페이지로" title="메인으로"><span aria-hidden="true">H</span></a>
+        <button id="homeLogo" class="brand" type="button" aria-label="사회·문화 시작 화면으로">
+          <span class="brand-mark">社</span><span class="brand-copy"><strong>SOCIETY · CULTURE</strong><small>KICE PAST EXAM LOOP</small></span>
+        </button>
+      </div>
       <div class="header-actions"><button id="openStats" class="ghost compact" type="button"><span class="label-wide">학습 </span>기록</button></div>
     </header>
     <main id="app" tabindex="-1"></main>

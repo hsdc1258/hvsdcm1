@@ -42,11 +42,17 @@
 
   function showUser(username) {
     const prefix = document.createElement('span');
-    const user = document.createElement('span');
+    const isAdmin = username.trim().toLowerCase() === 'hvsdcm';
+    const user = document.createElement(isAdmin ? 'a' : 'span');
     prefix.className = 'welcome-prefix';
     prefix.textContent = 'W3lc0m3,';
-    user.className = 'welcome-user';
-    user.textContent = username;
+    user.className = isAdmin ? 'welcome-user welcome-admin' : 'welcome-user';
+    user.textContent = isAdmin ? 'Admin' : username;
+    if (isAdmin) {
+      user.href = '/admin/';
+      user.setAttribute('aria-label', '관리자 페이지로 이동');
+      user.title = '관리자 페이지';
+    }
     elements.title.replaceChildren(prefix, user);
     elements.title.dataset.user = username;
     elements.account.classList.add('logged');

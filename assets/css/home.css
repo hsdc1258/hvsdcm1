@@ -118,6 +118,28 @@ h1[data-user]:after {
   overflow-wrap:anywhere;
   word-break:break-word
 }
+.welcome-admin {
+  width:max-content;
+  flex:0 1 auto;
+  padding:.04em .12em .08em;
+  color:#ff4b4b;
+  font-family:"Courier New",ui-monospace,Consolas,monospace;
+  font-weight:900;
+  letter-spacing:-.08em;
+  text-decoration:none;
+  text-shadow:2px 0 0 #650707,0 2px 0 #650707;
+  border-bottom:2px solid rgba(255,75,75,.55);
+  transition:color .16s ease,text-shadow .16s ease,transform .16s ease
+}
+.welcome-admin:hover {
+  color:#ff7777;
+  text-shadow:3px 0 0 #650707,0 3px 0 #650707;
+  transform:translate(-1px,-1px)
+}
+.welcome-admin:focus-visible {
+  outline:2px solid #ff5b5b;
+  outline-offset:5px
+}
 .rule {
   width:100%;
   height:1px;
