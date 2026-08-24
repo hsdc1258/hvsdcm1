@@ -159,8 +159,10 @@ function validateWordMasterData() {
 
 function validateSmStudyData() {
   const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
+  const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
   check(Boolean(data), 'smstudy: SMSTUDY_DATA export is missing');
-  if (!data) return;
+  check(Boolean(notebookData), 'smstudy: SMSTUDY_NOTEBOOK export is missing');
+  if (!data || !notebookData) return;
 
   const subunits = data.UNITS.flatMap((unit) => unit.subs);
   const subunitIds = new Set(subunits.map((subunit) => subunit.id));
@@ -171,15 +173,31 @@ function validateSmStudyData() {
   check(data.QUESTION_ROWS.length === 78, `smstudy: expected 78 questions, found ${data.QUESTION_ROWS.length}`);
   check(questionIds.size === data.QUESTION_ROWS.length, 'smstudy: question IDs must be unique');
   check(data.QUESTIONS.length === data.QUESTION_ROWS.length, 'smstudy: derived question count mismatch');
+  const notebookIds = Object.keys(notebookData.NOTEBOOKS || {});
+  check(notebookIds.length === 13, `smstudy: expected 13 concept notebooks, found ${notebookIds.length}`);
+  check(notebookData.LEARNING_DESIGN?.steps?.length === 4, 'smstudy: learning design must contain four study steps');
+  check(notebookData.LEARNING_DESIGN?.evidence?.length >= 3, 'smstudy: learning design evidence is incomplete');
 
   for (const subunit of subunits) {
     const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
+    const notebook = notebookData.NOTEBOOKS?.[subunit.id];
     check(questions.length === 6, `smstudy: ${subunit.id} must contain 6 questions`);
     check(subunit.sections.length > 0, `smstudy: ${subunit.id} has no concept sections`);
     check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
     check(subunit.visual?.flow?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 flow steps`);
     check(subunit.visual?.checks?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 checks`);
+    check(Boolean(notebook?.oneLine && notebook?.memoryCode && notebook?.examInsight), `smstudy: ${subunit.id} notebook summary is incomplete`);
+    check(notebook?.patterns?.length >= 1, `smstudy: ${subunit.id} notebook has no exam patterns`);
+    check(notebook?.patterns?.every((pattern) => Number.isInteger(pattern.count) && pattern.count >= 1 && pattern.count <= 6), `smstudy: ${subunit.id} exam pattern count must be between 1 and 6`);
+    check(notebook?.matrix?.headers?.length >= 3, `smstudy: ${subunit.id} comparison matrix has too few columns`);
+    check(notebook?.matrix?.rows?.length >= 4, `smstudy: ${subunit.id} comparison matrix has too few rows`);
+    check(notebook?.matrix?.rows?.every((row) => row.length === notebook.matrix.headers.length), `smstudy: ${subunit.id} comparison matrix row width mismatch`);
+    check(notebook?.decision?.length >= 4, `smstudy: ${subunit.id} decision flow is too short`);
+    check(notebook?.deepDive?.length >= 4, `smstudy: ${subunit.id} deep-dive notes are too short`);
+    check(notebook?.recall?.length >= 3, `smstudy: ${subunit.id} recall practice is too short`);
   }
+
+  for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
 
   const referencedImages = new Set();
   for (const question of data.QUESTION_ROWS) {

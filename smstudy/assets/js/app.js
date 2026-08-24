@@ -12,9 +12,13 @@
     QUESTIONS,
     UNITS
   } = window.SMSTUDY_DATA || {};
+  const {
+    LEARNING_DESIGN,
+    NOTEBOOKS
+  } = window.SMSTUDY_NOTEBOOK || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS)) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -446,9 +450,133 @@
       </article>`;
   }
 
+  function renderNotebookMenu() {
+    return `
+      <nav class="notebook-menu" aria-label="단권화 노트 목차">
+        <span>이 노트의 순서</span>
+        <a href="#exam-analysis">기출 분석</a>
+        <a href="#concept-compare">비교표</a>
+        <a href="#concept-flow">판별 순서</a>
+        <a href="#concept-detail">개념 상세</a>
+        <a href="#recall-lab">회상 점검</a>
+      </nav>`;
+  }
+
+  function renderNotebookHero(note) {
+    return `
+      <article class="notebook-hero">
+        <div>
+          <span class="badge green">단권화 한 줄</span>
+          <h3>${esc(note.oneLine)}</h3>
+        </div>
+        <p><strong>암기 코드</strong>${esc(note.memoryCode)}</p>
+      </article>`;
+  }
+
+  function renderExamAnalysis(id, note) {
+    const questions = QUESTIONS.filter((question) => question.sub === id);
+    const averageWrongRate = Math.round(questions.reduce((sum, question) => sum + question.wrongRate, 0) / questions.length);
+    const hardest = questions.reduce((current, question) => question.wrongRate > current.wrongRate ? question : current);
+    const highWrongCount = questions.filter((question) => question.wrongRate >= 35).length;
+    const patterns = note.patterns.map((pattern) => `
+      <li>
+        <div class="frequency-label"><strong>${esc(pattern.label)}</strong><span>${pattern.count}/6</span></div>
+        <div class="frequency-track" role="img" aria-label="수록 6문항 중 ${pattern.count}문항에 등장">
+          <span style="--frequency:${pattern.count / 6 * 100}%"></span>
+        </div>
+        <p>${esc(pattern.note)}</p>
+      </li>`).join('');
+    return `
+      <section id="exam-analysis" class="notebook-section exam-analysis" aria-labelledby="exam-analysis-title">
+        <div class="notebook-heading">
+          <div>
+            <p class="eyebrow">사이트 수록 기출 6문항 분석</p>
+            <h3 id="exam-analysis-title">무엇이 반복 출제됐나</h3>
+          </div>
+          <span class="analysis-scope">대표 문항 표본 · 전수 기출 통계 아님</span>
+        </div>
+        <div class="exam-stat-grid">
+          <div><small>평균 오답률</small><strong>${averageWrongRate}%</strong><span>${averageWrongRate >= 35 ? '고난도 단원' : averageWrongRate >= 25 ? '주의 단원' : '확보할 단원'}</span></div>
+          <div><small>고오답 문항</small><strong>${highWrongCount}<em>/6</em></strong><span>오답률 35% 이상</span></div>
+          <div><small>최고 오답률</small><strong>${hardest.wrongRate}%</strong><span>${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
+        </div>
+        <p class="exam-insight">${esc(note.examInsight)}</p>
+        <ol class="frequency-list">${patterns}</ol>
+      </section>`;
+  }
+
+  function renderComparisonMatrix(note) {
+    const headerCells = note.matrix.headers.map((header) => `<th scope="col">${esc(header)}</th>`).join('');
+    const bodyRows = note.matrix.rows.map((row) => `<tr>${row.map((cell, index) => index === 0 ? `<th scope="row">${esc(cell)}</th>` : `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
+    return `
+      <section id="concept-compare" class="notebook-section comparison-section" aria-labelledby="comparison-title">
+        <div class="notebook-heading">
+          <div><p class="eyebrow">헷갈리는 개념은 같은 기준으로</p><h3 id="comparison-title">${esc(note.matrix.title)}</h3></div>
+          <span class="swipe-hint">좌우로 밀어 전체 보기 →</span>
+        </div>
+        <div class="comparison-scroll" tabindex="0">
+          <table class="comparison-table">
+            <thead><tr>${headerCells}</tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+      </section>`;
+  }
+
+  function renderDecisionFlow(note) {
+    return `
+      <section id="concept-flow" class="notebook-section decision-section" aria-labelledby="decision-title">
+        <div class="notebook-heading"><div><p class="eyebrow">시험장에서 이 순서대로</p><h3 id="decision-title">판별 알고리즘</h3></div></div>
+        <ol class="decision-list">${note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('')}</ol>
+      </section>`;
+  }
+
+  function renderDeepDive(note) {
+    return `
+      <section class="notebook-section deep-dive" aria-labelledby="deep-dive-title">
+        <div class="notebook-heading"><div><p class="eyebrow">선지 판단에 필요한 세부 내용</p><h3 id="deep-dive-title">심화 메모</h3></div></div>
+        <div class="deep-dive-grid">${note.deepDive.map((item) => `<article><h4>${esc(item.term)}</h4><p>${esc(item.body)}</p></article>`).join('')}</div>
+      </section>`;
+  }
+
+  function renderRecallLab(note) {
+    const recallItems = note.recall.map((item, index) => `
+      <details class="recall-item">
+        <summary><span>Q${index + 1}</span>${esc(item.question)}</summary>
+        <div><strong>정답</strong><p>${esc(item.answer)}</p></div>
+      </details>`).join('');
+    return `
+      <section id="recall-lab" class="notebook-section recall-lab" aria-labelledby="recall-title">
+        <div class="notebook-heading">
+          <div><p class="eyebrow">답을 말한 뒤 펼치기</p><h3 id="recall-title">덮고 답하는 회상 점검</h3></div>
+          <span class="recall-rule">생각하기 → 말하기 → 확인하기</span>
+        </div>
+        <div class="recall-grid">${recallItems}</div>
+        <div class="review-schedule" aria-label="권장 복습 간격">
+          <strong>복습 간격</strong>
+          <span>오늘 · 첫 회상</span><i aria-hidden="true">→</i><span>+1일</span><i aria-hidden="true">→</i><span>+3일</span><i aria-hidden="true">→</i><span>+7일</span>
+        </div>
+      </section>`;
+  }
+
+  function renderLearningDesign() {
+    return `
+      <details class="learning-design">
+        <summary><span class="badge blue">학습과학 기반</span><strong>${esc(LEARNING_DESIGN.title)}</strong><span>설계 근거 보기</span></summary>
+        <div class="learning-design-body">
+          <p>${esc(LEARNING_DESIGN.summary)}</p>
+          <div class="learning-steps">${LEARNING_DESIGN.steps.map((step) => `<div><strong>${esc(step.label)}</strong><p>${esc(step.text)}</p></div>`).join('')}</div>
+          <div class="evidence-links">${LEARNING_DESIGN.evidence.map((item) => `<a href="${item.href}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
+          <p class="evidence-caution">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
+        </div>
+      </details>`;
+  }
+
   function renderConcept(id) {
     const sub = SUB_BY_ID.get(id);
     if (!sub) return renderHome();
+    const note = NOTEBOOKS[id];
+    if (!note) return renderHome();
     state.view = 'concept';
     state.concept = id;
     const index = SUBUNITS.findIndex((subunit) => subunit.id === id);
@@ -464,15 +592,26 @@
           <button id="conceptHome" class="ghost compact">단원 목록</button>
         </div>
         ${renderConceptNavigation(id, index)}
+        ${renderNotebookMenu()}
+        ${renderNotebookHero(note)}
+        ${renderExamAnalysis(id, note)}
+        ${renderComparisonMatrix(note)}
+        ${renderDecisionFlow(note)}
         ${renderConceptMap(sub)}
-        <div class="concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
+        <section id="concept-detail" aria-labelledby="concept-detail-title">
+          <div class="notebook-heading concept-detail-heading"><div><p class="eyebrow">교과 개념을 선지 언어로</p><h3 id="concept-detail-title">개념 상세</h3></div></div>
+          <div class="concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
+        </section>
+        ${renderDeepDive(note)}
+        ${renderRecallLab(note)}
+        ${renderLearningDesign()}
         <div class="concept-finish">
           <button id="markDone" class="secondary">
             ${db.completed[id] ? '✓ 개념 확인 완료됨' : '개념 확인 완료로 표시'}
           </button>
           <button id="subQuiz" class="primary">이 중단원 퀴즈 ${questionCount}문제</button>
         </div>
-        <p class="source-note">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 퀴즈: 2022~2026학년도 평가원 6월·9월·수능 실기출 원문. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>
+        <p class="source-note">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항(중단원별 6문항)을 분석한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>
       </section>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
