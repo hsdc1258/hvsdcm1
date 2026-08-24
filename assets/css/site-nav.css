@@ -1,75 +1,55 @@
-:root {
-  --landing-accent:#f4f4f4
-}
 .brand-cluster,.admin-title-cluster {
   min-width:0;
   display:flex;
   align-items:center;
-  gap:12px
+  gap:10px
 }
 .brand-cluster .brand {
-  min-width:0
+  min-width:0;
+  padding-left:12px;
+  border-left:1px solid rgba(255,255,255,.14)
+}
+.brand-cluster .brand-mark {
+  width:40px;
+  height:40px
 }
 .landing-home-link {
-  --landing-link-accent:var(--landing-accent);
-  position:relative;
-  width:34px;
-  height:34px;
+  width:40px;
+  height:40px;
   flex:none;
   display:grid;
   place-items:center;
-  border:1px solid color-mix(in srgb,var(--landing-link-accent) 34%,transparent);
-  border-radius:9px;
-  background:rgba(10,10,10,.78);
-  color:var(--landing-link-accent);
-  box-shadow:3px 3px 0 rgba(0,0,0,.45);
-  font:900 14px/1 "Courier New",ui-monospace,Consolas,monospace;
-  letter-spacing:-.08em;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;
+  background:transparent;
+  color:#fff;
   text-decoration:none;
-  transition:transform .16s ease,border-color .16s ease,background .16s ease
+  transition:border-color .16s ease,background .16s ease
 }
-.landing-home-link:after {
-  content:"";
-  position:absolute;
-  right:4px;
-  bottom:4px;
-  width:3px;
-  height:3px;
-  background:var(--landing-link-accent);
-  box-shadow:-4px 0 0 color-mix(in srgb,var(--landing-link-accent) 42%,transparent)
+.landing-home-link svg {
+  width:20px;
+  height:20px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round
 }
 .landing-home-link:hover {
-  transform:translate(-1px,-1px);
-  border-color:color-mix(in srgb,var(--landing-link-accent) 70%,transparent);
-  background:color-mix(in srgb,var(--landing-link-accent) 9%,#0a0a0a)
+  border-color:rgba(255,255,255,.42);
+  background:rgba(255,255,255,.07)
 }
 .landing-home-link:focus-visible {
-  outline:2px solid var(--landing-link-accent);
+  outline:2px solid #fff;
   outline-offset:3px
 }
-.landing-home-link.wordmaster {
-  --landing-link-accent:#87f5b0
-}
-.landing-home-link.society {
-  --landing-link-accent:#86efac
-}
-.landing-home-link.admin {
-  --landing-link-accent:#ff6464
-}
 .admin-title-cluster {
-  align-items:flex-end;
-  gap:16px
-}
-.admin-title-cluster .landing-home-link {
-  margin-bottom:2px
+  align-items:center;
+  gap:18px
 }
 @media(max-width:400px) {
   .brand-cluster {
     gap:8px
-  }
-  .landing-home-link {
-    width:32px;
-    height:32px
   }
   .brand-cluster .brand-copy strong {
     font-size:11px;
