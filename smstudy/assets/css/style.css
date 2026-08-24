@@ -564,22 +564,54 @@ select {
   line-height:1.38;
   letter-spacing:-.045em
 }
-.notebook-hero>p {
+.key-point-map {
+  display:grid;
+  align-content:center;
+  gap:0;
   margin:0;
-  padding:20px;
+  padding:17px 18px;
   border:1px solid rgba(125,211,252,.2);
   border-radius:17px;
-  background:rgba(4,8,12,.4);
-  color:#dcecf5;
-  line-height:1.65;
-  align-content:center
+  background:rgba(4,8,12,.4)
 }
-.notebook-hero>p strong {
-  display:block;
-  margin-bottom:7px;
+.key-point-item {
+  position:relative;
+  display:grid;
+  grid-template-columns:29px 1fr;
+  gap:11px;
+  padding:10px 0
+}
+.key-point-item:not(:last-child)::after {
+  content:'';
+  position:absolute;
+  left:14px;
+  bottom:-4px;
+  width:1px;
+  height:10px;
+  background:rgba(125,211,252,.45)
+}
+.key-point-item>span {
+  width:29px;
+  height:29px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:var(--bluebg);
   color:var(--blue);
-  font-size:10px;
-  letter-spacing:.1em
+  font-size:11px;
+  font-weight:900
+}
+.key-point-item strong {
+  display:block;
+  margin:1px 0 4px;
+  color:var(--blue);
+  font-size:12px
+}
+.key-point-item p {
+  margin:0;
+  color:#dcecf5;
+  font-size:11px;
+  line-height:1.58
 }
 .notebook-section {
   min-width:0;
@@ -780,20 +812,16 @@ select {
   background:var(--bluebg)
 }
 .decision-list li:not(:last-child)::after {
-  content:'→';
+  content:'';
   position:absolute;
   top:50%;
-  right:-10px;
+  right:-8px;
   z-index:1;
-  width:19px;
-  height:19px;
-  display:grid;
-  place-items:center;
-  border-radius:50%;
-  background:var(--surface);
-  color:var(--blue);
-  font-size:12px;
-  transform:translateY(-50%)
+  width:10px;
+  height:10px;
+  border-top:2px solid var(--blue);
+  border-right:2px solid var(--blue);
+  transform:translateY(-50%) rotate(45deg)
 }
 .decision-list span {
   width:29px;
@@ -917,8 +945,21 @@ select {
   color:var(--accent)
 }
 .review-schedule i {
-  color:var(--muted2);
-  font-style:normal
+  position:relative;
+  width:18px;
+  height:1px;
+  background:var(--muted2)
+}
+.review-schedule i::after {
+  content:'';
+  position:absolute;
+  top:-3px;
+  right:0;
+  width:6px;
+  height:6px;
+  border-top:1px solid var(--muted2);
+  border-right:1px solid var(--muted2);
+  transform:rotate(45deg)
 }
 .learning-design {
   margin:14px 0;
@@ -1599,9 +1640,19 @@ select {
   font-size:14px
 }
 .concept-arrow {
-  color:var(--accent);
-  font-size:22px;
-  font-weight:900
+  position:relative;
+  width:28px;
+  height:2px;
+  background:var(--accent)
+}
+.concept-arrow::after {
+  content:'';
+  position:absolute;
+  top:-4px;
+  right:0;
+  border-top:5px solid transparent;
+  border-bottom:5px solid transparent;
+  border-left:7px solid var(--accent)
 }
 .concept-checks {
   display:grid;
@@ -1917,7 +1968,7 @@ select {
   }
   .concept-arrow {
     transform:rotate(90deg);
-    text-align:center
+    justify-self:center
   }
   .concept-checks,
   .weakness-insights {
@@ -2122,7 +2173,7 @@ select {
     padding:20px;
     border-radius:21px
   }
-  .notebook-hero>p {
+  .key-point-map {
     padding:16px
   }
   .notebook-section {
@@ -2169,12 +2220,11 @@ select {
     gap:12px
   }
   .decision-list li:not(:last-child)::after {
-    content:'↓';
     top:auto;
     right:auto;
-    bottom:-12px;
-    left:22px;
-    transform:none
+    bottom:-8px;
+    left:21px;
+    transform:rotate(135deg)
   }
   .decision-list p {
     margin:3px 0 0
@@ -2247,7 +2297,8 @@ select {
     break-inside:avoid;
     box-shadow:none
   }
-  .notebook-hero>p,
+  .key-point-map,
+  .key-point-item,
   .deep-dive-grid article,
   .recall-item,
   .concept-flow-step,

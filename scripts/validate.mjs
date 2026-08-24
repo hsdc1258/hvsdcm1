@@ -194,7 +194,9 @@ function validateSmStudyData() {
     check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
     check(subunit.visual?.flow?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 flow steps`);
     check(subunit.visual?.checks?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 checks`);
-    check(Boolean(notebook?.oneLine && notebook?.memoryCode && notebook?.examInsight), `smstudy: ${subunit.id} notebook summary is incomplete`);
+    check(Boolean(notebook?.oneLine && notebook?.examInsight), `smstudy: ${subunit.id} notebook summary is incomplete`);
+    check(notebook?.keyPoints?.length === 3, `smstudy: ${subunit.id} must have three readable key points`);
+    check(notebook?.keyPoints?.every((item) => item.label && item.text), `smstudy: ${subunit.id} has an incomplete key point`);
     check(notebook?.patterns?.length >= 1, `smstudy: ${subunit.id} notebook has no exam patterns`);
     check(notebook?.patterns?.every((pattern) => Number.isInteger(pattern.count) && pattern.count >= 1 && pattern.count <= 6), `smstudy: ${subunit.id} exam pattern count must be between 1 and 6`);
     check(notebook?.matrix?.headers?.length >= 3, `smstudy: ${subunit.id} comparison matrix has too few columns`);
@@ -208,6 +210,13 @@ function validateSmStudyData() {
   }
 
   for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
+  check(notebookData.NOTEBOOKS['I-02']?.keyPoints?.some((item) => item.text.includes('질문지·실험은 양적 연구')), 'smstudy: research methods must teach the standard quantitative pairing first');
+  check(notebookData.NOTEBOOKS['I-02']?.recall?.some((item) => item.answer.includes('질문지법은 양적 연구, 면접법은 질적 연구')), 'smstudy: research-method recall must use the KICE-standard pairing');
+  check(notebookData.NOTEBOOKS['III-03']?.matrix?.rows?.some((row) => row[0] === '1차적 발명'), 'smstudy: primary invention is missing from cultural change');
+  check(notebookData.NOTEBOOKS['III-03']?.matrix?.rows?.some((row) => row[0] === '2차적 발명'), 'smstudy: secondary invention is missing from cultural change');
+  check(notebookData.NOTEBOOKS['III-03']?.deepDive?.some((item) => item.term === '2차적 발명과 자극 전파'), 'smstudy: secondary invention and stimulus diffusion comparison is missing');
+  check(explanationData.GUIDES['I-02']?.checks?.some((item) => item.includes('질문지·실험은 양적 연구')), 'smstudy: research-method feedback must use the standard quantitative pairing');
+  check(explanationData.GUIDES['III-03']?.checks?.some((item) => item.includes('2차적 발명은 사회 내부')), 'smstudy: cultural-change feedback must distinguish secondary invention from stimulus diffusion');
   check(Object.keys(explanationData.GUIDES || {}).length === 13, 'smstudy: expected 13 explanation guides');
   check(Boolean(explanationData.EBS_PAST_EXAMS?.startsWith('https://www.ebsi.co.kr/')), 'smstudy: EBS explanation source link is missing');
 

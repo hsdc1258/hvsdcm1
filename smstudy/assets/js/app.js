@@ -418,7 +418,7 @@
     if (!visual) return '';
     const flow = visual.flow.map((step, index) => `
       <div class="concept-flow-step"><span>${index + 1}</span><strong>${esc(step)}</strong></div>
-      ${index < visual.flow.length - 1 ? '<span class="concept-arrow" aria-hidden="true">→</span>' : ''}
+      ${index < visual.flow.length - 1 ? '<span class="concept-arrow" aria-hidden="true"></span>' : ''}
     `).join('');
     const checks = visual.checks.map((check, index) => `
       <div><span>CHECK ${index + 1}</span><p>${esc(check)}</p></div>
@@ -465,20 +465,26 @@
         <span>이 노트의 순서</span>
         <a href="#exam-analysis">기출 분석</a>
         <a href="#concept-compare">비교표</a>
-        <a href="#concept-flow">판별 순서</a>
-        <a href="#concept-detail">개념 상세</a>
+        <a href="#concept-flow">문제 푸는 순서</a>
+        <a href="#concept-detail">개념 설명</a>
         <a href="#recall-lab">회상 점검</a>
       </nav>`;
   }
 
   function renderNotebookHero(note) {
+    const keyPoints = note.keyPoints.map((item, index) => `
+      <div class="key-point-item">
+        <span aria-hidden="true">${index + 1}</span>
+        <div><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></div>
+      </div>
+    `).join('');
     return `
       <article class="notebook-hero">
-        <div>
-          <span class="badge green">단권화 한 줄</span>
+        <div class="notebook-hero-copy">
+          <span class="badge green">이 단원에서 먼저 잡을 생각</span>
           <h3>${esc(note.oneLine)}</h3>
         </div>
-        <p><strong>암기 코드</strong>${esc(note.memoryCode)}</p>
+        <div class="key-point-map" aria-label="핵심 개념 세 가지">${keyPoints}</div>
       </article>`;
   }
 
@@ -535,7 +541,7 @@
   function renderDecisionFlow(note) {
     return `
       <section id="concept-flow" class="notebook-section decision-section" aria-labelledby="decision-title">
-        <div class="notebook-heading"><div><p class="eyebrow">시험장에서 이 순서대로</p><h3 id="decision-title">판별 알고리즘</h3></div></div>
+        <div class="notebook-heading"><div><p class="eyebrow">시험장에서 이 순서대로</p><h3 id="decision-title">문제 푸는 순서</h3></div></div>
         <ol class="decision-list">${note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('')}</ol>
       </section>`;
   }
@@ -543,7 +549,7 @@
   function renderDeepDive(note) {
     return `
       <section class="notebook-section deep-dive" aria-labelledby="deep-dive-title">
-        <div class="notebook-heading"><div><p class="eyebrow">선지 판단에 필요한 세부 내용</p><h3 id="deep-dive-title">심화 메모</h3></div></div>
+        <div class="notebook-heading"><div><p class="eyebrow">헷갈리는 선지를 가르는 설명</p><h3 id="deep-dive-title">꼭 알아둘 세부 개념</h3></div></div>
         <div class="deep-dive-grid">${note.deepDive.map((item) => `<article><h4>${esc(item.term)}</h4><p>${esc(item.body)}</p></article>`).join('')}</div>
       </section>`;
   }
@@ -558,12 +564,12 @@
       <section id="recall-lab" class="notebook-section recall-lab" aria-labelledby="recall-title">
         <div class="notebook-heading">
           <div><p class="eyebrow">답을 말한 뒤 펼치기</p><h3 id="recall-title">덮고 답하는 회상 점검</h3></div>
-          <span class="recall-rule">생각하기 → 말하기 → 확인하기</span>
+          <span class="recall-rule">먼저 생각하고 답한 뒤 확인하세요</span>
         </div>
         <div class="recall-grid">${recallItems}</div>
         <div class="review-schedule" aria-label="권장 복습 간격">
           <strong>복습 간격</strong>
-          <span>오늘 · 첫 회상</span><i aria-hidden="true">→</i><span>+1일</span><i aria-hidden="true">→</i><span>+3일</span><i aria-hidden="true">→</i><span>+7일</span>
+          <span>오늘 · 첫 회상</span><i aria-hidden="true"></i><span>+1일</span><i aria-hidden="true"></i><span>+3일</span><i aria-hidden="true"></i><span>+7일</span>
         </div>
       </section>`;
   }
@@ -608,7 +614,7 @@
         ${renderDecisionFlow(note)}
         ${renderConceptMap(sub)}
         <section id="concept-detail" aria-labelledby="concept-detail-title">
-          <div class="notebook-heading concept-detail-heading"><div><p class="eyebrow">교과 개념을 선지 언어로</p><h3 id="concept-detail-title">개념 상세</h3></div></div>
+          <div class="notebook-heading concept-detail-heading"><div><p class="eyebrow">교과 개념을 차근차근</p><h3 id="concept-detail-title">개념을 하나씩 이해하기</h3></div></div>
           <div class="concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
         </section>
         ${renderDeepDive(note)}
