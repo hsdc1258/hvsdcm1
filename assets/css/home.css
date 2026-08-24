@@ -98,42 +98,47 @@ h1:after {
 }
 h1[data-user] {
   width:100%;
-  display:flex;
-  align-items:baseline;
-  flex-wrap:wrap;
-  column-gap:.18em;
-  row-gap:.05em;
+  display:block;
   font-size:clamp(56px,12vw,116px)
 }
 h1[data-user]:after {
   display:none
 }
+h1[data-user] .welcome-prefix {
+  display:block
+}
 .welcome-user {
-  min-width:0;
+  display:block;
+  width:fit-content;
   max-width:100%;
-  flex:1 1 auto;
-  font-size:.48em;
-  line-height:1.05;
-  letter-spacing:-.055em;
+  margin-top:.12em;
+  font-size:1em;
+  line-height:.9;
+  letter-spacing:-.075em;
   overflow-wrap:anywhere;
   word-break:break-word
 }
 .welcome-admin {
-  width:max-content;
-  flex:0 1 auto;
-  padding:.04em .12em .08em;
-  color:#ff4b4b;
-  font-family:"Courier New",ui-monospace,Consolas,monospace;
+  position:relative;
+  color:#ff4854;
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-weight:900;
-  letter-spacing:-.08em;
+  font-variation-settings:"wght" 900;
+  letter-spacing:-.085em;
   text-decoration:none;
-  text-shadow:2px 0 0 #650707,0 2px 0 #650707;
-  border-bottom:2px solid rgba(255,75,75,.55);
-  transition:color .16s ease,text-shadow .16s ease,transform .16s ease
+  background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.95) 0 1px,transparent 1px 3px),radial-gradient(circle at 28% 32%,#fff 0 1px,transparent 1.5px),radial-gradient(circle at 72% 68%,#ff8088 0 1px,transparent 1.7px);
+  background-size:100% 3px,9px 8px,11px 10px;
+  background-color:#ff4854;
+  background-blend-mode:soft-light,screen,screen;
+  background-clip:text;
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  filter:drop-shadow(.018em .025em 0 #6c0712) drop-shadow(0 0 .12em rgba(255,50,67,.28));
+  animation:admin-noise .34s steps(2,end) infinite;
+  transition:filter .16s ease,transform .16s ease
 }
 .welcome-admin:hover {
-  color:#ff7777;
-  text-shadow:3px 0 0 #650707,0 3px 0 #650707;
+  filter:drop-shadow(.025em .035em 0 #6c0712) drop-shadow(0 0 .18em rgba(255,69,83,.4));
   transform:translate(-1px,-1px)
 }
 .welcome-admin:focus-visible {
@@ -534,6 +539,17 @@ footer {
     box-shadow:0 0 5px #65ff97
   }
 }
+@keyframes admin-noise {
+  0% {
+    background-position:0 0,0 0,0 0
+  }
+  50% {
+    background-position:0 1px,4px -2px,-3px 3px
+  }
+  100% {
+    background-position:0 -1px,-2px 3px,4px -2px
+  }
+}
 @media(max-width:560px) {
   main {
     width:100%;
@@ -544,10 +560,6 @@ footer {
   }
   h1[data-user] {
     font-size:clamp(54px,18vw,86px)
-  }
-  .welcome-user {
-    flex-basis:100%;
-    font-size:.56em
   }
   .rule {
     margin-top:30px
