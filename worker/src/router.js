@@ -172,6 +172,12 @@ async function listUsers(env) {
       u.username,
       u.created_at,
       u.last_login_at,
+      (
+        SELECT MAX(activity_session.last_seen_at)
+        FROM sessions activity_session
+        WHERE activity_session.user_id = u.id
+          AND activity_session.role = 'user'
+      ) last_activity_at,
       u.disabled,
       COALESCE(SUM(CASE WHEN a.event = 'login' THEN 1 ELSE 0 END), 0) logins,
       COUNT(DISTINCT CASE WHEN a.app = 'wordmaster' THEN a.id END) word_events,

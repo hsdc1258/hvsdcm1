@@ -101,6 +101,7 @@
         <td>${escapeHtml(user.username)}</td>
         <td>${formatDate(user.created_at)}</td>
         <td>${formatDate(user.last_login_at)}</td>
+        <td>${formatDate(user.last_activity_at)}</td>
         <td>${Number(user.active_devices).toLocaleString()}</td>
         <td class="ip-cell">${escapeHtml(user.recent_ip || '-')}</td>
         <td>${Number(user.logins).toLocaleString()}</td>

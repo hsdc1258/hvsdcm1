@@ -165,6 +165,66 @@ test('admin session route returns device metadata without token hashes', async (
   assert.equal('token_hash' in data.sessions[0], false);
 });
 
+test('admin user statistics include the latest activity time separately from login', async () => {
+  const lastLoginAt = Date.now() - 60_000;
+  const lastActivityAt = Date.now();
+  let userQuery = '';
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        return {
+          bind() {
+            if (sql.includes('SELECT s.*, u.username')) {
+              return { async first() { return { token_hash: 'stored-admin-hash', role: 'admin', disabled: 0 }; } };
+            }
+            if (sql.includes('UPDATE sessions')) {
+              return { async run() { return { success: true }; } };
+            }
+            if (sql.includes('FROM users u')) {
+              userQuery = sql;
+              return {
+                async all() {
+                  return {
+                    results: [{
+                      id: 3,
+                      username: 'tester',
+                      created_at: lastLoginAt - 60_000,
+                      last_login_at: lastLoginAt,
+                      last_activity_at: lastActivityAt,
+                      active_devices: 1,
+                      recent_ip: '203.0.113.8',
+                      logins: 2,
+                      word_events: 5,
+                      sm_events: 4,
+                    }],
+                  };
+                },
+              };
+            }
+            throw new Error(`Unexpected SQL in test: ${sql}`);
+          },
+        };
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/admin/users', {
+    headers: {
+      authorization: 'Bearer admin-token',
+      'cf-connecting-ip': '198.51.100.1',
+      'user-agent': 'Admin Browser',
+    },
+  }), env);
+  const data = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(data.users[0].last_login_at, lastLoginAt);
+  assert.equal(data.users[0].last_activity_at, lastActivityAt);
+  assert.match(userQuery, /MAX\(activity_session\.last_seen_at\)/u);
+  assert.match(userQuery, /activity_session\.role = 'user'/u);
+});
+
 test('logout expires the session but preserves its audit record', async () => {
   let updateCall;
   const env = {
