@@ -102,9 +102,14 @@
     return db.qStats[question.id]?.lastAt || null;
   }
 
+  function cumulativeWrongCount(question) {
+    return db.qStats[question.id]?.wrong || 0;
+  }
+
   function sortQuestions(questions, order) {
     return sortStudyItems(questions, order, {
       wrongRate: (question) => question.wrongRate,
+      wrongCount: cumulativeWrongCount,
       recentAt: recentAttemptAt,
       compareDefault: compareQuestions,
     });

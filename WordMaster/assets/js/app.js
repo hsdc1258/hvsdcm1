@@ -267,6 +267,10 @@
     return stats?.attempts ? ((stats.wrong || 0) / stats.attempts) * 100 : null;
   }
 
+  function cumulativeWrongCount(item) {
+    return db.stats[item.id]?.wrong || 0;
+  }
+
   function recentAttemptAt(item) {
     return db.stats[item.id]?.lastAt || null;
   }
@@ -274,6 +278,7 @@
   function sortWords(items, order) {
     return sortStudyItems(items, order, {
       wrongRate: personalWrongRate,
+      wrongCount: cumulativeWrongCount,
       recentAt: recentAttemptAt,
       compareDefault: compareWords,
     });

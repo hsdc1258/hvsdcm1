@@ -67,6 +67,8 @@ function validateUiContracts() {
   const homeCss = readFileSync(path.join(ROOT, 'assets/css/home.css'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
   const wordMasterCss = readFileSync(path.join(ROOT, 'WordMaster/assets/css/style.css'), 'utf8');
+  const wordMasterJs = readFileSync(path.join(ROOT, 'WordMaster/assets/js/app.js'), 'utf8');
+  const smstudyJs = readFileSync(path.join(ROOT, 'smstudy/assets/js/app.js'), 'utf8');
 
   check(homeHtml.includes('id="drawerStudy"'), 'home: authenticated STUDY drawer is missing');
   check(homeHtml.includes('class="study-icon wordmaster-icon"'), 'home: WordMaster drawer icon is missing');
@@ -76,6 +78,8 @@ function validateUiContracts() {
   check(homeJs.includes("drawerStudy.setAttribute('aria-hidden', 'false')"), 'home: STUDY drawer accessibility state is not synchronized');
   check(wordMasterCss.includes('#app:focus { outline: none; }'), 'WordMaster: app focus outline fix is missing');
   check(wordMasterCss.includes('grid-template-columns: minmax(0, 1fr)'), 'WordMaster: desktop review actions must use a shrink-safe column');
+  check(wordMasterJs.includes('wrongCount: cumulativeWrongCount'), 'WordMaster: wrong-rate ties must use cumulative mistakes');
+  check(smstudyJs.includes('wrongCount: cumulativeWrongCount'), 'smstudy: wrong-rate ties must use cumulative mistakes');
 }
 
 function validateMigrations() {
