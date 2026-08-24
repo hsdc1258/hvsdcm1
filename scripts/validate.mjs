@@ -99,6 +99,41 @@ function evaluateBrowserData(file, exportedName) {
   return context[exportedName];
 }
 
+function readWebpDimensions(file) {
+  const buffer = readFileSync(file);
+  if (buffer.length < 30 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WEBP') return null;
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const type = buffer.toString('ascii', offset, offset + 4);
+    const size = buffer.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    if (type === 'VP8X' && size >= 10) {
+      return {
+        width: 1 + buffer.readUIntLE(start + 4, 3),
+        height: 1 + buffer.readUIntLE(start + 7, 3)
+      };
+    }
+    if (type === 'VP8 ' && size >= 10 && buffer[start + 3] === 0x9d && buffer[start + 4] === 0x01 && buffer[start + 5] === 0x2a) {
+      return {
+        width: buffer.readUInt16LE(start + 6) & 0x3fff,
+        height: buffer.readUInt16LE(start + 8) & 0x3fff
+      };
+    }
+    if (type === 'VP8L' && size >= 5 && buffer[start] === 0x2f) {
+      const b1 = buffer[start + 1];
+      const b2 = buffer[start + 2];
+      const b3 = buffer[start + 3];
+      const b4 = buffer[start + 4];
+      return {
+        width: 1 + b1 + ((b2 & 0x3f) << 8),
+        height: 1 + (b2 >> 6) + (b3 << 2) + ((b4 & 0x0f) << 10)
+      };
+    }
+    offset = start + size + (size % 2);
+  }
+  return null;
+}
+
 function validateWordMasterData() {
   const words = evaluateBrowserData('WordMaster/assets/js/words.js', 'WORDMASTER_WORDS');
   check(Array.isArray(words), 'WordMaster: exported data must be an array');
@@ -141,6 +176,9 @@ function validateSmStudyData() {
     const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
     check(questions.length === 6, `smstudy: ${subunit.id} must contain 6 questions`);
     check(subunit.sections.length > 0, `smstudy: ${subunit.id} has no concept sections`);
+    check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
+    check(subunit.visual?.flow?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 flow steps`);
+    check(subunit.visual?.checks?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 checks`);
   }
 
   const referencedImages = new Set();
@@ -150,7 +188,15 @@ function validateSmStudyData() {
     check(Number.isInteger(question.answerNumber) && question.answerNumber >= 1 && question.answerNumber <= 5, `smstudy: ${question.id} has invalid answer`);
     check(question.correctRate + question.wrongRate === 100, `smstudy: ${question.id} rates must total 100`);
     check(Boolean(source?.question && source?.answer), `smstudy: ${question.id} source links are missing`);
-    check(existsSync(path.join(ROOT, 'smstudy', question.image)), `smstudy: ${question.id} image is missing`);
+    const imagePath = path.join(ROOT, 'smstudy', question.image);
+    check(existsSync(imagePath), `smstudy: ${question.id} image is missing`);
+    if (existsSync(imagePath)) {
+      const dimensions = readWebpDimensions(imagePath);
+      check(Boolean(dimensions), `smstudy: ${question.id} is not a readable WebP image`);
+      check(dimensions?.width >= 700, `smstudy: ${question.id} image is too narrow to preserve the printed question`);
+      // A shorter crop previously left "위 연구" visible but omitted its shared passage.
+      check(dimensions?.height >= 500, `smstudy: ${question.id} image may omit its stem, passage or choices`);
+    }
     referencedImages.add(path.basename(question.image));
   }
 

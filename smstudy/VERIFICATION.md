@@ -2,7 +2,7 @@
 
 - 검증 일시: 2026-08-23 15:55 KST
 - 검증 대상: 2022~2026학년도 평가원 6월·9월 모의평가 및 수능 사회·문화
-- 사이트 문항: 13개 소단원 × 6문항 = 78문항
+- 사이트 문항: 13개 중단원 × 6문항 = 78문항
 - 오답률: 평가원 공식 통계가 아니라 통사랑 문항별 정답률 집계로부터 `100 - 정답률`로 계산
 
 ## 자동 교차 검증 결과
@@ -10,13 +10,13 @@
 - PASS — 78 unique questions; 13 subunits x 6 questions; 2022-2026 and June/September/CSAT represented
 - PASS — 15 downloaded KICE question papers and 15 answer sheets opened; 14 text-layer papers yielded all question numbers 1-20, and the unselected 2025 CSAT image-only paper was separately opened and inspected
 - PASS — All 78 printed question numbers exist; answers match both downloaded answer sheets and the public index; wrong rate = 100 - correct rate
-- PASS — Exactly 78 valid WebP crops; dimensions range 727-768 px wide and 339-1115 px high
+- PASS — Exactly 78 valid WebP crops; every crop is at least 700 px wide and 500 px high
 - PASS — Embedded HTML data exactly matches the independently verified 78-row manifest
 - PASS — No subjective/blank grading or media-literacy item remains; localStorage, wrong retest, backup/restore, source labels, and JavaScript syntax passed
 
-## 소단원별 배치
+## 중단원별 배치
 
-| 소단원 | 문항 수 | 평균 오답률 | 출전 |
+| 중단원 | 문항 수 | 평균 오답률 | 출전 |
 |---|---:|---:|---|
 | I-01 | 6 | 15.3% | 2026학년도 수능 1번, 2025학년도 6월 1번, 2024학년도 수능 1번, 2023학년도 수능 3번, 2022학년도 9월 2번, 2022학년도 수능 3번 |
 | I-02 | 6 | 36.8% | 2026학년도 수능 5번, 2025학년도 9월 4번, 2025학년도 6월 9번, 2024학년도 9월 3번, 2023학년도 9월 2번, 2022학년도 6월 2번 |
@@ -38,5 +38,12 @@
 2. 각 문항의 정답을 다운로드한 평가원 정답표와 문항별 정답률 인덱스에서 독립적으로 대조했다.
 3. 문제 본문을 OCR로 재작성하지 않고 원문 PDF에서 그대로 잘라 WebP로 렌더링했다.
 4. 생성된 13개 연락시트를 육안 검수하고, 이 자동 감사로 원문·정답·이미지·HTML 데이터를 다시 교차 확인했다.
+
+## 2026-08-24 노출 품질 재검수
+
+- 2026학년도 6월 9번은 기존 크롭이 `위 연구`가 가리키는 공통 제시문을 제외한 채 문항과 선지만 보여 주고 있었다.
+- 원본 문제지에서 `[9~10]` 공통 제시문, 9번 문항, 다섯 선지를 한 이미지로 다시 크롭해 교체했다.
+- 자동 검증에 WebP 헤더·실제 크기 검사를 추가해 지나치게 작은 크롭이 다시 들어오면 배포 전 검사에서 실패하도록 했다.
+- 브라우저에서 중단원 선택, 6문항 풀이, 오답 원인 저장, 결과 원문 카드, 대단원·중단원 취약도 분석까지 한 흐름으로 재검수했다.
 
 ※ 문항 저작권은 한국교육과정평가원에 있으며, 사이트에는 비상업적 개인 학습을 위해 원문을 배치했다.
