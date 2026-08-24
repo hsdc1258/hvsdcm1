@@ -405,15 +405,15 @@
     const s = summaryStats();
     app.innerHTML = `
       <section class="hero">
-        <p class="eyebrow">KOREAN MEANING DRILL</p>
-        <h1>영단어<br>테스트기</h1>
-        <p>DAY를 하나만 고르거나 범위로 묶어서 시험을 시작할 수 있습니다. 틀린 단어는 자동으로 오답 노트에 쌓이고, 나중에 따로 재시험할 수 있습니다.</p>
+        <p class="eyebrow">SELECT → SOLVE → RETEST</p>
+        <h1>단어를<br>내 것으로.</h1>
+        <p>DAY 선택 → 뜻 시험 → 오답 회독</p>
       </section>
 
       <section class="grid two">
         <div class="card">
           <h2>시험 범위</h2>
-          <p class="card-sub">시작과 끝을 같게 두면 단일 DAY 시험입니다.</p>
+          <p class="card-sub">DAY 01–50</p>
 
           <div class="range-row">
             <div class="field">
@@ -461,7 +461,7 @@
 
         <aside class="card">
           <h2>누적 기록</h2>
-          <p class="card-sub">계정 DB에 저장된 누적 기록입니다.</p>
+          <p class="card-sub">계정 동기화</p>
           <div class="stat-list">
             <div class="stat-box"><span>총 풀이</span><strong>${s.attempts.toLocaleString()}</strong></div>
             <div class="stat-box"><span>정답률</span><strong>${s.accuracy}%</strong></div>
@@ -469,7 +469,7 @@
           <div class="review-box">
             <span class="section-label">오답 노트</span>
             <div class="review-count">${s.wrongCount}</div>
-            <p>틀린 단어와 정답을 먼저 보며 외우거나, 다시 시험칠 수 있습니다.</p>
+            <p>보기 → 기억 → 재시험</p>
             <div class="review-actions"><button id="wrongStudyBtn" class="ghost-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 보고 외우기</button><button id="reviewBtn" class="secondary-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button></div>
           </div>
         </aside>

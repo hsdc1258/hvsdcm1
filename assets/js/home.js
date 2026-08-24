@@ -45,7 +45,7 @@
     const isAdmin = username.trim().toLowerCase() === 'hvsdcm';
     const user = document.createElement(isAdmin ? 'a' : 'span');
     prefix.className = 'welcome-prefix';
-    prefix.textContent = 'W3lc0m3,';
+    prefix.textContent = 'Welcome,';
     user.className = isAdmin ? 'welcome-user welcome-admin' : 'welcome-user';
     user.textContent = isAdmin ? 'Admin' : username;
     if (isAdmin) {

@@ -2,34 +2,31 @@
   min-width:0;
   display:flex;
   align-items:center;
-  gap:10px
+  gap:12px
 }
 .brand-cluster .brand {
-  min-width:0;
-  min-height:44px;
-  padding-left:12px;
-  border-left:1px solid rgba(255,255,255,.14)
+  min-width:0
 }
 .brand-cluster .brand-mark {
-  width:40px;
-  height:40px
+  width:38px;
+  height:38px
 }
 .landing-home-link {
-  width:44px;
-  height:44px;
+  width:38px;
+  height:38px;
   flex:none;
   display:grid;
   place-items:center;
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:12px;
-  background:transparent;
-  color:#fff;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.08);
+  color:#f5f5f7;
   text-decoration:none;
-  transition:border-color .16s ease,background .16s ease
+  transition:background .16s ease,transform .16s ease
 }
 .landing-home-link svg {
-  width:20px;
-  height:20px;
+  width:18px;
+  height:18px;
   fill:none;
   stroke:currentColor;
   stroke-width:1.8;
@@ -37,16 +34,15 @@
   stroke-linejoin:round
 }
 .landing-home-link:hover {
-  border-color:rgba(255,255,255,.42);
-  background:rgba(255,255,255,.07)
+  background:rgba(255,255,255,.15);
+  transform:scale(1.04)
 }
 .landing-home-link:focus-visible {
-  outline:2px solid #fff;
+  outline:2px solid #2997ff;
   outline-offset:3px
 }
 .admin-title-cluster {
-  align-items:center;
-  gap:18px
+  gap:16px
 }
 @media(max-width:400px) {
   .brand-cluster {
@@ -57,7 +53,7 @@
     letter-spacing:.04em
   }
   .admin-title-cluster {
-    gap:12px
+    gap:10px
   }
 }
 @media(max-width:340px) {

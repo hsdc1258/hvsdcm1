@@ -262,7 +262,7 @@
     return `
       <div class="card start-panel">
         <h2>학습 시작</h2>
-        <p class="muted">대단원 전체 또는 원하는 중단원만 골라 출제합니다.</p>
+        <p class="muted">범위 선택 → 기출 풀이</p>
         ${renderOverview(summary)}
         <div class="setup-row">
           <div>
@@ -289,12 +289,12 @@
         </div>
         <div class="review-card">
           <h3>낮은 정답률 기출</h3>
-          <p>통사랑 집계 정답률 65% 이하인 평가원 실기출만 모아 풉니다.</p>
+          <p>정답률 65% 이하</p>
           <button id="weakQuiz" class="secondary full">낮은 정답률 기출 풀기</button>
         </div>
         <div class="review-card">
           <h3>오답 복습</h3>
-          <p>문제·내 답·정답을 먼저 보며 외우거나 다시 시험칠 수 있습니다.</p>
+          <p>원문 → 원인 → 재시험</p>
           <div class="button-row">
             <button id="wrongStudy" class="ghost" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
             <button id="wrongQuiz" class="secondary" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
@@ -302,7 +302,7 @@
         </div>
         <div class="review-card">
           <h3>누적 복습</h3>
-          <p>개념 완료한 중단원 전체에서 20문제를 다시 꺼냅니다.</p>
+          <p>완료 범위 20문제</p>
           <button id="cumulative" class="secondary full" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
         </div>
       </div>`;
@@ -313,9 +313,9 @@
     state.session = null;
     app.innerHTML = `
       <section class="hero">
-        <p class="eyebrow">READ → SOLVE → RETEST</p>
-        <h1>만든 문제가 아니라,<br>평가원 원문으로.</h1>
-        <p>2022~2026학년도 평가원 6월·9월 모의평가와 수능을 분석해 1~4단원, 13개 중단원별 실기출 78문항을 배치했습니다. 모든 문항은 평가원 원문 이미지와 정답표를 대조했고, 주관식 없이 5지선다로만 풉니다.</p>
+        <p class="eyebrow">CONCEPT → KICE → ANALYSIS</p>
+        <h1>개념은 선명하게.<br>문제는 원문으로.</h1>
+        <p>13개 중단원 · 평가원 원문 78문항 · 오답 원인 분석</p>
         <p class="copyright-note">문항 저작권: 한국교육과정평가원 · 비상업적 개인 학습용 발췌 · 정답률: 통사랑 문항별 집계 기준</p>
       </section>
       <section class="grid two">
