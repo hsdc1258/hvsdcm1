@@ -311,6 +311,64 @@ function validateSmStudyData() {
   check(imageFiles.every((file) => referencedImages.has(file)), 'smstudy: unreferenced WebP images exist');
 }
 
+// CSS를 중괄호 깊이로 훑어 커스텀 프로퍼티 *정의*를 셀렉터·at-rule 맥락과 함께 모은다.
+// 이전의 stripPrint 정규식(/@media print\s*\{[\s\S]*?\n\}/)은 닫는 중괄호가 0열에 있다고 가정해
+// 중첩 @media·다중 print 블록·들여쓰기 규약 변경에 조용히 오작동할 수 있었다
+// (review-3a N-10, review-3b §4 nit). 깊이 계산으로 대체한다.
+function collectCustomProperties(cssSource) {
+  const text = cssSource.replace(/\/\*[\s\S]*?\*\//gu, (comment) => comment.replace(/[^\n]/gu, ' '));
+  const definitions = [];
+  const stack = [];
+  let buffer = '';
+  let bufferStart = 0;
+
+  const flush = () => {
+    const match = buffer.match(/^\s*(--[\w-]+)\s*:([\s\S]*)$/u);
+    if (match) {
+      const offset = bufferStart + buffer.indexOf(match[1]);
+      definitions.push({
+        name: match[1],
+        value: match[2].trim(),
+        selector: stack.length > 0 ? stack[stack.length - 1] : '',
+        atRules: stack.filter((entry) => entry.startsWith('@')),
+        depth: stack.length,
+        line: text.slice(0, offset).split('\n').length,
+      });
+    }
+    buffer = '';
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"' || char === "'") {
+      const close = text.indexOf(char, index + 1);
+      const end = close === -1 ? text.length - 1 : close;
+      buffer += text.slice(index, end + 1);
+      index = end;
+      continue;
+    }
+    if (char === '{') {
+      stack.push(buffer.trim().replace(/\s+/gu, ' '));
+      buffer = '';
+      bufferStart = index + 1;
+      continue;
+    }
+    if (char === '}') {
+      flush();
+      stack.pop();
+      bufferStart = index + 1;
+      continue;
+    }
+    if (char === ';') {
+      flush();
+      bufferStart = index + 1;
+      continue;
+    }
+    buffer += char;
+  }
+  return definitions;
+}
+
 function validateDesignTokens() {
   // 토큰 단일 원본 = assets/css/system.css (plan.md D5, C-3).
   // 재작성 완료 표면의 CSS는 :root를 정의하지 않는다. 앱 3면(WordMaster·smstudy·admin)은
@@ -359,31 +417,74 @@ function validateDesignTokens() {
   // site-nav.css는 system.css .topbar가 흡수했다 — 파일도 링크도 남으면 안 된다.
   check(!existsSync(path.join(ROOT, 'assets/css/site-nav.css')), 'assets/css/site-nav.css must be deleted (absorbed by system.css .topbar)');
 
-  // C-3: system.css 밖의 어떤 CSS도 색 토큰을 정의하지 않는다.
-  // 인쇄용 라이트 팔레트만 예외이며, 그것도 :root가 아니라 @media print 안 html에서만 허용한다.
+  // C-3 / D5 — 디자인 토큰 단일 원본. 검사 대상 토큰 목록은 system.css의 :root에서 자동 도출한다.
+  // 하드코딩하면 토큰이 늘어날 때마다 게이트가 조용히 뒤처진다 — 실제로 색 토큰 9종만 지키고
+  // --text-3 등 나머지는 아무 셀렉터에서나 재정의 가능했다 (review-3b §4 major, review-3a M-7).
   const legacyPalette = /#87f5b0|#86efac|#6dff9a|#5fe391|#4ade80|#ff7a7a|#fb7185|#7dd3fc|#a8f5bf|#8fffb0|#facc15|#fb923c|135, ?245, ?176|134, ?239, ?172|95, ?227, ?145|74, ?222, ?128|255, ?122, ?122|251, ?113, ?133|109, ?255, ?154|125, ?211, ?252|250, ?204, ?21/iu;
-  const colorTokens = ['--bg', '--surface', '--surface-2', '--text', '--text-2', '--line', '--accent', '--green', '--red'];
-  const stripPrint = (source) => source.replace(/@media\s+print\s*\{[\s\S]*?\n\}/gu, '');
+  const systemTokens = new Set(
+    [...systemRoot.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/gu)].map(([, token]) => token),
+  );
+  // 도출이 깨지면 아래 재정의 금지가 통째로 무력해지므로 도출 결과 자체를 검사한다.
+  check(systemTokens.size >= 60, `system.css: :root token set looks truncated (parsed ${systemTokens.size}, expected >= 60)`);
+  for (const name of Object.keys(canonical)) {
+    check(systemTokens.has(name), `system.css: canonical token ${name} must appear in the parsed :root token set`);
+  }
+
+  // 자체 작성 CSS 등록부. 미등록 CSS는 실패시키므로 서드파티 CSS를 슬쩍 끼워 넣어
+  // 게이트를 우회할 수 없고, var(--) 소비 강제는 자체 작성 CSS에만 적용된다 (review-3a N-11).
+  const firstPartyCss = new Set([
+    'assets/css/system.css',
+    'assets/css/home.css',
+    'WordMaster/assets/css/style.css',
+    'smstudy/assets/css/style.css',
+    'admin/assets/css/admin.css',
+  ]);
+  const vendorCss = new Set();
+
+  // 유일한 정당한 재정의: smstudy 개념노트 인쇄용 라이트 팔레트 (plan.md §2).
+  // 파일 + @media print + html 셀렉터 + at-rule 1겹 + system.css가 아는 토큰 — 5중으로 좁혀
+  // 화이트리스트가 다른 파일·다른 위치의 위반을 덮지 않게 한다.
+  const printPalette = { file: 'smstudy/assets/css/style.css', selector: 'html' };
+  const isPrintPalette = (name, definition) => name === printPalette.file
+    && definition.selector === printPalette.selector
+    && definition.depth === 2
+    && definition.atRules.length === 1
+    && /^@media\b[^{]*\bprint\b/u.test(definition.atRules[0])
+    && systemTokens.has(definition.name);
+  let printPaletteOverrides = 0;
 
   for (const file of walk(ROOT, (item) => item.endsWith('.css'))) {
     const name = relative(file);
-    if (name === 'assets/css/system.css') continue;
     const source = readFileSync(file, 'utf8');
-    const screenOnly = stripPrint(source);
 
     check(!legacyPalette.test(source), `${name}: legacy palette literal found`);
+    check(firstPartyCss.has(name) || vendorCss.has(name),
+      `${name}: unregistered stylesheet — add it to firstPartyCss or vendorCss in scripts/validate.mjs`);
+    if (name === 'assets/css/system.css') continue;
+
+    if (firstPartyCss.has(name)) check(/var\(--/u.test(source), `${name}: stylesheet must consume system.css tokens`);
     check(!/:root\s*\{/u.test(source), `${name}: tokens must come from system.css only (no :root block)`);
-    check(/var\(--/u.test(source), `${name}: stylesheet must consume system.css tokens`);
-    for (const token of colorTokens) {
-      check(
-        !new RegExp(`(^|[;{\\s])${token}\\s*:`, 'u').test(screenOnly),
-        `${name}: color token ${token} must not be redefined outside assets/css/system.css`,
-      );
-    }
+
+    // 토큰 이름도 셀렉터도 가리지 않는다 — system.css 밖의 커스텀 프로퍼티 *정의*는 전면 금지.
+    const redefinitions = collectCustomProperties(source).filter((definition) => {
+      if (!isPrintPalette(name, definition)) return true;
+      printPaletteOverrides += 1;
+      return false;
+    });
+    check(redefinitions.length === 0,
+      `${name}: design tokens must be defined only in assets/css/system.css — `
+      + redefinitions.map((item) => `${item.name} at line ${item.line} in "${item.selector || '(top level)'}"`).join('; '));
   }
 
+  // 화이트리스트가 죽은 채 남아 다른 위반을 덮는 일이 없도록 실제 사용을 확인한다.
+  check(printPaletteOverrides >= 20,
+    `smstudy: @media print light palette must remap the shared tokens on html (found ${printPaletteOverrides})`);
+
   for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
-    check(!legacyPalette.test(readFileSync(file, 'utf8')), `${relative(file)}: legacy palette literal found`);
+    const source = readFileSync(file, 'utf8');
+    check(!legacyPalette.test(source), `${relative(file)}: legacy palette literal found`);
+    // style="--token: …" 인라인 정의도 같은 우회로다.
+    check(!/style="[^"]*--[\w-]+\s*:/u.test(source), `${relative(file)}: inline style must not define design tokens`);
   }
 }
 
