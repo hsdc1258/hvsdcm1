@@ -153,6 +153,8 @@ body.logged .topbar-login { display: none; }
 .hero-title a.welcome-user:hover { text-decoration: underline; }
 
 .hero-sub { max-width: 34ch; }
+/* 미로그인 소개 문구는 로그인 후 숨김 (학습 카피가 템플릿에서 주입된다) */
+body.logged .hero-sub-guest { display: none; }
 
 .hero-actions {
   margin-top: var(--space-3);

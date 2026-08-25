@@ -9,7 +9,6 @@
     closeLogin: document.getElementById('closeLogin'),
     drawer: document.getElementById('drawer'),
     drawerLogout: document.getElementById('drawerLogout'),
-    drawerStudy: document.getElementById('drawerStudy'),
     loginError: document.getElementById('loginError'),
     loginForm: document.getElementById('loginForm'),
     loginTriggers: document.querySelectorAll('[data-login-trigger]'),
@@ -58,7 +57,15 @@
     elements.account.classList.add('logged');
     elements.drawer.classList.add('logged');
     document.body.classList.add('logged');
-    elements.drawerStudy.setAttribute('aria-hidden', 'false');
+    document.title = 'hvsdcm — Study, distilled.';
+  }
+
+  // 학습 콘텐츠는 <template data-study>로만 존재한다 — 미로그인 문서에는 아예 렌더되지
+  // 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다. 로그인 판정 후 한 번만 주입한다.
+  function mountStudyContent() {
+    for (const template of document.querySelectorAll('template[data-study]')) {
+      template.parentNode.insertBefore(template.content.cloneNode(true), template);
+    }
   }
 
   // 로그인 후 이동은 동일 출처의 내부 경로만 허용한다.
@@ -162,10 +169,13 @@
     }
   });
 
-  setupReveal();
-
   const savedUsername = localStorage.getItem('hvsdcm.user');
   const token = localStorage.getItem('hvsdcm.token');
-  if (savedUsername && token) showUser(savedUsername);
+  if (savedUsername && token) {
+    mountStudyContent();
+    showUser(savedUsername);
+  }
+  // reveal 관찰은 학습 콘텐츠 주입 이후에 시작해야 주입된 섹션도 등장 처리가 된다.
+  setupReveal();
   if (new URLSearchParams(location.search).get('login') === '1' && !token) openLogin();
 })();

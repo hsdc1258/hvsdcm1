@@ -1,171 +1,235 @@
-# plan.md — 사이클 #2: 프론트엔드 전면 재작성 (Apple Dark v2)
+# plan.md — 사이클3: 사회문화 개념 파트 수능형 리디자인
 
-> 수행 모델 기록: 기획 = **Opus 5** (PIPELINE.md 지정은 Fable 5이나 본 세션 모델이 Opus 5여서 대체, 폴백 규칙에 따라 기록)
-> 사람 게이트 ①(plan 승인) = **사용자 지시로 생략.** "나한테 물어보지 말고 니가 알아서 해. 배포부터 끝까지."
-> 따라서 아래 판단(D1~D6)은 오케스트레이터가 결정하고 근거를 남긴 것이며, 승인 대기 없이 3단계로 진행한다.
+- 작성: Fable 5 (오케스트레이터, 본 세션)
+- 대상: `smstudy/` (사회·문화 학습 화면), 정적 사이트 / 빌드 없음
+- 날짜: 2026-08-26
 
-## 1. 요구사항
+---
 
-사용자 요청 원문 요약: 기존 프론트를 "싹 날린다는 마인드로" Fable이 직접 다시 짠다. 다크테마 선호,
-애플 디자인을 그대로 벤치마킹. **프론트만** 새로 짜고 **기존 기능은 전부 보존**. 레이아웃은 바뀌어도 무방.
-"hvsdcm"은 고유명이므로 표기를 분리하지 않는다.
+## 0. 현황 계측 (조사 단계 결과, Explore 서브에이전트)
 
-검증 가능한 문장으로 재진술:
+리디자인의 근거가 되는 실측값이다. 이후 완료 조건은 전부 이 수치를 기준으로 잡는다.
 
-- R-1. `index.html`, `WordMaster/index.html`, `smstudy/index.html`, `admin/index.html` 네 표면의
-  **DOM 구조를 새로 작성한다.** 기존 마크업을 그대로 옮겨 붙이지 않는다.
-- R-2. 시각 언어는 Apple을 기준으로 한다. 랜딩은 apple.com 제품 페이지 어법, 앱 3면은 macOS/iOS HIG 어법(D4).
-- R-3. 다크 전용을 유지한다(D3).
-- R-4. §3 인터페이스 계약에 나열된 기능·전역·저장 키·API가 **하나도 빠지지 않고** 동작한다.
-- R-5. 브랜드 표기는 항상 `hvsdcm` 한 덩어리다. `HVS DCM`, `hvs-dcm`, 글자별 자간 분해(letter-spacing 연출로
-  분리되어 보이는 것 포함) 금지. 대소문자는 소문자 `hvsdcm`으로 통일한다.
-- R-6. `npm test`가 통과한다.
-
-## 2. 파일 구조 / 변경 대상
-
-### 신설
-
-| 경로 | 책임 |
+| 항목 | 실측 |
 |---|---|
-| `assets/css/system.css` | **디자인 시스템 단일 원본.** 색·타이포·간격·반경·그림자·모션 토큰, 리셋, 공통 프리미티브(버튼/필드/카드/시트/토스트/표/뱃지/세그먼티드 컨트롤). 모든 표면이 이 파일을 **먼저** 링크한다. |
+| 개념 데이터 | `smstudy/assets/js/notebook-data.js` — 13개 중단원, 문자열 리터럴 821개 |
+| `oneLine` (단원 헤드라인, h3) | 13개 / 평균 **90자** / 최장 105자 |
+| `examInsight` | 13개 / 평균 **86자** / 최장 97자 |
+| `deepDive[].body` | 62개 / 평균 68자 / 최장 **139자** |
+| 60자 초과 문자열 | 83개 (80자 초과 28개) |
+| 한 문자열에 2문장 이상 | **93개** |
+| 줄바꿈 | 리터럴 개행 0개, br 태그 0개, 마크다운 0개 — **전부 개행 없는 평문 한 줄** |
+| 렌더 | `app.js:630 renderConcept()` — 데이터 문자열은 예외 없이 `escapeHtml()` 통과 |
+| 토큰 | `assets/css/system.css`가 단일 원본(73개). `smstudy/assets/css/style.css`에 `:root` 없음 |
+| 테마 | 다크 전용. 라이트 팔레트는 `@media print` 경로에만 존재 |
+| 기출 | `data.js` `QUESTION_ROWS` 78문항 + `assets/kice/*.webp` 78장 |
 
-### 전면 재작성
+**진단**: 사용자가 말한 "문장이 길고 줄바꿈이 뒤죽박죽"의 실제 원인은 *문장 길이*가 아니라
+**스키마에 구조가 없다는 것**이다. `oneLine`·`examInsight`·`deepDive.body`가 단일 string이라
+렌더러가 분절할 방법이 없고, `esc()` 정책 때문에 데이터에 br 태그를 넣는 우회도 막혀 있다.
+따라서 CSS만 손봐서는 해결되지 않으며 **데이터 스키마를 구조화하는 것이 정공법**이다.
 
-| 경로 | 비고 |
-|---|---|
-| `index.html` + `assets/css/home.css` + `assets/js/home.js` | 랜딩. home.js는 셀렉터·DOM 조작부만 새 구조에 맞게 수정(동작 로직은 보존). |
-| `WordMaster/index.html` + `WordMaster/assets/css/style.css` | 앱 셸·화면 템플릿 |
-| `smstudy/index.html` + `smstudy/assets/css/style.css` | 앱 셸·화면 템플릿. `@media print` 라이트 팔레트는 **유지**. |
-| `admin/index.html` + `admin/assets/css/admin.css` | 대시보드 |
-| `assets/css/site-nav.css` | system.css로 흡수하거나 새 상단바 컴포넌트로 재작성 |
-| `scripts/validate.mjs` | UI 계약·디자인 토큰 검사를 새 구조로 **재타겟**(D2) |
+---
 
-### 수정 (렌더링 부분만)
+## 1. 요구사항 (검증 가능한 문장으로)
 
-`WordMaster/assets/js/app.js`, `smstudy/assets/js/app.js`, `admin/assets/js/admin.js` —
-`innerHTML` 템플릿 문자열과 셀렉터를 새 마크업에 맞춘다. **상태 관리·채점·정렬·동기화 로직은 손대지 않는다.**
+- R1. 개념 파트의 모든 본문 문자열은 **한 문장, 60자 이하**다. 헤드라인 역할 필드는 **30자 이하**다.
+- R2. 시각적 분절은 CSS가 아니라 **데이터 구조**(배열·객체)가 만든다. 데이터에 개행·태그를 넣지 않는다.
+- R3. 각 중단원은 **마인드맵 1개**를 가진다. 중심 개념 1개 + 가지 3~6개 + 가지당 항목 2~4개.
+  렌더러가 데이터에서 **인라인 SVG**를 조립한다(외부 라이브러리·폰트·이미지 금지).
+- R4. 개념 항목에는 **아이콘 키**를 붙일 수 있다. 아이콘은 렌더러 내부 SVG 심볼 맵에서만 나오며,
+  데이터는 키 문자열만 갖는다(`esc()` 정책 유지).
+- R5. 개념과 기출이 **기계적으로 연결**된다. `QUESTION_ROWS`에 개념 태그 필드를 신설하고,
+  개념 화면의 빈출도·정답률·난이도는 **수기 숫자가 아니라 78문항에서 자동 집계**한 값이다.
+- R6. 콘텐츠는 **수능 문제풀이용**으로 재작성한다. 최근 5개년 평가원 기출에 실제로 나온 개념·함정만
+  남기고, 출제되지 않는 지엽적 서술은 삭제한다. 삭제 판단 근거를 §7 기준에 따라 남긴다.
+- R7. 기존 자동 게이트(`npm test`)를 통과한다. 단, **콘텐츠 문자열 하드코딩 검사 6건은 구조 계약
+  검사로 대체**한다(§6 LESSONS 규칙 5).
+- R8. 새 색 토큰을 도입하지 않는다. 불가피하면 `system.css`에 추가하고 print 팔레트와
+  대비표 주석을 함께 갱신한다(CLAUDE.md 승격 규칙 "토큰 대비 전수 검산").
 
-### 절대 수정 금지
+---
 
-`WordMaster/assets/js/words.js` (183KB 단일 라인, 열지 말 것), `smstudy/assets/js/data.js`,
-`smstudy/assets/js/notebook-data.js`, `smstudy/assets/js/explanation-data.js`,
-`assets/js/study-utils.js`, `account.js`, `worker/**`, `smstudy/assets/kice/*.webp`.
+## 2. 기출 분석 범위 — 사용자 요청과의 차이 (판단 기록)
 
-## 3. 인터페이스 계약 (재작성이 깨뜨리면 안 되는 경계면)
+사용자 요청은 "2023–2027 수능"이었다. 실제 가능한 범위는 다르며, 다음과 같이 확정한다.
 
-### 3.1 전역 심볼과 로드 순서 — classic script + `window` 전역 유지
+- 레포의 기출 자산은 **2022~2026학년도**다(파일명 `{학년도}-{csat|june|september}-{번호}.webp`).
+- **2027학년도 수능은 2026년 11월 시행으로 아직 치러지지 않았다.** 2027학년도 6월 모평(2026년 6월)은
+  시행됐으나 레포에 자산이 없다.
+- 2025학년도 수능 이미지가 누락돼 있다(6월·9월만 존재).
 
-`type="module"`로 바꾸면 전역 노출이 끊겨 전부 깨진다. **금지.** 페이지별 순서 그대로:
+**결정**: 분석 범위를 **2022~2026학년도 5개년 78문항(수능 4회 + 6월 5회 + 9월 5회)**으로 확정하고,
+목표를 **2027학년도 수능 대비**로 잡는다. 누락분(2025학년도 수능, 2027학년도 6월)은 자산이 없어
+이번 사이클에서 다루지 않으며, `docs/kice-analysis.md`에 "미수록"으로 명시한다.
+사용자가 원한 "최근 기출의 출제 방향 파악"이라는 목적은 78문항으로 충족된다고 판단해 진행한다.
 
-- smstudy: `account.js`(data-app="smstudy") → `data.js` → `notebook-data.js` → `explanation-data.js` → `/assets/js/study-utils.js` → `app.js`
-- WordMaster: `account.js`(data-app="wordmaster") → `words.js` → `/assets/js/study-utils.js` → `app.js`
-- 랜딩: `defer /assets/js/home.js` / admin: `defer /admin/assets/js/admin.js`
+---
 
-보존 전역: `window.HvsAccount`, `globalThis.HvsStudyUtils`(`Object.freeze`, `SORT_MODES`/`sortStudyItems` 포함),
-`window.WORDMASTER_WORDS`, `window.SMSTUDY_DATA`, `window.SMSTUDY_NOTEBOOK`, `window.SMSTUDY_EXPLANATIONS`.
+## 3. 파일 구조 / 변경 대상
 
-### 3.2 저장 키 — 이름 변경 금지
+| 파일 | 책임 | 변경 성격 |
+|---|---|---|
+| `docs/kice-analysis.md` | **신규**. 78문항 판독 결과 — 문항별 개념 태그, 단원별 빈출 개념·출제 스타일·함정 유형 | 생성 |
+| `smstudy/assets/js/notebook-data.js` | 개념 데이터. 스키마 구조화 + 전 단원 콘텐츠 재작성 | 전면 개편 |
+| `smstudy/assets/js/data.js` | `QUESTION_ROWS[].tags` 신설(78건). `UNITS[].sections`·`visual` 문장 축약 | 필드 추가 + 문장 수정 |
+| `smstudy/assets/js/app.js` | `renderConcept()` 계열 렌더러 — 마인드맵 SVG 조립, 아이콘 심볼 맵, 기출 집계 | 렌더 함수 개편 |
+| `smstudy/assets/css/style.css` | 마인드맵·아이콘·인포그래픽 칩/게이지 스타일. 기존 토큰만 사용 | 클래스 추가 |
+| `scripts/validate.mjs` | 콘텐츠 하드코딩 6건 → 구조 계약 검사로 교체, 신규 계약 추가 | 게이트 교체 |
+| `smstudy/index.html` | 변경 없음 예정 (새 JS 파일을 만들지 않는다 — 스크립트 순서 계약 보호) | 무변경 |
 
-`hvsdcm.token`, `hvsdcm.user`, `hvsdcm.api`(localStorage) / `hvsdcm.admin`, `hvsdcm.loaded.<app>`(sessionStorage) /
-`wordmaster2000.quiz.v1`, `samun2027.study.v1`(localStorage 학습 DB).
+**새 CSS 파일·새 JS 파일을 만들지 않는다.** `validate.mjs`의 `firstPartyCss` 등록부와
+스크립트 로드 순서 고정 검사를 건드리면 배포 계약이 흔들린다(CLAUDE.md: "파일명·스크립트 로드
+순서가 곧 배포 계약").
 
-### 3.3 백엔드 API — 호출부 시그니처 유지
+---
 
-`/api/login`, `/api/logout`, `/api/me`, `/api/progress/:app`, `/api/answers/:app`, `/api/answers/accept`,
-`/api/admin/login`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/stats`, `/api/admin/sessions`, `/api/admin/answers`.
-Bearer 토큰 방식, admin role 분리 유지.
+## 4. 인터페이스 계약
 
-### 3.4 보존 기능 체크리스트 (R-4의 판정 근거 — 리뷰어는 이 표로 반려한다)
+### 4.1 `notebook-data.js` — `NOTEBOOKS[subId]` 새 스키마
 
-**랜딩** — 로그인 모달 + `?login=1&next=` 동일 출처 리다이렉트 검증 / `hvsdcm` 계정일 때만 Admin 링크 노출 /
-드로어 열기·닫기 + `Escape` / 로그인 상태에 따른 학습 링크 노출·숨김 / 로그아웃 시 토큰·사용자·sessionStorage 전체 클리어 /
-Discord·Instagram 외부 링크.
+기존 9개 필드 중 단일 string이던 3개를 구조화하고, 마인드맵을 신설한다.
 
-**계정 동기화(account.js 호출 계약)** — 미로그인 시 즉시 리다이렉트 / progress PUT 350ms 디바운스 /
-서버 데이터 없으면 로컬 업로드 / 공유 답안 병합 후 변경 시 **1회만** `location.reload()`(`hvsdcm.loaded.<app>` 마커).
+```
+{
+  headline: string,            // (신) oneLine 대체. 명사구, <=30자, 종결부호 없음
+  summary: string[],           // (신) 2~3개, 각 <=60자 1문장
 
-**WordMaster** — DAY 1~50 범위 선택 / 문항 수·정렬(랜덤·순서·오답률↑↓·최근순) / 주관식 정규화 채점(NFKC, 공백·구두점 제거,
-대괄호 변형 허용) / "내 답 정답 인정"(로컬 오답 되돌림 + 서버 공유 답안 등록) / 결과·오답만 재시험 /
-통계(정답률·오답노트·정렬) / export·import·reset / 채점 후 `Enter`로 다음(포커스가 버튼이면 무시) /
-홈 복귀·기록 보기 시 진행 중이면 `confirm`.
+  map: {                       // (신) R3 마인드맵
+    center: string,            // <=14자
+    branches: [                // 3~6개
+      { label: string,         // <=12자
+        icon: string,          // 심볼 키 (4.3)
+        items: string[] }      // 2~4개, 각 <=20자
+    ]
+  },
 
-**smstudy** — 대단원·중단원 체크박스 + 전체선택·해제 / 범위별 5지선다 / 취약 개념 퀴즈·오답 재시험·누적 복습(각각 다른 문항 소스) /
-KICE 이미지 표시 + 로드 실패 처리(`error` 1회성 바인딩) / 채점 후 해설(정답 근거·오답 원인·체크리스트) /
-개념 노트(핵심요약·비교표·판별순서·심화메모·회상문제) + 이전·다음 중단원 이동 / 통계·취약점 패널 /
-export·import·reset / 퀴즈 중 `1`~`5` 즉시 선택, `Enter`로 다음.
+  keyPoints: [{ label: string, // <=12자
+                icon: string,
+                text: string }],// <=60자 1문장. 정확히 3개 (기존 계약 유지)
 
-**admin** — 관리자 비밀번호 로그인(sessionStorage, 탭 종료 시 소멸) / 통계 5종 카드 / 사용자 추가(아이디 3자+·비번 6자+)·목록·삭제(확인창) /
-세션 테이블(사용자 필터, UA 파싱 OS·브라우저·기기, IP, 활성·만료) / 공용 정답 테이블(접기·펼치기) / `noindex,nofollow`.
+  exam: {                      // (신) examInsight 대체
+    trend: string,             // <=60자 1문장 — 어떻게 출제되는가
+    trap: string,              // <=60자 1문장 — 무엇으로 틀리게 만드는가
+    tags: string[]             // 이 단원의 개념 태그 집합 (QUESTION_ROWS[].tags의 원본)
+  },
 
-**공통 알고리즘 불변식** — 취약 판정 `wrongRate >= 35` / 오답률 동률 시 누적 오답횟수 2차 정렬 /
-미시도 항목은 항상 측정 항목 뒤로(`compareNullableNumbers`).
+  matrix: { title, headers, rows },  // 기존 계약 유지(headers>=3, rows>=4). 각 셀 <=24자
+  decision: string[],          // >=4개, 각 <=60자 1문장
+  deepDive: [{ term: string,   // <=20자
+               icon: string,
+               points: string[] }],  // (신) body 대체. 2~4개, 각 <=60자 1문장. term 총 >=4개
+  recall: [{ question, answer }]      // >=3개, 각 <=60자
+}
+```
 
-## 4. 완료 조건
+- **삭제**: `patterns[]`. 수기 `count`가 자동 집계로 대체되므로 존재 이유가 없다(R5, LESSONS 5).
+  `patterns[].label`이 하던 역할은 `exam.tags`가 이어받는다.
+- `LEARNING_DESIGN`은 형태 유지, 문장만 R1에 맞게 축약.
 
-- [ ] C-1. `npm test` 통과 (validate + study-utils + worker 테스트).
-- [ ] C-2. **구조 재작성 증명**: `git diff --stat main..HEAD` 기준 4개 `index.html`이 각각
-      **삭제 30줄 이상 + 추가 30줄 이상**. 토큰 값만 바꾼 리스타일은 이 조건에서 반려된다.
-      (지난 사이클 `40f1d39`의 HTML 변경은 +2/-0줄이었다 — 같은 결과를 반복하지 않기 위한 게이트다.)
-- [ ] C-3. **디자인 토큰 단일화 증명**: `assets/css/system.css` 외의 CSS 파일에 색 토큰을 정의하는
-      `:root` 블록이 **0개**. `scripts/validate.mjs`가 이를 검사한다.
-- [ ] C-4. §3.4 체크리스트 전 항목이 새 마크업에서 동작. 리뷰어가 항목별로 판정한다.
-- [ ] C-5. `hvsdcm` 표기 분리 없음 — `validate.mjs`가 HTML·CSS 전체에서
-      `HVS[\s\-_]?DCM`, `hvs[\s\-_]dcm` 패턴을 검사해 발견 시 실패.
-- [ ] C-6. 전역 심볼·저장 키·스크립트 로드 순서 보존 — `validate.mjs`가 검사한다.
-- [ ] C-7. `main` 브랜치에 병합 후 push 완료, GitHub Pages 배포 반영.
+### 4.2 `data.js` — `QUESTION_ROWS[]` 필드 추가
 
-### C-1~C-6을 검증할 자동 검사 (LESSONS 규칙 준수 — 수작업 확인 금지)
+```
+{ id, sub, year, session, number, answerNumber, correctRate, wrongRate, image,
+  tags: string[] }   // (신) 1~3개. 값은 반드시 NOTEBOOKS[sub].exam.tags 안에 존재
+```
 
-`scripts/validate.mjs`를 다음과 같이 **재타겟한다. 검사를 줄이지 않는다.**
+집계 규칙(렌더러가 계산, 데이터에 저장하지 않음):
 
-- `validateDesignTokens()` → `system.css` 단일 `:root`에서 토큰 정의를 읽고,
-  **다른 CSS 파일에 색 토큰 `:root` 정의가 없음**을 검사(C-3). 레거시 팔레트 리터럴 금지 검사는 유지.
-- `validateUiContracts()` → 기존 하드코딩 문자열(`id="drawerStudy"` 등)을 **새 구조의 훅으로 교체**하되
-  검사 항목 수를 기존 이상으로 유지. 각 표면의 필수 랜드마크·상태 훅·접근성 속성을 검사.
-- 신규 `validateBrandName()` → C-5.
-- 신규 `validateGlobalsAndOrder()` → 각 HTML의 `<script src>` 순서가 §3.1과 일치하는지, `type="module"`이
-  없는지 검사(C-6). 저장 키 문자열이 각 앱 JS에 존재하는지 검사.
-- 데이터 불변식 검사(2,000단어 / 4단원·13중단원·78문항 / 이미지 78장·WebP 크기)는 **그대로 둔다.**
+- 태그 빈출도 = 해당 태그를 가진 문항 수 / 단원 총 문항 수
+- 단원 난이도 = 해당 단원 문항의 `correctRate` 평균
+- "고난도" 표시 = `wrongRate >= 35` (기존 `weak` 규칙 재사용)
 
-## 5. 관련 LESSONS 규칙 (docs/LESSONS.md 인용)
+### 4.3 `app.js` — 렌더러 계약
 
-- *"CSS 파일 안에 같은 셀렉터 또는 `:root`가 두 번 이상 선언돼 있으면 …"* →
-  현재 admin 2회·smstudy 3회·WordMaster 2회 중복 상태다. **D5(토큰 단일화)로 원인을 제거한다.** (C-3)
-- *"색 토큰의 명도·밝기를 바꾸는 수정을 할 때는 그 토큰을 참조하는 다른 모든 규칙의 대비도 함께 점검한다"* →
-  system.css 토큰 확정 시 본문·보조·비활성 텍스트의 대비를 각각 확인하고, 본문 텍스트는 배경 대비 **7:1 이상**을 목표로 한다.
-- *"완료 조건은 수작업 검증이 아니라 자동 검사 코드까지 함께 지정한다"* → §4의 자동 검사 재타겟이 이 규칙의 이행이다.
-- *"CRLF/LF 혼재 — diff·커밋 전에 `core.autocrlf false`로 고정"* → 오케스트레이터가 이미 설정했다.
-- *"파괴적 실험 전 커밋 또는 stash. 원복에 `git checkout -- <file>` 금지"* → 브랜치 작업 + 커밋 단위 진행으로 이행.
+- `ICONS`: 키 → SVG path 문자열 맵. **모듈 내부 상수**.
+  데이터의 `icon` 값이 맵에 없으면 렌더러는 아이콘을 생략한다(깨진 마크업 금지).
+- `renderIcon(key)` → `<svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true">`.
+  아이콘은 항상 장식이며 의미는 옆의 텍스트가 전달한다(스크린리더 중복 금지).
+- `renderMindMap(map)` → `<figure class="sm-mindmap">` 안에 인라인 SVG.
+  - 방사형: 중심 원 + 가지 N개를 균등 각도로 배치. `viewBox` 고정, `width:100%`로 반응형.
+  - 색은 `currentColor`와 CSS 클래스로만 지정한다(SVG 속성에 색 리터럴 금지 — 토큰 규칙).
+  - **폭 520px 미만에서는 SVG를 숨기고 같은 데이터의 목록 폴백을 보여준다.**
+    (`hidden` 속성이 아니라 CSS 미디어쿼리로 전환 — validate의 `hidden` 회귀 검사 저촉 방지)
+  - 접근성: `figcaption`에 중심 개념과 가지 라벨을 문장으로 서술.
+- `renderExamAnalysis(sub)` → 태그별 빈출 막대 + 정답률 게이지. 값은 `QUESTIONS`에서 계산.
+- 모든 데이터 문자열은 **기존대로 `esc()`를 통과**한다. 예외를 만들지 않는다.
 
-## 6. 담당 지정
+---
 
-- **구현자 모델: `fable`** — 선택 근거: 사용자가 "Fable이 직접 다시 짜도록"이라고 명시했다
-  (CLAUDE.md 모델 배정의 "사용자가 명시 요청한 경우" 조항).
-- **리뷰어: `opus`** — Codex 교차 리뷰가 1순위이나 본 사이클은 Opus 서브에이전트로 간다.
-  같은 계열 리뷰의 한계 보완을 위해 리뷰어는 review-template의 "테스트 실효성" 항목과
-  §3.4 체크리스트를 **항목별로** 별도 검증한다.
-- **실행 위치**: 구현·리뷰·수정 모두 Agent 서브에이전트 (CLAUDE.md 토큰 규칙 "실행 격리").
-- **브랜치**: `rebuild/apple-dark-v2`. 표면 단위 커밋. 승인 후 `main` 병합 → push(배포).
+## 5. 완료 조건
 
-## 7. 오케스트레이터 판단 기록 (사람 게이트 ① 생략에 따른 근거)
+기계 검사(`npm test`)로 판정한다. 각 항목 옆이 이를 검증하는 검사다.
 
-- **D1. 재작성 범위 = HTML 구조부터 전면.** 근거: 지난 `40f1d39`의 HTML 변경이 +2/-0줄이었고 사용자가
-  "변경성이 크게 없다"고 판정했다. CSS만 교체하면 같은 결과가 반복된다. C-2를 기계 게이트로 세운 이유다.
-- **D2. `validate.mjs`는 재타겟하되 약화하지 않는다.** 근거: 기존 UI 계약 검사는 옛 마크업 문자열을
-  하드코딩하므로 구조를 바꾸면 반드시 깨진다. 검사를 삭제하면 회귀 방어가 사라지므로(LESSONS 규칙 위반)
-  같은 수 이상의 새 훅 검사로 교체한다.
-- **D3. 다크 전용 유지, 라이트 토글 미추가.** 근거: 현재 라이트 경로가 아예 없고(`@media print` 예외),
-  토글 추가는 "기존 기능 보존" 범위를 넘는 **신규 기능**이다. 사용자 요청은 "다크테마 선호"였다.
-- **D4. 랜딩 = apple.com 제품 페이지 어법 / 앱 3면 = HIG 어법.** 근거: 랜딩은 소개 성격이라 여백·대형 타이포가
-  맞고, 학습 앱은 정보 밀도와 반복 조작이 중요해 사이드바·툴바·그룹 리스트 어법이 맞다.
-  두 어법은 system.css의 동일 토큰을 공유하므로 일관성은 유지된다.
-- **D5. 디자인 토큰 단일 원본(`system.css`).** 근거: 현재 4개 파일이 토큰을 복제하고 그중 3개는 `:root`가
-  2~3회 중복 선언돼 있다. LESSONS의 첫 규칙이 정확히 이 함정을 지목한다.
-- **D6. classic script + `window` 전역 유지.** 근거: 4개 표면 모두 전역 공유에 의존하며
-  `type="module"` 전환 시 전역 노출이 끊겨 전부 깨진다. 모듈화는 이번 범위 밖이다.
-- **D7. (리뷰 M-1 대응, 수정 라운드에서 추가) 미로그인 상태의 상단바·푸터 학습 링크 상시 노출은
-  기존 동작 보존이다.** 근거: `main`의 랜딩에서 `.product-card` 2장(/WordMaster/·/smstudy/)은
-  로그인 여부와 무관하게 항상 노출됐고(`git show main:index.html` 84·93행, home.css에 게이팅 규칙 없음),
-  게이팅됐던 표면은 드로어(`.drawer.logged .drawer-study`)와 히어로 CTA(`.account`)뿐이며 이 둘은
-  새 구현이 그대로 보존한다. §3.4의 "로그인 상태에 따른 학습 링크 노출·숨김"은 이 게이팅 표면을
-  가리키는 것으로 해석한다. 미로그인 진입 시 `account.js`가 `/?login=1&next=…`로 유도하므로 기능 누수도 없다.
+- [ ] `npm test` 통과 (빌드 단계 없음)
+- [ ] **길이 계약**: `NOTEBOOKS`의 모든 본문 문자열 <=60자, `headline` <=30자, `map.center` <=14자,
+      `branch.label` <=12자, `map.items[]` <=20자 → `validate.mjs`가 스키마를 순회하며 **자동 도출**해 검사
+- [ ] **1문장 계약**: 본문 문자열에 종결부호가 2회 이상 나오지 않는다 → 동일 순회 검사
+- [ ] **평문 계약**: 데이터에 꺾쇠·개행·br 태그가 없다 → 동일 순회 검사
+- [ ] **마인드맵 계약**: 13단원 전부 `map` 보유, branches 3~6, 각 items 2~4 → 형태 검사
+- [ ] **아이콘 계약**: 데이터의 모든 `icon` 값이 `app.js`의 `ICONS` 키 집합에 존재.
+      키 목록은 `app.js`에서 **정규식으로 파싱해 자동 도출**한다(하드코딩 금지)
+- [ ] **태그 정합**: 78문항의 모든 `tags` 값이 `NOTEBOOKS[sub].exam.tags`에 존재하고,
+      **역방향으로 모든 `exam.tags`가 최소 1문항에 쓰인다**(죽은 태그 금지) → 양방향 자동 대조
+- [ ] **하드코딩 제거**: `validate.mjs`에서 기존 콘텐츠 문자열 검사 6건이 사라지고,
+      그 자리를 위 구조 계약이 대신한다
+- [ ] **음성 테스트**: 위 신규 검사 각각에 대해 "일부러 값을 위반시키면 실제로 실패하는가"를
+      1건씩 확인하고 결과를 `docs/review.md`에 적는다 (LESSONS 규칙 4)
+- [ ] **대비**: 새 토큰을 도입했다면 배경 조합별 대비를 계산해 토큰 정의 옆 주석에 남긴다.
+      도입하지 않았다면 "신규 토큰 0개"를 리뷰에 명시 (CLAUDE.md 승격 규칙)
+- [ ] **수동 확인 1건**: 320px / 768px / 1280px에서 마인드맵이 잘리거나 겹치지 않는다.
+      구현자가 브라우저 프리뷰 스크린샷으로 증명한다(시각 판단은 기계 검사로 대체 불가 —
+      이것이 이번 게이트의 사각지대다, LESSONS 규칙 6)
+
+---
+
+## 6. 관련 LESSONS 규칙 (인용)
+
+- **규칙 5** — "색 토큰·훅 이름 같은 검사 대상 목록을 하드코딩하지 않는다. 단일 원본에서 파싱해
+  자동 도출하면 원본에 항목이 늘어도 검사가 뒤처지지 않는다."
+  → `patterns[].count` 수기 숫자와 콘텐츠 문자열 6건을 제거하는 직접 근거다.
+- **규칙 4** — "두 개의 독립된 존재 검사를 AND로 묶어 요소 하나를 검증한 것처럼 쓰지 않는다.
+  값을 지우는 음성 테스트로 실제로 실패하는지 확인한다." → §5 음성 테스트 항목.
+- **규칙 6** — "텍스트 검사로 커버할 수 없는 자산이 있으면 별도 잠금 검사를 둔다.
+  검사 통과가 곧 요구사항 충족은 아님을 전제한다." → 마인드맵의 시각적 정합성은 grep으로
+  판정할 수 없다. §5 마지막 항목에서 사각지대를 명시하고 스크린샷으로 메운다.
+- **규칙 1·2 (승격됨)** — 토큰 대비 전수 검산. → R8.
+- **규칙 10** — "줄바꿈/공백 정규화는 로직 변경과 별도 커밋으로 분리한다."
+  → 콘텐츠 재작성(데이터)과 렌더러/CSS 변경을 별도 커밋으로 나눈다.
+- **규칙 8** — "문서 산출물은 작성 도중 자주 커밋한다." → `kice-analysis.md`는 판독 배치마다 커밋.
+
+---
+
+## 7. 콘텐츠 삭제 기준 (R6 판단 근거)
+
+`docs/kice-analysis.md`의 5개년 집계에서 **0회 출제된 하위 개념**은 삭제 후보로 표시하고,
+다음 중 하나에 해당하면 남긴다: (a) 다른 빈출 개념을 이해하는 데 전제가 되는 정의,
+(b) 오답 선지로 반복 등장하는 개념. 그 외는 삭제한다. 삭제한 항목은 `kice-analysis.md`에
+"제외" 목록으로 남겨 되살릴 수 있게 한다.
+
+---
+
+## 8. 담당 지정
+
+| 단계 | 모델 | 근거 |
+|---|---|---|
+| 2. 기획 | **Fable 5** (본 세션) | CLAUDE.md 고정 |
+| 2.5 기출 판독 (신설, 격리) | **sonnet 5** × 3 병렬 | 78장 webp에서 개념 태그를 뽑는 추출 작업. 사양이 확정돼 있어 sonnet으로 충분하고, 이미지 토큰이 크므로 서브에이전트에 격리한다. 판독 결과는 구현자가 검수한다 |
+| 3. 구현 | **opus 5** | **Codex 제외 판정**: 이번 작업의 본체는 마인드맵 SVG 레이아웃·아이콘·정보 위계 등 **시각적 판단**과 개념 콘텐츠 저술이다. CLAUDE.md는 "프론트엔드는 Codex에 맡기지 않는다"고 못박고 있고, 사양이 확정된 기계적 스타일 작업이 아니라 설계 판단이 필요하므로 sonnet이 아닌 opus다 |
+| 4. 기계 게이트 | 본 세션 | `npm test` |
+| 5. 리뷰 | **Codex** (`codex exec`) | Claude 계열이 구현했으므로 교차 검토 유지 (CLAUDE.md 모델 배정) |
+| 6. 수정 | **opus 5** | "자기 코드의 지적사항은 자기가 고친다" |
+| 8. 회고 | **sonnet 5** | /retro 규칙 |
+
+- 실행 위치: 2.5·3·5·6·8 전부 서브에이전트 (CLAUDE.md 토큰 규칙 "실행 격리")
+- Codex 한도: 리뷰 1회분만 사용하므로 전환 불필요. 실패 시 폴백은 opus가 아닌 **sonnet 5**로 잡는다
+  (구현자가 opus이므로 opus 리뷰는 동일 모델 자기검토가 되어 교차 검토가 깨진다).
+
+---
+
+## 9. 커밋 계획
+
+1. `docs(kice): 2022~2026학년도 78문항 판독 분석` — `docs/kice-analysis.md`
+2. `feat(smstudy): 개념 데이터 스키마 구조화 + 5개년 기출 기반 재작성` — `notebook-data.js`, `data.js`
+3. `feat(smstudy): 마인드맵·아이콘 인포그래픽 렌더러` — `app.js`, `style.css`
+4. `test(validate): 콘텐츠 하드코딩 검사를 구조 계약 검사로 교체` — `scripts/validate.mjs`

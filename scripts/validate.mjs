@@ -102,7 +102,8 @@ function validateUiContracts() {
   const adminJs = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
 
   // 조건을 includes 두 개로 나누면 서로 다른 요소를 봐도 통과한다 — 한 태그 안에서 매칭한다 (review-3a M-6).
-  check(/id="drawerStudy"[^>]*aria-hidden="true"/u.test(homeHtml), 'home: authenticated STUDY drawer with default hidden state is missing');
+  // 학습 드로어는 미로그인 문서에 렌더되면 안 된다 — <template data-study> 안에만 존재한다 (사이클 #3 게이팅).
+  check(/<template data-study>[^]*?class="drawer-study"/u.test(homeHtml), 'home: STUDY drawer must live inside a <template data-study> (login-gated)');
   // 대화상자 의미는 백드롭이 아니라 시트 본체(form.sheet)에 붙는다 (review-3a N-7).
   check(/id="loginForm"[^>]*class="[^"]*\bsheet\b[^"]*"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="loginTitle"/u.test(homeHtml),
     'home: login sheet itself must carry role="dialog" aria-modal="true" aria-labelledby="loginTitle"');
@@ -117,7 +118,10 @@ function validateUiContracts() {
   check(homeCss.includes('.drawer.logged .drawer-study'), 'home: STUDY drawer must depend on logged-in state');
   check(homeCss.includes('.account.logged'), 'home: CTA switch must depend on logged-in state');
   check(homeCss.includes('.hero-title[data-user]'), 'home: personalized title responsive rule is missing');
-  check(homeJs.includes("drawerStudy.setAttribute('aria-hidden', 'false')"), 'home: STUDY drawer accessibility state is not synchronized');
+  // 주입은 로그인 판정 분기 안에서만 일어나야 한다 — 무조건 mount하면 게이팅이 무너진다.
+  check(/if \(savedUsername && token\) \{[^]*?mountStudyContent\(\);/u.test(homeJs),
+    'home: mountStudyContent() must run only inside the logged-in branch');
+  check(homeJs.includes("querySelectorAll('template[data-study]')"), 'home: study template mount routine is missing');
   check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
 
   // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
@@ -626,9 +630,39 @@ function validateOgImageLock() {
     'og lock: assets/og.png bytes do not match OG_LOCK.sha256 — regenerate the image and update the lock in one commit');
 }
 
+function validateLandingGating() {
+  // 사이클 #3 게이팅 잠금 (plan.md D7 철회) — 미로그인 랜딩은 "개인 웹사이트"여야 한다.
+  // 학습 콘텐츠는 <template data-study>에만 존재하고 로그인 판정 후 home.js가 주입한다.
+  // 마크업을 재작성하더라도 이 계약이 조용히 풀리지 않도록 정적으로 확인한다.
+  const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
+  const templatePattern = /<template data-study>[^]*?<\/template>/gu;
+  const studyTemplates = homeHtml.match(templatePattern) || [];
+  const staticMarkup = homeHtml.replace(templatePattern, '');
+
+  // 1) 미로그인 상태로 렌더되는 정적 마크업에 학습 앱 경로가 있으면 실패.
+  for (const appPath of ['/WordMaster/', '/smstudy/', '/admin/']) {
+    check(!new RegExp(`(?:href|src|action)=["']${appPath.replaceAll('/', '\\/')}`, 'u').test(staticMarkup),
+      `index.html: logged-out static markup must not link to study app path ${appPath}`);
+  }
+  // 2) 학습을 드러내는 문구도 정적 마크업에 남으면 안 된다 (메타/OG 포함 전체 소스 기준).
+  for (const keyword of ['학습', 'WordMaster', 'smstudy', 'Study']) {
+    check(!staticMarkup.includes(keyword),
+      `index.html: logged-out static markup must not contain study keyword "${keyword}"`);
+  }
+  // 3) 복원 계약 — 로그인 시 주입될 템플릿 안에는 두 학습 앱 링크가 반드시 있어야 한다.
+  const templateMarkup = studyTemplates.join('\n');
+  check(studyTemplates.length > 0, 'index.html: <template data-study> blocks are missing');
+  check(templateMarkup.includes('href="/WordMaster/"'), 'index.html: study templates must restore the /WordMaster/ link on login');
+  check(templateMarkup.includes('href="/smstudy/"'), 'index.html: study templates must restore the /smstudy/ link on login');
+  // 4) 주입 루틴 존재 — 템플릿만 있고 주입 코드가 사라지면 로그인 화면이 빈다.
+  check(homeJs.includes('mountStudyContent'), 'home.js: mountStudyContent is missing — study templates would never render');
+}
+
 validateJavaScriptSyntax();
 validateHtmlAssets();
 validateUiContracts();
+validateLandingGating();
 validateDesignTokens();
 validateBrandName();
 validateOgImageLock();
