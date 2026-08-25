@@ -63,19 +63,33 @@ function validateHtmlAssets() {
 }
 
 function validateUiContracts() {
+  // 랜딩 검사는 Apple Dark v2 구조(사이클 #2 재작성)의 훅을 검사한다 (plan.md D2).
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeCss = readFileSync(path.join(ROOT, 'assets/css/home.css'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
+  const systemCss = readFileSync(path.join(ROOT, 'assets/css/system.css'), 'utf8');
   const wordMasterCss = readFileSync(path.join(ROOT, 'WordMaster/assets/css/style.css'), 'utf8');
   const wordMasterJs = readFileSync(path.join(ROOT, 'WordMaster/assets/js/app.js'), 'utf8');
   const smstudyJs = readFileSync(path.join(ROOT, 'smstudy/assets/js/app.js'), 'utf8');
 
-  check(homeHtml.includes('id="drawerStudy"'), 'home: authenticated STUDY drawer is missing');
-  check(homeHtml.includes('class="study-icon wordmaster-icon"'), 'home: WordMaster drawer icon is missing');
-  check(homeHtml.includes('class="study-icon society-icon"'), 'home: social-studies drawer icon is missing');
+  check(homeHtml.includes('id="drawerStudy"') && homeHtml.includes('aria-hidden="true"'), 'home: authenticated STUDY drawer with default hidden state is missing');
+  check(/id="loginModal"[^>]*role="dialog"[^>]*aria-modal="true"/u.test(homeHtml), 'home: login sheet must be a modal dialog');
+  check(/class="brand"[^>]*>hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
+  check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
+  check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
+  check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
+  check(homeHtml.includes('aria-expanded') && homeHtml.includes('aria-controls="drawer"'), 'home: menu button accessibility wiring is missing');
   check(homeCss.includes('.drawer.logged .drawer-study'), 'home: STUDY drawer must depend on logged-in state');
-  check(homeCss.includes('h1[data-user]'), 'home: personalized title responsive rule is missing');
+  check(homeCss.includes('.account.logged'), 'home: CTA switch must depend on logged-in state');
+  check(homeCss.includes('.hero-title[data-user]'), 'home: personalized title responsive rule is missing');
   check(homeJs.includes("drawerStudy.setAttribute('aria-hidden', 'false')"), 'home: STUDY drawer accessibility state is not synchronized');
+  check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
+
+  // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
+  for (const primitive of ['.btn ', '.btn-primary ', '.field-input ', '.card ', '.sheet ', '.sheet-backdrop ', '.table ', '.badge ', '.segmented ', '.toolbar ', '.sidebar ', '.toast ', '.topbar ', '.app-shell ', '.segmented-btn ', '.sidebar-item ']) {
+    check(systemCss.includes(primitive.trimEnd() + ' {') || systemCss.includes(primitive.trimEnd() + ','), `system.css: primitive ${primitive.trim()} is missing`);
+  }
+
   check(wordMasterCss.includes('#app:focus { outline: none; }'), 'WordMaster: app focus outline fix is missing');
   check(wordMasterCss.includes('grid-template-columns: minmax(0, 1fr)'), 'WordMaster: desktop review actions must use a shrink-safe column');
   check(wordMasterJs.includes('wrongCount: cumulativeWrongCount'), 'WordMaster: wrong-rate ties must use cumulative mistakes');
@@ -246,10 +260,47 @@ function validateSmStudyData() {
 }
 
 function validateDesignTokens() {
-  // Palette contract (docs/plan.md cycle #1): every surface resolves the shared
-  // Apple dark tokens to the same values, and no legacy-palette literal survives.
+  // 토큰 단일 원본 = assets/css/system.css (plan.md D5, C-3).
+  // 재작성 완료 표면의 CSS는 :root를 정의하지 않는다. 앱 3면(WordMaster·smstudy·admin)은
+  // 3b 재작성 전까지 레거시 토큰 검사(값 일치)로 유지하고, 3b에서 :root 금지로 전환한다.
+  const systemCss = readFileSync(path.join(ROOT, 'assets/css/system.css'), 'utf8');
+  const systemRoots = [...systemCss.matchAll(/:root\s*\{([^}]*)\}/gsu)];
+  check(systemRoots.length === 1, `system.css: exactly one :root block must exist, found ${systemRoots.length}`);
+  const canonical = {
+    '--bg': '#000',
+    '--surface': '#161617',
+    '--surface-2': '#1d1d1f',
+    '--text': '#f5f5f7',
+    '--text-2': '#a1a1a6',
+    '--line': 'rgba(255,255,255,.12)',
+    '--green': '#30d158',
+    '--red': '#ff453a',
+    '--accent': '#2997ff',
+  };
+  const systemRoot = systemRoots[0]?.[1] ?? '';
+  for (const [name, expectedValue] of Object.entries(canonical)) {
+    const match = systemRoot.match(new RegExp(`${name}\\s*:\\s*([^;\\r\\n]+)`, 'u'));
+    check(Boolean(match), `system.css: canonical token ${name} is not defined`);
+    if (match) {
+      check(
+        match[1].trim().replace(/\s+/gu, '').toLowerCase() === expectedValue,
+        `system.css: ${name} is ${match[1].trim()}, expected ${expectedValue}`,
+      );
+    }
+  }
+
+  // 재작성 완료 표면: 색 토큰 :root 정의 금지 (C-3).
+  for (const file of ['assets/css/home.css']) {
+    check(!/:root\s*\{/u.test(readFileSync(path.join(ROOT, file), 'utf8')), `${file}: tokens must come from system.css only (no :root block)`);
+  }
+
+  // 로드 계약: 모든 표면은 system.css를 자기 스타일보다 먼저 링크한다. (지금은 랜딩만)
+  const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const systemIndex = homeHtml.indexOf('/assets/css/system.css');
+  check(systemIndex !== -1 && systemIndex < homeHtml.indexOf('/assets/css/home.css'), 'index.html: system.css must load before home.css');
+
+  // 레거시 표면 (3b에서 :root 제거 후 이 블록을 삭제):
   const surfaces = {
-    'assets/css/home.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
     'WordMaster/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
     'smstudy/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
     'admin/assets/css/admin.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
@@ -287,10 +338,63 @@ function validateDesignTokens() {
   }
 }
 
+function validateBrandName() {
+  // C-5: 브랜드는 소문자 "hvsdcm" 한 덩어리 (plan.md R-5). 분리 표기 전면 금지.
+  const separated = /HVS[\s\-_]?DCM|hvs[\s\-_]dcm/u;
+  for (const file of walk(ROOT, (item) => item.endsWith('.html') || item.endsWith('.css'))) {
+    check(!separated.test(readFileSync(file, 'utf8')), `${relative(file)}: separated brand name found (use "hvsdcm" in one piece)`);
+  }
+
+  // 재작성 완료 표면은 슬래시·가운뎃점·대문자 변형도 금지 — 3b에서 전 표면으로 확대.
+  const strict = /hvs\s*[/·]\s*dcm|HVSDCM|HvsDcm|Hvsdcm/u;
+  for (const file of ['index.html', 'assets/css/home.css', 'assets/css/system.css', 'assets/js/home.js']) {
+    check(!strict.test(readFileSync(path.join(ROOT, file), 'utf8')), `${file}: brand must appear only as lowercase "hvsdcm"`);
+  }
+}
+
+function validateGlobalsAndOrder() {
+  // C-6: classic script + window 전역 유지 (plan.md §3.1, D6). type="module" 전면 금지.
+  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+    check(!/type=["']module["']/u.test(readFileSync(file, 'utf8')), `${relative(file)}: type="module" is forbidden`);
+  }
+
+  const scriptSources = (file) =>
+    [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/giu)].map(([, src]) => src);
+
+  // 표면별 스크립트 로드 순서 (§3.1)
+  const expectedOrders = {
+    'index.html': ['/assets/js/home.js'],
+    'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
+    'smstudy/index.html': ['/account.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
+    'admin/index.html': ['/admin/assets/js/admin.js'],
+  };
+  for (const [file, order] of Object.entries(expectedOrders)) {
+    check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
+  }
+
+  const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  check(/<script\b[^>]*src="\/assets\/js\/home\.js"[^>]*\bdefer\b/u.test(homeHtml), 'index.html: home.js must load with defer');
+  check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-app="wordmaster"'), 'WordMaster: account.js must declare data-app="wordmaster"');
+  check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-app="smstudy"'), 'smstudy: account.js must declare data-app="smstudy"');
+
+  // 저장 키 보존 (§3.2 — 이름 변경 금지)
+  const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
+  for (const key of ['hvsdcm.token', 'hvsdcm.user', 'hvsdcm.api']) {
+    check(homeJs.includes(`'${key}'`), `home.js: storage key ${key} is missing`);
+  }
+  const accountJs = readFileSync(path.join(ROOT, 'account.js'), 'utf8');
+  check(accountJs.includes('hvsdcm.token') && accountJs.includes('hvsdcm.loaded.'), 'account.js: sync storage keys are missing');
+  check(readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8').includes('hvsdcm.admin'), 'admin.js: admin session key is missing');
+  check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-key="wordmaster2000.quiz.v1"'), 'WordMaster: study DB key is missing');
+  check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-key="samun2027.study.v1"'), 'smstudy: study DB key is missing');
+}
+
 validateJavaScriptSyntax();
 validateHtmlAssets();
 validateUiContracts();
 validateDesignTokens();
+validateBrandName();
+validateGlobalsAndOrder();
 validateMigrations();
 validateWordMasterData();
 validateSmStudyData();
