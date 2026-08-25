@@ -450,11 +450,13 @@
     const checks = visual.checks.map((check, index) => `
       <div class="sm-check-item"><span class="kicker">check ${index + 1}</span><p>${esc(check)}</p></div>
     `).join('');
+    // 정적 라벨에 상태색(초록)을 쓰지 않는다 — 다른 섹션과 같은 kicker 어법으로 통일한다
+    // (DESIGN.md §3 강조색 1색, §4 장식 상한).
     return `
-      <section class="card sm-stack sm-map" aria-labelledby="conceptMapTitle">
+      <section class="sm-stack sm-map sm-section" aria-labelledby="conceptMapTitle">
         <div>
-          <span class="badge badge-green">개념 구조도</span>
-          <h3 class="title-3" id="conceptMapTitle">${esc(visual.question)}</h3>
+          <span class="kicker">개념 구조도</span>
+          <h3 class="title-2" id="conceptMapTitle">${esc(visual.question)}</h3>
           <p class="sm-note">글을 외우기 전에 아래 흐름과 판별 기준을 먼저 잡으세요.</p>
         </div>
         <ol class="sm-flow">${flow}</ol>
@@ -477,10 +479,9 @@
       </nav>`;
   }
 
-  function renderConceptSection(section, index) {
+  function renderConceptSection(section) {
     return `
       <article class="card sm-concept-card">
-        <span class="badge badge-green">개념 ${index + 1}</span>
         <h4 class="title-3">${esc(section.title)}</h4>
         <ul class="sm-bullets">${section.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul>
         <p class="sm-trap"><strong>함정 체크</strong>${esc(section.trap)}</p>
@@ -502,21 +503,19 @@
 
   function renderNotebookHero(note) {
     const summary = note.summary.map((line) => `<li>${esc(line)}</li>`).join('');
-    // 아이콘은 장식이다 (plan.md §4.3) — 의미는 옆의 label·text가 전달하고 svg는 aria-hidden이다.
+    // 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩을 쓰지 않는다 — 일반 리스트가
+    // 기본값이다 (DESIGN.md §4). 라벨과 설명 자체가 위계를 만든다.
     const keyPoints = note.keyPoints.map((item) => `
-      <li class="sm-keypoint">
-        <span class="sm-keypoint-icon">${icon(item.icon)}</span>
-        <div><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></div>
-      </li>
+      <li class="sm-keypoint"><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></li>
     `).join('');
     return `
-      <section class="card card-xl sm-stack sm-note-hero" aria-labelledby="noteHeroTitle">
+      <section class="sm-note-hero sm-section" aria-labelledby="noteHeroTitle">
         <div class="sm-hero-head">
-          <span class="badge badge-green">이 단원에서 먼저 잡을 생각</span>
+          <span class="kicker">이 단원에서 먼저 잡을 생각</span>
           <h3 class="sm-headline" id="noteHeroTitle">${esc(note.headline)}</h3>
         </div>
         <ul class="sm-summary">${summary}</ul>
-        <ol class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ol>
+        <ul class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ul>
       </section>`;
   }
 
@@ -539,7 +538,8 @@
 
   // 이 화면의 숫자는 전부 QUESTIONS에서 즉석 집계한다 (plan.md §4.2, R5).
   // 데이터에 수기 count를 두지 않으므로 문항이 늘거나 태그가 바뀌면 화면이 저절로 따라간다.
-  // 막대는 정적 콘텐츠 장식이 아니라 실측 집계값의 표현이라 DESIGN.md §4의 예외로 둔다.
+  // 집계값이라도 사용자의 진행 데이터가 아니므로 막대(게이지·미터)로 그리지 않는다 —
+  // DESIGN.md §4는 프로그레스 바를 진행률·정답률에만 허용한다. 숫자와 문장으로 낸다.
   function renderExamAnalysis(id, note) {
     const questions = QUESTIONS.filter((question) => question.sub === id);
     if (questions.length === 0) return '';

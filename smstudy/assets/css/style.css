@@ -107,8 +107,20 @@
 
 .sm-toc { gap: var(--space-4); }
 
-.sm-note-body { display: grid; gap: var(--space-5); word-break: keep-all; overflow-wrap: break-word; }
-.sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
+/* 개념 노트 본문 — 카드 10연속 스택을 걷어내고 구분선 조판으로 낸다.
+   레퍼런스는 문제집·참고서다 (DESIGN.md §1): 높은 밀도, 조용한 위계, 훑기 좋은 리스트.
+   카드는 정보의 경계가 필요한 자리에만 남긴다 (§4). */
+.sm-note-body { display: grid; gap: 0; }
+.sm-section {
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-6));
+  padding: var(--space-7) 0;
+  border-top: 1px solid var(--line-faint);
+}
+.sm-note-body > .sm-section:first-child { padding-top: 0; border-top: 0; }
+.sm-note-body > .sm-section:last-child { padding-bottom: 0; }
+
+/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조). */
+.sm-note-hero { display: grid; gap: var(--space-4); }
 
 /* 헤드라인은 30자 이하 명사구 전용이다 (DESIGN.md §2). 문장은 아래 .sm-summary가 본문 크기로 받는다. */
 .sm-headline {
@@ -128,24 +140,17 @@
 }
 .sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
 
+/* 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩 리스트를 쓰지 않는다 — 일반 리스트가
+   기본값이다 (DESIGN.md §4). 위계는 굵은 라벨 하나로 충분하다. */
 .sm-keypoints {
   display: grid;
   gap: var(--space-3);
-  padding-top: var(--space-3);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--line);
 }
-.sm-keypoint { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.sm-keypoint-icon {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.sm-keypoint strong { display: block; font-size: var(--fs-caption); }
-.sm-keypoint p { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
+.sm-keypoint { display: grid; gap: 2px; }
+.sm-keypoint strong { font-size: var(--fs-caption); }
+.sm-keypoint p { font-size: var(--fs-caption); color: var(--text-2); }
 
 /* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
 .sm-icon {
@@ -173,23 +178,8 @@
 .sm-facts-inline dt { font-size: var(--fs-micro); color: var(--text-3); }
 .sm-facts-inline dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-.sm-gauge { display: grid; gap: var(--space-2); }
-.sm-gauge-track {
-  position: relative;
-  height: 10px;
-  border-radius: var(--radius-full);
-  background: var(--surface-3);
-  overflow: hidden;
-}
-.sm-gauge-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
-.sm-gauge-mark {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 16px;
-  margin-left: -1px;
-  background: var(--text);
-}
+/* 정적 집계(단원 평균 정답률)를 막대로 그리던 .sm-gauge는 제거했다 — 프로그레스 바는
+   사용자의 진행 데이터에만 쓴다 (DESIGN.md §4). 같은 정보는 아래 .sm-hint 문장이 낸다. */
 
 .sm-callouts { display: grid; gap: var(--space-3); }
 .sm-callout {
@@ -205,12 +195,22 @@
 .sm-callout.is-trap { border-left-color: var(--line-strong); }
 .sm-callout .kicker { display: flex; align-items: center; gap: var(--space-2); }
 
-.sm-freq { display: grid; gap: var(--space-4); }
-.sm-freq-item { display: grid; gap: var(--space-2); }
-.sm-freq-head { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-caption); }
-.sm-freq-head span { color: var(--text-3); font-variant-numeric: tabular-nums; }
-.sm-freq-item p { font-size: var(--fs-micro); color: var(--text-2); }
+/* 출제 빈도는 정적 콘텐츠의 비중이라 막대를 쓰지 않는다 (DESIGN.md §4).
+   참고서 조판대로 라벨-숫자 행 나열로 낸다. */
+.sm-freq { display: grid; gap: 0; }
+.sm-freq-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line-faint);
+  font-size: var(--fs-caption);
+}
+.sm-freq-item:first-child { border-top: 0; }
+.sm-freq-count { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* 사용자의 정답률(실제 진행 데이터)에만 쓰는 막대다 — §4가 허용한 용도. */
 .sm-meter { height: 6px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
 .sm-meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 
@@ -253,7 +253,9 @@
 }
 .sm-recall-item summary::-webkit-details-marker { display: none; }
 .sm-recall-item > div { padding: 0 var(--space-4) var(--space-4); display: grid; gap: var(--space-1); }
-.sm-recall-item > div strong { font-size: var(--fs-micro); color: var(--green); }
+/* 채점 결과가 아니라 펼침 라벨이다 — 상태색을 쓰지 않는다 (§3).
+   --text-2 on --surface-2 7.03:1. */
+.sm-recall-item > div strong { font-size: var(--fs-micro); color: var(--text-2); }
 .sm-recall-item > div p { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-schedule {
@@ -287,14 +289,26 @@
 
 .sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
 .sm-concept-card { display: grid; gap: var(--space-3); align-content: start; background: var(--surface-2); }
+/* 함정 칸은 색이 아니라 라벨로 구분한다 — 상태색은 상태 표시에만 쓴다 (DESIGN.md §3).
+   205행의 .sm-callout.is-trap과 같은 처리다. */
 .sm-trap {
   padding: var(--space-3);
+  border-left: 2px solid var(--line-strong);
   border-radius: var(--radius-s);
-  background: var(--orange-soft);
+  background: var(--surface-3);
   font-size: var(--fs-caption);
   color: var(--text);
 }
-.sm-trap strong { display: block; color: var(--orange); font-size: var(--fs-micro); margin-bottom: 2px; }
+/* --text-3 on --surface-3 3.85:1 — system.css 표에 따르면 본문 금지 구간이므로
+   라벨은 --text-2를 쓴다 (on --surface-3 6.54:1, 캡션·UI 라벨 기준 충족). */
+.sm-trap strong {
+  display: block;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
 
 .sm-design { padding: 0; }
 .sm-design > summary {

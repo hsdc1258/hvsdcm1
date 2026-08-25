@@ -277,6 +277,73 @@ function validateWordMasterData() {
   }
 }
 
+// ---- smstudy 개념 노트 구조 계약 (plan.md §5) --------------------------------
+// 콘텐츠 문자열 하드코딩을 대신하는 검사들이다. 검사 대상 목록(허용 kind, 아이콘 키,
+// 길이를 잴 필드)을 여기에 열거하지 않고 전부 단일 원본에서 도출한다 (LESSONS 규칙 5).
+
+// 필드 이름 → 길이 상한 (plan.md §4.1). 표에 없는 문자열은 본문으로 보고 60자를 적용하므로
+// 스키마에 필드가 새로 생겨도 검사가 자동으로 따라간다.
+const NOTEBOOK_STRING_LIMITS = {
+  headline: 30,
+  center: 14,
+  label: 12,
+  items: 20,
+  why: 40,
+  title: 20,
+  term: 20,
+  tags: 24,
+  headers: 24,
+  rows: 24,
+};
+
+// kind별 nodes 개수 상·하한 (docs/kice-analysis.md 부록 D). kind 목록 자체는 여기서 정하지
+// 않는다 — 아래 derivedDiagramKinds()가 렌더러에서 뽑고, 뽑힌 kind에 여기 항목이 없으면
+// 실패시킨다. 즉 레이아웃을 새로 만들면 상·하한을 함께 적는 일이 강제된다.
+const DIAGRAM_NODE_BOUNDS = {
+  flow: [3, 5],
+  scale: [2, 2],
+  matrix2x2: [4, 4],
+  venn: [2, 3],
+  timeline: [3, 5],
+  pyramid: [3, 4],
+  radial: [5, 5],
+};
+
+const DIAGRAM_SOURCE = 'smstudy/assets/js/diagram.js';
+const ICON_SOURCE = 'assets/vendor/lucide/icons.js';
+
+// 허용 kind는 렌더러의 레이아웃 함수 이름에서 뽑는다. LAYOUTS 등록부와 교차 대조해
+// "함수는 있는데 등록이 안 된" 또는 그 반대의 상태를 잡는다.
+function derivedDiagramKinds() {
+  const source = readFileSync(path.join(ROOT, DIAGRAM_SOURCE), 'utf8');
+  const kinds = new Set(
+    [...source.matchAll(/function layout([A-Z][\w$]*)\s*\(/gu)]
+      .map(([, name]) => name[0].toLowerCase() + name.slice(1)),
+  );
+  const layoutBlock = /const LAYOUTS = \{([^}]*)\}/su.exec(source);
+  const registered = new Set(
+    [...(layoutBlock?.[1] ?? '').matchAll(/^\s*([\w$]+)\s*:/gmu)].map(([, name]) => name),
+  );
+  return { kinds, registered, source };
+}
+
+// 스키마를 재귀 순회하며 모든 문자열에 방문자를 적용한다 (검사할 필드를 열거하지 않는다).
+function walkNotebookStrings(node, location, key, visit) {
+  if (typeof node === 'string') {
+    visit(node, location, key);
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((item, index) => walkNotebookStrings(item, `${location}[${index}]`, key, visit));
+    return;
+  }
+  if (node && typeof node === 'object') {
+    for (const [childKey, value] of Object.entries(node)) {
+      walkNotebookStrings(value, `${location}.${childKey}`, childKey, visit);
+    }
+  }
+}
+
 function validateSmStudyData() {
   const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
   const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
@@ -301,40 +368,119 @@ function validateSmStudyData() {
   check(notebookData.LEARNING_DESIGN?.steps?.length === 4, 'smstudy: learning design must contain four study steps');
   check(notebookData.LEARNING_DESIGN?.evidence?.length >= 3, 'smstudy: learning design evidence is incomplete');
 
+  // ---- 구조 계약 (plan.md §5) : 콘텐츠 문자열 하드코딩 검사를 대체한다 ----
+  const { kinds: diagramKinds, registered: registeredKinds, source: diagramSource } = derivedDiagramKinds();
+  const iconKeys = new Set(Object.keys(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS')?.ICONS || {}));
+
+  // 도출이 조용히 깨지면 아래 계약이 통째로 무력해지므로 도출 결과 자체를 먼저 검사한다.
+  check(diagramKinds.size >= 4, `smstudy: diagram kind derivation looks broken (parsed ${diagramKinds.size} layout functions in ${DIAGRAM_SOURCE})`);
+  check(iconKeys.size >= 20, `smstudy: icon key derivation looks broken (parsed ${iconKeys.size} keys in ${ICON_SOURCE})`);
+  // 게이트가 검사하는 아이콘 집합과 렌더러가 실제로 쓰는 집합이 같은 물건이어야 한다.
+  check(diagramSource.includes('window.SM_ICONS'), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
+  for (const kind of diagramKinds) {
+    check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
+    check(Array.isArray(DIAGRAM_NODE_BOUNDS[kind]), `smstudy: diagram kind ${kind} has no node-count bound — add it to DIAGRAM_NODE_BOUNDS in scripts/validate.mjs`);
+  }
+  for (const kind of registeredKinds) {
+    check(diagramKinds.has(kind), `smstudy: LAYOUTS registers ${kind} but ${DIAGRAM_SOURCE} has no layout${kind[0].toUpperCase()}${kind.slice(1)} function`);
+  }
+
+  // 문자열 계약 — 길이 상한 / 1문장 / 평문. 스키마를 재귀 순회해 전 문자열에 적용한다.
+  // 아이콘 키 정합도 같은 순회에서 본다 (icon 값이 곧 문자열이므로 별도 목록이 필요 없다).
+  let visitedStrings = 0;
+  let visitedIcons = 0;
+  const inspectString = (value, location, key) => {
+    if (key === 'href') return;
+    if (key === 'icon') {
+      visitedIcons += 1;
+      check(iconKeys.has(value), `smstudy: ${location} uses icon key "${value}" that is not vendored in ${ICON_SOURCE}`);
+      return;
+    }
+    visitedStrings += 1;
+    const limit = NOTEBOOK_STRING_LIMITS[key] ?? 60;
+    const length = [...value].length;
+    check(length <= limit, `smstudy: ${location} is ${length} characters, over the ${limit} limit — "${value}"`);
+    check((value.match(/[.!?]/gu) || []).length <= 1, `smstudy: ${location} must be a single sentence — "${value}"`);
+    check(!/[<>\r\n]/u.test(value), `smstudy: ${location} must be plain text without angle brackets or line breaks — "${value}"`);
+  };
+  walkNotebookStrings(notebookData.NOTEBOOKS, 'NOTEBOOKS', '', inspectString);
+  walkNotebookStrings(notebookData.LEARNING_DESIGN, 'LEARNING_DESIGN', '', inspectString);
+  check(visitedStrings >= 500, `smstudy: notebook string walk looks truncated (visited ${visitedStrings} strings)`);
+  check(visitedIcons >= 50, `smstudy: notebook icon walk looks truncated (visited ${visitedIcons} icon keys)`);
+
+  // 형식 다양성 — 13단원이 같은 형식으로 수렴하면 R3(내용에 맞는 형식 선택)가 무너진다.
+  const usedKinds = new Set(
+    Object.values(notebookData.NOTEBOOKS || {}).flatMap((notebook) => (notebook.diagrams || []).map((diagram) => diagram.kind)),
+  );
+  check(usedKinds.size >= 4, `smstudy: diagrams must use at least 4 different kinds, found ${usedKinds.size} (${[...usedKinds].join(', ')})`);
+
   for (const subunit of subunits) {
     const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
     const notebook = notebookData.NOTEBOOKS?.[subunit.id];
     const explanation = explanationData.GUIDES?.[subunit.id];
-    check(questions.length === 6, `smstudy: ${subunit.id} must contain 6 questions`);
+    // 3a에서 sub 오분류 5건을 정정해 단원별 문항 수가 2~10으로 갈라졌다 (kice-analysis.md §3).
+    // 총합 78은 위에서 따로 검사하므로 여기서는 "빈 단원이 없다"만 본다.
+    check(questions.length >= 1, `smstudy: ${subunit.id} must contain at least one question`);
     check(subunit.sections.length > 0, `smstudy: ${subunit.id} has no concept sections`);
     check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
     check(subunit.visual?.flow?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 flow steps`);
     check(subunit.visual?.checks?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 checks`);
-    check(Boolean(notebook?.oneLine && notebook?.examInsight), `smstudy: ${subunit.id} notebook summary is incomplete`);
+    check(Boolean(notebook?.headline), `smstudy: ${subunit.id} notebook has no headline`);
+    check(notebook?.summary?.length >= 2 && notebook?.summary?.length <= 3, `smstudy: ${subunit.id} notebook needs 2-3 summary lines`);
     check(notebook?.keyPoints?.length === 3, `smstudy: ${subunit.id} must have three readable key points`);
-    check(notebook?.keyPoints?.every((item) => item.label && item.text), `smstudy: ${subunit.id} has an incomplete key point`);
-    check(notebook?.patterns?.length >= 1, `smstudy: ${subunit.id} notebook has no exam patterns`);
-    check(notebook?.patterns?.every((pattern) => Number.isInteger(pattern.count) && pattern.count >= 1 && pattern.count <= 6), `smstudy: ${subunit.id} exam pattern count must be between 1 and 6`);
+    check(notebook?.keyPoints?.every((item) => item.label && item.text && item.icon), `smstudy: ${subunit.id} has an incomplete key point`);
+    check(Boolean(notebook?.exam?.trend && notebook?.exam?.trap), `smstudy: ${subunit.id} exam note must carry both trend and trap`);
+    check(notebook?.exam?.tags?.length >= 1, `smstudy: ${subunit.id} exam.tags must not be empty`);
+    // 수기 count가 자동 집계로 대체됐으므로 옛 필드가 되살아나면 실패시킨다 (plan.md §4.1).
+    check(!('oneLine' in (notebook || {})) && !('examInsight' in (notebook || {})) && !('patterns' in (notebook || {})),
+      `smstudy: ${subunit.id} still carries a removed field (oneLine / examInsight / patterns)`);
+    // 다이어그램 형태 — kind 허용 집합과 nodes 개수 상·하한 (plan.md §5, 부록 D).
+    check(notebook?.diagrams?.length >= 1, `smstudy: ${subunit.id} must carry at least one diagram`);
+    (notebook?.diagrams || []).forEach((diagram, index) => {
+      const where = `${subunit.id}.diagrams[${index}]`;
+      check(diagramKinds.has(diagram.kind), `smstudy: ${where} uses kind "${diagram.kind}" but ${DIAGRAM_SOURCE} has no layout for it`);
+      const bounds = DIAGRAM_NODE_BOUNDS[diagram.kind];
+      const nodeCount = Array.isArray(diagram.nodes) ? diagram.nodes.length : 0;
+      check(Boolean(bounds) && nodeCount >= bounds[0] && nodeCount <= bounds[1],
+        `smstudy: ${where} (${diagram.kind}) must hold ${bounds ? `${bounds[0]}-${bounds[1]}` : '?'} nodes, found ${nodeCount}`);
+      check(Boolean(diagram.title && diagram.why), `smstudy: ${where} must carry both a title and a why`);
+      check(diagram.kind !== 'radial' || Boolean(diagram.center), `smstudy: ${where} is radial and must carry a center label`);
+      check((diagram.nodes || []).every((node) => Boolean(node.label)), `smstudy: ${where} has a node without a label`);
+    });
     check(notebook?.matrix?.headers?.length >= 3, `smstudy: ${subunit.id} comparison matrix has too few columns`);
     check(notebook?.matrix?.rows?.length >= 4, `smstudy: ${subunit.id} comparison matrix has too few rows`);
     check(notebook?.matrix?.rows?.every((row) => row.length === notebook.matrix.headers.length), `smstudy: ${subunit.id} comparison matrix row width mismatch`);
     check(notebook?.decision?.length >= 4, `smstudy: ${subunit.id} decision flow is too short`);
     check(notebook?.deepDive?.length >= 4, `smstudy: ${subunit.id} deep-dive notes are too short`);
+    check(notebook?.deepDive?.every((item) => item.points?.length >= 2 && item.points?.length <= 4), `smstudy: ${subunit.id} deep-dive entries must each carry 2-4 points`);
     check(notebook?.recall?.length >= 3, `smstudy: ${subunit.id} recall practice is too short`);
     check(Boolean(explanation?.focus && explanation?.correctReason && explanation?.wrongReason), `smstudy: ${subunit.id} explanation guide is incomplete`);
     check(explanation?.checks?.length === 3, `smstudy: ${subunit.id} explanation guide must contain three checks`);
   }
 
   for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
-  check(notebookData.NOTEBOOKS['I-02']?.keyPoints?.some((item) => item.text.includes('질문지·실험은 양적 연구')), 'smstudy: research methods must teach the standard quantitative pairing first');
-  check(notebookData.NOTEBOOKS['I-02']?.recall?.some((item) => item.answer.includes('질문지법은 양적 연구, 면접법은 질적 연구')), 'smstudy: research-method recall must use the KICE-standard pairing');
-  check(notebookData.NOTEBOOKS['III-03']?.matrix?.rows?.some((row) => row[0] === '1차적 발명'), 'smstudy: primary invention is missing from cultural change');
-  check(notebookData.NOTEBOOKS['III-03']?.matrix?.rows?.some((row) => row[0] === '2차적 발명'), 'smstudy: secondary invention is missing from cultural change');
-  check(notebookData.NOTEBOOKS['III-03']?.deepDive?.some((item) => item.term === '2차적 발명과 자극 전파'), 'smstudy: secondary invention and stimulus diffusion comparison is missing');
   check(explanationData.GUIDES['I-02']?.checks?.some((item) => item.includes('질문지·실험은 양적 연구')), 'smstudy: research-method feedback must use the standard quantitative pairing');
   check(explanationData.GUIDES['III-03']?.checks?.some((item) => item.includes('2차적 발명은 사회 내부')), 'smstudy: cultural-change feedback must distinguish secondary invention from stimulus diffusion');
   check(Object.keys(explanationData.GUIDES || {}).length === 13, 'smstudy: expected 13 explanation guides');
   check(Boolean(explanationData.EBS_PAST_EXAMS?.startsWith('https://www.ebsi.co.kr/')), 'smstudy: EBS explanation source link is missing');
+
+  // 태그 양방향 정합 — 문항의 태그는 전부 그 단원의 exam.tags 안에 있어야 하고,
+  // 역으로 exam.tags는 전부 최소 1문항에 쓰여야 한다 (죽은 태그 금지, plan.md §5).
+  const tagUsage = new Set();
+  for (const question of data.QUESTION_ROWS) {
+    const declared = notebookData.NOTEBOOKS?.[question.sub]?.exam?.tags || [];
+    check(Array.isArray(question.tags) && question.tags.length >= 1 && question.tags.length <= 3,
+      `smstudy: ${question.id} must carry 1-3 concept tags`);
+    for (const tag of question.tags || []) {
+      check(declared.includes(tag), `smstudy: ${question.id} tag "${tag}" is not declared in NOTEBOOKS.${question.sub}.exam.tags`);
+      tagUsage.add(`${question.sub}|${tag}`);
+    }
+  }
+  for (const [notebookId, notebook] of Object.entries(notebookData.NOTEBOOKS || {})) {
+    for (const tag of notebook.exam?.tags || []) {
+      check(tagUsage.has(`${notebookId}|${tag}`), `smstudy: NOTEBOOKS.${notebookId}.exam.tags "${tag}" is never used by any question (dead tag)`);
+    }
+  }
 
   const referencedImages = new Set();
   for (const question of data.QUESTION_ROWS) {

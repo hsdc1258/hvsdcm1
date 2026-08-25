@@ -86,6 +86,7 @@ body.logged .topbar-login { display: none; }
 .drawer.logged .drawer-study { display: grid; gap: var(--space-2); }
 
 .drawer-app { padding: 10px 12px; }
+/* 앱마다 색을 달리하면 한 화면의 강조색이 갈라진다 — 강조는 --accent 1색이다 (§3). */
 .drawer-app-glyph {
   width: 36px;
   height: 36px;
@@ -93,11 +94,11 @@ body.logged .topbar-login { display: none; }
   display: grid;
   place-items: center;
   border-radius: var(--radius-s);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 800;
   font-size: .9375rem;
 }
-.glyph-word { background: var(--accent-soft); color: var(--accent); }
-.glyph-society { background: var(--purple-soft); color: var(--purple); }
 .drawer-app-copy { display: grid; line-height: 1.35; }
 .drawer-app-copy strong { color: var(--text); font-size: var(--fs-body); }
 .drawer-app-copy small { color: var(--text-3); font-size: var(--fs-micro); }
@@ -129,31 +130,21 @@ body.logged .topbar-login { display: none; }
 
 .hero-kicker { color: var(--text-3); }
 
+/* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠하므로
+   forced-colors 우회 블록(background-image 제거 대비)도 더는 필요하지 않다. */
 .hero-title {
   max-width: 14ch;
-  background: linear-gradient(180deg, var(--text) 62%, var(--text-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-/* forced-colors: UA가 background-image를 제거해도 h1(및 내부 Admin 링크)이 보이게 (M-5) */
-@media (forced-colors: active) {
-  .hero-title {
-    background: none;
-    -webkit-text-fill-color: currentColor;
-    color: CanvasText;
-  }
+  color: var(--text);
 }
 
 /* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
 .hero-title[data-user] { font-size: clamp(2.25rem, 1.7rem + 3.6vw, 4.25rem); }
 .hero-title .welcome-user { display: block; }
-.hero-title a.welcome-user { -webkit-text-fill-color: var(--accent); color: var(--accent); }
+.hero-title a.welcome-user { color: var(--accent); }
 .hero-title a.welcome-user:hover { text-decoration: underline; }
 
-.hero-sub { max-width: 34ch; }
+/* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
+.hero-sub { max-width: 24em; }
 /* 미로그인 소개 문구는 로그인 후 숨김 (학습 카피가 템플릿에서 주입된다) */
 body.logged .hero-sub-guest { display: none; }
 
@@ -197,9 +188,11 @@ body.logged .hero-sub-guest { display: none; }
 .feature-flip .feature-visual { order: 1; }
 
 .feature-copy { display: grid; gap: var(--space-5); justify-items: start; }
-.kicker-word { color: var(--accent); }
-.kicker-society { color: var(--purple); }
-.feature-sub { max-width: 44ch; }
+/* 섹션마다 색을 바꾸지 않는다 — 강조는 뷰당 1색 (§3). */
+.feature-kicker { color: var(--accent); }
+/* 헤드라인 줄 수는 <br>가 아니라 폭으로 잡는다 (§2). */
+.feature-copy h2 { max-width: 12em; }
+.feature-sub { max-width: 30em; }
 .feature-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 @media (max-width: 860px) {
@@ -311,12 +304,21 @@ body.logged .hero-sub-guest { display: none; }
   justify-items: center;
   margin-bottom: var(--space-8);
 }
+.sync-head h2 { max-width: 10em; }
+/* 카드 3연속 대신 구분선 — 정보의 경계가 필요한 자리가 아니다 (§4). */
 .sync-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-5) var(--space-6);
 }
-.sync-point { display: grid; gap: var(--space-2); align-content: start; }
+.sync-point {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.sync-point p { max-width: 26em; }
 
 @media (max-width: 760px) {
   .sync-grid { grid-template-columns: minmax(0, 1fr); }

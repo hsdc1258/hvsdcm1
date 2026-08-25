@@ -131,6 +131,11 @@ body {
   font-family: var(--font-sans);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
+  /* DESIGN.md §2 — 한국어 어절 쪼개짐 금지. keep-all은 비CJK 텍스트에서 normal과
+     동일하게 동작하므로 전역 기본값으로 두어도 영문 조판에 영향이 없다.
+     끊을 곳이 없는 긴 토큰(URL·합성어)은 overflow-wrap이 받는다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

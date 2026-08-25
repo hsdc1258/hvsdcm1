@@ -91,7 +91,9 @@
   line-height: 1.1;
   letter-spacing: var(--ls-display);
   font-weight: 800;
-  word-break: break-word;
+  /* 표제어는 영단어다 — body의 전역 keep-all(§2)을 여기서만 끊어 긴 단어를 접는다.
+     비표준 별칭 word-break: break-word 대신 표준 속성을 쓴다. */
+  overflow-wrap: anywhere;
 }
 .wm-answer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; }
 .wm-hint { font-size: var(--fs-micro); color: var(--text-3); }
