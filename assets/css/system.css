@@ -179,7 +179,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   border-radius: var(--radius-full);
   color: var(--text);
 }
-.skip-link:focus-visible { top: var(--space-4); }
+/* :focus로 확장 — 프로그램적 focus()에서도 가시화 (N-2) */
+.skip-link:focus { top: var(--space-4); }
 
 /* ==========================================================================
    텍스트 프리미티브
