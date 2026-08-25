@@ -176,7 +176,7 @@ check(homeHtml.includes('id="drawerStudy"') && homeHtml.includes('aria-hidden="t
 ```
 
 메시지는 "drawerStudy가 기본 숨김 상태인지"를 검사한다고 주장하지만, 두 `includes`는
-**같은 요소를 검사하지 않는다.** `index.html`에는 `#shade`(28행)와 메뉴 버튼 내부 `<span aria-hidden="true">`(31행)에도
+**같은 요소를 검사하지 않는다.** `index.html`에는 메뉴 버튼 내부 `<span aria-hidden="true">`(29행), `#shade`(40행) 등 8곳에도
 `aria-hidden="true"`가 있으므로, `#drawerStudy`에서 `aria-hidden="true"`를 지워도 이 검사는 그대로 통과한다.
 plan.md D2가 "검사를 약화하지 않는다"고 했는데, 겉보기엔 강화된 검사가 실제로는 기존 단순 존재 검사와 같은 강도다.
 
@@ -218,3 +218,74 @@ D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게
 고치는 법: `colorTokens`를 하드코딩하는 대신 `system.css`의 `:root`에서 `--*: <색값>` 선언을 파싱해
 토큰 목록을 **자동 생성**하고, 검사 대상을 `:root`가 아니라 "system.css 밖에서의 모든 커스텀 프로퍼티 정의"로 바꾼다.
 `@media print` 예외는 파일·블록 단위 허용 목록으로 명시한다.
+
+---
+
+## 3. nit
+
+- **N-1. `#apps` 앵커에 `scroll-margin-top`이 없다.** `assets/css/home.css:164` / `index.html:75`(`.hero-browse`).
+  상단바가 `position: fixed; height: 52px`(`system.css:227-231`)인데 `.showcase`의 `scroll-margin-top`은 실측 `0px`이다.
+  브라우저에서 `#apps` 위치로 스크롤해 재보니 첫 카드 상단 **24px이 상단바에 가린다**(kicker 텍스트 자체는 안 가림).
+  → `.showcase { scroll-margin-top: calc(var(--topbar-h) + var(--space-4)); }`.
+- **N-2. skip-link가 `:focus-visible`에만 반응한다.** `assets/css/system.css:175`.
+  `top: -100%`로 화면 밖에 두고 `:focus-visible`에서만 끌어오므로, 프로그램적 `focus()`나
+  `:focus-visible` 판정이 다른 경로에서는 포커스가 보이지 않는 곳에 갇힌다. → `:focus, :focus-visible` 둘 다 건다.
+- **N-3. `#main`에 `tabindex="-1"`이 없다.** `index.html:67`. `scripts/validate.mjs:111`은 앱 3면에
+  `<main class="app-main" tabindex="-1">`을 **요구**하는데 랜딩만 예외다. skip-link 목적지가
+  포커스 가능해야 건너뛰기가 실제 포커스 이동으로 이어진다. 4면 일관성 차원에서도 맞추는 편이 낫다.
+- **N-4. `.js` 클래스를 defer 스크립트가 붙인다.** `assets/js/home.js:120` + `system.css:653-661`.
+  `.reveal`이 숨겨지는 시점이 파싱 완료 이후라 첫 페인트가 먼저 나가면 "보였다 사라졌다 다시 나타나는" 깜빡임이 가능하다.
+  정석은 `<head>` 인라인 한 줄이지만 `validate.mjs:52`가 인라인 `<script>`를 금지하므로,
+  대안으로 `.reveal`의 초기 상태를 CSS만으로 잡고 JS는 `.in`만 붙이도록 뒤집는 방법이 있다.
+  (JS 실패 시 항상 보이는 폴백은 지금 구조가 더 안전하므로 우선순위는 낮다.)
+- **N-5. `.link-arrow` 호버 시 `›` 글리프까지 밑줄이 그어진다.** `system.css:137`의 전역 `a:hover { text-decoration: underline; }`을
+  `.link-arrow`(322행)가 상쇄하지 않는다. `.btn`·`.sidebar-item`·`.social-card`는 전부 `:hover`에서 상쇄해 두었으므로 누락으로 보인다.
+- **N-6. 드로어·모달 열림 중 배경 스크롤 잠금과 포커스 트랩이 없다.** `home.js:23-31`, `system.css:406-419`.
+  드로어가 열려도 뒤쪽 `.topbar-link`가 여전히 탭 도달 가능함을 실측 확인했다.
+  **기존 사이클과 동일한 상태이므로 회귀는 아니다.** 다음 사이클 후보.
+- **N-7. `role="dialog" aria-modal="true"`가 백드롭 `div`에 붙어 있다.** `index.html:194`.
+  대화상자 본체는 `.sheet`(`<form>`)이므로 의미상 그쪽이 맞다. 닫힘 상태에서 `visibility: hidden`으로
+  접근성 트리에서 빠지는 것은 확인했으므로 실사용 영향은 작다.
+- **N-8. R-5의 "자간 분해 금지"는 자동 검사에 없다.** `system.css:214-220`이 `.brand { letter-spacing: normal; }`으로
+  코드상 지키고 있지만, `validateBrandName()`은 문자열 패턴만 본다.
+  → `.brand` 규칙에 `letter-spacing`을 늘리는 선언이 없는지 검사 한 줄 추가.
+- **N-9. `home.js`가 CRLF→LF 정규화로 전체 재작성처럼 보인다.** 실제 변경은 +26/-2줄인데
+  `git diff`는 +170/-146으로 나온다. plan.md §5가 인용한 LESSONS의 "CRLF/LF 혼재 고정" 이행 자체는 맞지만,
+  줄바꿈 정규화를 **별도 커밋으로 분리**했다면 `1c0533a`의 리뷰 비용이 훨씬 낮았을 것이다.
+- **N-10. `stripPrint` 정규식이 포맷 가정에 의존한다.** `scripts/validate.mjs:364`
+  `/@media\s+print\s*\{[\s\S]*?\n\}/gu` — 닫는 `}`가 0열에 있다는 전제라, 들여쓰기가 바뀌면 조용히 오작동한다.
+- **N-11. `check(/var\(--/u.test(source), …)`가 모든 CSS 파일에 적용된다.** `scripts/validate.mjs:374`.
+  벤더/서드파티 CSS를 한 장이라도 추가하면 오탐으로 빌드가 깨진다. 자체 작성 CSS로 대상을 한정하는 편이 안전하다.
+- **N-12. `.welcome-prefix`는 대응 CSS 규칙이 없는 데드 훅이다.** `index.html:71`, `home.js:49`.
+  줄바꿈은 `.hero-title .welcome-user { display: block; }`(home.css:142)이 담당하므로 클래스 자체는 아무 일도 하지 않는다.
+
+---
+
+## 4. 완료 조건 판정 (3a 범위)
+
+| 조건 | 내용 | 판정 | 근거 |
+|---|---|---|---|
+| **C-1** | `npm test` 통과 | ✅ 충족 | 실행 확인 — `Validation passed (5257 checks)` + 단위 테스트 14/14 통과 |
+| **C-2** | 구조 재작성 증명 (index.html 추가·삭제 각 30줄↑) | ✅ 충족 | `git diff --numstat main..HEAD -- index.html` = **+160 / -87**. 클래스만 바꾼 위장이 아니라 topbar·showcase·sync·stats·socials·footer 섹션이 신설되고 product-grid·signal-strip이 제거된 **실제 DOM 구조 교체**임을 diff로 확인 |
+| **C-3** | system.css 외 CSS에 색 토큰 `:root` 0개 | ⚠️ 조건부 충족 | `home.css` `:root` 0개, `system.css` `:root` 정확히 1개 — **문장 그대로는 충족**. 다만 이를 지키는 게이트가 색 토큰 25개 중 9개만 커버한다(**M-7**). D5의 "단일 원본" 실질 보장은 미완 |
+| **C-4** | §3.4 체크리스트 전 항목 동작 (랜딩분) | ⚠️ 부분 충족 | 로그인 모달 ✅ / `next` 동일 출처 검증 ✅(페이로드 14종 실측) / `hvsdcm` Admin 링크 ✅ / 드로어 + `Escape` ✅ / 로그아웃 시 토큰·사용자·sessionStorage 클리어 ✅ / Discord·Instagram 외부 링크 ✅ / **로그인 상태에 따른 학습 링크 노출·숨김 ❌(M-1)** — 7항목 중 6항목 충족 |
+| **C-5** | `hvsdcm` 표기 분리 없음 | ❌ 미충족 | `validateBrandName()` 자동 검사는 통과하나, 랜딩이 `og:image`/`twitter:image`로 내보내는 `assets/og.png`가 여전히 `HVS/DCM`(**B-1**). 게이트가 PNG를 못 봐서 통과했을 뿐 R-5는 위반 상태 |
+| **C-6** | 전역·저장 키·스크립트 로드 순서 보존 | ✅ 충족 | `index.html`에 `type="module"` 없음, `<script src="/assets/js/home.js" defer>` 단일 classic script, `hvsdcm.token`·`hvsdcm.user`·`hvsdcm.api` 키 이름 보존. `validateGlobalsAndOrder()`가 이를 기계 검사로 고정 |
+| **C-7** | main 병합·push·Pages 배포 | — 범위 밖 | 3a 리뷰 시점에는 미수행 (브랜치 `rebuild/apple-dark-v2`) |
+
+---
+
+## 5. 총평
+
+`index.html`은 **리스타일이 아니라 실제 구조 재작성**이다(C-2 통과, D1의 목적 달성).
+`system.css`는 `:root` 단 하나를 갖고 있고 상단 대비 주석의 수치는 전부 직접 계산해 정확함을 확인했다 —
+이 부분에서 구현자의 자기 보고는 신뢰할 만하다. `home.js`는 셀렉터만 최소 침습으로 갈아끼웠고,
+가장 걱정했던 **오픈 리다이렉트 방어는 바이트 단위로 그대로**다.
+
+남은 문제는 두 갈래다. 하나는 **대비**(M-2·M-3·M-4) — 주석의 대비표가 `--surface-2`와
+`-soft` 반투명 합성 케이스를 다루지 않아 세 곳에서 AA·목표치를 놓쳤다.
+다른 하나는 **게이트의 실효성**(M-6·M-7, 그리고 B-1) — 검사가 초록불인데 요구사항은 위반인 구간이 있고,
+B-1은 그 구멍으로 R-5 위반이 실제 배포면까지 나간 사례다.
+
+**배포 가능 여부: 아직 아니다.** B-1(og.png)만 고치면 나머지는 배포를 막을 정도는 아니지만,
+M-1은 C-4 판정에 직결되므로 코드 수정이든 plan.md 판단 기록이든 한 쪽은 반드시 정리하고 넘어가야 한다.
