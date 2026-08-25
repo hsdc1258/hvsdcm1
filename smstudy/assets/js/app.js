@@ -20,9 +20,13 @@
     EBS_PAST_EXAMS,
     GUIDES: EXPLANATION_GUIDES
   } = window.SMSTUDY_EXPLANATIONS || {};
+  const {
+    renderDiagram,
+    renderIcon: icon
+  } = window.SMSTUDY_DIAGRAM || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -487,6 +491,7 @@
     return `
       <nav class="toolbar sm-toc" aria-label="단권화 노트 목차">
         <span class="kicker">이 노트의 순서</span>
+        <a class="topbar-link" href="#concept-diagrams">구조도</a>
         <a class="topbar-link" href="#exam-analysis">기출 분석</a>
         <a class="topbar-link" href="#concept-compare">비교표</a>
         <a class="topbar-link" href="#concept-flow">문제 푸는 순서</a>
@@ -496,51 +501,89 @@
   }
 
   function renderNotebookHero(note) {
-    const keyPoints = note.keyPoints.map((item, index) => `
+    const summary = note.summary.map((line) => `<li>${esc(line)}</li>`).join('');
+    // 아이콘은 장식이다 (plan.md §4.3) — 의미는 옆의 label·text가 전달하고 svg는 aria-hidden이다.
+    const keyPoints = note.keyPoints.map((item) => `
       <li class="sm-keypoint">
-        <span aria-hidden="true">${index + 1}</span>
+        <span class="sm-keypoint-icon">${icon(item.icon)}</span>
         <div><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></div>
       </li>
     `).join('');
     return `
       <section class="card card-xl sm-stack sm-note-hero" aria-labelledby="noteHeroTitle">
-        <div>
+        <div class="sm-hero-head">
           <span class="badge badge-green">이 단원에서 먼저 잡을 생각</span>
-          <h3 class="title-2" id="noteHeroTitle">${esc(note.oneLine)}</h3>
+          <h3 class="sm-headline" id="noteHeroTitle">${esc(note.headline)}</h3>
         </div>
+        <ul class="sm-summary">${summary}</ul>
         <ol class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ol>
       </section>`;
   }
 
+  function renderDiagramSection(note) {
+    const diagrams = (note.diagrams || []).map((diagram) => renderDiagram(diagram)).filter(Boolean).join('');
+    if (!diagrams) return '';
+    return `
+      <section id="concept-diagrams" class="card sm-stack sm-section" aria-labelledby="diagrams-title">
+        <div>
+          <span class="kicker">글보다 구조를 먼저</span>
+          <h3 class="title-2" id="diagrams-title">한 장으로 보는 구조</h3>
+        </div>
+        <div class="sm-diagrams">${diagrams}</div>
+      </section>`;
+  }
+
+  function averageCorrectRate(rows) {
+    return Math.round(rows.reduce((sum, row) => sum + row.correctRate, 0) / rows.length);
+  }
+
+  // 이 화면의 숫자는 전부 QUESTIONS에서 즉석 집계한다 (plan.md §4.2, R5).
+  // 데이터에 수기 count를 두지 않으므로 문항이 늘거나 태그가 바뀌면 화면이 저절로 따라간다.
+  // 막대는 정적 콘텐츠 장식이 아니라 실측 집계값의 표현이라 DESIGN.md §4의 예외로 둔다.
   function renderExamAnalysis(id, note) {
     const questions = QUESTIONS.filter((question) => question.sub === id);
-    const averageCorrectRate = Math.round(questions.reduce((sum, question) => sum + question.correctRate, 0) / questions.length);
+    if (questions.length === 0) return '';
+    const unitRate = averageCorrectRate(questions);
+    const overallRate = averageCorrectRate(QUESTIONS);
     const hardest = questions.reduce((current, question) => question.correctRate < current.correctRate ? question : current);
-    const lowCorrectCount = questions.filter((question) => question.correctRate <= 65).length;
-    const patterns = note.patterns.map((pattern) => `
+    const hardCount = questions.filter((question) => question.wrongRate >= 35).length;
+    const tagRows = note.exam.tags
+      .map((tag) => ({ tag, hits: questions.filter((question) => (question.tags || []).includes(tag)).length }))
+      .sort((left, right) => right.hits - left.hits || left.tag.localeCompare(right.tag, 'ko'));
+    const freq = tagRows.map(({ tag, hits }) => `
       <li class="sm-freq-item">
-        <div class="sm-freq-head"><strong>${esc(pattern.label)}</strong><span>${pattern.count}/6</span></div>
-        <div class="sm-meter" role="img" aria-label="수록 6문항 중 ${pattern.count}문항에 등장">
-          <span style="width:${pattern.count / 6 * 100}%"></span>
+        <div class="sm-freq-head"><strong>${esc(tag)}</strong><span>${hits}/${questions.length}문항</span></div>
+        <div class="sm-meter" role="img" aria-label="이 단원 ${questions.length}문항 가운데 ${hits}문항에 등장">
+          <span style="width:${Math.round(hits / questions.length * 100)}%"></span>
         </div>
-        <p>${esc(pattern.note)}</p>
       </li>`).join('');
     return `
       <section id="exam-analysis" class="card sm-stack sm-section" aria-labelledby="exam-analysis-title">
         <div class="view-head">
           <div>
-            <span class="kicker">사이트 수록 기출 6문항 분석</span>
+            <span class="kicker">수록 기출 ${questions.length}문항 자동 집계</span>
             <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
           </div>
-          <span class="badge">대표 문항 표본 · 전수 통계 아님</span>
+          <span class="badge">선별 수록 표본 · 전수 통계 아님</span>
         </div>
-        <div class="sm-exam-stats">
-          <div class="stat"><span class="stat-value">${averageCorrectRate}%</span><span class="stat-label">평균 정답률 · ${averageCorrectRate <= 65 ? '고난도 단원' : averageCorrectRate <= 75 ? '주의 단원' : '확보할 단원'}</span></div>
-          <div class="stat"><span class="stat-value">${lowCorrectCount}/6</span><span class="stat-label">정답률 65% 이하 문항</span></div>
-          <div class="stat"><span class="stat-value">${hardest.correctRate}%</span><span class="stat-label">최저 · ${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
+        <dl class="sm-facts-inline">
+          <div><dt>수록 문항</dt><dd>${questions.length}문항</dd></div>
+          <div><dt>평균 정답률</dt><dd>${unitRate}%</dd></div>
+          <div><dt>고난도 문항</dt><dd>${hardCount}문항</dd></div>
+          <div><dt>최저 정답률</dt><dd>${hardest.correctRate}% · ${hardest.year}학년도 ${esc(hardest.session)} ${hardest.number}번</dd></div>
+        </dl>
+        <div class="sm-gauge">
+          <div class="sm-gauge-track" role="img" aria-label="이 단원 평균 정답률 ${unitRate}퍼센트, 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}퍼센트">
+            <span class="sm-gauge-fill" style="width:${unitRate}%"></span>
+            <i class="sm-gauge-mark" style="left:${overallRate}%"></i>
+          </div>
+          <p class="sm-hint">이 단원 평균 ${unitRate}% · 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}%${unitRate < overallRate ? ' · 평균보다 어려운 단원' : ''}</p>
         </div>
-        <p class="sm-insight">${esc(note.examInsight)}</p>
-        <ol class="sm-freq">${patterns}</ol>
+        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도">${freq}</ol>
+        <div class="sm-callouts">
+          <p class="sm-callout"><span class="kicker">${icon('trending-up')}출제 방식</span>${esc(note.exam.trend)}</p>
+          <p class="sm-callout is-trap"><span class="kicker">${icon('alert-triangle')}자주 걸리는 함정</span>${esc(note.exam.trap)}</p>
+        </div>
       </section>`;
   }
 
@@ -583,7 +626,7 @@
           <span class="kicker">헷갈리는 선지를 가르는 설명</span>
           <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
         </div>
-        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${esc(item.term)}</h4><p>${esc(item.body)}</p></article>`).join('')}</div>
+        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${icon(item.icon)}<span>${esc(item.term)}</span></h4><ul class="sm-deep-points">${item.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul></article>`).join('')}</div>
       </section>`;
   }
 
@@ -650,6 +693,7 @@
       ${renderNotebookMenu()}
       <div class="sm-note-body">
         ${renderNotebookHero(note)}
+        ${renderDiagramSection(note)}
         ${renderExamAnalysis(id, note)}
         ${renderComparisonMatrix(note)}
         ${renderDecisionFlow(note)}
@@ -672,7 +716,7 @@
         <div class="toolbar-spacer"></div>
         <button id="subQuiz" class="btn btn-primary" type="button">이 중단원 퀴즈 ${questionCount}문제</button>
       </div>
-      <p class="sm-source">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항(중단원별 6문항)을 분석한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
+      <p class="sm-source">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항을 개념 태그별로 자동 집계한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
     document.getElementById('nextConcept').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
