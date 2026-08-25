@@ -5,8 +5,11 @@
 
    대비 실측 (scripts 검증 시 계산값):
      --text   #f5f5f7  on --bg 19.29:1 / on --surface 16.61:1  (본문, 목표 7:1 충족)
+              on --bg-alt 18.06:1 / on --surface-3 12.80:1
      --text-2 #a1a1a6  on --bg  8.16:1 / on --surface  7.03:1  (보조)
+              on --bg-alt 7.65:1 (불투명 상단바 라벨 — 본문 7:1 충족)
               on --surface-2 6.54:1 — 본문 7:1 미달, 캡션·UI 라벨 한정 (M-4)
+              on --surface-3 5.42:1 — 중립 .badge·.segmented-btn 라벨 (캡션 하한 4.5:1 충족)
      --text-3 #86868b  on --bg  5.80:1 / on --surface  4.99:1  (캡션 전용, ≥4.5:1)
               on --surface-2 4.65:1 (캡션 하한 충족) / on --surface-3 3.85:1 금지
      --text-4 #6e6e73  on --bg  4.14:1 / on --surface  3.57:1  (비활성 전용 — 살아있는 텍스트 금지)
@@ -240,9 +243,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(10,10,12,.72);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+  /* DESIGN.md §3은 유리 효과(blur/glass)를 예외 없이 금지한다. 반투명 + blur 대신
+     불투명 표면색으로 가독성을 확보한다 — --text 18.06:1 / --text-2 7.65:1 on --bg-alt. */
+  background: var(--bg-alt);
   border-bottom: 1px solid var(--line-faint);
 }
 
@@ -437,9 +440,8 @@ select.field-input {
   display: grid;
   place-items: center;
   padding: var(--space-4);
-  background: rgba(0,0,0,.6);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  /* blur 없는 순수 스크림 (§3). 뒤 배경을 흐리는 대신 더 어둡게 덮어 시트를 분리한다. */
+  background: rgba(0,0,0,.78);
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
@@ -569,13 +571,13 @@ select.field-input {
 }
 .toolbar-group { display: flex; align-items: center; gap: var(--space-2); }
 .toolbar-spacer { flex: 1; }
+/* 스크롤 콘텐츠가 밑으로 지나가므로 불투명해야 한다 — blur는 §3이 금지한다.
+   .toolbar의 --surface와 같은 값이라 sticky 여부로 표면이 달라지지 않는다. */
 .toolbar-sticky {
   position: sticky;
   top: calc(var(--topbar-h) + var(--space-3));
   z-index: 50;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  background: rgba(22,22,23,.82);
+  background: var(--surface);
 }
 
 /* ==========================================================================

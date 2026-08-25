@@ -305,27 +305,38 @@
           </div>
         </section>
 
-        <!-- 카드 4연속 스택 대신 한 장 안의 구분선 그룹으로 낸다 (DESIGN.md §4). -->
+        <!-- 카드 4연속 스택 대신 한 장 안의 구분선 그룹으로 낸다 (DESIGN.md §4).
+             시각적 통합과 의미 구조는 양립한다 — 각 항목은 이름 있는 하위 section과
+             제목(h3)을 그대로 유지해 스크린리더 탐색점을 잃지 않는다 (review M-3). -->
         <section class="card sm-quick" aria-labelledby="quickTitle">
-          <h3 class="title-3" id="quickTitle">빠른 복습</h3>
+          <h2 class="title-3" id="quickTitle">빠른 복습</h2>
 
-          <div class="sm-quick-item">
-            <div><strong>낮은 정답률 기출</strong><small>정답률 65% 이하</small></div>
+          <section class="sm-quick-item" aria-labelledby="weakTitle">
+            <div>
+              <h3 class="sm-quick-name" id="weakTitle">낮은 정답률 기출</h3>
+              <small>정답률 65% 이하</small>
+            </div>
             <button id="weakQuiz" class="btn btn-secondary sm-full" type="button">낮은 정답률 기출 풀기</button>
-          </div>
+          </section>
 
-          <div class="sm-quick-item">
-            <div><strong>오답 복습</strong><small>원문 → 원인 → 재시험</small></div>
+          <section class="sm-quick-item" aria-labelledby="wrongTitle">
+            <div>
+              <h3 class="sm-quick-name" id="wrongTitle">오답 복습</h3>
+              <small>원문 → 원인 → 재시험</small>
+            </div>
             <div class="sm-actions">
               <button id="wrongStudy" class="btn btn-secondary btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
               <button id="wrongQuiz" class="btn btn-ghost btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
             </div>
-          </div>
+          </section>
 
-          <div class="sm-quick-item">
-            <div><strong>누적 복습</strong><small>완료 범위 20문제</small></div>
+          <section class="sm-quick-item" aria-labelledby="cumulativeTitle">
+            <div>
+              <h3 class="sm-quick-name" id="cumulativeTitle">누적 복습</h3>
+              <small>완료 범위 20문제</small>
+            </div>
             <button id="cumulative" class="btn btn-secondary sm-full" type="button" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
-          </div>
+          </section>
         </section>
       </div>`;
   }
@@ -1093,7 +1104,7 @@
       </div>
     `).join('');
     return `
-      <section class="card sm-stack" aria-labelledby="weaknessTitle">
+      <section class="card sm-stack sm-section" aria-labelledby="weaknessTitle">
         <div>
           <span class="kicker">무료 자동 분석</span>
           <h2 class="title-2" id="weaknessTitle">내 약점 한눈에</h2>
@@ -1121,7 +1132,7 @@
       </div>
     `).join('');
     return `
-      <section class="card sm-stack sm-section" aria-labelledby="subStatsTitle">
+      <section class="sm-stack sm-section sm-record-section" aria-labelledby="subStatsTitle">
         <h2 class="title-2" id="subStatsTitle">중단원별 현황</h2>
         <div class="sm-rates">${rows}</div>
       </section>`;
@@ -1140,7 +1151,7 @@
       renderMistakeCard(question, info, info.lastInput)
     )).join('');
     return `
-      <section class="sm-stack sm-section" aria-labelledby="wrongNoteTitle">
+      <section class="sm-stack sm-section sm-record-section" aria-labelledby="wrongNoteTitle">
         <div class="view-head">
           <div>
             <h2 class="title-2" id="wrongNoteTitle">오답 원문 분석 노트</h2>
