@@ -335,7 +335,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   font-weight: 500;
   color: var(--accent);
 }
-.link-arrow::after { content: "›"; font-size: 1.1em; transition: transform var(--dur-fast) var(--ease-out); }
+.link-arrow::after { content: "›"; display: inline-block; font-size: 1.1em; transition: transform var(--dur-fast) var(--ease-out); }
 .link-arrow:hover::after { transform: translateX(3px); }
 
 /* ==========================================================================
