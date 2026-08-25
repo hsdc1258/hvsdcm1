@@ -305,31 +305,27 @@
           </div>
         </section>
 
-        <section class="card sm-stack" aria-labelledby="weakTitle">
-          <div>
-            <h3 class="title-3" id="weakTitle">낮은 정답률 기출</h3>
-            <p class="sm-note">정답률 65% 이하</p>
-          </div>
-          <button id="weakQuiz" class="btn btn-secondary sm-full" type="button">낮은 정답률 기출 풀기</button>
-        </section>
+        <!-- 카드 4연속 스택 대신 한 장 안의 구분선 그룹으로 낸다 (DESIGN.md §4). -->
+        <section class="card sm-quick" aria-labelledby="quickTitle">
+          <h3 class="title-3" id="quickTitle">빠른 복습</h3>
 
-        <section class="card sm-stack" aria-labelledby="wrongTitle">
-          <div>
-            <h3 class="title-3" id="wrongTitle">오답 복습</h3>
-            <p class="sm-note">원문 → 원인 → 재시험</p>
+          <div class="sm-quick-item">
+            <div><strong>낮은 정답률 기출</strong><small>정답률 65% 이하</small></div>
+            <button id="weakQuiz" class="btn btn-secondary sm-full" type="button">낮은 정답률 기출 풀기</button>
           </div>
-          <div class="sm-actions">
-            <button id="wrongStudy" class="btn btn-secondary btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
-            <button id="wrongQuiz" class="btn btn-ghost btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
-          </div>
-        </section>
 
-        <section class="card sm-stack" aria-labelledby="cumulativeTitle">
-          <div>
-            <h3 class="title-3" id="cumulativeTitle">누적 복습</h3>
-            <p class="sm-note">완료 범위 20문제</p>
+          <div class="sm-quick-item">
+            <div><strong>오답 복습</strong><small>원문 → 원인 → 재시험</small></div>
+            <div class="sm-actions">
+              <button id="wrongStudy" class="btn btn-secondary btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
+              <button id="wrongQuiz" class="btn btn-ghost btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
+            </div>
           </div>
-          <button id="cumulative" class="btn btn-secondary sm-full" type="button" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
+
+          <div class="sm-quick-item">
+            <div><strong>누적 복습</strong><small>완료 범위 20문제</small></div>
+            <button id="cumulative" class="btn btn-secondary sm-full" type="button" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
+          </div>
         </section>
       </div>`;
   }
@@ -523,7 +519,7 @@
     const diagrams = (note.diagrams || []).map((diagram) => renderDiagram(diagram)).filter(Boolean).join('');
     if (!diagrams) return '';
     return `
-      <section id="concept-diagrams" class="card sm-stack sm-section" aria-labelledby="diagrams-title">
+      <section id="concept-diagrams" class="sm-stack sm-section" aria-labelledby="diagrams-title">
         <div>
           <span class="kicker">글보다 구조를 먼저</span>
           <h3 class="title-2" id="diagrams-title">한 장으로 보는 구조</h3>
@@ -552,13 +548,11 @@
       .sort((left, right) => right.hits - left.hits || left.tag.localeCompare(right.tag, 'ko'));
     const freq = tagRows.map(({ tag, hits }) => `
       <li class="sm-freq-item">
-        <div class="sm-freq-head"><strong>${esc(tag)}</strong><span>${hits}/${questions.length}문항</span></div>
-        <div class="sm-meter" role="img" aria-label="이 단원 ${questions.length}문항 가운데 ${hits}문항에 등장">
-          <span style="width:${Math.round(hits / questions.length * 100)}%"></span>
-        </div>
+        <strong>${esc(tag)}</strong>
+        <span class="sm-freq-count">${hits}/${questions.length}문항</span>
       </li>`).join('');
     return `
-      <section id="exam-analysis" class="card sm-stack sm-section" aria-labelledby="exam-analysis-title">
+      <section id="exam-analysis" class="sm-stack sm-section" aria-labelledby="exam-analysis-title">
         <div class="view-head">
           <div>
             <span class="kicker">수록 기출 ${questions.length}문항 자동 집계</span>
@@ -572,13 +566,7 @@
           <div><dt>고난도 문항</dt><dd>${hardCount}문항</dd></div>
           <div><dt>최저 정답률</dt><dd>${hardest.correctRate}% · ${hardest.year}학년도 ${esc(hardest.session)} ${hardest.number}번</dd></div>
         </dl>
-        <div class="sm-gauge">
-          <div class="sm-gauge-track" role="img" aria-label="이 단원 평균 정답률 ${unitRate}퍼센트, 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}퍼센트">
-            <span class="sm-gauge-fill" style="width:${unitRate}%"></span>
-            <i class="sm-gauge-mark" style="left:${overallRate}%"></i>
-          </div>
-          <p class="sm-hint">이 단원 평균 ${unitRate}% · 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}%${unitRate < overallRate ? ' · 평균보다 어려운 단원' : ''}</p>
-        </div>
+        <p class="sm-hint">이 단원 평균 ${unitRate}% · 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}%${unitRate < overallRate ? ' · 평균보다 어려운 단원' : ''}</p>
         <ol class="sm-freq" aria-label="개념 태그별 출제 빈도">${freq}</ol>
         <div class="sm-callouts">
           <p class="sm-callout"><span class="kicker">${icon('trending-up')}출제 방식</span>${esc(note.exam.trend)}</p>
@@ -591,7 +579,7 @@
     const headerCells = note.matrix.headers.map((header) => `<th scope="col">${esc(header)}</th>`).join('');
     const bodyRows = note.matrix.rows.map((row) => `<tr>${row.map((cell, index) => index === 0 ? `<th scope="row">${esc(cell)}</th>` : `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
     return `
-      <section id="concept-compare" class="card sm-stack sm-section" aria-labelledby="comparison-title">
+      <section id="concept-compare" class="sm-stack sm-section" aria-labelledby="comparison-title">
         <div class="view-head">
           <div>
             <span class="kicker">헷갈리는 개념은 같은 기준으로</span>
@@ -610,7 +598,7 @@
 
   function renderDecisionFlow(note) {
     return `
-      <section id="concept-flow" class="card sm-stack sm-section" aria-labelledby="decision-title">
+      <section id="concept-flow" class="sm-stack sm-section" aria-labelledby="decision-title">
         <div>
           <span class="kicker">시험장에서 이 순서대로</span>
           <h3 class="title-2" id="decision-title">문제 푸는 순서</h3>
@@ -621,7 +609,7 @@
 
   function renderDeepDive(note) {
     return `
-      <section class="card sm-stack sm-section" aria-labelledby="deep-dive-title">
+      <section class="sm-stack sm-section" aria-labelledby="deep-dive-title">
         <div>
           <span class="kicker">헷갈리는 선지를 가르는 설명</span>
           <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
@@ -633,11 +621,11 @@
   function renderRecallLab(note) {
     const recallItems = note.recall.map((item, index) => `
       <details class="sm-recall-item">
-        <summary><span class="badge badge-purple">Q${index + 1}</span>${esc(item.question)}</summary>
+        <summary><span class="badge">Q${index + 1}</span>${esc(item.question)}</summary>
         <div><strong>정답</strong><p>${esc(item.answer)}</p></div>
       </details>`).join('');
     return `
-      <section id="recall-lab" class="card sm-stack sm-section" aria-labelledby="recall-title">
+      <section id="recall-lab" class="sm-stack sm-section" aria-labelledby="recall-title">
         <div class="view-head">
           <div>
             <span class="kicker">답을 말한 뒤 펼치기</span>
@@ -698,7 +686,7 @@
         ${renderComparisonMatrix(note)}
         ${renderDecisionFlow(note)}
         ${renderConceptMap(sub)}
-        <section id="concept-detail" class="card sm-stack sm-section" aria-labelledby="concept-detail-title">
+        <section id="concept-detail" class="sm-stack sm-section" aria-labelledby="concept-detail-title">
           <div>
             <span class="kicker">교과 개념을 차근차근</span>
             <h3 class="title-2" id="concept-detail-title">개념을 하나씩 이해하기</h3>
@@ -1105,17 +1093,17 @@
       </div>
     `).join('');
     return `
-      <section class="card sm-stack sm-section" aria-labelledby="weaknessTitle">
+      <section class="card sm-stack" aria-labelledby="weaknessTitle">
         <div>
-          <span class="badge badge-green">무료 자동 분석</span>
+          <span class="kicker">무료 자동 분석</span>
           <h2 class="title-2" id="weaknessTitle">내 약점 한눈에</h2>
           <p class="sm-note">외부 AI나 유료 토큰 없이 실제 풀이·오답 기록만으로 계산합니다.</p>
         </div>
-        <div class="sm-exam-stats">
-          <div class="stat"><span class="stat-value">${esc(weakestUnit)}</span><span class="stat-label">가장 취약한 대단원</span></div>
-          <div class="stat"><span class="stat-value">${esc(weakestSubunit)}</span><span class="stat-label">가장 취약한 중단원</span></div>
-          <div class="stat"><span class="stat-value">${esc(reasonSummary)}</span><span class="stat-label">가장 많은 실수 원인</span></div>
-        </div>
+        <dl class="sm-facts-inline">
+          <div><dt>가장 취약한 대단원</dt><dd>${esc(weakestUnit)}</dd></div>
+          <div><dt>가장 취약한 중단원</dt><dd>${esc(weakestSubunit)}</dd></div>
+          <div><dt>가장 많은 실수 원인</dt><dd>${esc(reasonSummary)}</dd></div>
+        </dl>
         <div class="sm-rates">${unitRows}</div>
         <p class="sm-note">3회 미만 기록은 ‘표본 부족’으로 표시합니다. 풀이가 쌓일수록 대단원·중단원 취약도와 실수 원인 분류가 정확해집니다.</p>
       </section>`;

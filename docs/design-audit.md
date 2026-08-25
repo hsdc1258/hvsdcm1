@@ -30,6 +30,7 @@
 - [low] WordMaster/assets/css/style.css:94 -- §2 keep-all 전역화의 부수 처리 -> `.wm-word`가 비표준 별칭 `word-break: break-word`를 쓴다. 영단어 표제어는 전역 `keep-all`을 끊어야 하는 자리가 맞으므로 표준 `overflow-wrap: anywhere`로 바꾼다. (수정함)
 - [low] index.html:117 / smstudy/assets/js/app.js:714 -- §4 장식 상한 -> `✓` 글리프 2곳. U+2713은 텍스트 표현 문자이고 각각 성공 상태·완료 상태를 가리키므로 헌장 위반은 아니다. 유지한다.
 - [low] assets/css/home.css:327-344 `.stats-band` -- §4 장식 프리미티브 -> 랜딩의 통계 타일 1종. 랜딩 레퍼런스(apple.com 제품 페이지)의 어법 안이고 §4 상한(2종) 내이므로 유지한다. "2 학습 앱 / 1 동기화 계정"을 대형 숫자로 내는 것은 취향 문제라 헌장 근거가 없어 손대지 않는다.
+- [low] assets/css/system.css:50-54 `--purple*`·`--teal`·`--yellow` -- §3 "강조색은 뷰당 1색", 상태색은 green/red/orange 셋 -> 위 수정으로 이 토큰들의 사용처가 0이 됐다. 쓰이지 않는 장식용 색 토큰을 남겨두면 장식 목적 재도입을 부르므로 `.badge-purple` 규칙과 함께 삭제하고, 상단 대비 실측표에서 사라진 조합(`--purple-bright` 뱃지)도 같이 지웠다. (수정함 — :root 토큰 73→68개로 validate의 하한 60을 넘긴다.)
 - [low] assets/css/system.css:241,438,572 등 `backdrop-filter` -- §3 "유리 효과(blur/glass)" 금지 -> 해당 조항은 문맥상 장식면(배경 패널)을 겨눈다. 여기 쓰인 곳은 전부 고정 상단바·모달 백드롭·sticky 툴바로, 스크롤 콘텐츠와 겹치는 크롬 레이어의 가독성 장치이며 랜딩 레퍼런스(apple.com)의 어법 자체다. 장식면 유리 효과는 한 곳도 없어 유지한다.
 
 ## 판단 기록
@@ -40,6 +41,12 @@
 - **새 색 토큰 없음**: 이번 수정은 색 토큰을 하나도 신설·변경하지 않는다. 기존 토큰의 *사용처*만
   줄였으므로 CLAUDE.md "토큰 대비 전수 검산"이 요구하는 새 계산 대상이 발생하지 않았다.
   사용한 조합은 전부 system.css 상단 대비 실측표에 이미 기재된 것이다.
-- **기계 게이트 기준선**: 작업 시작 시점의 `npm run validate`는 이미 48건 실패(전부 smstudy
-  콘텐츠 데이터 관련, 다른 미완 작업 소관)였고 `npm test`는 validate에서 단락된다.
-  단위 테스트(`scripts/study-utils.test.mjs`, `worker/test.mjs`)는 14/14 통과가 기준선이다.
+- **기계 게이트**: 작업 시작 시점의 `npm run validate`는 48건 실패(5277 checks) 상태였다.
+  전부 smstudy 콘텐츠 데이터 관련이었고 이 작업의 소관이 아니었다. 작업 도중 다른 세션이
+  커밋 `c595275`·`3f962bd`로 그 콘텐츠 작업을 마무리해, 종료 시점에는
+  `npm test` 전체가 통과한다 (validate 0 실패 / 9572 checks, 단위 테스트 14/14).
+  이 감사의 수정으로 늘어난 실패는 0건이다.
+- **동시 편집 주의**: 위 두 커밋이 작업 중에 들어오면서 이 감사의 1차 수정분
+  (`assets/css/system.css`, `assets/css/home.css`, `WordMaster/assets/css/style.css`,
+  `index.html`, `smstudy/*`, 이 문서)이 `3f962bd`에 함께 담겼다. 내용은 온전하지만
+  커밋 메시지가 그 작업의 것이므로, 디자인 헌장 적용 이력을 찾을 때는 이 문서를 기준으로 본다.

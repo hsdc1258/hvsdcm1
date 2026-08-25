@@ -63,6 +63,20 @@
 .sm-units { display: grid; gap: var(--space-4); }
 .sm-panel { display: grid; gap: var(--space-4); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
 
+/* 빠른 복습 — 카드 3장 대신 한 장 안의 구분선 그룹 (DESIGN.md §4). */
+.sm-quick { display: grid; gap: 0; }
+.sm-quick-item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line-faint);
+}
+.sm-quick-item:last-child { padding-bottom: 0; }
+.sm-quick > .title-3 { padding-bottom: var(--space-2); }
+.sm-quick-item > div { display: grid; gap: 2px; }
+.sm-quick-item strong { font-size: var(--fs-caption); font-weight: 600; }
+.sm-quick-item small { font-size: var(--fs-micro); color: var(--text-3); }
+
 .sm-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
 .sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); }
@@ -111,13 +125,15 @@
    레퍼런스는 문제집·참고서다 (DESIGN.md §1): 높은 밀도, 조용한 위계, 훑기 좋은 리스트.
    카드는 정보의 경계가 필요한 자리에만 남긴다 (§4). */
 .sm-note-body { display: grid; gap: 0; }
-.sm-section {
-  scroll-margin-top: calc(var(--topbar-h) + var(--space-6));
+.sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
+/* 구분선 조판은 노트 본문 안에서만 적용한다 — 같은 클래스를 쓰는 학습 기록 화면의
+   카드 섹션까지 건드리면 안 된다. */
+.sm-note-body > .sm-section {
   padding: var(--space-7) 0;
   border-top: 1px solid var(--line-faint);
 }
 .sm-note-body > .sm-section:first-child { padding-top: 0; border-top: 0; }
-.sm-note-body > .sm-section:last-child { padding-bottom: 0; }
+.sm-note-body > .sm-section:last-of-type { padding-bottom: 0; }
 
 /* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조). */
 .sm-note-hero { display: grid; gap: var(--space-4); }
@@ -163,7 +179,6 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.sm-keypoint-icon .sm-icon { width: 15px; height: 15px; }
 
 /* 대형 숫자 타일 대신 사실 나열로 낸다 — 장식 프리미티브를 뷰당 2종 이하로 유지한다 (DESIGN.md §4). */
 .sm-facts-inline {
@@ -310,6 +325,9 @@
   margin-bottom: 2px;
 }
 
+/* 설계 근거는 본문이 아니라 접히는 부록이다 — 유일하게 상자를 유지하되
+   구분선 조판과 섞이지 않게 아래로 떼어 놓는다 (§4: 경계가 필요한 자리에만 카드). */
+.sm-note-body > .sm-design { margin-top: var(--space-7); }
 .sm-design { padding: 0; }
 .sm-design > summary {
   display: flex;
