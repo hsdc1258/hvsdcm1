@@ -7,7 +7,7 @@
      --text   #f5f5f7  on --bg 19.29:1 / on --surface 16.61:1  (본문, 목표 7:1 충족)
               on --bg-alt 18.06:1 / on --surface-3 12.80:1
      --text-2 #a1a1a6  on --bg  8.16:1 / on --surface  7.03:1  (보조)
-              on --bg-alt 7.65:1 (불투명 상단바 라벨 — 본문 7:1 충족)
+              on --bg-alt 7.64:1 (불투명 상단바 라벨 — 본문 7:1 충족)
               on --surface-2 6.54:1 — 본문 7:1 미달, 캡션·UI 라벨 한정 (M-4)
               on --surface-3 5.42:1 — 중립 .badge·.segmented-btn 라벨 (캡션 하한 4.5:1 충족)
      --text-3 #86868b  on --bg  5.80:1 / on --surface  4.99:1  (캡션 전용, ≥4.5:1)
@@ -244,7 +244,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   z-index: 100;
   height: var(--topbar-h);
   /* DESIGN.md §3은 유리 효과(blur/glass)를 예외 없이 금지한다. 반투명 + blur 대신
-     불투명 표면색으로 가독성을 확보한다 — --text 18.06:1 / --text-2 7.65:1 on --bg-alt. */
+     불투명 표면색으로 가독성을 확보한다 — --text 18.06:1 / --text-2 7.64:1 on --bg-alt. */
   background: var(--bg-alt);
   border-bottom: 1px solid var(--line-faint);
 }

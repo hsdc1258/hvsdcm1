@@ -32,7 +32,7 @@
 - [low] assets/css/home.css:327-344 `.stats-band` -- §4 장식 프리미티브 -> 랜딩의 통계 타일 1종. 랜딩 레퍼런스(apple.com 제품 페이지)의 어법 안이고 §4 상한(2종) 내이므로 유지한다. "2 학습 앱 / 1 동기화 계정"을 대형 숫자로 내는 것은 취향 문제라 헌장 근거가 없어 손대지 않는다.
 - [low] assets/css/system.css:50-54 `--purple*`·`--teal`·`--yellow` -- §3 "강조색은 뷰당 1색", 상태색은 green/red/orange 셋 -> 위 수정으로 이 토큰들의 사용처가 0이 됐다. 쓰이지 않는 장식용 색 토큰을 남겨두면 장식 목적 재도입을 부르므로 `.badge-purple` 규칙과 함께 삭제하고, 상단 대비 실측표에서 사라진 조합(`--purple-bright` 뱃지)도 같이 지웠다. (수정함 — :root 토큰 73→68개로 validate의 하한 60을 넘긴다.)
 - [~~low~~ → **major, 리뷰 M-1로 승격**] assets/css/system.css `.topbar`·`.sheet-backdrop`·`.toolbar-sticky`, assets/css/home.css `.shade`, smstudy/assets/css/style.css `.sm-concept-nav` -- §3 "금지: … 유리 효과(blur/glass)" -> 처음에 나는 "이 조항은 장식면을 겨눈다"며 크롬 레이어의 `backdrop-filter`를 유지했다. **이 판단은 틀렸다.** 헌장 원문에 그런 예외가 없고, 헌장에 없는 예외를 만들려면 헌장을 먼저 고쳐야 한다. `backdrop-filter` 5곳을 전부 제거하고 불투명 표면색으로 가독성을 확보했다. (수정함)
-  - `.topbar`: `rgba(10,10,12,.72)` + blur(20px) → `var(--bg-alt)` 불투명. `--text` 18.06:1 / `--text-2` 7.65:1.
+  - `.topbar`: `rgba(10,10,12,.72)` + blur(20px) → `var(--bg-alt)` 불투명. `--text` 18.06:1 / `--text-2` 7.64:1.
   - `.toolbar-sticky`, `.sm-concept-nav`: `rgba(22,22,23,.8x)` + blur(20px) → `var(--surface)` 불투명. sticky 여부로 표면색이 달라지지 않는다.
   - `.sheet-backdrop`, `.shade`: blur만 제거하고 스크림은 남겼다(각각 .6→.78, .55→.7로 어둡게). 뒤 배경을 *흐리는* 것이 유리 효과이지, 어둡게 덮는 스크림은 그렇지 않다.
 
@@ -67,7 +67,7 @@
     이전에 이 조합을 6.54:1로 적었던 주석은 실제로는 `--surface-2` 값이었다. 바로잡았다.
   - `.sm-trap` 본문 — `--text` on `--surface-3` **12.80:1**.
   - 불투명 상단바(§3 blur 제거) — `--text` on `--bg-alt` **18.06:1**,
-    `--text-2` on `--bg-alt` **7.65:1** (본문 7:1 충족).
+    `--text-2` on `--bg-alt` **7.64:1** (본문 7:1 충족).
   계산값은 전부 `assets/css/system.css` 상단 대비 실측표에 반영했다.
 - **기계 게이트**: 작업 시작 시점의 `npm run validate`는 48건 실패(5277 checks) 상태였다.
   전부 smstudy 콘텐츠 데이터 관련이었고 이 작업의 소관이 아니었다. 작업 도중 다른 세션이
