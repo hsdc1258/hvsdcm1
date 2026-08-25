@@ -376,7 +376,8 @@ function validateSmStudyData() {
   check(diagramKinds.size >= 4, `smstudy: diagram kind derivation looks broken (parsed ${diagramKinds.size} layout functions in ${DIAGRAM_SOURCE})`);
   check(iconKeys.size >= 20, `smstudy: icon key derivation looks broken (parsed ${iconKeys.size} keys in ${ICON_SOURCE})`);
   // 게이트가 검사하는 아이콘 집합과 렌더러가 실제로 쓰는 집합이 같은 물건이어야 한다.
-  check(diagramSource.includes('window.SM_ICONS'), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
+  // includes()로 보면 window.SM_ICONS_RENAMED 같은 이름 변경이 부분 문자열로 통과한다 (음성 테스트로 확인).
+  check(/window\.SM_ICONS(?![\w$])/u.test(diagramSource), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
   for (const kind of diagramKinds) {
     check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
     check(Array.isArray(DIAGRAM_NODE_BOUNDS[kind]), `smstudy: diagram kind ${kind} has no node-count bound — add it to DIAGRAM_NODE_BOUNDS in scripts/validate.mjs`);
