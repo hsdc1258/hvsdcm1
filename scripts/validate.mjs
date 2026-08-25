@@ -245,9 +245,52 @@ function validateSmStudyData() {
   check(imageFiles.every((file) => referencedImages.has(file)), 'smstudy: unreferenced WebP images exist');
 }
 
+function validateDesignTokens() {
+  // Palette contract (docs/plan.md cycle #1): every surface resolves the shared
+  // Apple dark tokens to the same values, and no legacy-palette literal survives.
+  const surfaces = {
+    'assets/css/home.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
+    'WordMaster/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
+    'smstudy/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
+    'admin/assets/css/admin.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
+  };
+  const expected = { bg: '#000', surface: '#161617', text: '#f5f5f7', line: 'rgba(255,255,255,.12)', green: '#30d158' };
+  const legacyPalette = /#87f5b0|#86efac|#6dff9a|#5fe391|#4ade80|#ff7a7a|#fb7185|#7dd3fc|#a8f5bf|#8fffb0|#facc15|#fb923c|135, ?245, ?176|134, ?239, ?172|95, ?227, ?145|74, ?222, ?128|255, ?122, ?122|251, ?113, ?133|109, ?255, ?154|125, ?211, ?252|250, ?204, ?21/iu;
+  const normalize = (value) => value.replace(/\s+/gu, '').replace(/\b0\./gu, '.').toLowerCase();
+
+  for (const [file, tokens] of Object.entries(surfaces)) {
+    const source = readFileSync(path.join(ROOT, file), 'utf8');
+    check(!legacyPalette.test(source), `${file}: legacy palette literal found`);
+
+    // Effective value = last screen :root declaration wins; print/light roots are exempt.
+    const roots = [...source.matchAll(/:root\s*\{([^}]*)\}/gu)]
+      .map(([, body]) => body)
+      .filter((body) => !body.includes('color-scheme:light') && !body.includes('--bg:#fff'));
+    for (const [key, name] of Object.entries(tokens)) {
+      let value = null;
+      for (const body of roots) {
+        const match = body.match(new RegExp(`${name}\\s*:\\s*([^;\\r\\n]+)`, 'u'));
+        if (match) value = match[1].trim();
+      }
+      check(value !== null, `${file}: shared token ${name} is not defined`);
+      if (value !== null) {
+        check(
+          normalize(value) === normalize(expected[key]),
+          `${file}: ${name} is ${value}, expected ${expected[key]} (shared Apple dark palette)`,
+        );
+      }
+    }
+  }
+
+  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+    check(!legacyPalette.test(readFileSync(file, 'utf8')), `${relative(file)}: legacy palette literal found`);
+  }
+}
+
 validateJavaScriptSyntax();
 validateHtmlAssets();
 validateUiContracts();
+validateDesignTokens();
 validateMigrations();
 validateWordMasterData();
 validateSmStudyData();

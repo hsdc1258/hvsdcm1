@@ -32,6 +32,9 @@
   (현행 "각 앱 자립" 구조 유지).
 - localStorage 키(`wordmaster2000.quiz.v1`, `samun2027.study.v1`, 계정 토큰 키) 불변.
 - Worker/API, `scripts/`, `worker/`, 데이터 JS(`words.js`, `data.js` 등) 불변.
+- **계약 변경 이력 (라운드 2, review.md blocker-2 대응):** `scripts/validate.mjs`에
+  디자인 토큰 검증(`validateDesignTokens`) 추가 및 `package.json` format:css 대상 확장 허용.
+  기존 검사 삭제·완화는 계속 금지. admin은 개인정보 콘솔 특성상 서드파티 CDN 폰트 제외(nit-9).
 
 ## 4. 완료 조건
 - [x] `npm test` 통과 (validate 5057 checks + 단위 테스트 14/14 — 각 커밋마다 실행)

@@ -8,6 +8,7 @@
   --muted:#86868b;
   --line:rgba(255,255,255,.12);
   --blue:#2997ff;
+  --accent-cta:#0071e3;
   --green:#30d158;
   --purple:#bf5af2;
   --max:1180px
@@ -608,7 +609,7 @@ h1[data-user] .welcome-prefix {
   place-items:center;
   margin-bottom:30px;
   border-radius:14px;
-  background:var(--blue);
+  background:var(--accent-cta);
   color:#fff;
   font-size:24px
 }
@@ -643,7 +644,7 @@ h1[data-user] .welcome-prefix {
   margin-top:14px;
   border:0;
   border-radius:13px;
-  background:var(--blue);
+  background:var(--accent-cta);
   color:#fff;
   font-weight:780;
   cursor:pointer

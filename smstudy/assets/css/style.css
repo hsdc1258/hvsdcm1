@@ -5,7 +5,7 @@
   --surface:#161617;
   --surface2:#1d1d1f;
   --surface3:#242426;
-  --line:rgba(255,255,255,.14);
+  --line:rgba(255,255,255,.12);
   --soft:rgba(255,255,255,.08);
   --text:#f5f5f7;
   --muted:#86868b;
@@ -21,8 +21,8 @@
   --warnbg:rgba(255,214,10,.11);
   --blue:#64d2ff;
   --bluebg:rgba(100,210,255,.1);
-  --radius:22px;
-  --max:1060px
+  --radius:28px;
+  --max:1160px
 }
 * {
   box-sizing:border-box
@@ -239,9 +239,9 @@ button:disabled {
   font-weight:800
 }
 .badge.green {
-  background:var(--accentbg);
+  background:var(--greenbg);
   border-color:rgba(48,209,88,.24);
-  color:var(--accent)
+  color:var(--green)
 }
 .badge.warn {
   background:var(--warnbg);
@@ -543,7 +543,7 @@ select {
 }
 .notebook-menu a:hover,
 .notebook-menu a:focus-visible {
-  border-color:rgba(48,209,88,.4);
+  border-color:rgba(191,90,242,.4);
   color:var(--accent)
 }
 .notebook-hero {
@@ -553,11 +553,11 @@ select {
   gap:14px;
   margin-bottom:14px;
   padding:clamp(22px,4vw,34px);
-  border:1px solid rgba(48,209,88,.26);
+  border:1px solid rgba(191,90,242,.26);
   border-radius:26px;
   background:
     radial-gradient(circle at 92% 12%,rgba(100,210,255,.12),transparent 15rem),
-    linear-gradient(145deg,rgba(48,209,88,.12),rgba(22,22,23,.98) 58%)
+    linear-gradient(145deg,rgba(191,90,242,.12),rgba(22,22,23,.98) 58%)
 }
 .notebook-hero h3 {
   max-width:730px;
@@ -871,7 +871,7 @@ select {
   line-height:1.72
 }
 .recall-lab {
-  border-color:rgba(48,209,88,.2)
+  border-color:rgba(191,90,242,.2)
 }
 .recall-grid {
   display:grid;
@@ -936,7 +936,7 @@ select {
   gap:8px;
   margin-top:15px;
   padding:13px 15px;
-  border:1px dashed rgba(48,209,88,.28);
+  border:1px dashed rgba(191,90,242,.28);
   border-radius:14px;
   color:var(--muted);
   font-size:10px;
@@ -1594,9 +1594,9 @@ select {
 .concept-visual {
   margin-bottom:14px;
   padding:clamp(20px,4vw,30px);
-  border:1px solid rgba(48,209,88,.2);
+  border:1px solid rgba(191,90,242,.2);
   border-radius:22px;
-  background:linear-gradient(145deg,rgba(48,209,88,.09),rgba(22,22,23,.98) 62%)
+  background:linear-gradient(145deg,rgba(191,90,242,.09),rgba(22,22,23,.98) 62%)
 }
 .concept-visual-copy h3 {
   margin:13px 0 7px;
@@ -2266,6 +2266,10 @@ select {
     --muted2:#68737d;
     --accent:#187341;
     --accentbg:#eff9f3;
+    --green:#187341;
+    --greenbg:#eff9f3;
+    --danger:#a3231b;
+    --dangerbg:#fdeceb;
     --blue:#176785;
     --bluebg:#eef8fc;
     --warn:#8a6800;
@@ -2340,20 +2344,20 @@ select {
     --surface:#161617;
     --surface2:#1d1d1f;
     --surface3:#242426;
-    --line:rgba(255,255,255,.14);
-    --soft:rgba(255,255,255,.09);
+    --line:rgba(255,255,255,.12);
+    --soft:rgba(255,255,255,.08);
     --text:#f5f5f7;
     --muted:#86868b;
-    --muted2:#5f5f64;
+    --muted2:#6e6e73;
     --accent:#bf5af2;
     --accent2:#af52de;
     --accentbg:rgba(191,90,242,.13);
-    --danger:#ff6961;
+    --danger:#ff453a;
     --dangerbg:rgba(255,69,58,.12);
     --warn:#ffd60a;
-    --warnbg:rgba(255,214,10,.1);
+    --warnbg:rgba(255,214,10,.11);
     --blue:#64d2ff;
-    --bluebg:rgba(100,210,255,.11);
+    --bluebg:rgba(100,210,255,.1);
     --radius:28px;
     --max:1160px
   }
