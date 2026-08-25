@@ -6,8 +6,8 @@
    대비 실측 (scripts 검증 시 계산값):
      --text   #f5f5f7  on --bg 19.29:1 / on --surface 16.61:1  (본문, 목표 7:1 충족)
      --text-2 #a1a1a6  on --bg  8.16:1 / on --surface  7.03:1  (보조)
-     --text-3 #86868b  on --bg  5.80:1                          (캡션 전용, ≥4.5:1)
-     --text-4 #6e6e73  on --bg  4.14:1                          (비활성 전용)
+     --text-3 #86868b  on --bg  5.80:1 / on --surface  4.99:1  (캡션 전용, ≥4.5:1)
+     --text-4 #6e6e73  on --bg  4.14:1 / on --surface  3.57:1  (비활성 전용 — 살아있는 텍스트 금지)
      #fff on --accent-strong #0071e3 4.70:1                      (채움 버튼 라벨)
      --accent #2997ff  on --bg  6.96:1                           (링크)
    ========================================================================== */
@@ -575,7 +575,8 @@ select.field-input {
   font-weight: 700;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--text-4);
+  /* --text-4는 비활성 전용(상단 주석) — 살아있는 라벨은 --text-3 (on --surface 4.99:1, M-2) */
+  color: var(--text-3);
   padding: 0 var(--space-3) var(--space-1);
 }
 
