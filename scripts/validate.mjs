@@ -79,13 +79,14 @@ function validateUiContracts() {
   const adminCss = readFileSync(path.join(ROOT, 'admin/assets/css/admin.css'), 'utf8');
   const adminJs = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
 
-  check(homeHtml.includes('id="drawerStudy"') && homeHtml.includes('aria-hidden="true"'), 'home: authenticated STUDY drawer with default hidden state is missing');
+  // 조건을 includes 두 개로 나누면 서로 다른 요소를 봐도 통과한다 — 한 태그 안에서 매칭한다 (review-3a M-6).
+  check(/id="drawerStudy"[^>]*aria-hidden="true"/u.test(homeHtml), 'home: authenticated STUDY drawer with default hidden state is missing');
   check(/id="loginModal"[^>]*role="dialog"[^>]*aria-modal="true"/u.test(homeHtml), 'home: login sheet must be a modal dialog');
   check(/class="brand"[^>]*>hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
   check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
   check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
-  check(homeHtml.includes('aria-expanded') && homeHtml.includes('aria-controls="drawer"'), 'home: menu button accessibility wiring is missing');
+  check(/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u.test(homeHtml), 'home: menu button accessibility wiring is missing');
   check(homeCss.includes('.drawer.logged .drawer-study'), 'home: STUDY drawer must depend on logged-in state');
   check(homeCss.includes('.account.logged'), 'home: CTA switch must depend on logged-in state');
   check(homeCss.includes('.hero-title[data-user]'), 'home: personalized title responsive rule is missing');
