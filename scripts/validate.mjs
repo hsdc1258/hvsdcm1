@@ -81,7 +81,12 @@ function validateUiContracts() {
 
   // 조건을 includes 두 개로 나누면 서로 다른 요소를 봐도 통과한다 — 한 태그 안에서 매칭한다 (review-3a M-6).
   check(/id="drawerStudy"[^>]*aria-hidden="true"/u.test(homeHtml), 'home: authenticated STUDY drawer with default hidden state is missing');
-  check(/id="loginModal"[^>]*role="dialog"[^>]*aria-modal="true"/u.test(homeHtml), 'home: login sheet must be a modal dialog');
+  // 대화상자 의미는 백드롭이 아니라 시트 본체(form.sheet)에 붙는다 (review-3a N-7).
+  check(/id="loginForm"[^>]*class="[^"]*\bsheet\b[^"]*"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="loginTitle"/u.test(homeHtml),
+    'home: login sheet itself must carry role="dialog" aria-modal="true" aria-labelledby="loginTitle"');
+  check(!/id="loginModal"[^>]*(?:role="dialog"|aria-modal=)/u.test(homeHtml),
+    'home: sheet backdrop must not carry dialog semantics — they belong on the .sheet form');
+  check(/id="loginTitle"/u.test(homeHtml), 'home: login dialog label target #loginTitle is missing');
   check(/class="brand"[^>]*>hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
   check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
