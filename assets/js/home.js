@@ -120,11 +120,16 @@
 
       localStorage.setItem('hvsdcm.token', data.token);
       localStorage.setItem('hvsdcm.user', data.user.username);
-      showUser(data.user.username);
-      closeLogin();
 
+      // 학습 콘텐츠 복원은 로그인 문서의 로드 경로(mountStudyContent → showUser →
+      // setupReveal) 하나로 통일한다 — 로그아웃의 location.reload()와 대칭.
+      // 제자리 주입으로 갈라놓으면 reveal 관찰·타이틀 복원을 여기서 중복 구현해야 한다.
       const nextPath = getSafeNextPath();
-      if (nextPath) location.assign(nextPath);
+      if (nextPath) {
+        location.assign(nextPath);
+        return;
+      }
+      location.reload();
     } catch (error) {
       elements.loginError.textContent = error.message || '로그인 실패';
     }
