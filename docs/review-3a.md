@@ -88,6 +88,10 @@ plan.md §3.4 랜딩 체크리스트는 "**로그인 상태에 따른 학습 링
 고치는 법: `home.css`에 `body:not(.logged) .topbar-link, body:not(.logged) .footer-nav { display: none; }`을 추가하거나,
 "로그아웃 상태에서도 앱 존재는 노출하되 진입 시 로그인으로 유도한다"는 결정을 plan.md에 D7로 기록한다(둘 중 하나는 필요).
 
+> **[수정 라운드] 고치지 않음 — plan.md §7 D7로 기록.** `main`을 직접 확인한 결과 원래 랜딩의
+> `.product-card` 2장(/WordMaster/·/smstudy/)이 로그인 여부와 무관하게 상시 노출돼 있었고(게이팅 규칙 없음),
+> 게이팅됐던 표면(드로어·히어로 CTA)은 새 구현이 보존한다. 상단바·푸터 링크는 기존 상시 노출의 등가물이므로 회귀 아님.
+
 ### M-2. `.sidebar-label`이 "비활성 전용" 토큰 `--text-4`를 살아있는 라벨에 사용 — 실측 3.56:1, AA 미달
 
 - `assets/css/system.css:573-580` — `.sidebar-label { … color: var(--text-4); }`
@@ -187,6 +191,10 @@ plan.md D2가 "검사를 약화하지 않는다"고 했는데, 겉보기엔 강�
 `/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u`.
 (같은 파일 82행의 `loginModal` 검사는 이미 이 방식으로 올바르게 작성돼 있다 — 기준은 이미 파일 안에 있다.)
 
+> **[수정 라운드] 보류 — 통합 수정 라운드에서 처리.** 다른 리뷰어가 validate.mjs를 읽고 있어 지금은
+> B-1의 og 잠금 검사만 추가했다. 처리안: 81행을 `/id="drawerStudy"[^>]*aria-hidden="true"/u`로,
+> 87행을 `/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u`로 교체(82행 loginModal 검사와 같은 단일 정규식 방식).
+
 ### M-7. C-3 게이트의 커버리지 구멍 — 색 토큰 25개 중 9개만 지킨다
 
 `scripts/validate.mjs:363-380`
@@ -219,6 +227,12 @@ D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게
 토큰 목록을 **자동 생성**하고, 검사 대상을 `:root`가 아니라 "system.css 밖에서의 모든 커스텀 프로퍼티 정의"로 바꾼다.
 `@media print` 예외는 파일·블록 단위 허용 목록으로 명시한다.
 
+> **[수정 라운드] 보류 — 통합 수정 라운드에서 처리.** 같은 이유(validate.mjs 동시 열람)로 지금 손대지 않는다.
+> 처리안: (1) `system.css`의 `:root` 블록에서 `--[\w-]+\s*:` 선언을 파싱해 colorTokens를 자동 생성,
+> (2) 검사 대상을 ":root 블록"이 아니라 "system.css 밖 모든 CSS의 커스텀 프로퍼티 *정의*"로 확장
+> (`(^|[;{\s])--[\w-]+\s*:` 전면 금지), (3) 예외는 `smstudy/assets/css/style.css`의 인쇄 라이트 팔레트 블록만
+> 파일+토큰 화이트리스트로 명시. og 잠금 검사(validateOgImageLock)와 충돌 없음.
+
 ---
 
 ## 3. nit
@@ -237,27 +251,27 @@ D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게
   `.reveal`이 숨겨지는 시점이 파싱 완료 이후라 첫 페인트가 먼저 나가면 "보였다 사라졌다 다시 나타나는" 깜빡임이 가능하다.
   정석은 `<head>` 인라인 한 줄이지만 `validate.mjs:52`가 인라인 `<script>`를 금지하므로,
   대안으로 `.reveal`의 초기 상태를 CSS만으로 잡고 JS는 `.in`만 붙이도록 뒤집는 방법이 있다.
-  (JS 실패 시 항상 보이는 폴백은 지금 구조가 더 안전하므로 우선순위는 낮다.)
+  (JS 실패 시 항상 보이는 폴백은 지금 구조가 더 안전하므로 우선순위는 낮다.) **[수정 라운드: 남김 — 리뷰 스스로 현 구조가 더 안전하다고 판단한 항목, 실익 대비 위험이 큼]**
 - **N-5. `.link-arrow` 호버 시 `›` 글리프까지 밑줄이 그어진다.** `system.css:137`의 전역 `a:hover { text-decoration: underline; }`을
   `.link-arrow`(322행)가 상쇄하지 않는다. `.btn`·`.sidebar-item`·`.social-card`는 전부 `:hover`에서 상쇄해 두었으므로 누락으로 보인다.
 - **N-6. 드로어·모달 열림 중 배경 스크롤 잠금과 포커스 트랩이 없다.** `home.js:23-31`, `system.css:406-419`.
   드로어가 열려도 뒤쪽 `.topbar-link`가 여전히 탭 도달 가능함을 실측 확인했다.
-  **기존 사이클과 동일한 상태이므로 회귀는 아니다.** 다음 사이클 후보.
+  **기존 사이클과 동일한 상태이므로 회귀는 아니다.** 다음 사이클 후보. **[수정 라운드: 남김 — 회귀 아님, 다음 사이클]**
 - **N-7. `role="dialog" aria-modal="true"`가 백드롭 `div`에 붙어 있다.** `index.html:194`.
   대화상자 본체는 `.sheet`(`<form>`)이므로 의미상 그쪽이 맞다. 닫힘 상태에서 `visibility: hidden`으로
-  접근성 트리에서 빠지는 것은 확인했으므로 실사용 영향은 작다.
+  접근성 트리에서 빠지는 것은 확인했으므로 실사용 영향은 작다. **[수정 라운드: 남김 — validate.mjs 82행이 `id="loginModal"…role="dialog"…aria-modal` 동일 태그를 요구해 지금 옮기면 검사가 깨짐. 검사 수정과 함께 통합 라운드에서]**
 - **N-8. R-5의 "자간 분해 금지"는 자동 검사에 없다.** `system.css:214-220`이 `.brand { letter-spacing: normal; }`으로
   코드상 지키고 있지만, `validateBrandName()`은 문자열 패턴만 본다.
-  → `.brand` 규칙에 `letter-spacing`을 늘리는 선언이 없는지 검사 한 줄 추가.
+  → `.brand` 규칙에 `letter-spacing`을 늘리는 선언이 없는지 검사 한 줄 추가. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, 통합 라운드에서]**
 - **N-9. `home.js`가 CRLF→LF 정규화로 전체 재작성처럼 보인다.** 실제 변경은 +26/-2줄인데
   `git diff`는 +170/-146으로 나온다. plan.md §5가 인용한 LESSONS의 "CRLF/LF 혼재 고정" 이행 자체는 맞지만,
-  줄바꿈 정규화를 **별도 커밋으로 분리**했다면 `1c0533a`의 리뷰 비용이 훨씬 낮았을 것이다.
+  줄바꿈 정규화를 **별도 커밋으로 분리**했다면 `1c0533a`의 리뷰 비용이 훨씬 낮았을 것이다. **[수정 라운드: 남김 — 커밋 이력 재작성은 하지 않음, 프로세스 교훈으로만 수용]**
 - **N-10. `stripPrint` 정규식이 포맷 가정에 의존한다.** `scripts/validate.mjs:364`
-  `/@media\s+print\s*\{[\s\S]*?\n\}/gu` — 닫는 `}`가 0열에 있다는 전제라, 들여쓰기가 바뀌면 조용히 오작동한다.
+  `/@media\s+print\s*\{[\s\S]*?\n\}/gu` — 닫는 `}`가 0열에 있다는 전제라, 들여쓰기가 바뀌면 조용히 오작동한다. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, M-7 처리안에 포함해 통합 라운드에서]**
 - **N-11. `check(/var\(--/u.test(source), …)`가 모든 CSS 파일에 적용된다.** `scripts/validate.mjs:374`.
-  벤더/서드파티 CSS를 한 장이라도 추가하면 오탐으로 빌드가 깨진다. 자체 작성 CSS로 대상을 한정하는 편이 안전하다.
+  벤더/서드파티 CSS를 한 장이라도 추가하면 오탐으로 빌드가 깨진다. 자체 작성 CSS로 대상을 한정하는 편이 안전하다. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, 통합 라운드에서]**
 - **N-12. `.welcome-prefix`는 대응 CSS 규칙이 없는 데드 훅이다.** `index.html:71`, `home.js:49`.
-  줄바꿈은 `.hero-title .welcome-user { display: block; }`(home.css:142)이 담당하므로 클래스 자체는 아무 일도 하지 않는다.
+  줄바꿈은 `.hero-title .welcome-user { display: block; }`(home.css:142)이 담당하므로 클래스 자체는 아무 일도 하지 않는다. **[수정 라운드: 남김 — 무해한 훅이고 제거하려면 home.js·index.html 두 파일을 건드려야 해 실익 없음]**
 
 ---
 
