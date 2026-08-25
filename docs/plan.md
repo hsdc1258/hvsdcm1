@@ -163,3 +163,9 @@ export·import·reset / 퀴즈 중 `1`~`5` 즉시 선택, `Enter`로 다음.
   2~3회 중복 선언돼 있다. LESSONS의 첫 규칙이 정확히 이 함정을 지목한다.
 - **D6. classic script + `window` 전역 유지.** 근거: 4개 표면 모두 전역 공유에 의존하며
   `type="module"` 전환 시 전역 노출이 끊겨 전부 깨진다. 모듈화는 이번 범위 밖이다.
+- **D7. (리뷰 M-1 대응, 수정 라운드에서 추가) 미로그인 상태의 상단바·푸터 학습 링크 상시 노출은
+  기존 동작 보존이다.** 근거: `main`의 랜딩에서 `.product-card` 2장(/WordMaster/·/smstudy/)은
+  로그인 여부와 무관하게 항상 노출됐고(`git show main:index.html` 84·93행, home.css에 게이팅 규칙 없음),
+  게이팅됐던 표면은 드로어(`.drawer.logged .drawer-study`)와 히어로 CTA(`.account`)뿐이며 이 둘은
+  새 구현이 그대로 보존한다. §3.4의 "로그인 상태에 따른 학습 링크 노출·숨김"은 이 게이팅 표면을
+  가리키는 것으로 해석한다. 미로그인 진입 시 `account.js`가 `/?login=1&next=…`로 유도하므로 기능 누수도 없다.
