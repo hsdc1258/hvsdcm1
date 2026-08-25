@@ -663,7 +663,7 @@
         <div class="sm-design-body">
           <p>${esc(LEARNING_DESIGN.summary)}</p>
           <div class="sm-design-steps">${LEARNING_DESIGN.steps.map((step) => `<div><strong>${esc(step.label)}</strong><p>${esc(step.text)}</p></div>`).join('')}</div>
-          <div class="sm-evidence">${LEARNING_DESIGN.evidence.map((item) => `<a href="${item.href}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
+          <div class="sm-evidence">${LEARNING_DESIGN.evidence.map((item) => `<a href="${esc(item.href)}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
           <p class="sm-note">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
         </div>
       </details>`;
@@ -715,7 +715,7 @@
         <div class="toolbar-spacer"></div>
         <button id="subQuiz" class="btn btn-primary" type="button">이 중단원 퀴즈 ${questionCount}문제</button>
       </div>
-      <p class="sm-source">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항을 개념 태그별로 자동 집계한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
+      <p class="sm-source">개념 검토는 2027 불후의 명강 사회·문화와 2027 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 이 사이트에 선별 수록한 실기출 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 전체 기출의 전수 빈도를 뜻하지는 않습니다. 문항과 정답은 원문 PDF·정답표와 대조했습니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
     document.getElementById('nextConcept').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
