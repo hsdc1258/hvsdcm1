@@ -109,6 +109,7 @@ body.logged .topbar-login { display: none; }
   border-top: 1px solid var(--line-faint);
   padding-top: var(--space-4);
 }
+.drawer-social { display: flex; gap: var(--space-2); }
 .drawer-logout { display: none; color: var(--red); }
 .drawer-logout:hover { color: var(--red); background: var(--red-soft); }
 .drawer.logged .drawer-logout { display: flex; }
@@ -345,25 +346,10 @@ body.logged .hero-sub-guest { display: none; }
 /* ---- 소셜 ---- */
 
 .socials { padding-bottom: var(--section-gap); }
-.socials-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-.social-card {
+.socials-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  text-decoration: none;
-}
-.social-card:hover { text-decoration: none; }
-.social-label { font-weight: 700; color: var(--text); }
-.social-handle { font-size: var(--fs-caption); color: var(--text-2); }
-.social-handle i { font-style: normal; color: var(--text-3); }
-
-@media (max-width: 560px) {
-  .socials-grid { grid-template-columns: minmax(0, 1fr); }
+  justify-content: center;
+  gap: var(--space-4);
 }
 
 /* ---- 푸터 ---- */
