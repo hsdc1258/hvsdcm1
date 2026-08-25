@@ -5,3 +5,4 @@
 - [요청] review-3a 지적 수정(원 구현자=수정 담당) → [수정] M-2 sidebar-label --text-3 (4af557d) / M-3 badge bright 토큰 (b025587) / M-4 feature 그라디언트 (7651fda) / M-5 forced-colors (d80117a) / M-1 D7 판단 기록 (c1fc57c) / B-1 og.png 재생성+해시 잠금 검사 (14c1d4e) / N-1~N-3·N-5 (565bfb1, 3fabcee, 9448c37, eefdb95) / 처리 기록 (da14812). M-6·M-7은 validate.mjs 동시 열람으로 통합 라운드 보류. npm test 5260 checks + 14/14 통과, 브라우저 실측 확인.
 - [요청] 3a 리뷰 지적 수정 → [수정] og.png 재생성 + validateOgImageLock 신설, 대비 4건, forced-colors, nit 4건 (4af557d..91b6376)
 - [요청] validate.mjs 통합 수정 → [수정] 토큰 목록 system.css 자동 도출(73종), 중괄호 깊이 스캐너, 음성테스트 11종 (3af65c6, d62cc69, edcb6a4, ff30981, 60e51d1)
+- [결과] main 병합·push 완료 (2806eea) — GitHub Pages 배포
