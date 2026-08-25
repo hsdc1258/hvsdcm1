@@ -4,9 +4,9 @@
 }
 body {
   margin:0;
-  background:#080808;
-  color:#eee;
-  font-family:Inter,-apple-system,"Segoe UI",sans-serif
+  background:#000;
+  color:#f5f5f7;
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif
 }
 main {
   width:min(1100px,calc(100% - 30px));
@@ -18,18 +18,18 @@ h1 {
   margin:0 0 25px
 }
 .card {
-  border:1px solid #272727;
+  border:1px solid rgba(255,255,255,.1);
   border-radius:18px;
-  background:#101010;
+  background:#161617;
   padding:20px;
   margin:12px 0
 }
 input,button,select {
   height:45px;
   border-radius:11px;
-  border:1px solid #303030;
-  background:#171717;
-  color:#eee;
+  border:1px solid rgba(255,255,255,.12);
+  background:#1d1d1f;
+  color:#f5f5f7;
   padding:0 13px;
   font:inherit
 }
@@ -38,8 +38,8 @@ button {
   font-weight:800
 }
 button.primary {
-  background:#eee;
-  color:#090909
+  background:#f5f5f7;
+  color:#000
 }
 .row {
   display:flex;
@@ -57,7 +57,7 @@ button.primary {
 }
 .stat {
   padding:16px;
-  border:1px solid #272727;
+  border:1px solid rgba(255,255,255,.1);
   border-radius:14px
 }
 .stat small {
@@ -83,20 +83,20 @@ table {
 th,td {
   text-align:left;
   padding:12px 8px;
-  border-bottom:1px solid #222;
+  border-bottom:1px solid rgba(255,255,255,.08);
   font-size:13px
 }
 th {
   color:#777
 }
 .danger {
-  color:#ff8c8c
+  color:#ff6961
 }
 .hidden {
   display:none
 }
 .error {
-  color:#ff8585;
+  color:#ff6961;
   min-height:20px;
   margin-top:10px
 }
@@ -119,7 +119,7 @@ th {
 }
 body {
   min-height:100svh;
-  background:#050505;
+  background:#000;
   -webkit-font-smoothing:antialiased
 }
 body:before {
@@ -127,7 +127,7 @@ body:before {
   position:fixed;
   inset:0;
   z-index:-2;
-  background:radial-gradient(circle at 10% 0,rgba(91,75,255,.12),transparent 30%),radial-gradient(circle at 88% 20%,rgba(255,255,255,.06),transparent 25%)
+  background:radial-gradient(circle at 10% 0,rgba(41,151,255,.12),transparent 30%),radial-gradient(circle at 88% 20%,rgba(255,255,255,.06),transparent 25%)
 }
 body:after {
   content:"";
@@ -154,7 +154,7 @@ main {
 .head small {
   display:block;
   margin-bottom:10px;
-  color:#6dff9a;
+  color:#64d2ff;
   font:700 10px ui-monospace,Consolas,monospace;
   letter-spacing:.22em;
   text-transform:uppercase
@@ -176,7 +176,7 @@ main {
   padding:22px;
   border-color:var(--line);
   border-radius:20px;
-  background:rgba(15,15,15,.84);
+  background:rgba(22,22,23,.84);
   backdrop-filter:blur(16px);
   box-shadow:0 20px 70px rgba(0,0,0,.18)
 }
@@ -193,7 +193,7 @@ input,button,select {
   height:48px;
   border-color:var(--line);
   border-radius:12px;
-  background:#131313;
+  background:#1d1d1f;
   outline:none;
   transition:.18s
 }
@@ -207,10 +207,10 @@ select:focus {
 }
 button:hover {
   border-color:rgba(255,255,255,.3);
-  background:#1a1a1a
+  background:#242426
 }
 button.primary {
-  border-color:#eee
+  border-color:rgba(255,255,255,.4)
 }
 .row button {
   flex:0 0 110px
@@ -271,8 +271,8 @@ td:first-child {
 .danger {
   height:34px;
   padding:0 11px;
-  background:rgba(255,80,80,.045);
-  border-color:rgba(255,100,100,.15)
+  background:rgba(255,69,58,.06);
+  border-color:rgba(255,69,58,.16)
 }
 .table-actions {
   display:flex;
@@ -281,9 +281,9 @@ td:first-child {
 .session-link {
   height:34px;
   padding:0 11px;
-  color:#a8f5bf;
-  background:rgba(109,255,154,.05);
-  border-color:rgba(109,255,154,.16)
+  color:#7ee49b;
+  background:rgba(48,209,88,.06);
+  border-color:rgba(48,209,88,.16)
 }
 #login {
   width:min(100%,480px);
@@ -371,17 +371,17 @@ td:first-child {
   background:#555
 }
 .status-badge.active {
-  color:#8fffb0;
-  border-color:rgba(109,255,154,.2);
-  background:rgba(109,255,154,.05)
+  color:#7ee49b;
+  border-color:rgba(48,209,88,.2);
+  background:rgba(48,209,88,.06)
 }
 .status-badge.active:before {
-  background:#6dff9a;
-  box-shadow:0 0 10px rgba(109,255,154,.65)
+  background:#30d158;
+  box-shadow:0 0 10px rgba(48,209,88,.65)
 }
 .device-cell strong {
   display:block;
-  color:#eee;
+  color:#f5f5f7;
   font-size:12px
 }
 .device-cell small {
@@ -519,7 +519,7 @@ body {
     radial-gradient(circle at 88% 0,rgba(41,151,255,.13),transparent 30rem),
     #000;
   color:#f5f5f7;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Pretendard,"Segoe UI",sans-serif
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif
 }
 body:before,body:after {
   display:none
