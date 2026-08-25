@@ -24,6 +24,28 @@ function walk(directory, predicate) {
   return files;
 }
 
+// hidden 속성이 붙은 채로 렌더되는 요소의 class 토큰을 뽑는다 (템플릿 보간 토큰은 제외).
+function hiddenClassTokens(markup) {
+  const tokens = new Set();
+  for (const tag of markup.match(/<[a-z][\w-]*\b[^>]*>/gu) || []) {
+    if (!/\shidden(?=[\s>])/u.test(tag)) continue;
+    const classMatch = tag.match(/\sclass="([^"]*)"/u);
+    if (!classMatch) continue;
+    for (const token of classMatch[1].split(/\s+/u)) {
+      if (token && !token.includes('$') && !token.includes('{')) tokens.add(token);
+    }
+  }
+  return [...tokens];
+}
+
+// '.token { ... }' 단독 선택자 규칙의 display 값을 돌려준다 (규칙이나 선언이 없으면 null).
+function baseRuleDisplay(css, token) {
+  const rule = new RegExp(`(?:^|\\})\\s*\\.${token}\\s*\\{([^}]*)\\}`, 'su').exec(css);
+  if (!rule) return null;
+  const display = /display\s*:\s*([a-z-]+)/u.exec(rule[1]);
+  return display ? display[1] : null;
+}
+
 function relative(absolute) {
   return path.relative(ROOT, absolute).split(path.sep).join('/');
 }
@@ -143,6 +165,25 @@ function validateUiContracts() {
   check(smstudyJs.includes("toast.classList.add('open')"), 'smstudy: toast must use the shared .toast.open contract');
   check(smstudyJs.includes('data-question-image') && smstudyJs.includes('.sm-media-fallback'), 'smstudy: KICE image error fallback hook is missing');
   check(smstudyJs.includes("addEventListener('error', markFailed, { once: true })"), 'smstudy: image error handler must bind once');
+  check(smstudyJs.includes("addEventListener('load', markLoaded, { once: true })"), 'smstudy: image success handler must be bound');
+  check(smstudyJs.includes('image.naturalWidth > 0'), 'smstudy: cached images must be judged by naturalWidth, not by complete alone');
+  check(/markLoaded = \(\) => \{[^}]*fallback\.hidden = true/su.test(smstudyJs), 'smstudy: image success path must re-hide the fallback block');
+  check(/\.sm-media\.is-failed \.sm-media-fallback \{[^}]*display: grid/su.test(smstudyCss), 'smstudy: fallback must be revealed by an explicit failure-state rule');
+  check(baseRuleDisplay(smstudyCss, 'sm-media-fallback') === 'none', 'smstudy: .sm-media-fallback must default to display: none so a rendered-but-hidden fallback stays invisible');
+
+  // 회귀 방지: hidden 속성으로 렌더되는 블록을 저자 CSS의 display 선언이 되살리는 결함을 잡는다.
+  // UA 스타일시트의 [hidden] { display: none } 은 저자 규칙에 항상 지므로, hidden 만으로는 숨겨지지 않는다.
+  for (const [surface, markup, css] of [
+    ['smstudy', smstudyJs + smstudyHtml, smstudyCss],
+    ['WordMaster', wordMasterJs + wordMasterHtml, wordMasterCss],
+  ]) {
+    for (const token of hiddenClassTokens(markup)) {
+      const display = baseRuleDisplay(css, token);
+      if (display === null || display === 'none') continue;
+      const guarded = css.includes(`.${token}[hidden]`) || /\[hidden\]\s*\{[^}]*display\s*:\s*none/su.test(css);
+      check(guarded, `${surface}: .${token} renders with a hidden attribute but its CSS sets display: ${display}; add a [hidden] guard or default it to none`);
+    }
+  }
   check(smstudyJs.includes('wrongCount: cumulativeWrongCount'), 'smstudy: wrong-rate ties must use cumulative mistakes');
 
   check(adminHtml.includes('content="noindex, nofollow"'), 'admin: dashboard must stay unindexed');

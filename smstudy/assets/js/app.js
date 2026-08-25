@@ -760,13 +760,31 @@
   }
   function bindQuestionImages(root = document) {
     root.querySelectorAll('[data-question-image]').forEach(image => {
+      const figure = image.closest('.sm-media');
+      const link = image.closest('.sm-media-link');
+      const fallback = figure?.querySelector('.sm-media-fallback');
+      // 폴백은 '숨김 attribute + CSS 기본 display:none' 두 겹으로 잠겨 있다.
+      // 상태 전환은 반드시 이 두 함수만 통해서 한다 (성공/실패 양방향 복원).
       const markFailed = () => {
-        image.closest('.sm-media-link')?.classList.add('is-failed');
-        const fallback = image.closest('.sm-media')?.querySelector('.sm-media-fallback');
+        figure?.classList.add('is-failed');
+        link?.classList.add('is-failed');
         if (fallback) fallback.hidden = false;
       };
+      const markLoaded = () => {
+        figure?.classList.remove('is-failed');
+        link?.classList.remove('is-failed');
+        if (fallback) fallback.hidden = true;
+      };
       image.addEventListener('error', markFailed, { once: true });
-      if (image.complete && image.naturalWidth === 0) markFailed();
+      image.addEventListener('load', markLoaded, { once: true });
+      // 캐시 히트로 이미 complete인 경우 load/error 이벤트가 다시 오지 않는다.
+      // naturalWidth > 0 이면 디코드 성공, 0 이면 실패다 (complete 전에는 판정하지 않는다).
+      if (image.complete) {
+        if (image.naturalWidth > 0) markLoaded();
+        else markFailed();
+      } else {
+        markLoaded();
+      }
     });
   }
   function renderAnswerChoices(question, session, current, total) {

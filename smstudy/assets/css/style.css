@@ -276,14 +276,17 @@
 .sm-media-link.is-failed { display: none; }
 .sm-media-img { width: 100%; height: auto; }
 .sm-media figcaption { font-size: var(--fs-micro); color: var(--text-3); }
+.sm-media.is-failed figcaption { display: none; }
 .sm-media-fallback {
-  display: grid;
+  display: none;
   gap: var(--space-2);
   justify-items: start;
   padding: var(--space-4);
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-m);
 }
+.sm-media.is-failed .sm-media-fallback { display: grid; }
+.sm-media-fallback[hidden] { display: none; }
 .sm-media-fallback p { font-size: var(--fs-caption); color: var(--text-2); }
 .sm-media.is-review .sm-media-link { max-height: 520px; overflow: auto; }
 

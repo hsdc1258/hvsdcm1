@@ -1,0 +1,1 @@
+- [요청] smstudy 이미지 정상 로드인데 폴백이 동시 노출 → [수정] .sm-media-fallback 기본 display:none + is-failed 상태 클래스, bindQuestionImages 성공/실패 양방향 복원, validate.mjs에 hidden-attribute vs display 회귀 검사 추가
