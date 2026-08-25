@@ -81,7 +81,7 @@ PIPELINE.md의 "Fable 구현 + Opus 리뷰(동일 계열 폴백) 시 리뷰어�
   `#2997ff` 포커스 링·Pretendard 스택을 쓰고 있어 plan 2절의 "정합성 확인" 요건을 이미 충족한다.
   (다만 plan 7절 2단계에 대응하는 커밋이 없어 "확인했음"이 커밋 이력에 남지 않았다.)
 
-## 판정
+## 판정 (라운드 1 시점 — 최종 판정은 아래 라운드 2 참조)
 - [ ] 승인 (blocker 0 + 기계 게이트 통과)
 - [x] **수정 후 재검토**
 - [ ] 중단 — 사용자 판단 필요
@@ -98,3 +98,121 @@ PIPELINE.md의 "Fable 구현 + Opus 리뷰(동일 계열 폴백) 시 리뷰어�
 5. **major 6·7**: admin 하드코딩 그레이 → `var(--muted)`, CTA 블루 `#0071e3`로 AA 확보
 6. nit 9~12는 선택 (단, 10은 1줄이라 함께 처리 권장)
 7. `npm test` 재실행 → 라운드 2 재검토
+
+---
+
+# 라운드 2 재검토
+
+## 리뷰 대상
+- 수정 커밋: **`f6979ab`** "fix: address review round 1 (2 blockers, 6 majors, 3 nits)"
+  (9 files, +237 / -79). 누적 범위 `75f5b71..f6979ab`
+- 구현 모델 / 리뷰 모델: **Fable 5 / Opus 5**
+- 라운드: 1 / **2** (최대 라운드 도달)
+- 판정 기준: 라운드 1과 동일 (`docs/plan.md` 3절 + 부록 A). 코디네이터 요약을 신뢰하지 않고
+  `git show f6979ab` 전문과 파일 실측으로 독립 검증함.
+
+### 계약 재확인
+`f6979ab`는 라운드 1 범위 밖 파일 3개(`scripts/validate.mjs`, `package.json`, `assets/css/home.css`)를
+건드린다. plan.md 3절은 원래 `scripts/` 불변을 규정했으나,
+**같은 커밋에서 3절에 계약 변경 이력을 명시적으로 append**했다(검사 삭제·완화는 계속 금지 조건 부기).
+blocker-2 대응에 필수적인 변경이고 절차(계약 변경을 계약서에 기록)를 지켰으므로 **적법한 계약 개정으로 인정**한다.
+`home.css` 변경은 라운드 1 major-7이 홈을 기준선으로 지목했으므로 범위 내다.
+DOM id/class·셀렉터명·JS·localStorage 키는 여전히 무변경(**`.js` 앱 파일 0건**) — 계약 위반 0건 유지.
+
+## 테스트 실효성
+- [x] 테스트가 plan.md 완료 조건을 실제로 검증한다 (형식적·항상 통과하는 테스트는 blocker)
+
+**충족.** `validateDesignTokens()`를 코드로 읽고, **리뷰어가 직접 5회 파괴 실험**을 돌려 실패 동작을 확인했다
+(전부 원복, `git status` clean):
+
+| 실험 | 조작 | 결과 |
+|---|---|---|
+| A | smstudy `--accent`를 구팔레트 `#86efac`로 되돌림 | **exit 1** — `legacy palette literal found` |
+| B | smstudy 실효 `--line` `.12`→`.14` (`@media screen` 블록) | **exit 1** — `--line is …,.14, expected …,.12` |
+| C | `WordMaster/index.html`에 `#86efac` 삽입 | **exit 1** — `legacy palette literal found` |
+| D | admin `:root`에서 `--text` 제거 | **exit 1** — `shared token --text is not defined` |
+| E | WordMaster **비실효**(앞쪽) `:root`의 `--line`만 파괴 | exit 0 — 통과 (아래 nit-13) |
+
+라운드 1의 반증 실험(“팔레트를 통째로 되돌려도 초록불”)이 이제 **재현되지 않는다.**
+검사 수 5057 → **5105 (+48)** 도 4파일 × (리터럴 1 + 토큰 5×2) + HTML 4 = 48로 정확히 일치해,
+숫자를 부풀린 형식적 검사가 아님이 확인된다. 구현 방식도 “home.css 파싱” 대신
+공유 기대값 상수 + **실효 `:root`(마지막 선언 우선, print/light 블록 제외)** 비교로,
+라운드 1 major-5가 지적한 이중 `:root` 문제를 정면으로 다룬 설계다.
+
+### 기계 게이트 (리뷰어 재실행)
+```
+Validation passed (5105 checks)
+tests 14 / pass 14 / fail 0
+```
+
+## 라운드 1 지적사항 처리 결과
+
+| # | 심각도 | 상태 | 검증 근거 |
+|---|---|---|---|
+| 1 | blocker | ✅ **해소** | `smstudy/…/style.css:2269-2272` 프린트 `:root`에 `--green:#187341 / --greenbg:#eff9f3 / --danger:#a3231b / --dangerbg:#fdeceb` 추가. `.feedback.correct .feedback-title`이 인쇄 시 **2.02:1 → 5.89:1**로 복구 (단, 부수 효과 → major-15) |
+| 2 | blocker | ✅ **해소** | 위 파괴 실험 A~D 참조. 게이트가 더 이상 무신호가 아님 |
+| 3 | major | ✅ 해소 | `:241-245` `background:var(--greenbg)` / `color:var(--green)` / 초록 테두리 3속성 정합 (제시한 2안 중 “green 정합화” 채택) |
+| 4 | major | ✅ 해소 | `:546,556,560,874,939,1597,1599` 7곳 전부 `rgba(191,90,242,…)` 퍼플로 재매핑. 잔존 장식 green 0건 (grep 확인) |
+| 5 | major | ✅ 해소 | WordMaster·smstudy 이중 `:root` 값 통일 — `--danger` #ff453a, `--muted-2/2` #6e6e73, `--line-soft/soft` .08, `--accent-strong` #0077ed, radius 30/22/15·28, shadow/max 정렬 |
+| 6 | major | ✅ 해소 | admin 하드코딩 그레이 12곳(`#555`×2·`#666`×4·`#707070`×2·`#777`×5, `#999` 포함) → `var(--muted)`(#86868b). 최악 **2.48:1 → 5.1:1** |
+| 7 | major | ⚠️ **부분 미해소** | `--accent-cta:#0071e3` 신설 및 홈 2곳·admin `button.primary`는 정상 적용. **WordMaster만 실효 규칙이 누락** → major-14 |
+| 8 | major | ✅ 해소 | admin `:root`에 `--bg/--surface/--surface-2/--surface-3/--text` 추가·리터럴 토큰화, `--line` 4개 표면 `.12` 정렬, `#64d2ff`→`var(--blue)` |
+| 9 | nit | ✅ 해소(선택 수용) | admin에서 jsDelivr `<link>` 제거. WM/sm은 홈과 동일 핀 유지 — 일관성 근거 타당 |
+| 10 | nit | ✅ 해소 | `format:css`에 WordMaster CSS 추가 |
+| 11 | nit | ⚠️ 대부분 해소 | `.session-link`·`.status-badge.active`·`.danger`·`.error` → `var(--green)`/`var(--red)`. 잔여 리터럴 → nit-16 |
+| 12 | nit | ✅ 해소 | `--warnbg` .11 / `--bluebg` .1로 두 블록 일치 |
+
+**blocker 2/2 해소, major 5/6 해소, nit 3.5/4 해소.**
+
+## 라운드 2 지적사항 (신규 · 잔여)
+
+| # | 심각도 | 파일:위치 | 내용 | 수정 제안 |
+|---|---|---|---|---|
+| 13 | ~~blocker~~ **없음** | — | **blocker 0건.** 라운드 1의 두 blocker 모두 실측으로 해소 확인 | — |
+| 14 | major | `WordMaster/assets/css/style.css:578-580` (vs 수정된 `:188-190`) | **major-7이 WordMaster에서 실효되지 않았다.** 190행은 `var(--accent-cta)`로 고쳤으나, 파일 뒤쪽 "Apple layer"의 **`.primary-btn { background:var(--accent) }`(578행)** 이 손대지 않은 채 남아 있다. 미디어 쿼리 밖 동일 특이도의 후행 규칙이므로 **이쪽이 이긴다.** 실제 렌더 색은 여전히 `#2997ff`이고 흰 글자 대비 **3.02:1로 AA 미달 그대로**다. 커밋 메시지·보고의 "WordMaster .primary-btn(양쪽 블록) 적용"은 사실과 다르다. 라운드 1 major-5가 경고한 **이중 블록 함정이 그대로 재현된 사례** | `:579`를 `background:var(--accent-cta)`로 변경(1줄). `:582` hover는 이미 `var(--accent-strong)`=#0077ed로 정렬돼 있어 추가 조치 불필요 |
+| 15 | major | `smstudy/assets/css/style.css:2460-2462` (`@media screen`, 실효) | **smstudy 기본 버튼이 AA 미달** — `.primary { background:var(--accent)(#bf5af2); color:#fff }` → **3.52:1**. 라운드 1 major-7이 WordMaster·홈만 지목해 누락한 건으로, **리뷰어 측 라운드 1 커버리지 결함**임을 밝혀 둔다. 아이러니하게도 비실효 블록(`:182-185`)의 `color:#07140c`는 5.6:1로 통과하는데 실효 블록이 흰 글자로 덮어써 더 나쁘다 | 퍼플 CTA용 토큰 `--accent-cta:#9330d1`(흰 글자 4.6:1) 신설 후 `:2461`에 적용, 또는 `:2462`를 `color:#0f0417`(어두운 글자, 5.4:1)로 되돌린다. 후자가 1줄이고 첫 블록과도 일관됨 |
+| 16 | major | `smstudy/assets/css/style.css:1191-1193, 1199-1201` (프린트 경로) | **blocker-1 수정의 부수 효과.** 프린트 `--green`/`--danger`가 어두운 값(#187341/#a3231b)으로 바뀌면서, 그 위에 **어두운 글자를 얹는** 선택지 번호 칩이 인쇄 시 어두운색 위 어두운색이 됐다 — `.correct-option span`(#07140c on #187341) **9.8:1 → 3.37:1**, `.wrong-option span`(#1b070b on #a3231b) **5.93:1 → 2.51:1**. 화면에서는 정상(밝은 칩)이라 눈에 안 띈다. 프린트 시트가 개념노트 뷰 중심이라 노출 빈도는 낮지만, 회귀 방향은 명확 | `@media print`에 2줄 추가: `.choice-option.correct-option span,.choice-option.wrong-option span{color:#fff}` → 각각 5.89:1 / 7.46:1로 복구 |
+| 17 | nit | `scripts/validate.mjs` — `validateDesignTokens()`의 `expected` 상수 | 새 토큰 검사가 `--bg/--surface/--text/--line/--green` **5개만** 대조한다. 라운드 1에서 실제 드리프트가 났던 `--surface-2/-3`, `--muted`, `--danger`, 신설 `--accent-cta`는 미커버. 또 실험 E대로 **비실효 `:root`의 드리프트는 통과**한다(실효값 검사라 설계상 맞지만, major-5가 지적한 "읽는 사람이 오인하는" 상태는 계속 만들 수 있다) | `expected`에 `surface2:'#1d1d1f'`, `surface3:'#242426'`, `muted:'#86868b'`, `danger` 추가. 여유가 있으면 "같은 파일 내 모든 스크린 `:root`가 동일 토큰에 동일 값" 검사를 1줄 덧붙이면 실험 E 구멍과 major-14류가 함께 막힌다 |
+| 18 | nit | `smstudy/assets/js/app.js:429,455,484,986` 렌더 지점 | major-3(green 정합)과 major-4(장식 → 퍼플)를 각각 다르게 처리한 결과, **장식 라벨인 `.badge.green`만 성공색 초록으로 남아** 퍼플로 바뀐 `.concept-visual`·`.notebook-hero` 패널 안에 초록 배지가 놓인다. 두 결정이 서로 반대 방향. (라운드 1 #3에서 리뷰어가 양자택일을 허용했으므로 계약 위반은 아님) | 장식 통일을 택한다면 `.badge.green` 3속성을 퍼플로. 현행 유지도 무방하나 **택일 근거를 plan.md나 LESSONS에 한 줄 남길 것** |
+| 19 | nit | `admin/assets/css/admin.css:295, 345, 379, 397, 545`, `WordMaster …:17` vs `smstudy …:17` | 잔여 리터럴 — admin `#aaa`(295) `#ddd`(345) `#b7b7b7`(397), **`background:#30d158`(379, `var(--green)`로 바꿀 수 있음)**, `.head` 그라디언트 `#102a3e/#0b0b0d`(545)는 공유 팔레트 밖 색. 또 성공 배경 알파가 표면 간 불일치 — WordMaster `--green-bg` **.14** vs smstudy `--greenbg` **.13** | 379는 `var(--green)`으로(1줄), 그레이 3개는 `var(--muted)`/`var(--text)` 계열로. `--green-bg` 알파는 `.13`으로 통일하고 nit-17의 `expected`에 넣어 고정 |
+
+- blocker: 머지 불가 (버그, 보안, 계약 위반)
+- major: 수정 강력 권장 (설계 문제, 엣지케이스 누락)
+- nit: 선택 (스타일, 네이밍)
+
+**라운드 2 집계 — blocker 0 / major 3 / nit 3**
+(major 3건 중 #14는 라운드 1 major-7의 잔여, #15는 리뷰어 라운드 1 누락분, #16은 blocker-1 수정의 부수 효과)
+
+### 잘 된 점 (기록용)
+- blocker-2 대응이 **형식적 통과 회피에 성공**했다. 검사 수 증가분이 산식과 정확히 일치하고,
+  리뷰어의 독립 파괴 실험 4/5가 의도대로 실패했다. 특히 "실효 `:root`(마지막 선언 우선)" 개념을
+  검사에 그대로 옮겨, 라운드 1 major-5의 구조적 지적을 코드로 고정한 점이 좋다.
+- 계약(3절) 범위를 벗어나는 수정이 필요해지자 **같은 커밋에서 계약서를 개정하고 이력을 남겼다.**
+  파이프라인 원칙("핸드오프 매개체는 채팅이 아니라 커밋과 docs")에 부합하는 처리다.
+- nit-9(admin CDN 제외)처럼 **표면별로 다른 판단을 내리고 근거를 남긴** 항목이 있다 — 일괄 수용이 아니라
+  개인정보 콘솔이라는 맥락을 반영했다.
+- major-6은 지적한 11곳보다 많은 12곳(`#999` 추가 발견)을 고쳤다.
+
+## 최종 판정 (라운드 2)
+- [x] **승인** (blocker 0 + 기계 게이트 통과)
+- [ ] 수정 후 재검토
+- [ ] 중단 — 사용자 판단 필요
+
+**사유:** PIPELINE.md 7단계 승인 조건(**blocker 0개 AND 기계 게이트 통과**)을 충족한다.
+계약 위반 0건, blocker 0건, `Validation passed (5105 checks)` + `14/14`를 리뷰어가 재실행해 확인했다.
+잔여 major 3건은 정의상 "수정 강력 권장"이며 머지를 막지 않는다.
+
+**배포(push) 전 권고 — 잔여 major 3건은 총 4줄 수정으로 끝난다**
+1. **#14** `WordMaster/assets/css/style.css:579` → `background:var(--accent-cta)` *(1줄. major-7이 실제로는 미적용 상태이므로 우선순위 최상)*
+2. **#15** `smstudy/assets/css/style.css:2462` → `color:#0f0417` *(1줄)*
+3. **#16** smstudy `@media print`에 선택지 칩 `color:#fff` 규칙 *(2줄)*
+4. 위 3건 반영 후 `npm test` 재실행(회귀 없음 확인). nit 17~19는 다음 사이클로 미뤄도 무방
+5. plan.md 완료 조건 #1의 "5057 checks"는 **5105**로 갱신 필요 (현재 수치가 낡음)
+
+**`/retro`(8단계) 반영 제안 — LESSONS.md 후보 규칙 3건**
+- CSS 한 파일에 같은 셀렉터 규칙이나 `:root`가 **두 번 이상 등장하면, 값을 고칠 때 전 블록을 함께 고치고
+  "실효 블록"이 어디인지 확인한다** (근거: 사이클 #1 라운드 1 major-5, 라운드 2 major-14 — 동일 함정 2회 재발)
+- 색 토큰의 **명도를 바꾸는 수정은 그 토큰을 배경으로 쓰는 규칙의 전경색도 함께 점검한다**
+  (근거: 사이클 #1 blocker-1 수정이 프린트 칩 대비를 3.37:1/2.51:1로 떨어뜨림 → major-16)
+- **완료 조건에 "grep으로 확인" 같은 수작업 검증을 쓰지 않는다.** 기계로 검증 가능한 조건은
+  기획 단계에서 검사 코드까지 함께 지정한다 (근거: 사이클 #1 blocker-2)

@@ -578,7 +578,7 @@ main {
   border-color:rgba(255,255,255,.18)
 }
 .primary-btn {
-  background:var(--accent);
+  background:var(--accent-cta);
   color:#fff
 }
 .primary-btn:hover {

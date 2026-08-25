@@ -37,7 +37,7 @@
   기존 검사 삭제·완화는 계속 금지. admin은 개인정보 콘솔 특성상 서드파티 CDN 폰트 제외(nit-9).
 
 ## 4. 완료 조건
-- [x] `npm test` 통과 (validate 5057 checks + 단위 테스트 14/14 — 각 커밋마다 실행)
+- [x] `npm test` 통과 (validate 5105 checks + 단위 테스트 14/14 — 각 커밋마다 실행)
 - [x] 4개 표면의 `:root` 토큰이 동일 팔레트 (기준: home.css; 앱 식별색 blue/purple은 홈 팔레트 내)
 - [x] 로컬 서버 4페이지 computed style 검증 — bg #000 / Pretendard / 액센트·정답·위험 토큰 정상
       (브라우저 패널 비표시로 스크린샷 대신 getComputedStyle 검증; 육안 확인은 배포 전 사용자 몫)

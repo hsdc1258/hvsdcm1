@@ -11,6 +11,7 @@
   --muted:#86868b;
   --muted2:#6e6e73;
   --accent:#bf5af2;
+  --accent-cta:#8e2fc9;
   --accent2:#af52de;
   --accentbg:rgba(191,90,242,.13);
   --green:#30d158;
@@ -2275,6 +2276,10 @@ select {
     --warn:#8a6800;
     --warnbg:#fff9e8
   }
+  .choice-option.correct-option span,
+  .choice-option.wrong-option span {
+    color:#fff
+  }
   body {
     background:#fff;
     color:#101418
@@ -2350,6 +2355,7 @@ select {
     --muted:#86868b;
     --muted2:#6e6e73;
     --accent:#bf5af2;
+    --accent-cta:#8e2fc9;
     --accent2:#af52de;
     --accentbg:rgba(191,90,242,.13);
     --danger:#ff453a;
@@ -2458,11 +2464,11 @@ select {
     font-size:26px
   }
   .primary {
-    background:var(--accent);
+    background:var(--accent-cta);
     color:#fff
   }
   .primary:hover {
-    background:var(--accent2)
+    background:#9d3fd8
   }
   .secondary,.ghost {
     border-color:transparent;
