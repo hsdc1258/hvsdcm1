@@ -38,3 +38,28 @@
 - **C-3 준수** — `home.css`에 `:root` 0개(주석 1회만 언급), `system.css`에 `:root` 정확히 1개.
 - **레이아웃** — 375px 뷰포트에서 가로 오버플로 0px, 넘치는 자식 요소 0개.
 - **`npm test`** — `Validation passed (5257 checks)` + 단위 테스트 14개 전부 통과 (실행 확인).
+
+---
+
+## 1. blocker
+
+### B-1. 소셜 미리보기 이미지가 여전히 `HVS/DCM` — R-5 위반이 배포면에 남아 있다
+
+`index.html:12` `<meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">`
+`index.html:16` `<meta name="twitter:image" ...>` — 같은 파일을 가리킨다.
+
+`assets/og.png`를 직접 열어 확인했다. 이미지 중앙에 **대문자 슬래시 분리 표기 `HVS/DCM`**이
+그대로 렌더돼 있다. 이 파일의 마지막 변경 커밋은 사이클 #1의 `b6747fc`이고, 이번 사이클에서는 손대지 않았다.
+
+왜 blocker인가:
+- R-5는 "브랜드 표기는 **항상** `hvsdcm` 한 덩어리. `HVS DCM`, `hvs-dcm` … 금지. 대소문자는 소문자로 통일"이다.
+  og:image는 링크가 공유될 때 **사용자에게 실제로 보이는 랜딩의 대표 이미지**이므로 "표기"의 핵심 표면이다.
+- 그런데 C-5의 자동 검사(`validateBrandName()`, `scripts/validate.mjs:389-411`)는
+  `.html`/`.css`/`.js` **텍스트만** 스캔한다. PNG 안의 글자는 볼 수 없어 `npm test`가 초록불로 통과한다.
+  즉 C-5 게이트는 통과했지만 **R-5는 위반 상태**이며, 게이트가 이 구멍을 덮고 있다.
+- 랜딩의 `<title>`·`og:title`·`twitter:title`은 전부 `hvsdcm`으로 고쳤으면서 그 옆 이미지만 옛 표기라
+  일관성 결함이 외부에 그대로 노출된다.
+
+고치는 법: `assets/og.png`를 소문자 `hvsdcm` 워드마크로 재생성하고,
+`validateBrandName()`에 "og.png의 mtime/해시가 사이클 #2 이후인지" 또는 최소한
+`assets/og.png`가 갱신됐다는 사실을 고정하는 체크를 한 줄 추가해 회귀를 막는다.
