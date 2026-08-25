@@ -71,6 +71,12 @@ function validateUiContracts() {
   const wordMasterCss = readFileSync(path.join(ROOT, 'WordMaster/assets/css/style.css'), 'utf8');
   const wordMasterJs = readFileSync(path.join(ROOT, 'WordMaster/assets/js/app.js'), 'utf8');
   const smstudyJs = readFileSync(path.join(ROOT, 'smstudy/assets/js/app.js'), 'utf8');
+  const wordMasterHtml = readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8');
+  const smstudyHtml = readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8');
+  const smstudyCss = readFileSync(path.join(ROOT, 'smstudy/assets/css/style.css'), 'utf8');
+  const adminHtml = readFileSync(path.join(ROOT, 'admin/index.html'), 'utf8');
+  const adminCss = readFileSync(path.join(ROOT, 'admin/assets/css/admin.css'), 'utf8');
+  const adminJs = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
 
   check(homeHtml.includes('id="drawerStudy"') && homeHtml.includes('aria-hidden="true"'), 'home: authenticated STUDY drawer with default hidden state is missing');
   check(/id="loginModal"[^>]*role="dialog"[^>]*aria-modal="true"/u.test(homeHtml), 'home: login sheet must be a modal dialog');
@@ -90,10 +96,54 @@ function validateUiContracts() {
     check(systemCss.includes(primitive.trimEnd() + ' {') || systemCss.includes(primitive.trimEnd() + ','), `system.css: primitive ${primitive.trim()} is missing`);
   }
 
-  check(wordMasterCss.includes('#app:focus { outline: none; }'), 'WordMaster: app focus outline fix is missing');
-  check(wordMasterCss.includes('grid-template-columns: minmax(0, 1fr)'), 'WordMaster: desktop review actions must use a shrink-safe column');
+  // 앱 3면 공통 셸 (사이클 #2 3b 재작성): topbar + app-shell + 사이드바 + 접근성 훅.
+  const appSurfaces = {
+    'WordMaster/index.html': wordMasterHtml,
+    'smstudy/index.html': smstudyHtml,
+    'admin/index.html': adminHtml,
+  };
+  for (const [name, source] of Object.entries(appSurfaces)) {
+    check(/<header class="topbar">/u.test(source), `${name}: shared topbar landmark is missing`);
+    check(/class="brand"[^>]*>hvsdcm</u.test(source), `${name}: topbar wordmark must render "hvsdcm" in one piece`);
+    check(source.includes('class="skip-link"'), `${name}: skip navigation link is missing`);
+    check(source.includes('class="app-shell"'), `${name}: app shell layout is missing`);
+    check(/<aside class="sidebar"[^>]*aria-label=/u.test(source), `${name}: labelled sidebar landmark is missing`);
+    check(/<main [^>]*class="app-main"[^>]*tabindex="-1"/u.test(source), `${name}: focusable main region is missing`);
+    check(!source.includes('site-nav.css'), `${name}: stale site-nav.css link`);
+  }
+
+  // 학습 앱 2면: 사이드바 화면 전환 훅과 토스트 상태 영역.
+  const studySurfaces = {
+    'WordMaster/index.html': [wordMasterHtml, 'homeLogo', 'openStatsBtn'],
+    'smstudy/index.html': [smstudyHtml, 'homeLogo', 'openStats'],
+  };
+  for (const [name, [source, homeId, statsId]] of Object.entries(studySurfaces)) {
+    check(new RegExp(`id="${homeId}"[^>]*data-nav="home"`, 'u').test(source), `${name}: sidebar home switch hook is missing`);
+    check(new RegExp(`id="${statsId}"[^>]*data-nav="stats"`, 'u').test(source), `${name}: sidebar stats switch hook is missing`);
+    check(/<div id="toast" class="toast" role="status" aria-live="polite">/u.test(source), `${name}: polite toast region is missing`);
+  }
+
+  check(wordMasterCss.includes('.app-main:focus { outline: none; }'), 'WordMaster: programmatic main focus must not paint an outline');
+  check(wordMasterCss.includes('grid-template-columns: minmax(0, 1fr) auto'), 'WordMaster: answer row must use a shrink-safe column');
+  check(wordMasterJs.includes('function setNav('), 'WordMaster: sidebar state must follow the rendered view');
+  check(wordMasterJs.includes("toast.classList.add('open')"), 'WordMaster: toast must use the shared .toast.open contract');
   check(wordMasterJs.includes('wrongCount: cumulativeWrongCount'), 'WordMaster: wrong-rate ties must use cumulative mistakes');
+
+  check(smstudyCss.includes('.app-main:focus { outline: none; }'), 'smstudy: programmatic main focus must not paint an outline');
+  check(smstudyCss.includes('@media print'), 'smstudy: printable concept-note stylesheet is missing');
+  check(smstudyCss.includes('.sm-media-fallback'), 'smstudy: KICE image fallback styling is missing');
+  check(smstudyJs.includes('function setNav('), 'smstudy: sidebar state must follow the rendered view');
+  check(smstudyJs.includes("toast.classList.add('open')"), 'smstudy: toast must use the shared .toast.open contract');
+  check(smstudyJs.includes('data-question-image') && smstudyJs.includes('.sm-media-fallback'), 'smstudy: KICE image error fallback hook is missing');
+  check(smstudyJs.includes("addEventListener('error', markFailed, { once: true })"), 'smstudy: image error handler must bind once');
   check(smstudyJs.includes('wrongCount: cumulativeWrongCount'), 'smstudy: wrong-rate ties must use cumulative mistakes');
+
+  check(adminHtml.includes('content="noindex, nofollow"'), 'admin: dashboard must stay unindexed');
+  check(/<table class="table">/u.test(adminHtml), 'admin: tables must use the shared table primitive');
+  check(/id="panel"[^>]*\bhidden\b/u.test(adminHtml), 'admin: dashboard panel must start hidden');
+  check(adminCss.includes('.hidden { display: none !important; }'), 'admin: hidden-state utility is missing');
+  check(adminJs.includes('class="ad-stat"'), 'admin: stat cards must render on the rewritten markup');
+  check(adminJs.includes('btn btn-danger btn-sm delete-user'), 'admin: destructive user action must use the danger button primitive');
 }
 
 function validateMigrations() {
@@ -289,47 +339,44 @@ function validateDesignTokens() {
     }
   }
 
-  // 재작성 완료 표면: 색 토큰 :root 정의 금지 (C-3).
-  for (const file of ['assets/css/home.css']) {
-    check(!/:root\s*\{/u.test(readFileSync(path.join(ROOT, file), 'utf8')), `${file}: tokens must come from system.css only (no :root block)`);
+  // 로드 계약: 모든 표면은 system.css를 자기 스타일보다 먼저 링크한다 (4면 전체).
+  const styleOrder = {
+    'index.html': '/assets/css/home.css',
+    'WordMaster/index.html': 'assets/css/style.css',
+    'smstudy/index.html': 'assets/css/style.css',
+    'admin/index.html': '/admin/assets/css/admin.css',
+  };
+  for (const [file, ownStylesheet] of Object.entries(styleOrder)) {
+    const html = readFileSync(path.join(ROOT, file), 'utf8');
+    const systemIndex = html.indexOf('/assets/css/system.css');
+    const ownIndex = html.indexOf(ownStylesheet);
+    check(systemIndex !== -1, `${file}: system.css must be linked`);
+    check(ownIndex !== -1 && systemIndex < ownIndex, `${file}: system.css must load before ${ownStylesheet}`);
   }
 
-  // 로드 계약: 모든 표면은 system.css를 자기 스타일보다 먼저 링크한다. (지금은 랜딩만)
-  const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  const systemIndex = homeHtml.indexOf('/assets/css/system.css');
-  check(systemIndex !== -1 && systemIndex < homeHtml.indexOf('/assets/css/home.css'), 'index.html: system.css must load before home.css');
+  // site-nav.css는 system.css .topbar가 흡수했다 — 파일도 링크도 남으면 안 된다.
+  check(!existsSync(path.join(ROOT, 'assets/css/site-nav.css')), 'assets/css/site-nav.css must be deleted (absorbed by system.css .topbar)');
 
-  // 레거시 표면 (3b에서 :root 제거 후 이 블록을 삭제):
-  const surfaces = {
-    'WordMaster/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
-    'smstudy/assets/css/style.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
-    'admin/assets/css/admin.css': { bg: '--bg', surface: '--surface', text: '--text', line: '--line', green: '--green' },
-  };
-  const expected = { bg: '#000', surface: '#161617', text: '#f5f5f7', line: 'rgba(255,255,255,.12)', green: '#30d158' };
+  // C-3: system.css 밖의 어떤 CSS도 색 토큰을 정의하지 않는다.
+  // 인쇄용 라이트 팔레트만 예외이며, 그것도 :root가 아니라 @media print 안 html에서만 허용한다.
   const legacyPalette = /#87f5b0|#86efac|#6dff9a|#5fe391|#4ade80|#ff7a7a|#fb7185|#7dd3fc|#a8f5bf|#8fffb0|#facc15|#fb923c|135, ?245, ?176|134, ?239, ?172|95, ?227, ?145|74, ?222, ?128|255, ?122, ?122|251, ?113, ?133|109, ?255, ?154|125, ?211, ?252|250, ?204, ?21/iu;
-  const normalize = (value) => value.replace(/\s+/gu, '').replace(/\b0\./gu, '.').toLowerCase();
+  const colorTokens = ['--bg', '--surface', '--surface-2', '--text', '--text-2', '--line', '--accent', '--green', '--red'];
+  const stripPrint = (source) => source.replace(/@media\s+print\s*\{[\s\S]*?\n\}/gu, '');
 
-  for (const [file, tokens] of Object.entries(surfaces)) {
-    const source = readFileSync(path.join(ROOT, file), 'utf8');
-    check(!legacyPalette.test(source), `${file}: legacy palette literal found`);
+  for (const file of walk(ROOT, (item) => item.endsWith('.css'))) {
+    const name = relative(file);
+    if (name === 'assets/css/system.css') continue;
+    const source = readFileSync(file, 'utf8');
+    const screenOnly = stripPrint(source);
 
-    // Effective value = last screen :root declaration wins; print/light roots are exempt.
-    const roots = [...source.matchAll(/:root\s*\{([^}]*)\}/gu)]
-      .map(([, body]) => body)
-      .filter((body) => !body.includes('color-scheme:light') && !body.includes('--bg:#fff'));
-    for (const [key, name] of Object.entries(tokens)) {
-      let value = null;
-      for (const body of roots) {
-        const match = body.match(new RegExp(`${name}\\s*:\\s*([^;\\r\\n]+)`, 'u'));
-        if (match) value = match[1].trim();
-      }
-      check(value !== null, `${file}: shared token ${name} is not defined`);
-      if (value !== null) {
-        check(
-          normalize(value) === normalize(expected[key]),
-          `${file}: ${name} is ${value}, expected ${expected[key]} (shared Apple dark palette)`,
-        );
-      }
+    check(!legacyPalette.test(source), `${name}: legacy palette literal found`);
+    check(!/:root\s*\{/u.test(source), `${name}: tokens must come from system.css only (no :root block)`);
+    check(/var\(--/u.test(source), `${name}: stylesheet must consume system.css tokens`);
+    for (const token of colorTokens) {
+      check(
+        !new RegExp(`(^|[;{\\s])${token}\\s*:`, 'u').test(screenOnly),
+        `${name}: color token ${token} must not be redefined outside assets/css/system.css`,
+      );
     }
   }
 
@@ -345,10 +392,21 @@ function validateBrandName() {
     check(!separated.test(readFileSync(file, 'utf8')), `${relative(file)}: separated brand name found (use "hvsdcm" in one piece)`);
   }
 
-  // 재작성 완료 표면은 슬래시·가운뎃점·대문자 변형도 금지 — 3b에서 전 표면으로 확대.
-  const strict = /hvs\s*[/·]\s*dcm|HVSDCM|HvsDcm|Hvsdcm/u;
-  for (const file of ['index.html', 'assets/css/home.css', 'assets/css/system.css', 'assets/js/home.js']) {
-    check(!strict.test(readFileSync(path.join(ROOT, file), 'utf8')), `${file}: brand must appear only as lowercase "hvsdcm"`);
+  // 슬래시·가운뎃점·마침표 분리와 대문자 변형은 전 표면에서 금지 (3b에서 확대).
+  const separator = /hvs\s*[/·.]\s*dcm/iu;
+  const casing = /HVSDCM|HvsDcm|Hvsdcm|hvsDcm|HVSdcm|hvsDCM/u;
+  const brandSurfaces = [
+    ...walk(ROOT, (item) => item.endsWith('.html') || item.endsWith('.css')).map(relative),
+    'assets/js/home.js',
+    'account.js',
+    'WordMaster/assets/js/app.js',
+    'smstudy/assets/js/app.js',
+    'admin/assets/js/admin.js',
+  ];
+  for (const file of brandSurfaces) {
+    const source = readFileSync(path.join(ROOT, file), 'utf8');
+    check(!separator.test(source), `${file}: brand must not be split (use "hvsdcm" in one piece)`);
+    check(!casing.test(source), `${file}: brand must appear only as lowercase "hvsdcm"`);
   }
 }
 
