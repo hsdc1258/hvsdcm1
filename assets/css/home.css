@@ -171,6 +171,8 @@ body.logged .topbar-login { display: none; }
 /* ---- 쇼케이스 (제품 섹션) ---- */
 
 .showcase {
+  /* #apps 앵커 스크롤 시 고정 상단바에 첫 카드가 가리지 않게 (N-1) */
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
   display: grid;
   gap: clamp(20px, 3vw, 36px);
   width: min(var(--container-wide), 100% - clamp(24px, 5vw, 56px));
