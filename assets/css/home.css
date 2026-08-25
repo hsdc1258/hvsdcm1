@@ -137,6 +137,15 @@ body.logged .topbar-login { display: none; }
   color: transparent;
 }
 
+/* forced-colors: UA가 background-image를 제거해도 h1(및 내부 Admin 링크)이 보이게 (M-5) */
+@media (forced-colors: active) {
+  .hero-title {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    color: CanvasText;
+  }
+}
+
 /* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
 .hero-title[data-user] { font-size: clamp(2.25rem, 1.7rem + 3.6vw, 4.25rem); }
 .hero-title .welcome-user { display: block; }
