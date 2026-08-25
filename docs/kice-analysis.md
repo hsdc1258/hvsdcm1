@@ -344,19 +344,19 @@ I-02 = 10, I-03 = 2, II-01 = 5, II-03 = 7이 된다. 총합 78문항은 유지�
 존재하는 kebab-case 이름이다.
 
 ```
-alert-triangle   arrow-up-down    bar-chart-3      book-open        brain
-building-2       calculator       circle-dot       clipboard-list   coins
-compass          eye              filter           flag             flask-conical
-git-branch       git-merge        globe            hammer           heart-handshake
-key              layers           lightbulb        link             list-checks
-lock             map              message-square   milestone        network
+alert-triangle   arrow-up-down    bar-chart-3      book-open        building-2
+calculator       clipboard-list   coins            compass          eye
+filter           flag             flask-conical    git-merge        globe
+hammer           heart-handshake  key              layers           lightbulb
+link             list-checks      lock             message-square   network
 percent          pie-chart        repeat           ruler            scale
 search           shield           shuffle          sparkles         split
 target           trending-up      umbrella         user-check       users
-wallet           workflow
+wallet
 ```
 
-총 **46개**. 렌더러 계약(plan.md §4.3)에 따라 맵에 없는 키는 아이콘을 생략하고 텍스트만 남긴다.
+총 **41개**(데이터에서 실제로 쓰인 값을 기계적으로 수집한 목록이다).
+렌더러 계약(plan.md §4.3)에 따라 맵에 없는 키는 아이콘을 생략하고 텍스트만 남긴다.
 
 ## 부록 D. 다이어그램 배정표
 
