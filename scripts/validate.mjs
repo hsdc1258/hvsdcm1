@@ -516,6 +516,18 @@ function validateBrandName() {
     check(!separator.test(source), `${file}: brand must not be split (use "hvsdcm" in one piece)`);
     check(!casing.test(source), `${file}: brand must appear only as lowercase "hvsdcm"`);
   }
+
+  // R-5의 "자간 분해 금지"는 문자열 스캔으로 잡히지 않는다 — .brand 규칙의 letter-spacing을 직접 본다
+  // (review-3a N-8). h v s d c m 처럼 벌어진 워드마크는 문자열상 "hvsdcm"이라 통과해 버린다.
+  check(/^\.brand\s*\{[^}]*letter-spacing\s*:\s*normal\s*;/mu.test(readFileSync(path.join(ROOT, 'assets/css/system.css'), 'utf8')),
+    'system.css: .brand must pin letter-spacing: normal (R-5 forbids a spaced-out wordmark)');
+  for (const cssFile of walk(ROOT, (item) => item.endsWith('.css'))) {
+    for (const [, selector, body] of readFileSync(cssFile, 'utf8').matchAll(/([^{}]*\.brand[^{}]*)\{([^{}]*)\}/gu)) {
+      const spacing = body.match(/letter-spacing\s*:\s*([^;]+)/u);
+      check(!spacing || spacing[1].trim() === 'normal',
+        `${relative(cssFile)}: ${selector.replace(/\/\*[\s\S]*?\*\//gu, " ").trim()} must not spread the wordmark (letter-spacing: ${spacing?.[1].trim()})`);
+    }
+  }
 }
 
 function validateGlobalsAndOrder() {
