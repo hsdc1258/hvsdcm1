@@ -1,51 +1,75 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#000000" />
-  <meta name="description" content="워드마스터 수능 2000 DAY 범위별 영단어 뜻 시험" />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="WordMaster — HVS/DCM" />
-  <meta property="og:description" content="DAY 선택 → 뜻 시험 → 오답 회독" />
-  <meta property="og:url" content="https://hvsdcm1.xyz/WordMaster/" />
-  <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="WordMaster — HVS/DCM" />
-  <meta name="twitter:description" content="DAY 선택 → 뜻 시험 → 오답 회독" />
-  <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png" />
-  <title>Wordmaster 2000 Test</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="워드마스터 수능 2000 DAY 범위별 영단어 뜻 시험">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="hvsdcm">
+  <meta property="og:title" content="WordMaster — hvsdcm">
+  <meta property="og:description" content="DAY 선택 → 뜻 시험 → 오답 회독">
+  <meta property="og:url" content="https://hvsdcm1.xyz/WordMaster/">
+  <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="WordMaster — hvsdcm">
+  <meta name="twitter:description" content="DAY 선택 → 뜻 시험 → 오답 회독">
+  <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
+  <title>WordMaster 2000</title>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="assets/css/style.css">
-  <link rel="stylesheet" href="/assets/css/site-nav.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="site-header" aria-label="상단 메뉴">
-      <div class="brand-cluster">
-        <a class="landing-home-link" href="/" aria-label="메인 랜딩 페이지로" title="메인으로">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10.5 8.5-7.5 8.5 7.5"/><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7"/></svg>
-        </a>
-        <button id="homeLogo" class="brand" type="button" aria-label="워드마스터 시작 화면으로">
-          <span class="brand-mark">W</span>
-          <span class="brand-copy">
-            <strong>WORDMASTER</strong>
-            <small>2000 TEST</small>
-          </span>
-        </button>
-      </div>
-      <div class="header-actions">
-        <button id="openStatsBtn" class="ghost-btn compact" type="button">기록</button>
-      </div>
-    </header>
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
 
-    <main id="app" tabindex="-1"></main>
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">WordMaster</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+        <a class="topbar-link" href="/smstudy/">사회·문화</a>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
 
-    <footer class="site-footer">
-      <span>워드마스터 수능 2000 · DAY 01–50 · 2,000 words</span>
-      <span>학습 기록은 계정 DB에 동기화됩니다.</span>
-    </footer>
+  <div class="container-wide wm-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="학습 메뉴">
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <p class="sidebar-label">화면</p>
+          <button id="homeLogo" class="sidebar-item is-active" type="button" data-nav="home" aria-current="page">시험 설정</button>
+          <button id="openStatsBtn" class="sidebar-item" type="button" data-nav="stats">학습 기록</button>
+        </nav>
+
+        <div class="sidebar-group">
+          <p class="sidebar-label">교재</p>
+          <dl class="wm-facts">
+            <div><dt>범위</dt><dd>DAY 01–50</dd></div>
+            <div><dt>표제어</dt><dd>2,000</dd></div>
+            <div><dt>채점</dt><dd>한국어 뜻 주관식</dd></div>
+          </dl>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-label">동기화</p>
+          <p class="wm-side-note">학습 기록은 계정 DB에 저장되고, 이 브라우저에는 빠른 실행용 사본만 남습니다.</p>
+        </div>
+      </aside>
+
+      <main id="app" class="app-main" tabindex="-1"></main>
+    </div>
   </div>
+
+  <footer class="wm-footer">
+    <div class="container-wide wm-footer-inner">
+      <span>워드마스터 수능 2000 · DAY 01–50 · 2,000 words</span>
+      <span class="text-tertiary">hvsdcm</span>
+    </div>
+  </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -55,4 +79,3 @@
   <script src="assets/js/app.js"></script>
 </body>
 </html>
-

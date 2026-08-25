@@ -399,81 +399,99 @@
     renderQuiz();
   }
 
+  function setNav(view) {
+    const active = view === 'stats' ? 'stats' : 'home';
+    document.querySelectorAll('.sidebar-item[data-nav]').forEach((item) => {
+      const on = item.dataset.nav === active;
+      item.classList.toggle('is-active', on);
+      if (on) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    });
+  }
+
   function renderHome() {
     state.view = 'home';
     state.session = null;
+    setNav('home');
     const s = summaryStats();
     app.innerHTML = `
-      <section class="hero">
-        <p class="eyebrow">SELECT → SOLVE → RETEST</p>
-        <h1>단어를<br>내 것으로.</h1>
-        <p>DAY 선택 → 뜻 시험 → 오답 회독</p>
-      </section>
+      <header class="view-head">
+        <div>
+          <span class="kicker">select · solve · retest</span>
+          <h1>시험 설정</h1>
+          <p>DAY 범위와 문항 수를 고르면 바로 주관식 뜻 시험이 시작됩니다.</p>
+        </div>
+        <span class="badge badge-accent">DAY ${String(state.home.startDay).padStart(2, '0')}–${String(state.home.endDay).padStart(2, '0')}</span>
+      </header>
 
-      <section class="grid two">
-        <div class="card">
-          <h2>시험 범위</h2>
-          <p class="card-sub">DAY 01–50</p>
+      <div class="wm-layout">
+        <section class="card wm-config" aria-labelledby="rangeTitle">
+          <h2 class="title-3" id="rangeTitle">DAY 범위</h2>
 
-          <div class="range-row">
+          <div class="wm-range">
             <div class="field">
-              <label for="startDay">시작 DAY</label>
-              <input id="startDay" class="day-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.startDay}">
+              <label class="field-label" for="startDay">시작</label>
+              <input id="startDay" class="field-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.startDay}">
             </div>
-            <div class="range-sep">→</div>
+            <div class="wm-range-sep" aria-hidden="true">→</div>
             <div class="field">
-              <label for="endDay">끝 DAY</label>
-              <input id="endDay" class="day-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.endDay}">
+              <label class="field-label" for="endDay">끝</label>
+              <input id="endDay" class="field-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.endDay}">
             </div>
           </div>
 
-          <div class="preset-wrap">
-            <span class="section-label">빠른 선택</span>
-            <div class="chips">
-              <button class="chip preset" data-start="1" data-end="1" type="button">DAY 1</button>
-              <button class="chip preset" data-start="1" data-end="10" type="button">1–10</button>
-              <button class="chip preset" data-start="1" data-end="25" type="button">1–25</button>
-              <button class="chip preset" data-start="26" data-end="50" type="button">26–50</button>
-              <button class="chip preset" data-start="1" data-end="50" type="button">1–50</button>
+          <div class="field">
+            <span class="field-label">빠른 선택</span>
+            <div class="wm-presets">
+              <div class="segmented" role="group" aria-label="DAY 범위 빠른 선택">
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="1">DAY 1</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="10">1–10</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="25">1–25</button>
+                <button class="segmented-btn preset" type="button" data-start="26" data-end="50">26–50</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="50">전체</button>
+              </div>
             </div>
           </div>
 
-          <div class="options-row">
-            <div class="select-wrap">
-              <label for="questionCount">문제 수</label>
-              <select id="questionCount">
+          <div class="wm-options">
+            <div class="field">
+              <label class="field-label" for="questionCount">문제 수</label>
+              <select id="questionCount" class="field-input">
                 <option value="25" ${state.home.questionCount === '25' ? 'selected' : ''}>25개</option>
                 <option value="50" ${state.home.questionCount === '50' ? 'selected' : ''}>50개</option>
                 <option value="100" ${state.home.questionCount === '100' ? 'selected' : ''}>100개</option>
                 <option value="all" ${state.home.questionCount === 'all' ? 'selected' : ''}>전체</option>
               </select>
             </div>
-            <div class="select-wrap">
-              <label for="orderMode">출제 순서</label>
-              <select id="orderMode">
-                ${renderSortOptions(state.home.order)}
-              </select>
+            <div class="field">
+              <label class="field-label" for="orderMode">출제 순서</label>
+              <select id="orderMode" class="field-input">${renderSortOptions(state.home.order)}</select>
             </div>
           </div>
 
-          <button id="startQuizBtn" class="primary-btn start-btn" type="button">시험 시작</button>
-        </div>
+          <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button">시험 시작</button>
+        </section>
 
-        <aside class="card">
-          <h2>누적 기록</h2>
-          <p class="card-sub">계정 동기화</p>
-          <div class="stat-list">
-            <div class="stat-box"><span>총 풀이</span><strong>${s.attempts.toLocaleString()}</strong></div>
-            <div class="stat-box"><span>정답률</span><strong>${s.accuracy}%</strong></div>
-          </div>
-          <div class="review-box">
-            <span class="section-label">오답 노트</span>
-            <div class="review-count">${s.wrongCount}</div>
-            <p>보기 → 기억 → 재시험</p>
-            <div class="review-actions"><button id="wrongStudyBtn" class="ghost-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 보고 외우기</button><button id="reviewBtn" class="secondary-btn" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button></div>
-          </div>
+        <aside class="wm-panel">
+          <section class="card wm-stack">
+            <h2 class="title-3">누적 기록</h2>
+            <div class="wm-metrics">
+              <div class="stat"><span class="stat-value">${s.attempts.toLocaleString()}</span><span class="stat-label">총 풀이</span></div>
+              <div class="stat"><span class="stat-value">${s.accuracy}%</span><span class="stat-label">정답률</span></div>
+            </div>
+          </section>
+
+          <section class="card wm-review">
+            <span class="kicker">오답 노트</span>
+            <div class="wm-review-count">${s.wrongCount}</div>
+            <p class="text-secondary">보기 → 기억 → 재시험</p>
+            <div class="wm-actions">
+              <button id="wrongStudyBtn" class="btn btn-secondary" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 보고 외우기</button>
+              <button id="reviewBtn" class="btn btn-ghost" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button>
+            </div>
+          </section>
         </aside>
-      </section>
+      </div>
     `;
 
     document.querySelectorAll('.preset').forEach((button) => {
@@ -492,6 +510,7 @@
     const session = state.session;
     if (!session) return renderHome();
     state.view = 'quiz';
+    setNav('quiz');
     const item = session.questions[session.index];
     const answered = session.answered;
     const result = session.lastResult;
@@ -500,28 +519,33 @@
     const progress = Math.round((current / total) * 100);
 
     app.innerHTML = `
-      <section class="quiz-wrap">
-        <div class="quiz-head">
-          <div class="quiz-meta">
-            <span>${escapeHtml(sessionLabel(session))}</span>
-            <span>${current} / ${total} · 정답 ${session.correct}</span>
+      <header class="view-head">
+        <div>
+          <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
+          <h1>뜻 시험</h1>
+        </div>
+        <span class="badge ${session.wrong ? 'badge-red' : 'badge-green'}">정답 ${session.correct} · 오답 ${session.wrong}</span>
+      </header>
+
+      <section class="wm-progress" aria-label="진행 상황">
+        <div class="wm-progress-meta"><span>${current} / ${total}</span><span>${progress}%</span></div>
+        <div class="wm-track"><div class="wm-fill" style="width:${progress}%"></div></div>
+      </section>
+
+      <section class="card card-xl wm-question">
+        <span class="kicker">DAY ${String(item.day).padStart(2, '0')} · 번호 ${String(item.number).padStart(2, '0')}</span>
+        <h2 class="wm-word">${escapeHtml(item.word)}</h2>
+
+        <div class="field">
+          <label class="field-label" for="answerInput">한국어 뜻</label>
+          <div class="wm-answer-row">
+            <input id="answerInput" class="field-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="뜻을 입력하세요" value="${answered ? escapeHtml(result.input) : ''}" ${answered ? 'disabled' : ''}>
+            <button id="submitBtn" class="btn btn-primary" type="button">${answered ? (current === total ? '결과 보기' : '다음') : '정답 확인'}</button>
           </div>
-          <div class="progress-track"><div class="progress-fill" style="width:${progress}%"></div></div>
+          <p class="wm-hint">Enter로 정답 확인 · 확인 후 Enter로 다음 문제</p>
         </div>
 
-        <div class="question-card">
-          <div class="question-kicker">DAY ${String(item.day).padStart(2, '0')} · ${String(item.number).padStart(2, '0')}</div>
-          <h2 class="word">${escapeHtml(item.word)}</h2>
-
-          <label class="answer-label" for="answerInput">한국어 뜻</label>
-          <div class="answer-row">
-            <input id="answerInput" class="answer-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="뜻을 입력하세요" value="${answered ? escapeHtml(result.input) : ''}" ${answered ? 'disabled' : ''}>
-            <button id="submitBtn" class="primary-btn" type="button">${answered ? (current === total ? '결과 보기' : '다음') : '정답 확인'}</button>
-          </div>
-          <div class="keyboard-hint">Enter로 정답 확인 · 확인 후 Enter로 다음 문제</div>
-
-          ${answered ? renderFeedback(item, result) : ''}
-        </div>
+        ${answered ? renderFeedback(item, result) : ''}
       </section>
     `;
 
@@ -545,21 +569,15 @@
   function renderFeedback(item, result) {
     const isCorrect = result.correct;
     return `
-      <div class="feedback ${isCorrect ? 'correct' : 'wrong'}">
-        <div class="feedback-title">${isCorrect ? '✓ 정답' : '✕ 오답'}${result.overridden ? ' · 사용자 정답으로 저장됨' : ''}</div>
-        <div class="feedback-grid">
-          <div class="feedback-item">
-            <small>정답</small>
-            <strong>${escapeHtml(item.meaning)}</strong>
-          </div>
-          <div class="feedback-item">
-            <small>내 답</small>
-            <strong>${escapeHtml(result.input || '(빈 답)')}</strong>
-          </div>
+      <div class="wm-feedback ${isCorrect ? 'is-correct' : 'is-wrong'}" role="status">
+        <p class="wm-feedback-head">${isCorrect ? '정답' : '오답'}${result.overridden ? ' · 사용자 정답으로 저장됨' : ''}</p>
+        <div class="wm-feedback-grid">
+          <div class="wm-feedback-cell"><small>교재 정답</small><strong>${escapeHtml(item.meaning)}</strong></div>
+          <div class="wm-feedback-cell"><small>내 답</small><strong>${escapeHtml(result.input || '(빈 답)')}</strong></div>
         </div>
         ${!isCorrect && result.input ? `
-          <div class="feedback-actions">
-            <button id="acceptMineBtn" class="ghost-btn" type="button">내 답도 정답으로 인정</button>
+          <div class="wm-feedback-actions">
+            <button id="acceptMineBtn" class="btn btn-secondary btn-sm" type="button">내 답도 정답으로 인정</button>
           </div>
         ` : ''}
       </div>
@@ -570,48 +588,55 @@
     const session = state.session;
     if (!session) return renderHome();
     state.view = 'result';
+    setNav('result');
     const total = session.questions.length;
     const accuracy = total ? Math.round((session.correct / total) * 100) : 0;
     const wrongRows = session.results.filter((row) => !row.correct);
 
     app.innerHTML = `
-      <section class="result-card card">
-        <div class="result-top">
-          <p class="eyebrow">${escapeHtml(sessionLabel(session))}</p>
-          <div class="result-score">${accuracy}%</div>
-          <p>${total}문제 중 ${session.correct}개 정답</p>
+      <header class="view-head">
+        <div>
+          <span class="kicker">${escapeHtml(sessionLabel(session))} 완료</span>
+          <h1>시험 결과</h1>
+        </div>
+      </header>
+
+      <section class="card card-xl wm-result">
+        <div>
+          <div class="wm-score">${accuracy}%</div>
+          <p class="text-secondary">${total}문제 중 ${session.correct}개 정답</p>
         </div>
 
-        <div class="result-stats">
-          <div class="result-stat"><small>정답</small><strong>${session.correct}</strong></div>
-          <div class="result-stat"><small>오답</small><strong>${session.wrong}</strong></div>
-          <div class="result-stat"><small>문제</small><strong>${total}</strong></div>
+        <div class="wm-result-stats">
+          <div class="stat"><span class="stat-value">${session.correct}</span><span class="stat-label">정답</span></div>
+          <div class="stat"><span class="stat-value">${session.wrong}</span><span class="stat-label">오답</span></div>
+          <div class="stat"><span class="stat-value">${total}</span><span class="stat-label">문항</span></div>
         </div>
 
-        <div class="result-actions">
-          <button id="resultHomeBtn" class="secondary-btn" type="button">홈으로</button>
-          <button id="retryWrongBtn" class="primary-btn" type="button" ${wrongRows.length ? '' : 'disabled'}>이번 오답만 재시험</button>
+        <div class="wm-result-actions">
+          <button id="retryWrongBtn" class="btn btn-primary" type="button" ${wrongRows.length ? '' : 'disabled'}>이번 오답만 재시험</button>
+          <button id="resultHomeBtn" class="btn btn-secondary" type="button">시험 설정으로</button>
         </div>
-
-        ${wrongRows.length ? `
-          <div class="mistake-section">
-            <h3>이번 시험 오답 ${wrongRows.length}개</h3>
-            <div class="mistake-list">
-              ${wrongRows.map((row) => {
-                const item = WORD_BY_ID.get(row.id);
-                return `
-                  <div class="mistake-row">
-                    <div class="mistake-word">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2,'0')} · ${String(item.number).padStart(2,'0')}</small></div>
-                    <div class="mistake-meaning">
-                      <div>${escapeHtml(item.meaning)}</div>
-                      <div class="user-wrong">내 답: ${escapeHtml(row.input || '(빈 답)')}</div>
-                    </div>
-                  </div>`;
-              }).join('')}
-            </div>
-          </div>
-        ` : ''}
       </section>
+
+      ${wrongRows.length ? `
+        <section class="card wm-stack" aria-labelledby="sessionMistakes">
+          <h2 class="title-3" id="sessionMistakes">이번 시험 오답 ${wrongRows.length}개</h2>
+          <div class="wm-mistakes">
+            ${wrongRows.map((row) => {
+              const item = WORD_BY_ID.get(row.id);
+              return `
+                <div class="wm-mistake">
+                  <div class="wm-mistake-term">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2, '0')} · ${String(item.number).padStart(2, '0')}</small></div>
+                  <div class="wm-mistake-gloss">
+                    <span>${escapeHtml(item.meaning)}</span>
+                    <span class="wm-mine">내 답 · ${escapeHtml(row.input || '(빈 답)')}</span>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </section>
+      ` : ''}
     `;
 
     document.getElementById('resultHomeBtn').addEventListener('click', renderHome);
@@ -621,6 +646,7 @@
   function renderStatsPage() {
     state.view = 'stats';
     state.session = null;
+    setNav('stats');
     const s = summaryStats();
     const wrongItems = Object.keys(db.wrongBank)
       .map((id) => WORD_BY_ID.get(id))
@@ -629,55 +655,59 @@
       .map((item) => ({ item, info: db.wrongBank[item.id] }));
 
     app.innerHTML = `
-      <section class="modal-page">
-        <div class="page-title-row">
+      <header class="view-head">
+        <div>
+          <span class="kicker">account study data</span>
+          <h1>학습 기록</h1>
+          <p>계정 DB에 저장된 풀이 기록입니다. 이 브라우저에는 사본만 보관됩니다.</p>
+        </div>
+        <button id="statsBackBtn" class="btn btn-secondary btn-sm" type="button">시험 설정</button>
+      </header>
+
+      <section class="card wm-stack" aria-label="누적 지표">
+        <div class="wm-result-stats">
+          <div class="stat"><span class="stat-value">${s.attempts.toLocaleString()}</span><span class="stat-label">총 풀이</span></div>
+          <div class="stat"><span class="stat-value">${s.accuracy}%</span><span class="stat-label">정답률</span></div>
+          <div class="stat"><span class="stat-value">${s.wrongCount}</span><span class="stat-label">오답 노트</span></div>
+        </div>
+      </section>
+
+      <div class="toolbar" role="group" aria-label="기록 데이터 관리">
+        <div class="toolbar-group">
+          <button id="exportBtn" class="btn btn-secondary btn-sm" type="button">기록 백업</button>
+          <label class="btn btn-secondary btn-sm" for="importFile">기록 복원</label>
+          <input id="importFile" class="wm-file" type="file" accept="application/json,.json">
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="resetBtn" class="btn btn-danger btn-sm" type="button">기록 초기화</button>
+      </div>
+
+      <section class="card wm-stack" aria-labelledby="wrongNoteTitle">
+        <div class="view-head">
           <div>
-            <p class="eyebrow">ACCOUNT STUDY DATA</p>
-            <h2>학습 기록</h2>
-            <p>학습 기록은 계정 DB에 저장되며, 현재 브라우저에는 빠른 실행을 위한 사본만 보관됩니다.</p>
+            <h2 class="title-3" id="wrongNoteTitle">오답 암기 노트</h2>
+            <p>${wrongEntries.length}개 · 개인 풀이 기록 기준으로 정렬합니다.</p>
           </div>
-          <button id="statsBackBtn" class="ghost-btn compact" type="button">홈</button>
-        </div>
-
-        <div class="card">
-          <div class="stats-grid">
-            <div class="stat-box"><span>총 풀이</span><strong>${s.attempts.toLocaleString()}</strong></div>
-            <div class="stat-box"><span>정답률</span><strong>${s.accuracy}%</strong></div>
-            <div class="stat-box"><span>오답 노트</span><strong>${s.wrongCount}</strong></div>
-          </div>
-          <div class="data-actions">
-            <button id="exportBtn" class="secondary-btn" type="button">기록 백업</button>
-            <label class="ghost-btn" for="importFile" role="button">기록 복원</label>
-            <input id="importFile" class="file-input" type="file" accept="application/json,.json">
-            <button id="resetBtn" class="danger-btn" type="button">기록 초기화</button>
+          <div class="toolbar-group">
+            <label class="field-label" for="wrongSortMode">정렬</label>
+            <select id="wrongSortMode" class="field-input">${renderSortOptions(state.wrongOrder)}</select>
+            <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
           </div>
         </div>
 
-        <div class="card wrong-note-card">
-          <div class="page-title-row wrong-note-head">
-            <div>
-              <h2>오답 암기 노트</h2>
-              <p>${wrongEntries.length}개 · 개인 풀이 기록 기준으로 정렬해 복습하세요.</p>
-            </div>
-            <div class="wrong-note-actions">
-              <label for="wrongSortMode">오답 정렬</label>
-              <select id="wrongSortMode">
-                ${renderSortOptions(state.wrongOrder)}
-              </select>
-              <button id="statsReviewBtn" class="primary-btn" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
-            </div>
-          </div>
-          ${wrongEntries.length ? `
-            <div class="mistake-list">
-              ${wrongEntries.slice(0, 200).map(({ item, info }) => `
-                <div class="mistake-row">
-                  <div class="mistake-word">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2,'0')} · 개인 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</small></div>
-                  <div class="mistake-meaning">${escapeHtml(item.meaning)}<div class="user-wrong">최근 답: ${escapeHtml(info.lastAnswer || '(빈 답)')}</div></div>
+        ${wrongEntries.length ? `
+          <div class="wm-mistakes">
+            ${wrongEntries.slice(0, 200).map(({ item, info }) => `
+              <div class="wm-mistake">
+                <div class="wm-mistake-term">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2, '0')} · 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</small></div>
+                <div class="wm-mistake-gloss">
+                  <span>${escapeHtml(item.meaning)}</span>
+                  <span class="wm-mine">최근 답 · ${escapeHtml(info.lastAnswer || '(빈 답)')}</span>
                 </div>
-              `).join('')}
-            </div>
-          ` : '<div class="empty-state">아직 오답이 없습니다.</div>'}
-        </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<p class="wm-empty">아직 오답이 없습니다.</p>'}
       </section>
     `;
 
@@ -741,9 +771,9 @@
 
   function showToast(message) {
     toast.textContent = message;
-    toast.classList.add('show');
+    toast.classList.add('open');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove('show'), 1900);
+    toastTimer = setTimeout(() => toast.classList.remove('open'), 1900);
   }
 
   function goHomeWithConfirm() {
