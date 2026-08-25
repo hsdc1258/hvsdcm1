@@ -1,26 +1,29 @@
 /* Design tokens and shared document baseline */
 :root {
   color-scheme:dark;
-  --bg:#090b0d;
-  --surface:#111419;
-  --surface2:#171b21;
-  --surface3:#1d222a;
-  --line:#29303a;
-  --soft:#20262e;
-  --text:#f5f7f9;
-  --muted:#9ba4b0;
-  --muted2:#6f7885;
-  --accent:#86efac;
-  --accent2:#4ade80;
-  --accentbg:rgba(74,222,128,.12);
-  --danger:#fb7185;
-  --dangerbg:rgba(251,113,133,.12);
-  --warn:#facc15;
-  --warnbg:rgba(250,204,21,.11);
-  --blue:#7dd3fc;
-  --bluebg:rgba(125,211,252,.1);
-  --radius:22px;
-  --max:1060px
+  --bg:#000;
+  --surface:#161617;
+  --surface2:#1d1d1f;
+  --surface3:#242426;
+  --line:rgba(255,255,255,.12);
+  --soft:rgba(255,255,255,.08);
+  --text:#f5f5f7;
+  --muted:#86868b;
+  --muted2:#6e6e73;
+  --accent:#bf5af2;
+  --accent-cta:#8e2fc9;
+  --accent2:#af52de;
+  --accentbg:rgba(191,90,242,.13);
+  --green:#30d158;
+  --greenbg:rgba(48,209,88,.13);
+  --danger:#ff453a;
+  --dangerbg:rgba(255,69,58,.12);
+  --warn:#ffd60a;
+  --warnbg:rgba(255,214,10,.11);
+  --blue:#64d2ff;
+  --bluebg:rgba(100,210,255,.1);
+  --radius:28px;
+  --max:1160px
 }
 * {
   box-sizing:border-box
@@ -33,9 +36,9 @@ html {
 body {
   margin:0;
   min-height:100vh;
-  background:radial-gradient(circle at 50% -12%,rgba(134,239,172,.09),transparent 32rem),var(--bg);
+  background:radial-gradient(circle at 50% -12%,rgba(191,90,242,.1),transparent 32rem),var(--bg);
   color:var(--text);
-  font-family:Inter,Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,"Noto Sans KR",sans-serif;
   -webkit-font-smoothing:antialiased
 }
 button,input,select,textarea {
@@ -189,7 +192,7 @@ h3 {
   border-color:var(--line)
 }
 .secondary:hover,.ghost:hover {
-  border-color:#46505f
+  border-color:rgba(255,255,255,.24)
 }
 .ghost {
   background:transparent;
@@ -202,7 +205,7 @@ h3 {
 }
 .danger {
   background:var(--dangerbg);
-  border-color:rgba(251,113,133,.25);
+  border-color:rgba(255,69,58,.25);
   color:var(--danger)
 }
 .compact {
@@ -237,17 +240,17 @@ button:disabled {
   font-weight:800
 }
 .badge.green {
-  background:var(--accentbg);
-  border-color:rgba(74,222,128,.24);
-  color:var(--accent)
+  background:var(--greenbg);
+  border-color:rgba(48,209,88,.24);
+  color:var(--green)
 }
 .badge.warn {
   background:var(--warnbg);
-  border-color:rgba(250,204,21,.22);
+  border-color:rgba(255,214,10,.22);
   color:var(--warn)
 }
 .badge.blue {
-  border-color:rgba(125,211,252,.25);
+  border-color:rgba(100,210,255,.25);
   background:var(--bluebg);
   color:var(--blue)
 }
@@ -441,7 +444,7 @@ select {
   padding:9px;
   border:1px solid var(--soft);
   border-radius:15px;
-  background:rgba(17,20,25,.94);
+  background:rgba(22,22,23,.94);
   backdrop-filter:blur(12px);
   overflow:auto;
   scrollbar-width:none
@@ -485,7 +488,7 @@ select {
   padding:14px 15px;
   border-radius:14px;
   background:var(--warnbg);
-  border:1px solid rgba(250,204,21,.18);
+  border:1px solid rgba(255,214,10,.18);
   color:#f4e7a3;
   font-size:13px;
   line-height:1.65
@@ -541,7 +544,7 @@ select {
 }
 .notebook-menu a:hover,
 .notebook-menu a:focus-visible {
-  border-color:rgba(134,239,172,.4);
+  border-color:rgba(191,90,242,.4);
   color:var(--accent)
 }
 .notebook-hero {
@@ -551,11 +554,11 @@ select {
   gap:14px;
   margin-bottom:14px;
   padding:clamp(22px,4vw,34px);
-  border:1px solid rgba(134,239,172,.26);
+  border:1px solid rgba(191,90,242,.26);
   border-radius:26px;
   background:
-    radial-gradient(circle at 92% 12%,rgba(125,211,252,.12),transparent 15rem),
-    linear-gradient(145deg,rgba(74,222,128,.12),rgba(17,20,25,.98) 58%)
+    radial-gradient(circle at 92% 12%,rgba(100,210,255,.12),transparent 15rem),
+    linear-gradient(145deg,rgba(191,90,242,.12),rgba(22,22,23,.98) 58%)
 }
 .notebook-hero h3 {
   max-width:730px;
@@ -570,9 +573,9 @@ select {
   gap:0;
   margin:0;
   padding:17px 18px;
-  border:1px solid rgba(125,211,252,.2);
+  border:1px solid rgba(100,210,255,.2);
   border-radius:17px;
-  background:rgba(4,8,12,.4)
+  background:rgba(0,0,0,.4)
 }
 .key-point-item {
   position:relative;
@@ -588,7 +591,7 @@ select {
   bottom:-4px;
   width:1px;
   height:10px;
-  background:rgba(125,211,252,.45)
+  background:rgba(100,210,255,.45)
 }
 .key-point-item>span {
   width:29px;
@@ -648,7 +651,7 @@ select {
   display:none
 }
 .exam-analysis {
-  border-color:rgba(250,204,21,.16)
+  border-color:rgba(255,214,10,.16)
 }
 .exam-stat-grid {
   display:grid;
@@ -734,7 +737,7 @@ select {
   width:var(--frequency);
   height:100%;
   border-radius:inherit;
-  background:linear-gradient(90deg,var(--warn),#fb923c)
+  background:linear-gradient(90deg,var(--warn),#ff9f0a)
 }
 .frequency-list p {
   margin:6px 0 0;
@@ -786,7 +789,7 @@ select {
   left:0;
   z-index:1;
   width:125px;
-  background:#151a20;
+  background:#1d1d1f;
   color:var(--text);
   font-size:11px
 }
@@ -807,7 +810,7 @@ select {
   position:relative;
   min-height:145px;
   padding:17px;
-  border:1px solid rgba(125,211,252,.16);
+  border:1px solid rgba(100,210,255,.16);
   border-radius:16px;
   background:var(--bluebg)
 }
@@ -869,7 +872,7 @@ select {
   line-height:1.72
 }
 .recall-lab {
-  border-color:rgba(134,239,172,.2)
+  border-color:rgba(191,90,242,.2)
 }
 .recall-grid {
   display:grid;
@@ -934,7 +937,7 @@ select {
   gap:8px;
   margin-top:15px;
   padding:13px 15px;
-  border:1px dashed rgba(134,239,172,.28);
+  border:1px dashed rgba(191,90,242,.28);
   border-radius:14px;
   color:var(--muted);
   font-size:10px;
@@ -963,7 +966,7 @@ select {
 }
 .learning-design {
   margin:14px 0;
-  border:1px solid rgba(125,211,252,.15);
+  border:1px solid rgba(100,210,255,.15);
   border-radius:18px;
   background:var(--surface)
 }
@@ -1160,7 +1163,7 @@ select {
   transition:.14s ease
 }
 .choice-option:hover {
-  border-color:#536071;
+  border-color:rgba(255,255,255,.24);
   background:var(--surface3)
 }
 .choice-option span {
@@ -1183,15 +1186,15 @@ select {
   cursor:default
 }
 .choice-option.correct-option {
-  border-color:rgba(74,222,128,.5);
-  background:var(--accentbg)
+  border-color:rgba(48,209,88,.5);
+  background:var(--greenbg)
 }
 .choice-option.correct-option span {
-  background:var(--accent);
+  background:var(--green);
   color:#07140c
 }
 .choice-option.wrong-option {
-  border-color:rgba(251,113,133,.5);
+  border-color:rgba(255,69,58,.5);
   background:var(--dangerbg)
 }
 .choice-option.wrong-option span {
@@ -1208,23 +1211,23 @@ select {
   border:1px solid
 }
 .feedback.correct {
-  background:var(--accentbg);
-  border-color:rgba(74,222,128,.22)
+  background:var(--greenbg);
+  border-color:rgba(48,209,88,.22)
 }
 .feedback.partial {
   background:var(--warnbg);
-  border-color:rgba(250,204,21,.22)
+  border-color:rgba(255,214,10,.22)
 }
 .feedback.wrong {
   background:var(--dangerbg);
-  border-color:rgba(251,113,133,.22)
+  border-color:rgba(255,69,58,.22)
 }
 .feedback-title {
   font-weight:900;
   margin-bottom:14px
 }
 .feedback.correct .feedback-title {
-  color:var(--accent)
+  color:var(--green)
 }
 .feedback.partial .feedback-title {
   color:var(--warn)
@@ -1261,9 +1264,9 @@ select {
 .solution-guide {
   margin-top:15px;
   padding:17px;
-  border:1px solid rgba(125,211,252,.24);
+  border:1px solid rgba(100,210,255,.24);
   border-radius:16px;
-  background:rgba(5,12,16,.38)
+  background:rgba(0,0,0,.38)
 }
 .solution-guide-head {
   display:flex;
@@ -1307,7 +1310,7 @@ select {
   background:var(--dangerbg)
 }
 .selected-reason h4 {
-  color:#ff9aaa
+  color:#ff8e86
 }
 .solution-checks {
   margin-top:11px;
@@ -1461,8 +1464,8 @@ select {
   transform:translate(-50%,18px);
   opacity:0;
   pointer-events:none;
-  background:#f5f7f9;
-  color:#111;
+  background:#f5f5f7;
+  color:#000;
   padding:12px 16px;
   border-radius:12px;
   font-size:13px;
@@ -1592,9 +1595,9 @@ select {
 .concept-visual {
   margin-bottom:14px;
   padding:clamp(20px,4vw,30px);
-  border:1px solid rgba(74,222,128,.2);
+  border:1px solid rgba(191,90,242,.2);
   border-radius:22px;
-  background:linear-gradient(145deg,rgba(74,222,128,.09),rgba(17,20,25,.98) 62%)
+  background:linear-gradient(145deg,rgba(191,90,242,.09),rgba(22,22,23,.98) 62%)
 }
 .concept-visual-copy h3 {
   margin:13px 0 7px;
@@ -1622,7 +1625,7 @@ select {
   padding:14px;
   border:1px solid var(--line);
   border-radius:16px;
-  background:rgba(5,7,9,.55);
+  background:rgba(0,0,0,.55);
   text-align:center
 }
 .concept-flow-step span {
@@ -1715,7 +1718,7 @@ select {
   background:rgba(0,0,0,.18)
 }
 .wrong-diagnosis>strong {
-  color:#ffd5dc;
+  color:#ffd1cc;
   font-size:13px
 }
 .wrong-diagnosis>p {
@@ -1744,7 +1747,7 @@ select {
 .reason-option.selected {
   border-color:var(--danger);
   background:var(--dangerbg);
-  color:#ffdbe1
+  color:#ffd7d2
 }
 
 /* Weakness dashboard and full-source mistake cards */
@@ -2264,10 +2267,18 @@ select {
     --muted2:#68737d;
     --accent:#187341;
     --accentbg:#eff9f3;
+    --green:#187341;
+    --greenbg:#eff9f3;
+    --danger:#a3231b;
+    --dangerbg:#fdeceb;
     --blue:#176785;
     --bluebg:#eef8fc;
     --warn:#8a6800;
     --warnbg:#fff9e8
+  }
+  .choice-option.correct-option span,
+  .choice-option.wrong-option span {
+    color:#fff
   }
   body {
     background:#fff;
@@ -2338,20 +2349,21 @@ select {
     --surface:#161617;
     --surface2:#1d1d1f;
     --surface3:#242426;
-    --line:rgba(255,255,255,.14);
-    --soft:rgba(255,255,255,.09);
+    --line:rgba(255,255,255,.12);
+    --soft:rgba(255,255,255,.08);
     --text:#f5f5f7;
     --muted:#86868b;
-    --muted2:#5f5f64;
+    --muted2:#6e6e73;
     --accent:#bf5af2;
+    --accent-cta:#8e2fc9;
     --accent2:#af52de;
     --accentbg:rgba(191,90,242,.13);
-    --danger:#ff6961;
+    --danger:#ff453a;
     --dangerbg:rgba(255,69,58,.12);
     --warn:#ffd60a;
-    --warnbg:rgba(255,214,10,.1);
+    --warnbg:rgba(255,214,10,.11);
     --blue:#64d2ff;
-    --bluebg:rgba(100,210,255,.11);
+    --bluebg:rgba(100,210,255,.1);
     --radius:28px;
     --max:1160px
   }
@@ -2359,7 +2371,7 @@ select {
     background:
       radial-gradient(circle at 90% 5%,rgba(191,90,242,.14),transparent 30rem),
       var(--bg);
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Pretendard,"Segoe UI",sans-serif
+    font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif
   }
   .app-shell {
     padding-inline:max(26px,env(safe-area-inset-left),env(safe-area-inset-right))
@@ -2452,11 +2464,11 @@ select {
     font-size:26px
   }
   .primary {
-    background:var(--accent);
+    background:var(--accent-cta);
     color:#fff
   }
   .primary:hover {
-    background:var(--accent2)
+    background:#9d3fd8
   }
   .secondary,.ghost {
     border-color:transparent;

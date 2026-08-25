@@ -4,9 +4,9 @@
 }
 body {
   margin:0;
-  background:#080808;
-  color:#eee;
-  font-family:Inter,-apple-system,"Segoe UI",sans-serif
+  background:#000;
+  color:var(--text);
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif
 }
 main {
   width:min(1100px,calc(100% - 30px));
@@ -18,18 +18,18 @@ h1 {
   margin:0 0 25px
 }
 .card {
-  border:1px solid #272727;
+  border:1px solid rgba(255,255,255,.1);
   border-radius:18px;
-  background:#101010;
+  background:var(--surface);
   padding:20px;
   margin:12px 0
 }
 input,button,select {
   height:45px;
   border-radius:11px;
-  border:1px solid #303030;
-  background:#171717;
-  color:#eee;
+  border:1px solid rgba(255,255,255,.12);
+  background:var(--surface-2);
+  color:var(--text);
   padding:0 13px;
   font:inherit
 }
@@ -38,8 +38,8 @@ button {
   font-weight:800
 }
 button.primary {
-  background:#eee;
-  color:#090909
+  background:#f5f5f7;
+  color:#000
 }
 .row {
   display:flex;
@@ -57,11 +57,11 @@ button.primary {
 }
 .stat {
   padding:16px;
-  border:1px solid #272727;
+  border:1px solid rgba(255,255,255,.1);
   border-radius:14px
 }
 .stat small {
-  color:#999;
+  color:var(--muted);
   font-weight:750
 }
 .stat strong {
@@ -71,7 +71,7 @@ button.primary {
 }
 .stat p {
   margin:0;
-  color:#666;
+  color:var(--muted);
   font-size:11px;
   line-height:1.55
 }
@@ -83,20 +83,20 @@ table {
 th,td {
   text-align:left;
   padding:12px 8px;
-  border-bottom:1px solid #222;
+  border-bottom:1px solid rgba(255,255,255,.08);
   font-size:13px
 }
 th {
-  color:#777
+  color:var(--muted)
 }
 .danger {
-  color:#ff8c8c
+  color:var(--red)
 }
 .hidden {
   display:none
 }
 .error {
-  color:#ff8585;
+  color:var(--red);
   min-height:20px;
   margin-top:10px
 }
@@ -114,12 +114,12 @@ th {
 /* Admin visual layer */
 :root {
   color-scheme:dark;
-  --line:rgba(255,255,255,.1);
-  --muted:#707070
+  --line:rgba(255,255,255,.12);
+  --muted:#86868b
 }
 body {
   min-height:100svh;
-  background:#050505;
+  background:#000;
   -webkit-font-smoothing:antialiased
 }
 body:before {
@@ -127,7 +127,7 @@ body:before {
   position:fixed;
   inset:0;
   z-index:-2;
-  background:radial-gradient(circle at 10% 0,rgba(91,75,255,.12),transparent 30%),radial-gradient(circle at 88% 20%,rgba(255,255,255,.06),transparent 25%)
+  background:radial-gradient(circle at 10% 0,rgba(41,151,255,.12),transparent 30%),radial-gradient(circle at 88% 20%,rgba(255,255,255,.06),transparent 25%)
 }
 body:after {
   content:"";
@@ -154,7 +154,7 @@ main {
 .head small {
   display:block;
   margin-bottom:10px;
-  color:#6dff9a;
+  color:var(--blue);
   font:700 10px ui-monospace,Consolas,monospace;
   letter-spacing:.22em;
   text-transform:uppercase
@@ -167,7 +167,7 @@ main {
 .head p {
   max-width:340px;
   margin:0;
-  color:#666;
+  color:var(--muted);
   font-size:12px;
   line-height:1.65;
   text-align:right
@@ -176,7 +176,7 @@ main {
   padding:22px;
   border-color:var(--line);
   border-radius:20px;
-  background:rgba(15,15,15,.84);
+  background:rgba(22,22,23,.84);
   backdrop-filter:blur(16px);
   box-shadow:0 20px 70px rgba(0,0,0,.18)
 }
@@ -193,7 +193,7 @@ input,button,select {
   height:48px;
   border-color:var(--line);
   border-radius:12px;
-  background:#131313;
+  background:var(--surface-2);
   outline:none;
   transition:.18s
 }
@@ -207,10 +207,10 @@ select:focus {
 }
 button:hover {
   border-color:rgba(255,255,255,.3);
-  background:#1a1a1a
+  background:var(--surface-3)
 }
 button.primary {
-  border-color:#eee
+  border-color:rgba(255,255,255,.4)
 }
 .row button {
   flex:0 0 110px
@@ -271,8 +271,8 @@ td:first-child {
 .danger {
   height:34px;
   padding:0 11px;
-  background:rgba(255,80,80,.045);
-  border-color:rgba(255,100,100,.15)
+  background:rgba(255,69,58,.06);
+  border-color:rgba(255,69,58,.16)
 }
 .table-actions {
   display:flex;
@@ -281,9 +281,9 @@ td:first-child {
 .session-link {
   height:34px;
   padding:0 11px;
-  color:#a8f5bf;
-  background:rgba(109,255,154,.05);
-  border-color:rgba(109,255,154,.16)
+  color:var(--green);
+  background:rgba(48,209,88,.06);
+  border-color:rgba(48,209,88,.16)
 }
 #login {
   width:min(100%,480px);
@@ -313,7 +313,7 @@ td:first-child {
 }
 .card-head p {
   margin:0;
-  color:#707070;
+  color:var(--muted);
   font-size:12px;
   line-height:1.6
 }
@@ -323,7 +323,7 @@ td:first-child {
   gap:7px
 }
 .session-filter span {
-  color:#777;
+  color:var(--muted);
   font:700 10px ui-monospace,Consolas,monospace;
   letter-spacing:.08em;
   text-transform:uppercase
@@ -339,7 +339,7 @@ td:first-child {
   justify-content:space-between;
   gap:16px;
   margin-bottom:12px;
-  color:#777
+  color:var(--muted)
 }
 .session-summary span {
   color:#ddd;
@@ -359,7 +359,7 @@ td:first-child {
   padding:0 8px;
   border:1px solid rgba(255,255,255,.1);
   border-radius:999px;
-  color:#777;
+  color:var(--muted);
   font-size:10px;
   font-weight:800
 }
@@ -368,20 +368,20 @@ td:first-child {
   width:6px;
   height:6px;
   border-radius:50%;
-  background:#555
+  background:var(--muted)
 }
 .status-badge.active {
-  color:#8fffb0;
-  border-color:rgba(109,255,154,.2);
-  background:rgba(109,255,154,.05)
+  color:var(--green);
+  border-color:rgba(48,209,88,.2);
+  background:rgba(48,209,88,.06)
 }
 .status-badge.active:before {
-  background:#6dff9a;
-  box-shadow:0 0 10px rgba(109,255,154,.65)
+  background:#30d158;
+  box-shadow:0 0 10px rgba(48,209,88,.65)
 }
 .device-cell strong {
   display:block;
-  color:#eee;
+  color:var(--text);
   font-size:12px
 }
 .device-cell small {
@@ -389,7 +389,7 @@ td:first-child {
   max-width:260px;
   margin-top:5px;
   overflow:hidden;
-  color:#555;
+  color:var(--muted);
   font:9px/1.35 ui-monospace,Consolas,monospace;
   text-overflow:ellipsis
 }
@@ -399,7 +399,7 @@ td:first-child {
 }
 .empty-row {
   padding:28px 10px;
-  color:#666!important;
+  color:var(--muted)!important;
   text-align:center;
   font-weight:500!important
 }
@@ -471,7 +471,7 @@ td:first-child {
 .answer-fold summary:before {
   content:'›';
   font:300 28px/1 ui-monospace,monospace;
-  color:#777;
+  color:var(--muted);
   transition:transform .2s
 }
 .answer-fold[open] summary:before {
@@ -479,7 +479,7 @@ td:first-child {
 }
 .answer-fold summary span {
   margin-left:auto;
-  color:#555;
+  color:var(--muted);
   font:11px ui-monospace,Consolas,monospace
 }
 .answer-content {
@@ -487,7 +487,7 @@ td:first-child {
   border-top:1px solid rgba(255,255,255,.07)
 }
 .answer-content>p {
-  color:#666;
+  color:var(--muted);
   font-size:13px;
   margin:16px 0
 }
@@ -508,18 +508,24 @@ td:first-child {
 
 /* Apple-led dark control layer. */
 :root {
-  --line:rgba(255,255,255,.1);
+  --line:rgba(255,255,255,.12);
   --muted:#86868b;
   --blue:#2997ff;
+  --accent-cta:#0071e3;
+  --bg:#000;
+  --surface:#161617;
+  --surface-2:#1d1d1f;
+  --surface-3:#242426;
+  --text:#f5f5f7;
   --green:#30d158;
-  --red:#ff6961
+  --red:#ff453a
 }
 body {
   background:
     radial-gradient(circle at 88% 0,rgba(41,151,255,.13),transparent 30rem),
-    #000;
-  color:#f5f5f7;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Pretendard,"Segoe UI",sans-serif
+    var(--bg);
+  color:var(--text);
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif
 }
 body:before,body:after {
   display:none
@@ -539,7 +545,7 @@ main {
     linear-gradient(145deg,#102a3e,#0b0b0d 68%)
 }
 .head small {
-  color:#64d2ff
+  color:var(--blue)
 }
 .head h1 {
   font-size:clamp(48px,8vw,84px)
@@ -550,14 +556,14 @@ main {
 .card {
   border-color:transparent;
   border-radius:26px;
-  background:#161617;
+  background:var(--surface);
   backdrop-filter:none;
   box-shadow:none
 }
 input,button,select {
   border-color:transparent;
   border-radius:13px;
-  background:#242426
+  background:var(--surface-3)
 }
 input:focus,select:focus {
   border-color:var(--blue);
@@ -565,11 +571,11 @@ input:focus,select:focus {
 }
 button.primary {
   border-color:transparent;
-  background:var(--blue);
+  background:var(--accent-cta);
   color:#fff
 }
 button.primary:hover {
-  background:#147ce5
+  background:#0077ed
 }
 .stats {
   gap:10px
@@ -578,7 +584,7 @@ button.primary:hover {
   min-height:160px;
   border-color:transparent;
   border-radius:22px;
-  background:#161617
+  background:var(--surface)
 }
 .stat strong {
   font-size:42px
@@ -587,15 +593,15 @@ th,td {
   border-color:rgba(255,255,255,.07)
 }
 .session-link {
-  color:#7ee49b;
+  color:var(--green);
   background:rgba(48,209,88,.1)
 }
 .danger {
-  color:#ff8a84;
+  color:var(--red);
   background:rgba(255,69,58,.1)
 }
 .status-badge.active {
-  color:#7ee49b;
+  color:var(--green);
   border-color:transparent;
   background:rgba(48,209,88,.1)
 }
@@ -605,7 +611,7 @@ th,td {
 #login {
   background:
     radial-gradient(circle at 90% 5%,rgba(41,151,255,.16),transparent 16rem),
-    #161617
+    var(--surface)
 }
 .answer-fold summary:before {
   color:var(--blue)
