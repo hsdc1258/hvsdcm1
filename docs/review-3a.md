@@ -194,6 +194,8 @@ plan.md D2가 "검사를 약화하지 않는다"고 했는데, 겉보기엔 강�
 > **[수정 라운드] 보류 — 통합 수정 라운드에서 처리.** 다른 리뷰어가 validate.mjs를 읽고 있어 지금은
 > B-1의 og 잠금 검사만 추가했다. 처리안: 81행을 `/id="drawerStudy"[^>]*aria-hidden="true"/u`로,
 > 87행을 `/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u`로 교체(82행 loginModal 검사와 같은 단일 정규식 방식).
+>
+> **[통합 라운드 — 해소]** `3af65c6`: 처리안 그대로 두 행을 단일 정규식으로 교체했다. `#drawerStudy`의 `aria-hidden`, 메뉴 버튼의 `aria-expanded`를 각각 지우는 음성 테스트에서 정상 실패 확인.
 
 ### M-7. C-3 게이트의 커버리지 구멍 — 색 토큰 25개 중 9개만 지킨다
 
@@ -232,6 +234,8 @@ D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게
 > (2) 검사 대상을 ":root 블록"이 아니라 "system.css 밖 모든 CSS의 커스텀 프로퍼티 *정의*"로 확장
 > (`(^|[;{\s])--[\w-]+\s*:` 전면 금지), (3) 예외는 `smstudy/assets/css/style.css`의 인쇄 라이트 팔레트 블록만
 > 파일+토큰 화이트리스트로 명시. og 잠금 검사(validateOgImageLock)와 충돌 없음.
+>
+> **[통합 라운드 — 해소]** `d62cc69`: 처리안 (1)(2)(3)을 그대로 구현하되 화이트리스트 범위를 더 좁혔다 — 파일 + `@media print` + `html` 셀렉터 + at-rule 1겹 + system.css가 아는 토큰의 5중 조건이라야 통과한다. 여기에 "화이트리스트가 실제로 쓰이는가(20건 이상)"를 함께 검사해, 예외가 죽은 채 남아 다른 위반을 덮는 경우를 막았다. 토큰 도출이 깨지면 금지 규칙이 통째로 무력해지므로 도출 결과 자체(60종 이상)도 검사한다. `validateOgImageLock`은 무영향.
 
 ---
 
@@ -260,16 +264,20 @@ D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게
 - **N-7. `role="dialog" aria-modal="true"`가 백드롭 `div`에 붙어 있다.** `index.html:194`.
   대화상자 본체는 `.sheet`(`<form>`)이므로 의미상 그쪽이 맞다. 닫힘 상태에서 `visibility: hidden`으로
   접근성 트리에서 빠지는 것은 확인했으므로 실사용 영향은 작다. **[수정 라운드: 남김 — validate.mjs 82행이 `id="loginModal"…role="dialog"…aria-modal` 동일 태그를 요구해 지금 옮기면 검사가 깨짐. 검사 수정과 함께 통합 라운드에서]**
+  **[통합 라운드 — 해소]** `edcb6a4`: 검사를 함께 고쳐 제약이 풀렸다. `role="dialog" aria-modal="true" aria-labelledby`를 `form.sheet`로 옮기고, 게이트는 (1) 시트가 세 속성을 갖는가 (2) 백드롭에 남아 있지 않은가 (3) 라벨 대상 `#loginTitle`이 존재하는가 3갈래로 강화했다.
 - **N-8. R-5의 "자간 분해 금지"는 자동 검사에 없다.** `system.css:214-220`이 `.brand { letter-spacing: normal; }`으로
   코드상 지키고 있지만, `validateBrandName()`은 문자열 패턴만 본다.
   → `.brand` 규칙에 `letter-spacing`을 늘리는 선언이 없는지 검사 한 줄 추가. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, 통합 라운드에서]**
+  **[통합 라운드 — 해소]** `ff30981`: system.css `.brand`의 `letter-spacing: normal` 고정 검사 + 전 CSS의 `.brand` 관련 규칙에서 자간 확대 금지 검사를 추가했다.
 - **N-9. `home.js`가 CRLF→LF 정규화로 전체 재작성처럼 보인다.** 실제 변경은 +26/-2줄인데
   `git diff`는 +170/-146으로 나온다. plan.md §5가 인용한 LESSONS의 "CRLF/LF 혼재 고정" 이행 자체는 맞지만,
   줄바꿈 정규화를 **별도 커밋으로 분리**했다면 `1c0533a`의 리뷰 비용이 훨씬 낮았을 것이다. **[수정 라운드: 남김 — 커밋 이력 재작성은 하지 않음, 프로세스 교훈으로만 수용]**
 - **N-10. `stripPrint` 정규식이 포맷 가정에 의존한다.** `scripts/validate.mjs:364`
   `/@media\s+print\s*\{[\s\S]*?\n\}/gu` — 닫는 `}`가 0열에 있다는 전제라, 들여쓰기가 바뀌면 조용히 오작동한다. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, M-7 처리안에 포함해 통합 라운드에서]**
+  **[통합 라운드 — 해소]** `d62cc69`: 중괄호 깊이 스캐너로 대체 (review-3b §4 nit과 동일 건).
 - **N-11. `check(/var\(--/u.test(source), …)`가 모든 CSS 파일에 적용된다.** `scripts/validate.mjs:374`.
   벤더/서드파티 CSS를 한 장이라도 추가하면 오탐으로 빌드가 깨진다. 자체 작성 CSS로 대상을 한정하는 편이 안전하다. **[수정 라운드: 남김 — validate.mjs 동시 열람 중, 통합 라운드에서]**
+  **[통합 라운드 — 해소]** `d62cc69`: `firstPartyCss`/`vendorCss` 등록부를 도입해 `var(--)` 소비 강제는 자체 작성 CSS에만 적용한다. 등록되지 않은 CSS가 나타나면 실패하므로, 벤더 CSS를 끼워 넣어 토큰 검사를 우회하는 길은 열리지 않는다.
 - **N-12. `.welcome-prefix`는 대응 CSS 규칙이 없는 데드 훅이다.** `index.html:71`, `home.js:49`.
   줄바꿈은 `.hero-title .welcome-user { display: block; }`(home.css:142)이 담당하므로 클래스 자체는 아무 일도 하지 않는다. **[수정 라운드: 남김 — 무해한 훅이고 제거하려면 home.js·index.html 두 파일을 건드려야 해 실익 없음]**
 
