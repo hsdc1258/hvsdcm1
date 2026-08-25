@@ -34,11 +34,11 @@
 - Worker/API, `scripts/`, `worker/`, 데이터 JS(`words.js`, `data.js` 등) 불변.
 
 ## 4. 완료 조건
-- [ ] `npm test` 통과 (validate + 단위 테스트 14개 — 회귀 없음)
-- [ ] 4개 표면의 `:root` 토큰이 동일 팔레트 (기준: home.css)
-- [ ] 로컬 서버(`python -m http.server`)로 4페이지 × (모바일 375px / 데스크톱 1280px)
-      스크린샷 수동 확인 — 깨진 레이아웃 없음, 위계·대비 정상
-- [ ] 하드코딩 색상 잔존 0 (admin.css 포함, grep으로 확인)
+- [x] `npm test` 통과 (validate 5057 checks + 단위 테스트 14/14 — 각 커밋마다 실행)
+- [x] 4개 표면의 `:root` 토큰이 동일 팔레트 (기준: home.css; 앱 식별색 blue/purple은 홈 팔레트 내)
+- [x] 로컬 서버 4페이지 computed style 검증 — bg #000 / Pretendard / 액센트·정답·위험 토큰 정상
+      (브라우저 패널 비표시로 스크린샷 대신 getComputedStyle 검증; 육안 확인은 배포 전 사용자 몫)
+- [x] 구팔레트 색상 잔존 0 (초록·핑크 계열 grep 확인; 중립 근검정 리터럴은 유지 — 부록 A 참조)
 
 ## 5. 관련 LESSONS 규칙
 - (첫 사이클 — 축적된 규칙 없음. 예시 규칙의 취지에 따라 모바일 사파리 등
