@@ -4,134 +4,207 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="HVS/DCM 학습 도구와 계정 동기화">
+  <meta name="description" content="hvsdcm — 두 개의 학습 앱, 하나의 동기화 계정. 선택, 풀이, 오답 회독.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="HVS/DCM — Study, distilled.">
+  <meta property="og:title" content="hvsdcm — Study, distilled.">
   <meta property="og:description" content="선택, 풀이, 오답 회독. 두 개의 학습 앱을 하나의 계정으로.">
   <meta property="og:url" content="https://hvsdcm1.xyz/">
   <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="HVS/DCM — Study, distilled.">
+  <meta name="twitter:title" content="hvsdcm — Study, distilled.">
   <meta name="twitter:description" content="선택, 풀이, 오답 회독. 두 개의 학습 앱을 하나의 계정으로.">
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <title>HVS/DCM — Study, distilled.</title>
+  <title>hvsdcm — Study, distilled.</title>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="/assets/css/home.css">
   <script src="/assets/js/home.js" defer></script>
 </head>
 <body>
-  <header class="global-nav">
-    <div class="nav-inner">
-      <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false">
-        <span></span><span></span>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <nav class="topbar-inner container-wide" aria-label="전역 내비게이션">
+      <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
+        <span aria-hidden="true"></span><span aria-hidden="true"></span>
       </button>
-      <a class="site-wordmark" href="/" aria-label="HVS/DCM 홈">HVS/DCM</a>
-      <span class="nav-status"><i aria-hidden="true"></i>SYNC</span>
-    </div>
+      <a class="brand" href="/" aria-label="hvsdcm 홈">hvsdcm</a>
+      <div class="topbar-nav">
+        <a class="topbar-link" href="/WordMaster/">WordMaster</a>
+        <a class="topbar-link" href="/smstudy/">사회·문화</a>
+        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
+      </div>
+    </nav>
   </header>
 
-  <div id="shade" class="shade"></div>
+  <div id="shade" class="shade" aria-hidden="true"></div>
+
   <aside id="drawer" class="drawer" aria-label="주 메뉴">
     <div class="drawer-head">
-      <small>HVS/DCM</small>
-      <strong>Study space</strong>
+      <span class="brand">hvsdcm</span>
+      <p class="drawer-tagline">Study, distilled.</p>
     </div>
     <div id="drawerStudy" class="drawer-study" aria-hidden="true">
-      <div class="drawer-section-label"><span>학습</span><small>2</small></div>
-      <nav aria-label="학습 도구">
-        <a class="study-link" href="/WordMaster/">
-          <span class="study-icon wordmaster-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 6.5c3.2-.9 5.9-.4 8 1.5v11c-2.1-1.9-4.8-2.4-8-1.5zM20 6.5c-3.2-.9-5.9-.4-8 1.5v11c2.1-1.9 4.8-2.4 8-1.5z"/></svg>
-          </span>
-          <span class="study-copy"><strong>WordMaster</strong><small>2,000 WORDS</small></span>
-          <span class="study-arrow" aria-hidden="true">→</span>
+      <p class="sidebar-label">학습</p>
+      <nav class="sidebar-group" aria-label="학습 도구">
+        <a class="sidebar-item drawer-app" href="/WordMaster/">
+          <span class="drawer-app-glyph glyph-word" aria-hidden="true">W</span>
+          <span class="drawer-app-copy"><strong>WordMaster</strong><small>DAY 1–50 · 2,000단어</small></span>
         </a>
-        <a class="study-link" href="/smstudy/">
-          <span class="study-icon society-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="7" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="m9 8.5 2 6m4-6-2 6M9.5 7h5"/></svg>
-          </span>
-          <span class="study-copy"><strong>사회·문화</strong><small>78 KICE QUESTIONS</small></span>
-          <span class="study-arrow" aria-hidden="true">→</span>
+        <a class="sidebar-item drawer-app" href="/smstudy/">
+          <span class="drawer-app-glyph glyph-society" aria-hidden="true">社</span>
+          <span class="drawer-app-copy"><strong>사회·문화</strong><small>13중단원 · 기출 78문항</small></span>
         </a>
       </nav>
     </div>
     <div class="drawer-bottom">
-      <a href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">Discord <span>↗</span></a>
-      <a href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">Instagram <span>↗</span></a>
-      <button id="drawerLogout" type="button">로그아웃 <span>→</span></button>
+      <a class="sidebar-item" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">Discord ↗</a>
+      <a class="sidebar-item" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">Instagram ↗</a>
+      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button">로그아웃</button>
     </div>
   </aside>
 
-  <main>
+  <main id="main">
     <section class="hero" aria-labelledby="welcomeTitle">
-      <div class="eyebrow"><span class="dot"></span>LEARN · SYNC · REPEAT</div>
-      <h1 id="welcomeTitle" data-shadow="Make it stick."><span class="welcome-prefix">Make it<br>stick.</span></h1>
-      <p class="hero-copy">선택 <span>→</span> 풀이 <span>→</span> 오답 회독</p>
-      <div id="account" class="account">
-        <button id="loginBtn" type="button" aria-label="로그인" title="로그인">
-          <span class="login-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>
-          </span>
-          <span>계정으로 시작</span>
-          <span class="button-arrow" aria-hidden="true">→</span>
-        </button>
-        <a href="/WordMaster/">WORDMASTER</a>
-        <a href="/smstudy/">사문 공부</a>
+      <div class="container hero-inner">
+        <p class="kicker hero-kicker">두 개의 학습 앱 · 하나의 계정</p>
+        <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">Make it stick.</span></h1>
+        <p class="hero-sub text-body-lg text-secondary">범위를 고르고, 문제를 풀고, 틀린 것만 다시 봅니다.<br>학습 기록은 어느 기기에서든 이어집니다.</p>
+        <div id="account" class="account hero-actions">
+          <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>계정으로 시작</button>
+          <a class="link-arrow hero-browse" href="#apps">학습 앱 둘러보기</a>
+          <a class="btn btn-secondary btn-lg account-app" href="/WordMaster/">WordMaster 열기</a>
+          <a class="btn btn-secondary btn-lg account-app" href="/smstudy/">사회·문화 열기</a>
+        </div>
       </div>
     </section>
 
-    <section class="product-grid" aria-label="학습 도구">
-      <a class="product-card word-card" href="/WordMaster/">
-        <div class="product-top"><span class="product-icon" aria-hidden="true">W</span><span class="product-index">01</span></div>
-        <div>
-          <span class="product-kicker">50 DAY · 2,000 WORDS</span>
-          <h2>WordMaster</h2>
-          <div class="mini-flow" aria-label="학습 흐름"><span>범위</span><i>→</i><span>시험</span><i>→</i><span>오답</span></div>
+    <section id="apps" class="showcase" aria-label="학습 앱">
+      <article class="feature card-xl reveal" aria-labelledby="featWordTitle">
+        <div class="feature-copy">
+          <p class="kicker feature-kicker kicker-word">WordMaster</p>
+          <h2 id="featWordTitle" class="display">2,000단어를,<br>오답이 사라질 때까지.</h2>
+          <p class="feature-sub text-secondary">DAY 1–50에서 범위를 고르면 시험이 만들어집니다.
+            주관식 답은 표기가 달라도 정규화해서 채점하고, 틀린 단어만 다시 시험을 봅니다.</p>
+          <div class="feature-meta">
+            <span class="badge">DAY 1–50</span>
+            <span class="badge">2,000단어</span>
+            <span class="badge badge-green">정규화 채점</span>
+            <span class="badge badge-red">오답만 재시험</span>
+          </div>
+          <a class="link-arrow" href="/WordMaster/">WordMaster 시작하기</a>
         </div>
-        <span class="card-link">시작 <b aria-hidden="true">↗</b></span>
-      </a>
-      <a class="product-card society-card" href="/smstudy/">
-        <div class="product-top"><span class="product-icon" aria-hidden="true">社</span><span class="product-index">02</span></div>
-        <div>
-          <span class="product-kicker">13 UNITS · 78 KICE</span>
-          <h2>사회·문화</h2>
-          <div class="mini-flow" aria-label="학습 흐름"><span>개념</span><i>→</i><span>기출</span><i>→</i><span>분석</span></div>
+        <div class="feature-visual visual-word" aria-hidden="true">
+          <div class="word-card word-card-back"></div>
+          <div class="word-card word-card-mid"></div>
+          <div class="word-card word-card-front">
+            <span class="word-day">DAY 07 · 23/40</span>
+            <span class="word-term">resilient</span>
+            <span class="word-answer">회복력 있는 <b>✓</b></span>
+          </div>
         </div>
-        <span class="card-link">시작 <b aria-hidden="true">↗</b></span>
-      </a>
+      </article>
+
+      <article class="feature feature-flip card-xl reveal" aria-labelledby="featSocietyTitle">
+        <div class="feature-copy">
+          <p class="kicker feature-kicker kicker-society">사회·문화</p>
+          <h2 id="featSocietyTitle" class="display">기출 78문항,<br>개념 노트 13장.</h2>
+          <p class="feature-sub text-secondary">평가원 기출을 원본 지문 그대로 풀고,
+            해설에서 정답 근거와 오답 원인을 확인합니다. 취약한 개념은 노트로 되돌아가 회독합니다.</p>
+          <div class="feature-meta">
+            <span class="badge">4단원 · 13중단원</span>
+            <span class="badge">KICE 기출 78</span>
+            <span class="badge badge-purple">개념 노트</span>
+            <span class="badge badge-orange">취약 개념 퀴즈</span>
+          </div>
+          <a class="link-arrow" href="/smstudy/">사회·문화 시작하기</a>
+        </div>
+        <div class="feature-visual visual-society" aria-hidden="true">
+          <div class="society-sheet">
+            <span class="society-tag">평가원 기출 · 원본 지문</span>
+            <span class="society-stem"></span>
+            <span class="society-stem society-stem-short"></span>
+            <ol class="society-choices">
+              <li>①</li><li>②</li><li class="is-picked">③</li><li>④</li><li>⑤</li>
+            </ol>
+            <span class="society-verdict">정답 · 근거 확인 →</span>
+          </div>
+        </div>
+      </article>
     </section>
 
-    <section class="signal-strip" aria-label="서비스 핵심 수치">
-      <div><strong>2,078</strong><span>학습 항목</span></div>
-      <div><strong>2</strong><span>학습 앱</span></div>
-      <div><strong>1</strong><span>동기화 계정</span></div>
+    <section class="sync reveal" aria-labelledby="syncTitle">
+      <div class="container-text sync-head">
+        <p class="kicker">계정 동기화</p>
+        <h2 id="syncTitle" class="display">기록은 계정에.<br>기기는 자유롭게.</h2>
+        <p class="text-body-lg text-secondary">로그인 한 번이면 진행도·오답노트·통계가 계정에 저장됩니다.
+          PC에서 풀던 범위를 휴대폰에서 그대로 이어서 봅니다.</p>
+      </div>
+      <div class="container sync-grid">
+        <div class="card sync-point">
+          <h3 class="title-3">즉시 저장</h3>
+          <p class="text-secondary">문제를 풀 때마다 진행도가 서버로 올라갑니다. 저장 버튼은 없습니다.</p>
+        </div>
+        <div class="card sync-point">
+          <h3 class="title-3">오답 회독</h3>
+          <p class="text-secondary">틀린 항목은 오답률순으로 정렬되어, 약한 것부터 다시 만납니다.</p>
+        </div>
+        <div class="card sync-point">
+          <h3 class="title-3">어디서나</h3>
+          <p class="text-secondary">브라우저만 있으면 됩니다. 설치도, 동기화 버튼도 필요 없습니다.</p>
+        </div>
+      </div>
     </section>
 
-    <section class="socials" aria-label="소셜 프로필">
-      <a class="social" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
-        <span><span class="label">Discord</span><span class="handle">hvsdcm</span></span><span class="index">↗</span>
-      </a>
-      <a class="social" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
-        <span><span class="label">Instagram</span><span class="handle">hvsdcm.exe</span></span><span class="index">↗</span>
-      </a>
+    <section class="stats-band reveal" aria-label="핵심 수치">
+      <div class="container stats-inner">
+        <div class="stat"><span class="stat-value">2,078</span><span class="stat-label">학습 항목</span></div>
+        <div class="stat"><span class="stat-value">2</span><span class="stat-label">학습 앱</span></div>
+        <div class="stat"><span class="stat-value">1</span><span class="stat-label">동기화 계정</span></div>
+      </div>
+    </section>
+
+    <section class="socials reveal" aria-label="소셜 프로필">
+      <div class="container socials-grid">
+        <a class="card card-hover social-card" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
+          <span class="social-label">Discord</span>
+          <span class="social-handle">hvsdcm <i aria-hidden="true">↗</i></span>
+        </a>
+        <a class="card card-hover social-card" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
+          <span class="social-label">Instagram</span>
+          <span class="social-handle">hvsdcm.exe <i aria-hidden="true">↗</i></span>
+        </a>
+      </div>
     </section>
   </main>
 
-  <div id="loginModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-    <form id="loginForm" class="box">
-      <div class="modal-icon" aria-hidden="true">↳</div>
-      <h2 id="loginTitle">로그인</h2>
-      <p>학습 기록 동기화</p>
-      <label for="username">아이디</label>
-      <input id="username" autocomplete="username" placeholder="아이디" required>
-      <label for="password">비밀번호</label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
-      <div id="loginError" role="alert"></div>
-      <button type="submit">계속</button>
-      <button type="button" id="closeLogin" class="close">닫기</button>
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="brand footer-brand">hvsdcm</span>
+      <nav class="footer-nav" aria-label="바닥글">
+        <a href="/WordMaster/">WordMaster</a>
+        <a href="/smstudy/">사회·문화</a>
+      </nav>
+      <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
+    </div>
+  </footer>
+
+  <div id="loginModal" class="sheet-backdrop" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <form id="loginForm" class="sheet login-sheet">
+      <h2 id="loginTitle" class="sheet-title">로그인</h2>
+      <p class="sheet-sub">학습 기록이 계정에 동기화됩니다.</p>
+      <div class="field">
+        <label class="field-label" for="username">아이디</label>
+        <input class="field-input" id="username" autocomplete="username" placeholder="아이디" required>
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">비밀번호</label>
+        <input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
+      </div>
+      <div id="loginError" class="field-error" role="alert"></div>
+      <button class="btn btn-primary login-submit" type="submit">계속</button>
+      <button class="btn btn-ghost" type="button" id="closeLogin">닫기</button>
     </form>
   </div>
-
-  <footer><span>HVS/DCM</span><span>2026</span></footer>
 </body>
 </html>
