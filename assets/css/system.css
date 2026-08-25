@@ -13,8 +13,11 @@
      #fff on --accent-strong #0071e3 4.70:1                      (채움 버튼 라벨)
      --accent #2997ff  on --bg  6.96:1                           (링크)
      뱃지(-soft 배경을 --surface-2와 합성한 실효 배경 기준, M-3):
-       --red-bright #ff6961 on ≈#3d2323 5.09:1 / --purple-bright #d08cf5 on ≈#34263d 5.87:1
+       --red-bright #ff6961 on ≈#3d2323 5.09:1
        --green #30d158 6.42:1 / --orange #ff9f0a 6.30:1 / --accent #2997ff 4.59:1
+     장식용 색(--purple*, --teal, --yellow)은 삭제했다 — DESIGN.md §3은 강조를 --accent
+     1색으로 수렴시키고 상태색을 green/red/orange 셋으로 한정한다. 쓰이지 않는 색 토큰을
+     남겨두면 장식 목적의 재도입을 부른다.
    ========================================================================== */
 
 :root {
@@ -47,11 +50,6 @@
   --red-bright: #ff6961;    /* 뱃지 등 -soft 배경 위 전경 전용 (M-3) */
   --orange: #ff9f0a;
   --orange-soft: rgba(255,159,10,.14);
-  --yellow: #ffd60a;
-  --purple: #bf5af2;
-  --purple-soft: rgba(191,90,242,.14);
-  --purple-bright: #d08cf5; /* 뱃지 등 -soft 배경 위 전경 전용 (M-3) */
-  --teal: #64d2ff;
 
   /* ---- 타이포 ---- */
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
@@ -520,7 +518,8 @@ select.field-input {
 .badge-green { background: var(--green-soft); color: var(--green); }
 .badge-red { background: var(--red-soft); color: var(--red-bright); }
 .badge-orange { background: var(--orange-soft); color: var(--orange); }
-.badge-purple { background: var(--purple-soft); color: var(--purple-bright); }
+/* .badge-purple 제거 — DESIGN.md §3의 상태색은 green/red/orange 셋뿐이고, 보라 뱃지는
+   장식 용도로만 쓰이고 있었다. 강조는 --accent 하나로 수렴한다. */
 
 /* ==========================================================================
    세그먼티드 컨트롤
