@@ -4,102 +4,157 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex, nofollow">
-  <title>HVS Admin</title>
+  <title>hvsdcm admin</title>
+  <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="/admin/assets/css/admin.css">
-  <link rel="stylesheet" href="/assets/css/site-nav.css">
   <script src="/admin/assets/js/admin.js" defer></script>
 </head>
 <body>
-  <main>
-    <header class="head">
-      <div class="admin-title-cluster">
-        <a class="landing-home-link" href="/" aria-label="메인 랜딩 페이지로" title="메인으로">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10.5 8.5-7.5 8.5 7.5"/><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7"/></svg>
-        </a>
-        <div>
-          <small>PRIVATE · SECURE</small>
-          <h1>/admin</h1>
-        </div>
-      </div>
-      <p>계정 → 활동 → 공유 정답</p>
-    </header>
+  <a class="skip-link" href="#adminMain">본문으로 건너뛰기</a>
 
-    <section id="login" class="card">
-      <form id="adminLogin">
-        <p>관리자 비밀번호</p>
-        <div class="row">
-          <input id="adminPassword" type="password" autocomplete="current-password" aria-label="관리자 비밀번호" required autofocus>
-          <button class="primary" type="submit">LOGIN</button>
-        </div>
-        <div id="loginError" class="error" role="alert"></div>
-      </form>
-    </section>
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">admin</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+        <span class="topbar-link">private · secure</span>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
 
-    <section id="panel" class="hidden">
-      <div id="stats" class="stats"></div>
+  <div class="container-wide ad-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="관리 메뉴">
+        <nav class="sidebar-group" aria-label="섹션 이동">
+          <p class="sidebar-label">대시보드</p>
+          <a class="sidebar-item" href="#statsSection">개요</a>
+          <a class="sidebar-item" href="#userSection">사용자</a>
+          <a class="sidebar-item" href="#sessionCard">접속 기기</a>
+          <a class="sidebar-item" href="#answerSection">공용 정답</a>
+        </nav>
 
-      <div class="card">
-        <h2>사용자 추가</h2>
-        <form id="addUser" class="row">
-          <input id="newUsername" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
-          <input id="newPassword" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
-          <button class="primary" type="submit">추가</button>
-        </form>
-        <div id="userError" class="error" role="alert"></div>
-      </div>
+        <div class="sidebar-group">
+          <p class="sidebar-label">범위</p>
+          <p class="ad-side-note">세션은 최근 90일, IP 통계는 최근 30일 기준입니다. 관리자 세션은 탭을 닫으면 사라집니다.</p>
+        </div>
+      </aside>
 
-      <div class="card">
-        <h2>사용자 및 접속 통계</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>아이디</th><th>생성</th><th>최근 로그인</th><th>마지막 활동</th><th>활성 기기</th><th>최근 IP</th><th>로그인</th><th>영단어 이벤트</th><th>사문 이벤트</th><th></th></tr>
-            </thead>
-            <tbody id="users"></tbody>
-          </table>
-        </div>
-      </div>
+      <main id="adminMain" class="app-main" tabindex="-1">
+        <section id="login" class="ad-login">
+          <form id="adminLogin" class="card card-xl ad-login-card">
+            <div>
+              <span class="kicker">restricted</span>
+              <h1 class="title-2">관리자 인증</h1>
+              <p class="text-secondary ad-login-sub">계정 → 활동 → 공유 정답</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="adminPassword">관리자 비밀번호</label>
+              <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required autofocus>
+            </div>
+            <button class="btn btn-primary" type="submit">로그인</button>
+            <p id="loginError" class="field-error" role="alert"></p>
+          </form>
+        </section>
 
-      <div id="sessionCard" class="card">
-        <div class="card-head">
-          <div>
-            <h2>접속 기기 및 IP</h2>
-            <p>최근 90일 세션의 로그인 IP, 기기·운영체제·브라우저와 마지막 활동 시각입니다.</p>
-          </div>
-          <label class="session-filter">
-            <span>사용자</span>
-            <select id="sessionUserFilter" aria-label="접속 기록 사용자 필터">
-              <option value="all">전체 사용자</option>
-            </select>
-          </label>
-        </div>
-        <div class="session-summary"><span id="sessionCount">0개 세션</span><small>기존 로그인은 IP 해시만 남아 있을 수 있으며, 정확한 IP는 이번 배포 이후 요청부터 기록됩니다.</small></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>상태</th><th>아이디</th><th>기기</th><th>브라우저</th><th>IP</th><th>로그인</th><th>마지막 활동</th><th>만료</th></tr>
-            </thead>
-            <tbody id="sessions"></tbody>
-          </table>
-        </div>
-      </div>
+        <section id="panel" class="ad-panel hidden">
+          <header class="view-head">
+            <div>
+              <span class="kicker">operations</span>
+              <h1 class="title-1">운영 대시보드</h1>
+              <p class="text-secondary">계정, 접속 기기, 공용 정답을 한 화면에서 관리합니다.</p>
+            </div>
+          </header>
 
-      <details class="card answer-fold">
-        <summary>공용으로 인정된 답안 <span>화살표를 눌러 펼치기</span></summary>
-        <div class="answer-content">
-          <p>사용자가 직접 정답으로 추가한 표현입니다. 이후 모든 계정의 채점에 적용됩니다.</p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>과목</th><th>영단어·문제</th><th>사용자</th><th>기본 단어 뜻</th><th>허용한 뜻</th><th>시각</th></tr>
-              </thead>
-              <tbody id="answers"></tbody>
-            </table>
-          </div>
-        </div>
-      </details>
-    </section>
-  </main>
+          <section id="statsSection" aria-label="전체 통계">
+            <div id="stats" class="ad-stats"></div>
+          </section>
+
+          <section id="userSection" class="ad-section" aria-labelledby="userSectionTitle">
+            <div class="view-head">
+              <div>
+                <h2 class="title-2" id="userSectionTitle">사용자</h2>
+                <p class="text-secondary">계정 생성과 활동 집계입니다.</p>
+              </div>
+            </div>
+
+            <form id="addUser" class="toolbar" aria-label="사용자 추가">
+              <div class="toolbar-group ad-add-fields">
+                <input id="newUsername" class="field-input" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
+                <input id="newPassword" class="field-input" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
+              </div>
+              <div class="toolbar-spacer"></div>
+              <button class="btn btn-primary btn-sm" type="submit">사용자 추가</button>
+            </form>
+            <p id="userError" class="field-error" role="alert"></p>
+
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="ad-caption">등록된 계정과 앱별 학습 이벤트</caption>
+                <thead>
+                  <tr><th scope="col">아이디</th><th scope="col">생성</th><th scope="col">최근 로그인</th><th scope="col">마지막 활동</th><th scope="col">활성 기기</th><th scope="col">최근 IP</th><th scope="col">로그인</th><th scope="col">영단어</th><th scope="col">사문</th><th scope="col"><span class="ad-sr">관리</span></th></tr>
+                </thead>
+                <tbody id="users"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="sessionCard" class="ad-section" aria-labelledby="sessionSectionTitle">
+            <div class="view-head">
+              <div>
+                <h2 class="title-2" id="sessionSectionTitle">접속 기기 및 IP</h2>
+                <p class="text-secondary">최근 90일 세션의 로그인 IP, 기기·운영체제·브라우저와 마지막 활동 시각입니다.</p>
+              </div>
+              <div class="toolbar-group">
+                <label class="field-label" for="sessionUserFilter">사용자</label>
+                <select id="sessionUserFilter" class="field-input">
+                  <option value="all">전체 사용자</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <span id="sessionCount" class="badge badge-accent">0개 세션</span>
+              <p class="ad-note">기존 로그인은 IP 해시만 남아 있을 수 있으며, 정확한 IP는 이번 배포 이후 요청부터 기록됩니다.</p>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="ad-caption">로그인 세션 상세</caption>
+                <thead>
+                  <tr><th scope="col">상태</th><th scope="col">아이디</th><th scope="col">기기</th><th scope="col">브라우저</th><th scope="col">IP</th><th scope="col">로그인</th><th scope="col">마지막 활동</th><th scope="col">만료</th></tr>
+                </thead>
+                <tbody id="sessions"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="answerSection" class="ad-section" aria-labelledby="answerSectionTitle">
+            <details class="card ad-fold">
+              <summary>
+                <span class="ad-fold-title" id="answerSectionTitle">공용으로 인정된 답안</span>
+                <span class="text-tertiary">펼쳐서 전체 보기</span>
+              </summary>
+              <div class="ad-fold-body">
+                <p class="text-secondary">사용자가 직접 정답으로 추가한 표현입니다. 이후 모든 계정의 채점에 적용됩니다.</p>
+                <div class="table-wrap">
+                  <table class="table">
+                    <caption class="ad-caption">공용 정답 승인 이력</caption>
+                    <thead>
+                      <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
+                    </thead>
+                    <tbody id="answers"></tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
 </body>
 </html>
