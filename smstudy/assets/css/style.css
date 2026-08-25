@@ -107,34 +107,103 @@
 
 .sm-toc { gap: var(--space-4); }
 
-.sm-note-body { display: grid; gap: var(--space-5); }
+.sm-note-body { display: grid; gap: var(--space-5); word-break: keep-all; overflow-wrap: break-word; }
 .sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
 
-.sm-keypoints { display: grid; gap: var(--space-3); }
+/* 헤드라인은 30자 이하 명사구 전용이다 (DESIGN.md §2). 문장은 아래 .sm-summary가 본문 크기로 받는다. */
+.sm-headline {
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+  font-weight: 700;
+  margin-top: var(--space-2);
+}
+.sm-hero-head { display: grid; justify-items: start; }
+
+.sm-summary {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--accent);
+}
+.sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
+
+.sm-keypoints {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
 .sm-keypoint { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.sm-keypoint > span {
+.sm-keypoint-icon {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: var(--fs-micro);
-  font-weight: 700;
 }
 .sm-keypoint strong { display: block; font-size: var(--fs-caption); }
 .sm-keypoint p { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
-.sm-exam-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); }
-.sm-exam-stats .stat-value { font-size: var(--fs-title-3); }
-.sm-insight {
-  padding: var(--space-4);
+/* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
+.sm-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sm-keypoint-icon .sm-icon { width: 15px; height: 15px; }
+
+/* 대형 숫자 타일 대신 사실 나열로 낸다 — 장식 프리미티브를 뷰당 2종 이하로 유지한다 (DESIGN.md §4). */
+.sm-facts-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-block: 1px solid var(--line);
+}
+.sm-facts-inline > div { display: grid; gap: 2px; }
+.sm-facts-inline dt { font-size: var(--fs-micro); color: var(--text-3); }
+.sm-facts-inline dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.sm-gauge { display: grid; gap: var(--space-2); }
+.sm-gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.sm-gauge-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.sm-gauge-mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.sm-callouts { display: grid; gap: var(--space-3); }
+.sm-callout {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-s);
-  background: var(--accent-soft);
+  background: var(--surface-2);
   font-size: var(--fs-caption);
 }
+/* 함정 칸은 색을 바꾸지 않고 아이콘과 라벨로 구분한다 — 강조색은 뷰당 1색이다 (DESIGN.md §3). */
+.sm-callout.is-trap { border-left-color: var(--line-strong); }
+.sm-callout .kicker { display: flex; align-items: center; gap: var(--space-2); }
 
 .sm-freq { display: grid; gap: var(--space-4); }
 .sm-freq-item { display: grid; gap: var(--space-2); }
@@ -166,7 +235,10 @@
 
 .sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
 .sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
-.sm-deep p { font-size: var(--fs-caption); color: var(--text-2); }
+.sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
+.sm-deep h4 span { color: var(--text); }
+.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
+.sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-recall { display: grid; gap: var(--space-2); }
 .sm-recall-item { border-radius: var(--radius-m); background: var(--surface-2); overflow: hidden; }
@@ -408,6 +480,128 @@
   color: var(--text-3);
 }
 
+/* ---- 개념 다이어그램 (diagram.js) ----
+   색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
+   SVG는 컨테이너가 좁아지면 글자가 같이 줄어 읽히지 않으므로, 임계 아래에서는
+   같은 데이터의 목록으로 전환한다. 전환은 hidden 속성이 아니라 CSS가 한다.
+   ---------------------------------------------------------------------- */
+
+.sm-diagrams {
+  display: grid;
+  gap: var(--space-5);
+  container-type: inline-size;
+  container-name: smdiagram;
+}
+.sm-diagram {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface-2);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.sm-diagram-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.sm-diagram-head strong { font-size: var(--fs-body); font-weight: 600; }
+.sm-diagram-note { font-size: var(--fs-caption); color: var(--text-2); line-height: 1.55; }
+
+.sm-diagram-canvas { display: block; animation: sm-diagram-in var(--dur-med) var(--ease-out) both; }
+.sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
+
+@keyframes sm-diagram-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.sm-d-box { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.sm-d-badge { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+.sm-d-num { fill: var(--accent); font-weight: 700; }
+.sm-d-label { fill: var(--text); font-weight: 600; }
+.sm-d-item { fill: var(--text-2); }
+.sm-d-mute { fill: var(--text-3); }
+.sm-d-chip { fill: var(--accent-soft); }
+.sm-d-dot { fill: var(--accent); }
+.sm-d-connector { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.sm-d-arrow { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sm-d-beam { fill: none; stroke: var(--text-3); stroke-width: 4; stroke-linecap: round; }
+.sm-d-fulcrum { fill: var(--surface-3); stroke: var(--line-strong); stroke-width: 1; }
+.sm-d-guide { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 6; }
+.sm-d-axis { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+/* 벤은 한 색의 겹침 농도로 교집합을 보인다 — 원마다 색을 달리하면 다색 규칙에 걸린다. */
+.sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
+.sm-d-center-circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.sm-d-center { fill: var(--text); font-weight: 700; }
+.sm-d-layer-1 { fill: var(--accent-soft); }
+.sm-d-icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 넓은 화면에서 목록은 화면에서만 감춘다(접근성 트리에는 남긴다). */
+.sm-diagram-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.sm-diagram-node { display: grid; gap: var(--space-1); padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--line); }
+.sm-diagram-node-head { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-caption); color: var(--accent); }
+.sm-diagram-node-head strong { color: var(--text); }
+.sm-diagram-node-items { display: grid; gap: 2px; padding-left: 1.6em; list-style: disc; }
+.sm-diagram-node-items li { font-size: var(--fs-micro); color: var(--text-2); }
+ol.sm-diagram-list { counter-reset: sm-diagram-step; }
+ol.sm-diagram-list .sm-diagram-node-head::before {
+  counter-increment: sm-diagram-step;
+  content: counter(sm-diagram-step);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+@container smdiagram (max-width: 680px) {
+  .sm-diagram-canvas { display: none; }
+  .sm-diagram-list {
+    position: static;
+    display: grid;
+    gap: var(--space-2);
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+
+/* 컨테이너 쿼리를 못 쓰는 환경을 위한 뷰포트 기준 안전망 (같은 임계). */
+@media (max-width: 700px) {
+  .sm-diagram-canvas { display: none; }
+  .sm-diagram-list {
+    position: static;
+    display: grid;
+    gap: var(--space-2);
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-diagram-canvas { animation: none; }
+}
+
+
 /* ---- 반응형 ---- */
 
 @media (max-width: 1024px) {
@@ -484,6 +678,10 @@
 
   .sm-choice.is-correct { background: #187341; color: #fff; }
   .sm-choice.is-wrong { background: #a3231b; color: #fff; }
+
+  .sm-diagram-canvas { display: block; animation: none; }
+  .sm-diagram-list { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sm-diagram { break-inside: avoid; }
 
   .sm-matrix-wrap { overflow: visible; max-height: none; }
   .sm-matrix { font-size: 9px; }

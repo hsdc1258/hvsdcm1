@@ -168,19 +168,26 @@
 
     const parts = [];
     circles.forEach((circle, index) => {
-      parts.push(`<circle cx="${circle.cx}" cy="${circle.cy}" r="${circle.r}" class="sm-d-venn sm-d-venn-${index + 1}"/>`);
+      parts.push(`<circle cx="${circle.cx}" cy="${circle.cy}" r="${circle.r}" class="sm-d-venn"/>`);
     });
     parts.push(svgText(380, three ? 262 : 206, '겹침', 12, 'sm-d-mute', 'middle'));
+
+    // 원마다 색을 달리하지 않으므로(강조색 1색), 원과 범례는 같은 번호로 짝지어 읽는다.
     nodes.forEach((node, index) => {
-      parts.push(svgText(labelSpots[index].x, labelSpots[index].y, node.label, 15, 'sm-d-label', 'middle'));
+      const spot = labelSpots[index];
+      const half = textWidth(node.label, 15) / 2;
+      parts.push(`<circle cx="${round(spot.x - half - 13)}" cy="${round(spot.y - 5)}" r="9" class="sm-d-badge"/>`);
+      parts.push(svgText(spot.x - half - 13, spot.y - 1, String(index + 1), 11, 'sm-d-num', 'middle'));
+      parts.push(svgText(spot.x, spot.y, node.label, 15, 'sm-d-label', 'middle'));
     });
 
     nodes.forEach((node, index) => {
       const x = columnStart + index * columnGap;
-      parts.push(`<circle cx="${x + 8}" cy="${legendTop + 8}" r="7" class="sm-d-venn sm-d-venn-${index + 1}"/>`);
-      parts.push(svgText(x + 24, legendTop + 13, node.label, 13.5, 'sm-d-label'));
+      parts.push(`<circle cx="${x + 9}" cy="${legendTop + 8}" r="9" class="sm-d-badge"/>`);
+      parts.push(svgText(x + 9, legendTop + 12, String(index + 1), 11, 'sm-d-num', 'middle'));
+      parts.push(svgText(x + 26, legendTop + 13, node.label, 13.5, 'sm-d-label'));
       (node.items || []).forEach((item, itemIndex) => {
-        parts.push(svgText(x + 24, legendTop + 36 + itemIndex * 22, item, 11.5, 'sm-d-item'));
+        parts.push(svgText(x + 26, legendTop + 36 + itemIndex * 22, item, 11.5, 'sm-d-item'));
       });
     });
 
@@ -336,6 +343,26 @@
     return diagram.nodes.map((node) => node.label);
   }
 
+  // 조사 선택 — 데이터의 라벨을 문장에 넣을 때 받침 유무로 이/가, 과/와, 을/를을 고른다.
+  // 이 처리가 없으면 '반문화이', '공공 부조과' 같은 문장이 캡션에 그대로 나간다.
+  function hasFinalConsonant(word) {
+    const text = String(word).trim();
+    const code = text.charCodeAt(text.length - 1);
+    if (Number.isNaN(code) || code < 0xac00 || code > 0xd7a3) return false;
+    return (code - 0xac00) % 28 !== 0;
+  }
+
+  function withParticle(word, afterConsonant, afterVowel) {
+    return `${word}${hasFinalConsonant(word) ? afterConsonant : afterVowel}`;
+  }
+
+  // 둘이면 '과/와'로, 셋 이상이면 쉼표로 잇는다 ('A과 B과 C'는 한국어 문장이 아니다).
+  function joinWith(words) {
+    if (words.length <= 1) return words[0] || '';
+    if (words.length === 2) return `${withParticle(words[0], '과', '와')} ${words[1]}`;
+    return words.join(', ');
+  }
+
   function narrative(diagram) {
     const labels = labelsOf(diagram);
     const first = labels[0];
@@ -344,17 +371,17 @@
       case 'flow':
         return `${first}부터 ${last}까지 ${labels.length}단계를 위에서 아래로 차례로 판정한다.`;
       case 'scale':
-        return `${labels.join('과 ')}이 하나의 축에서 정반대에 놓인다.`;
+        return `${withParticle(joinWith(labels), '이', '가')} 하나의 축에서 정반대에 놓인다.`;
       case 'matrix2x2':
         return `두 기준이 교차해 ${labels.join(', ')}의 네 칸이 만들어진다.`;
       case 'venn':
-        return `${labels.join('과 ')}이 서로 겹칠 수 있다는 점을 원의 교집합으로 보인다.`;
+        return `${withParticle(joinWith(labels), '이', '가')} 서로 겹칠 수 있다는 점을 원의 교집합으로 보인다.`;
       case 'timeline':
         return `${first}에서 ${last}까지 ${labels.length}단계가 시간 순서로 이어진다.`;
       case 'pyramid':
-        return `${first}이 ${last}에 포함되는 ${labels.length}층 위계다.`;
+        return `위의 ${first}에서 아래의 ${last}까지 ${labels.length}층으로 쌓인 구조다.`;
       case 'radial':
-        return `${diagram.center || diagram.title}을 중심으로 ${labels.length}갈래가 대등하게 뻗는다.`;
+        return `${withParticle(diagram.center || diagram.title, '을', '를')} 중심으로 ${labels.length}갈래가 대등하게 뻗는다.`;
       default:
         return `${labels.join(', ')}의 관계를 보인다.`;
     }
