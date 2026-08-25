@@ -63,3 +63,158 @@
 고치는 법: `assets/og.png`를 소문자 `hvsdcm` 워드마크로 재생성하고,
 `validateBrandName()`에 "og.png의 mtime/해시가 사이클 #2 이후인지" 또는 최소한
 `assets/og.png`가 갱신됐다는 사실을 고정하는 체크를 한 줄 추가해 회귀를 막는다.
+
+---
+
+## 2. major
+
+### M-1. 미로그인 상태에서도 학습 앱 링크가 상단바·푸터에 항상 노출 — §3.4 이탈
+
+- `index.html:33-34` — `<a class="topbar-link" href="/WordMaster/">` / `href="/smstudy/"`
+- `index.html:185-186` — `.footer-nav`의 같은 두 링크
+- `assets/css/home.css:33-37` — 로그인 상태에 반응하는 규칙은 `body.logged .topbar-login { display: none; }` **하나뿐**이고,
+  `.topbar-link`·`.footer-nav a`에는 상태 규칙이 없다.
+
+브라우저 실측(미로그인, 1280px): 두 `.topbar-link` 모두 `display: block`. 641px 미만에서는
+`@media (max-width: 640px)`가 `.topbar-link`를 숨기므로 **데스크톱 전용 문제**다. 푸터 링크는 폭과 무관하게 항상 보인다.
+
+plan.md §3.4 랜딩 체크리스트는 "**로그인 상태에 따른 학습 링크 노출·숨김**"을 보존 대상으로 명시한다.
+히어로 CTA(`.account .account-app`)와 드로어(`.drawer.logged .drawer-study`)는 이 규칙을 제대로 지키는데,
+새로 추가된 상단바·푸터 진입점만 이 규칙 밖에 있다. 기능이 깨지지는 않는다 —
+로그아웃 상태로 `/WordMaster/`에 가면 `account.js`가 `/?login=1&next=…`로 돌려보낸다.
+문제는 **완료 조건 C-4가 요구하는 "체크리스트 전 항목 동작"이 부분 충족**이고,
+이것이 의도적 설계 변경이라면 plan.md §7에 판단 기록(D7)이 남았어야 하는데 없다는 점이다.
+
+고치는 법: `home.css`에 `body:not(.logged) .topbar-link, body:not(.logged) .footer-nav { display: none; }`을 추가하거나,
+"로그아웃 상태에서도 앱 존재는 노출하되 진입 시 로그인으로 유도한다"는 결정을 plan.md에 D7로 기록한다(둘 중 하나는 필요).
+
+### M-2. `.sidebar-label`이 "비활성 전용" 토큰 `--text-4`를 살아있는 라벨에 사용 — 실측 3.56:1, AA 미달
+
+- `assets/css/system.css:573-580` — `.sidebar-label { … color: var(--text-4); }`
+- `index.html:48` — `<p class="sidebar-label">학습</p>` (드로어 섹션 라벨)
+
+`system.css:11` 주석은 `--text-4 #6e6e73`을 "**비활성 전용**"이라고 스스로 규정한다.
+그런데 같은 파일이 이 토큰을 비활성 상태가 아닌 **정상 섹션 라벨**에 쓰고 있다.
+드로어 배경은 `home.css:69` `background: var(--surface)`이고, 브라우저에서 계산 색을 확인했다
+(`rgb(110,110,115)` on `rgb(22,22,23)`). 직접 계산한 대비는 **3.56:1** — WCAG AA 본문 기준 4.5:1 미달이며,
+`--fs-micro`(12px) 굵은 글씨라 대형 텍스트 예외(3:1)에도 기대기 어렵다.
+주석의 대비표는 `--text-4`를 `--bg` 조합(4.14:1)으로만 적어 두어 **실제 사용 조합(surface 위 3.56:1)이 문서화되지 않았다.**
+
+고치는 법: `.sidebar-label`의 색을 `--text-3`(surface 위 4.99:1)로 올리고, 주석 대비표에 surface 조합 행을 추가한다.
+
+### M-3. `.badge-red` 4.24:1 / `.badge-purple` 4.02:1 — 반투명 배경 합성 후 AA 미달
+
+- `assets/css/system.css:491` `.badge-red { background: var(--red-soft); color: var(--red); }`
+- `assets/css/system.css:493` `.badge-purple { background: var(--purple-soft); color: var(--purple); }`
+- 사용처: `index.html:93` "오답만 재시험"(badge-red), `index.html:117` "개념 노트"(badge-purple)
+
+`--red-soft`/`--purple-soft`는 알파 `.14`의 반투명이므로 실효 배경은 `.feature`의 밝은 끝인
+`--surface-2 #1d1d1f`와 합성된다. 합성 후 직접 계산:
+
+| 뱃지 | 전경 | 실효 배경 | 대비 | 판정 |
+|---|---|---|---|---|
+| `.badge-red` | `#ff453a` | ≈`#3d2323` | **4.24:1** | AA 미달 |
+| `.badge-purple` | `#bf5af2` | ≈`#342638` | **4.02:1** | AA 미달 |
+| `.badge-green` | `#30d158` | ≈`#203627` | 6.41:1 | 통과 |
+| `.badge-orange` | `#ff9f0a` | ≈`#3d2f1c` | 6.30:1 | 통과 |
+
+같은 계열 프리미티브 4개 중 2개만 통과한다 — 토큰을 정할 때 "이 토큰을 참조하는 다른 모든 규칙의 대비도
+함께 점검한다"는 LESSONS 규칙(plan.md §5 인용)이 `-soft` 배경 합성 케이스에서 이행되지 않았다.
+
+고치는 법: `--red-soft`/`--purple-soft`의 알파를 `.14` → `.22` 수준으로 올리거나,
+뱃지 전경색을 각 색의 밝은 변형(`#ff6961`, `#d08cf5` 등)으로 분리한다. 4종을 한 번에 재계산할 것.
+
+### M-4. 랜딩 본문 단락이 `.feature` 배경에서 6.54:1 — plan §5의 "본문 7:1" 목표 미달
+
+- `assets/css/home.css:172-179` — `.feature { background: linear-gradient(160deg, var(--surface-2), var(--bg-alt) 70%); }`
+- `assets/css/home.css:187` / `index.html:82,106` — `.feature-sub`는 `class="feature-sub text-secondary"`,
+  즉 실제 제품 설명 **본문 단락**이 `--text-2`로 그려진다.
+
+`--text-2 #a1a1a6` on `--surface-2 #1d1d1f` = **6.54:1**(직접 계산). plan.md §5는
+"본문 텍스트는 배경 대비 **7:1 이상**을 목표로 한다"고 못박았다. 히어로(`--bg` 위 8.16:1)와
+sync 카드(`--surface` 위 7.03:1)는 목표를 만족하는데, 그라디언트의 밝은 끝만 목표에서 빠진다.
+system.css 상단 대비표에 **`--surface-2` 조합 행이 아예 없어서** 이 케이스가 검토된 흔적도 없다.
+
+고치는 법: `.feature` 그라디언트의 시작점을 `--surface-2` → `--surface`로 낮추거나
+`.feature-sub`를 `--text`로 올린다. 그리고 대비표에 `--surface-2` 행을 추가해 다음 사이클에서 재발을 막는다.
+
+### M-5. `.hero-title`의 `-webkit-text-fill-color: transparent` — 고대비(forced-colors) 모드에서 h1이 사라진다
+
+`assets/css/home.css:131-138`
+
+```css
+.hero-title {
+  background: linear-gradient(180deg, var(--text) 62%, var(--text-2));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+```
+
+브라우저 실측: `-webkit-text-fill-color`의 계산값이 `rgba(0,0,0,0)`이다. 즉 글자 픽셀은
+**오직 부모의 background-image로만** 그려진다. Windows 고대비/`forced-colors: active`에서는 UA가
+대부분의 요소에 `background-image: none`을 강제하는데, `-webkit-text-fill-color`는 강제 색상 목록에
+포함되지 않는다. 결과적으로 배경이 사라지고 글자는 투명한 채로 남아 **페이지의 h1("Make it stick.",
+로그인 후에는 사용자명/Admin 링크)이 통째로 보이지 않게 된다.** 로그인 후 Admin 진입 링크까지
+이 h1 안에 있으므로(`home.js:52-62`) 영향 범위가 장식에 그치지 않는다.
+
+고치는 법:
+```css
+@media (forced-colors: active) {
+  .hero-title { background: none; -webkit-text-fill-color: currentColor; color: CanvasText; }
+}
+```
+`.hero-title a.welcome-user`(home.css:143)는 이미 fill을 되돌리는 선례가 있으니 같은 방식이면 된다.
+
+### M-6. validate.mjs의 드로어 검사가 실효성 없음 — 두 조건이 서로 다른 요소를 봐도 통과한다
+
+`scripts/validate.mjs:81`
+
+```js
+check(homeHtml.includes('id="drawerStudy"') && homeHtml.includes('aria-hidden="true"'),
+      'home: authenticated STUDY drawer with default hidden state is missing');
+```
+
+메시지는 "drawerStudy가 기본 숨김 상태인지"를 검사한다고 주장하지만, 두 `includes`는
+**같은 요소를 검사하지 않는다.** `index.html`에는 `#shade`(28행)와 메뉴 버튼 내부 `<span aria-hidden="true">`(31행)에도
+`aria-hidden="true"`가 있으므로, `#drawerStudy`에서 `aria-hidden="true"`를 지워도 이 검사는 그대로 통과한다.
+plan.md D2가 "검사를 약화하지 않는다"고 했는데, 겉보기엔 강화된 검사가 실제로는 기존 단순 존재 검사와 같은 강도다.
+
+같은 패턴이 `scripts/validate.mjs:87`에도 있다 —
+`homeHtml.includes('aria-expanded') && homeHtml.includes('aria-controls="drawer"')`도 요소가 분리돼 있다.
+
+고치는 법: 단일 정규식으로 묶는다 — `/id="drawerStudy"[^>]*aria-hidden="true"/u`,
+`/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u`.
+(같은 파일 82행의 `loginModal` 검사는 이미 이 방식으로 올바르게 작성돼 있다 — 기준은 이미 파일 안에 있다.)
+
+### M-7. C-3 게이트의 커버리지 구멍 — 색 토큰 25개 중 9개만 지킨다
+
+`scripts/validate.mjs:363-380`
+
+```js
+const colorTokens = ['--bg','--surface','--surface-2','--text','--text-2','--line','--accent','--green','--red'];
+...
+check(!/:root\s*\{/u.test(source), `${name}: … (no :root block)`);
+for (const token of colorTokens) { check(!new RegExp(`(^|[;{\s])${token}\s*:`,'u').test(screenOnly), …); }
+```
+
+C-3의 문장은 "`system.css` **외의 CSS 파일에 색 토큰을 정의하는 `:root` 블록이 0개**"이고
+D5의 취지는 "디자인 토큰 **단일 원본**"이다. 그런데 실제 게이트는 두 겹 다 헐겁다:
+
+1. **토큰 목록이 9개뿐이다.** `system.css`의 `:root`가 정의하는 색 토큰은 `--bg-alt`, `--surface-3`,
+   `--line-strong`, `--line-faint`, `--text-3`, `--text-4`, `--accent-strong`, `--accent-soft`,
+   `--green-soft`, `--red-soft`, `--orange`, `--orange-soft`, `--yellow`, `--purple`, `--purple-soft`, `--teal`
+   등 16개가 더 있다. 이들은 어느 CSS 파일에서든 자유롭게 재정의해도 검사가 통과한다.
+   하필 M-2·M-3에서 문제가 된 `--text-4`, `--purple-soft`, `--red-soft`가 전부 이 미보호 구간에 있다.
+2. **`:root`만 금지하고 셀렉터는 안 본다.** 9개 목록 토큰조차 `@media print` 안에서는 검사 대상에서 빠지고
+   (`stripPrint`, 364행), 목록 밖 토큰은 `html {}`·`body {}`·임의 셀렉터 어디서든 재정의 가능하다.
+   실제로 `smstudy/assets/css/style.css:431`에는 "`:root`가 아니라 `html`에 재정의해
+   토큰 단일 원본 규칙(C-3)을 유지한다"는 주석이 달려 있다 — 인쇄용 라이트 팔레트라 plan.md §2가 허용한
+   정당한 케이스지만, **게이트가 셀렉터 이름으로 판정한다는 사실**이 주석에 그대로 드러나 있다.
+   같은 우회로가 스크린 컨텍스트에도 열려 있다.
+
+즉 C-3은 "형식상 통과"이고, D5의 실질(값이 다시 흩어지지 않음)은 **9개 토큰 범위에서만** 보장된다.
+
+고치는 법: `colorTokens`를 하드코딩하는 대신 `system.css`의 `:root`에서 `--*: <색값>` 선언을 파싱해
+토큰 목록을 **자동 생성**하고, 검사 대상을 `:root`가 아니라 "system.css 밖에서의 모든 커스텀 프로퍼티 정의"로 바꾼다.
+`@media print` 예외는 파일·블록 단위 허용 목록으로 명시한다.
