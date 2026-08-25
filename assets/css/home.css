@@ -183,7 +183,7 @@ body.logged .topbar-login { display: none; }
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: clamp(28px, 5vw, 72px);
-  /* 시작점 --surface: .feature-sub(--text-2 본문)가 밝은 끝에서도 7.03:1 ≥ 7:1 (plan §5, M-4) */
+  /* 시작점을 --surface로 — .feature-sub(--text-2 본문)가 밝은 끝에서도 7.03:1 ≥ 7:1 (plan §5, M-4) */
   background: linear-gradient(160deg, var(--surface), var(--bg-alt) 70%);
   overflow: hidden;
 }

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -447,11 +448,30 @@ function validateGlobalsAndOrder() {
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-key="samun2027.study.v1"'), 'smstudy: study DB key is missing');
 }
 
+function validateOgImageLock() {
+  // B-1 재발 방지 — og.png 픽셀 속 글자는 텍스트 스캔(validateBrandName)이 볼 수 없다.
+  // 그래서 "랜딩 워드마크 문자열 <-> assets/og.png 바이트 해시"를 잠금쌍으로 고정한다.
+  // 브랜드 표기를 바꾸는 커밋은 (1) 아래 brand가 어긋나 즉시 실패하고,
+  // (2) 잠금을 갱신하려면 og.png를 실제로 재생성해 sha256을 다시 계산해야 한다.
+  const OG_LOCK = {
+    brand: 'hvsdcm',
+    sha256: '4d702de6f212f303c88a51d99eb63344ed0503bce69bb255ddb490fe61dcf6ad',
+  };
+  const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  check(new RegExp(`class="brand"[^>]*>${OG_LOCK.brand}<`, 'u').test(homeHtml),
+    'og lock: index.html wordmark != OG_LOCK.brand — regenerate assets/og.png with the new brand, then update OG_LOCK (brand + sha256) together');
+  check(/property="og:image"[^>]*assets\/og\.png/u.test(homeHtml) && /name="twitter:image"[^>]*assets\/og\.png/u.test(homeHtml),
+    'og lock: index.html og:image/twitter:image must reference assets/og.png');
+  check(createHash('sha256').update(readFileSync(path.join(ROOT, 'assets/og.png'))).digest('hex') === OG_LOCK.sha256,
+    'og lock: assets/og.png bytes do not match OG_LOCK.sha256 — regenerate the image and update the lock in one commit');
+}
+
 validateJavaScriptSyntax();
 validateHtmlAssets();
 validateUiContracts();
 validateDesignTokens();
 validateBrandName();
+validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
 validateWordMasterData();
