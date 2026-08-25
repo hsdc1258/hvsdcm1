@@ -90,9 +90,9 @@
   let toastTimer;
   function showToast(msg) {
     toast.textContent = msg;
-    toast.classList.add('show');
+    toast.classList.add('open');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove('show'), 1900);
+    toastTimer = setTimeout(() => toast.classList.remove('open'), 1900);
   }
   function compareQuestions(left, right) {
     return QUESTION_ORDER.get(left.id) - QUESTION_ORDER.get(right.id);
@@ -249,98 +249,125 @@
     db.qStats[q.id] = s;
     saveDb();
   }
+  function setNav(view) {
+    const active = view === 'stats' ? 'stats' : 'home';
+    document.querySelectorAll('.sidebar-item[data-nav]').forEach((item) => {
+      const on = item.dataset.nav === active;
+      item.classList.toggle('is-active', on);
+      if (on) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    });
+  }
+
   function renderOverview(summary) {
     return `
-      <div class="overview">
-        <div class="stat"><span>개념 완료</span><strong>${summary.done}/${SUBUNITS.length}</strong></div>
-        <div class="stat"><span>누적 정답률</span><strong>${summary.accuracy}%</strong></div>
-        <div class="stat"><span>오답 노트</span><strong>${summary.wrong}</strong></div>
+      <div class="sm-metrics">
+        <div class="stat"><span class="stat-value">${summary.done}/${SUBUNITS.length}</span><span class="stat-label">개념 완료</span></div>
+        <div class="stat"><span class="stat-value">${summary.accuracy}%</span><span class="stat-label">누적 정답률</span></div>
+        <div class="stat"><span class="stat-value">${summary.wrong}</span><span class="stat-label">오답 노트</span></div>
       </div>`;
   }
 
   function renderStartPanel(summary) {
     return `
-      <div class="card start-panel">
-        <h2>학습 시작</h2>
-        <p class="muted">범위 선택 → 기출 풀이</p>
-        ${renderOverview(summary)}
-        <div class="setup-row">
+      <div class="sm-panel">
+        <section class="card sm-stack" aria-labelledby="startTitle">
+          <h2 class="title-3" id="startTitle">학습 시작</h2>
+          ${renderOverview(summary)}
+
+          <div class="sm-options">
+            <div class="field">
+              <label class="field-label" for="qCount">문제 수</label>
+              <select id="qCount" class="field-input">
+                <option value="10" ${state.count === '10' ? 'selected' : ''}>10문제</option>
+                <option value="20" ${state.count === '20' ? 'selected' : ''}>20문제</option>
+                <option value="40" ${state.count === '40' ? 'selected' : ''}>40문제</option>
+                <option value="all" ${state.count === 'all' ? 'selected' : ''}>선택 범위 전체</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="qOrder">출제 순서</label>
+              <select id="qOrder" class="field-input">${renderSortOptions(state.order)}</select>
+            </div>
+          </div>
+          <p class="sm-note">정답률은 통사랑 문항별 집계, 최근 순은 내 풀이 기록을 기준으로 합니다.</p>
+
+          <button id="startSelected" class="btn btn-primary sm-full" type="button" ${state.selected.size ? '' : 'disabled'}>
+            선택 범위 퀴즈 (${state.selected.size}개 중단원)
+          </button>
+          <div class="sm-actions">
+            <button id="selectAll" class="btn btn-secondary btn-sm" type="button">전체 선택</button>
+            <button id="clearAll" class="btn btn-secondary btn-sm" type="button">선택 해제</button>
+          </div>
+        </section>
+
+        <section class="card sm-stack" aria-labelledby="weakTitle">
           <div>
-            <label for="qCount">문제 수</label>
-            <select id="qCount">
-              <option value="10" ${state.count === '10' ? 'selected' : ''}>10문제</option>
-              <option value="20" ${state.count === '20' ? 'selected' : ''}>20문제</option>
-              <option value="40" ${state.count === '40' ? 'selected' : ''}>40문제</option>
-              <option value="all" ${state.count === 'all' ? 'selected' : ''}>선택 범위 전체</option>
-            </select>
+            <h3 class="title-3" id="weakTitle">낮은 정답률 기출</h3>
+            <p class="sm-note">정답률 65% 이하</p>
           </div>
+          <button id="weakQuiz" class="btn btn-secondary sm-full" type="button">낮은 정답률 기출 풀기</button>
+        </section>
+
+        <section class="card sm-stack" aria-labelledby="wrongTitle">
           <div>
-            <label for="qOrder">출제 순서</label>
-            <select id="qOrder">${renderSortOptions(state.order)}</select>
+            <h3 class="title-3" id="wrongTitle">오답 복습</h3>
+            <p class="sm-note">원문 → 원인 → 재시험</p>
           </div>
-        </div>
-        <p class="sort-note">정답률은 통사랑 문항별 집계, 최근 순은 내 풀이 기록을 기준으로 합니다.</p>
-        <button id="startSelected" class="primary full" ${state.selected.size ? '' : 'disabled'}>
-          선택 범위 퀴즈 (${state.selected.size}개 중단원)
-        </button>
-        <div class="button-row selection-actions">
-          <button id="selectAll" class="ghost">전체 선택</button>
-          <button id="clearAll" class="ghost">선택 해제</button>
-        </div>
-        <div class="review-card">
-          <h3>낮은 정답률 기출</h3>
-          <p>정답률 65% 이하</p>
-          <button id="weakQuiz" class="secondary full">낮은 정답률 기출 풀기</button>
-        </div>
-        <div class="review-card">
-          <h3>오답 복습</h3>
-          <p>원문 → 원인 → 재시험</p>
-          <div class="button-row">
-            <button id="wrongStudy" class="ghost" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
-            <button id="wrongQuiz" class="secondary" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
+          <div class="sm-actions">
+            <button id="wrongStudy" class="btn btn-secondary btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
+            <button id="wrongQuiz" class="btn btn-ghost btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
           </div>
-        </div>
-        <div class="review-card">
-          <h3>누적 복습</h3>
-          <p>완료 범위 20문제</p>
-          <button id="cumulative" class="secondary full" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
-        </div>
+        </section>
+
+        <section class="card sm-stack" aria-labelledby="cumulativeTitle">
+          <div>
+            <h3 class="title-3" id="cumulativeTitle">누적 복습</h3>
+            <p class="sm-note">완료 범위 20문제</p>
+          </div>
+          <button id="cumulative" class="btn btn-secondary sm-full" type="button" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
+        </section>
       </div>`;
   }
 
   function renderHome() {
     state.view = 'home';
     state.session = null;
+    setNav('home');
     app.innerHTML = `
-      <section class="hero">
-        <p class="eyebrow">CONCEPT → KICE → ANALYSIS</p>
-        <h1>개념은 선명하게.<br>문제는 원문으로.</h1>
-        <p>13개 중단원 · 평가원 원문 78문항 · 오답 원인 분석</p>
-        <p class="copyright-note">문항 저작권: 한국교육과정평가원 · 비상업적 개인 학습용 발췌 · 정답률: 통사랑 문항별 집계 기준</p>
-      </section>
-      <section class="grid two">
-        <div class="unit-list">${UNITS.map(renderUnit).join('')}</div>
+      <header class="view-head">
+        <div>
+          <span class="kicker">concept · kice · analysis</span>
+          <h1>단원 목록</h1>
+          <p>범위를 고르면 평가원 원문 그대로 출제됩니다. 13개 중단원 · 78문항.</p>
+        </div>
+        <span class="badge badge-accent">선택 ${state.selected.size}/${SUBUNITS.length}</span>
+      </header>
+
+      <div class="sm-layout">
+        <div class="sm-units">${UNITS.map(renderUnit).join('')}</div>
         <aside>${renderStartPanel(stats())}</aside>
-      </section>`;
+      </div>`;
     bindHome();
+    requestAnimationFrame(() => app.focus({ preventScroll: true }));
   }
 
   function renderSubunit(sub) {
     const progress = subStats(sub.id);
     const completionLabel = db.completed[sub.id] ? '개념 완료' : '미완료';
     return `
-      <div class="subunit-row">
-        <label class="check-target">
-          <input class="check sub-check" type="checkbox" data-id="${sub.id}"
+      <div class="sm-sub">
+        <label class="sm-check">
+          <input class="sub-check" type="checkbox" data-id="${sub.id}"
             aria-label="${esc(sub.title)} 중단원 선택" ${state.selected.has(sub.id) ? 'checked' : ''}>
         </label>
-        <div class="subunit-copy">
+        <div class="sm-sub-copy">
           <strong>${sub.id} · ${esc(sub.title)}</strong>
           <small>${esc(sub.keywords)}${progress.attempts ? ` · 정답률 ${progress.accuracy}%` : ''}</small>
         </div>
-        <div class="sub-actions">
-          <span class="done-dot ${db.completed[sub.id] ? 'on' : ''}" title="${completionLabel}"></span>
-          <button class="ghost compact study-btn" data-id="${sub.id}">개념 학습</button>
+        <div class="sm-sub-actions">
+          <span class="sm-dot ${db.completed[sub.id] ? 'is-on' : ''}" title="${completionLabel}" aria-label="${completionLabel}" role="img"></span>
+          <button class="btn btn-secondary btn-sm study-btn" type="button" data-id="${sub.id}">개념 학습</button>
         </div>
       </div>`;
   }
@@ -350,28 +377,25 @@
     const selectedCount = unit.subs.filter((sub) => state.selected.has(sub.id)).length;
     const allSelected = selectedCount === unit.subs.length;
     return `
-      <article class="unit-card">
-        <div class="unit-head">
-          <div class="unit-heading">
-            <label class="unit-selector">
-              <input class="check unit-check" type="checkbox" data-unit="${unit.id}"
+      <article class="card sm-unit">
+        <div class="sm-unit-head">
+          <div class="sm-unit-copy">
+            <label class="sm-unit-select">
+              <input class="unit-check" type="checkbox" data-unit="${unit.id}"
                 aria-label="${esc(unit.title)} 전체 선택" ${allSelected ? 'checked' : ''}>
-              <span class="unit-index">${unit.id}단원</span>
+              <span class="badge">${unit.id}단원</span>
             </label>
-            <h3>${esc(unit.title)}</h3>
-            <p>${esc(unit.desc)}</p>
+            <h2 class="title-3">${esc(unit.title)}</h2>
+            <p class="sm-note">${esc(unit.desc)}</p>
           </div>
-          <div class="unit-tools">
-            <button class="ghost compact unit-toggle" data-unit="${unit.id}">
-              ${allSelected ? '범위 해제' : '대단원 전체 선택'}
+          <div class="sm-unit-tools">
+            <button class="btn btn-ghost btn-sm unit-toggle" type="button" data-unit="${unit.id}">
+              ${allSelected ? '범위 해제' : '전체 선택'}
             </button>
-            <div class="unit-progress">
-              <strong>${selectedCount}/${unit.subs.length}</strong>
-              <small>범위 선택 · 개념 완료 ${completedCount}/${unit.subs.length}</small>
-            </div>
+            <p class="sm-unit-progress"><strong>${selectedCount}/${unit.subs.length}</strong><small>개념 완료 ${completedCount}/${unit.subs.length}</small></p>
           </div>
         </div>
-        <div class="subunit-list">${unit.subs.map(renderSubunit).join('')}</div>
+        <div class="sm-sub-list">${unit.subs.map(renderSubunit).join('')}</div>
       </article>`;
   }
   function bindHome() {
@@ -417,75 +441,75 @@
     const visual = sub.visual;
     if (!visual) return '';
     const flow = visual.flow.map((step, index) => `
-      <div class="concept-flow-step"><span>${index + 1}</span><strong>${esc(step)}</strong></div>
-      ${index < visual.flow.length - 1 ? '<span class="concept-arrow" aria-hidden="true"></span>' : ''}
+      <li class="sm-flow-step"><span>${index + 1}</span><strong>${esc(step)}</strong></li>
     `).join('');
     const checks = visual.checks.map((check, index) => `
-      <div><span>CHECK ${index + 1}</span><p>${esc(check)}</p></div>
+      <div class="sm-check-item"><span class="kicker">check ${index + 1}</span><p>${esc(check)}</p></div>
     `).join('');
     return `
-      <article class="concept-visual">
-        <div class="concept-visual-copy">
-          <span class="badge green">개념 구조도</span>
-          <h3>${esc(visual.question)}</h3>
-          <p>글을 외우기 전에 아래 흐름과 판별 기준을 먼저 잡으세요.</p>
+      <section class="card sm-stack sm-map" aria-labelledby="conceptMapTitle">
+        <div>
+          <span class="badge badge-green">개념 구조도</span>
+          <h3 class="title-3" id="conceptMapTitle">${esc(visual.question)}</h3>
+          <p class="sm-note">글을 외우기 전에 아래 흐름과 판별 기준을 먼저 잡으세요.</p>
         </div>
-        <div class="concept-flow">${flow}</div>
-        <div class="concept-checks">${checks}</div>
-      </article>`;
+        <ol class="sm-flow">${flow}</ol>
+        <div class="sm-checks">${checks}</div>
+      </section>`;
   }
 
   function renderConceptNavigation(id, index) {
     const jumps = SUBUNITS.map((subunit) => `
-      <button class="ghost compact jump-concept" data-id="${subunit.id}" ${subunit.id === id ? 'disabled' : ''}>
+      <button class="segmented-btn jump-concept" type="button" data-id="${subunit.id}" ${subunit.id === id ? 'aria-selected="true" disabled' : ''}>
         ${subunit.id}
       </button>
     `).join('');
     return `
-      <nav class="concept-nav" aria-label="중단원 이동">
-        <button id="prevConcept" class="ghost compact" ${index === 0 ? 'disabled' : ''}>← 이전</button>
-        ${jumps}
-        <button id="nextConcept" class="ghost compact" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>다음 →</button>
+      <nav class="toolbar sm-concept-nav" aria-label="중단원 이동">
+        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" ${index === 0 ? 'disabled' : ''}>← 이전</button>
+        <div class="segmented sm-jumps">${jumps}</div>
+        <div class="toolbar-spacer"></div>
+        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>다음 →</button>
       </nav>`;
   }
 
   function renderConceptSection(section, index) {
     return `
-      <article class="card concept-section">
-        <span class="badge green">개념 ${index + 1}</span>
-        <h3>${esc(section.title)}</h3>
-        <ul>${section.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul>
-        <div class="trap"><strong>함정 체크</strong><br>${esc(section.trap)}</div>
+      <article class="card sm-concept-card">
+        <span class="badge badge-green">개념 ${index + 1}</span>
+        <h4 class="title-3">${esc(section.title)}</h4>
+        <ul class="sm-bullets">${section.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul>
+        <p class="sm-trap"><strong>함정 체크</strong>${esc(section.trap)}</p>
       </article>`;
   }
 
   function renderNotebookMenu() {
     return `
-      <nav class="notebook-menu" aria-label="단권화 노트 목차">
-        <span>이 노트의 순서</span>
-        <a href="#exam-analysis">기출 분석</a>
-        <a href="#concept-compare">비교표</a>
-        <a href="#concept-flow">문제 푸는 순서</a>
-        <a href="#concept-detail">개념 설명</a>
-        <a href="#recall-lab">회상 점검</a>
+      <nav class="toolbar sm-toc" aria-label="단권화 노트 목차">
+        <span class="kicker">이 노트의 순서</span>
+        <a class="topbar-link" href="#exam-analysis">기출 분석</a>
+        <a class="topbar-link" href="#concept-compare">비교표</a>
+        <a class="topbar-link" href="#concept-flow">문제 푸는 순서</a>
+        <a class="topbar-link" href="#concept-detail">개념 설명</a>
+        <a class="topbar-link" href="#recall-lab">회상 점검</a>
       </nav>`;
   }
 
   function renderNotebookHero(note) {
     const keyPoints = note.keyPoints.map((item, index) => `
-      <div class="key-point-item">
+      <li class="sm-keypoint">
         <span aria-hidden="true">${index + 1}</span>
         <div><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></div>
-      </div>
+      </li>
     `).join('');
     return `
-      <article class="notebook-hero">
-        <div class="notebook-hero-copy">
-          <span class="badge green">이 단원에서 먼저 잡을 생각</span>
-          <h3>${esc(note.oneLine)}</h3>
+      <section class="card card-xl sm-stack sm-note-hero" aria-labelledby="noteHeroTitle">
+        <div>
+          <span class="badge badge-green">이 단원에서 먼저 잡을 생각</span>
+          <h3 class="title-2" id="noteHeroTitle">${esc(note.oneLine)}</h3>
         </div>
-        <div class="key-point-map" aria-label="핵심 개념 세 가지">${keyPoints}</div>
-      </article>`;
+        <ol class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ol>
+      </section>`;
   }
 
   function renderExamAnalysis(id, note) {
@@ -494,29 +518,29 @@
     const hardest = questions.reduce((current, question) => question.correctRate < current.correctRate ? question : current);
     const lowCorrectCount = questions.filter((question) => question.correctRate <= 65).length;
     const patterns = note.patterns.map((pattern) => `
-      <li>
-        <div class="frequency-label"><strong>${esc(pattern.label)}</strong><span>${pattern.count}/6</span></div>
-        <div class="frequency-track" role="img" aria-label="수록 6문항 중 ${pattern.count}문항에 등장">
-          <span style="--frequency:${pattern.count / 6 * 100}%"></span>
+      <li class="sm-freq-item">
+        <div class="sm-freq-head"><strong>${esc(pattern.label)}</strong><span>${pattern.count}/6</span></div>
+        <div class="sm-meter" role="img" aria-label="수록 6문항 중 ${pattern.count}문항에 등장">
+          <span style="width:${pattern.count / 6 * 100}%"></span>
         </div>
         <p>${esc(pattern.note)}</p>
       </li>`).join('');
     return `
-      <section id="exam-analysis" class="notebook-section exam-analysis" aria-labelledby="exam-analysis-title">
-        <div class="notebook-heading">
+      <section id="exam-analysis" class="card sm-stack sm-section" aria-labelledby="exam-analysis-title">
+        <div class="view-head">
           <div>
-            <p class="eyebrow">사이트 수록 기출 6문항 분석</p>
-            <h3 id="exam-analysis-title">무엇이 반복 출제됐나</h3>
+            <span class="kicker">사이트 수록 기출 6문항 분석</span>
+            <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
           </div>
-          <span class="analysis-scope">대표 문항 표본 · 전수 기출 통계 아님</span>
+          <span class="badge">대표 문항 표본 · 전수 통계 아님</span>
         </div>
-        <div class="exam-stat-grid">
-          <div><small>평균 정답률</small><strong>${averageCorrectRate}%</strong><span>${averageCorrectRate <= 65 ? '고난도 단원' : averageCorrectRate <= 75 ? '주의 단원' : '확보할 단원'}</span></div>
-          <div><small>저정답 문항</small><strong>${lowCorrectCount}<em>/6</em></strong><span>정답률 65% 이하</span></div>
-          <div><small>최저 정답률</small><strong>${hardest.correctRate}%</strong><span>${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
+        <div class="sm-exam-stats">
+          <div class="stat"><span class="stat-value">${averageCorrectRate}%</span><span class="stat-label">평균 정답률 · ${averageCorrectRate <= 65 ? '고난도 단원' : averageCorrectRate <= 75 ? '주의 단원' : '확보할 단원'}</span></div>
+          <div class="stat"><span class="stat-value">${lowCorrectCount}/6</span><span class="stat-label">정답률 65% 이하 문항</span></div>
+          <div class="stat"><span class="stat-value">${hardest.correctRate}%</span><span class="stat-label">최저 · ${hardest.year}학년도 ${hardest.session} ${hardest.number}번</span></div>
         </div>
-        <p class="exam-insight">${esc(note.examInsight)}</p>
-        <ol class="frequency-list">${patterns}</ol>
+        <p class="sm-insight">${esc(note.examInsight)}</p>
+        <ol class="sm-freq">${patterns}</ol>
       </section>`;
   }
 
@@ -524,13 +548,16 @@
     const headerCells = note.matrix.headers.map((header) => `<th scope="col">${esc(header)}</th>`).join('');
     const bodyRows = note.matrix.rows.map((row) => `<tr>${row.map((cell, index) => index === 0 ? `<th scope="row">${esc(cell)}</th>` : `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
     return `
-      <section id="concept-compare" class="notebook-section comparison-section" aria-labelledby="comparison-title">
-        <div class="notebook-heading">
-          <div><p class="eyebrow">헷갈리는 개념은 같은 기준으로</p><h3 id="comparison-title">${esc(note.matrix.title)}</h3></div>
-          <span class="swipe-hint">좌우로 밀어 전체 보기 →</span>
+      <section id="concept-compare" class="card sm-stack sm-section" aria-labelledby="comparison-title">
+        <div class="view-head">
+          <div>
+            <span class="kicker">헷갈리는 개념은 같은 기준으로</span>
+            <h3 class="title-2" id="comparison-title">${esc(note.matrix.title)}</h3>
+          </div>
+          <span class="badge sm-swipe">좌우로 밀어 전체 보기 →</span>
         </div>
-        <div class="comparison-scroll" tabindex="0">
-          <table class="comparison-table">
+        <div class="table-wrap sm-matrix-wrap" tabindex="0">
+          <table class="table sm-matrix">
             <thead><tr>${headerCells}</tr></thead>
             <tbody>${bodyRows}</tbody>
           </table>
@@ -540,34 +567,43 @@
 
   function renderDecisionFlow(note) {
     return `
-      <section id="concept-flow" class="notebook-section decision-section" aria-labelledby="decision-title">
-        <div class="notebook-heading"><div><p class="eyebrow">시험장에서 이 순서대로</p><h3 id="decision-title">문제 푸는 순서</h3></div></div>
-        <ol class="decision-list">${note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('')}</ol>
+      <section id="concept-flow" class="card sm-stack sm-section" aria-labelledby="decision-title">
+        <div>
+          <span class="kicker">시험장에서 이 순서대로</span>
+          <h3 class="title-2" id="decision-title">문제 푸는 순서</h3>
+        </div>
+        <ol class="sm-steps">${note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('')}</ol>
       </section>`;
   }
 
   function renderDeepDive(note) {
     return `
-      <section class="notebook-section deep-dive" aria-labelledby="deep-dive-title">
-        <div class="notebook-heading"><div><p class="eyebrow">헷갈리는 선지를 가르는 설명</p><h3 id="deep-dive-title">꼭 알아둘 세부 개념</h3></div></div>
-        <div class="deep-dive-grid">${note.deepDive.map((item) => `<article><h4>${esc(item.term)}</h4><p>${esc(item.body)}</p></article>`).join('')}</div>
+      <section class="card sm-stack sm-section" aria-labelledby="deep-dive-title">
+        <div>
+          <span class="kicker">헷갈리는 선지를 가르는 설명</span>
+          <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
+        </div>
+        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${esc(item.term)}</h4><p>${esc(item.body)}</p></article>`).join('')}</div>
       </section>`;
   }
 
   function renderRecallLab(note) {
     const recallItems = note.recall.map((item, index) => `
-      <details class="recall-item">
-        <summary><span>Q${index + 1}</span>${esc(item.question)}</summary>
+      <details class="sm-recall-item">
+        <summary><span class="badge badge-purple">Q${index + 1}</span>${esc(item.question)}</summary>
         <div><strong>정답</strong><p>${esc(item.answer)}</p></div>
       </details>`).join('');
     return `
-      <section id="recall-lab" class="notebook-section recall-lab" aria-labelledby="recall-title">
-        <div class="notebook-heading">
-          <div><p class="eyebrow">답을 말한 뒤 펼치기</p><h3 id="recall-title">덮고 답하는 회상 점검</h3></div>
-          <span class="recall-rule">먼저 생각하고 답한 뒤 확인하세요</span>
+      <section id="recall-lab" class="card sm-stack sm-section" aria-labelledby="recall-title">
+        <div class="view-head">
+          <div>
+            <span class="kicker">답을 말한 뒤 펼치기</span>
+            <h3 class="title-2" id="recall-title">덮고 답하는 회상 점검</h3>
+          </div>
+          <span class="badge">먼저 생각하고 답한 뒤 확인하세요</span>
         </div>
-        <div class="recall-grid">${recallItems}</div>
-        <div class="review-schedule" aria-label="권장 복습 간격">
+        <div class="sm-recall">${recallItems}</div>
+        <div class="sm-schedule" aria-label="권장 복습 간격">
           <strong>복습 간격</strong>
           <span>오늘 · 첫 회상</span><i aria-hidden="true"></i><span>+1일</span><i aria-hidden="true"></i><span>+3일</span><i aria-hidden="true"></i><span>+7일</span>
         </div>
@@ -576,13 +612,17 @@
 
   function renderLearningDesign() {
     return `
-      <details class="learning-design">
-        <summary><span class="badge blue">학습과학 기반</span><strong>${esc(LEARNING_DESIGN.title)}</strong><span>설계 근거 보기</span></summary>
-        <div class="learning-design-body">
+      <details class="card sm-design">
+        <summary>
+          <span class="badge badge-accent">학습과학 기반</span>
+          <strong>${esc(LEARNING_DESIGN.title)}</strong>
+          <span class="text-tertiary">설계 근거 보기</span>
+        </summary>
+        <div class="sm-design-body">
           <p>${esc(LEARNING_DESIGN.summary)}</p>
-          <div class="learning-steps">${LEARNING_DESIGN.steps.map((step) => `<div><strong>${esc(step.label)}</strong><p>${esc(step.text)}</p></div>`).join('')}</div>
-          <div class="evidence-links">${LEARNING_DESIGN.evidence.map((item) => `<a href="${item.href}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
-          <p class="evidence-caution">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
+          <div class="sm-design-steps">${LEARNING_DESIGN.steps.map((step) => `<div><strong>${esc(step.label)}</strong><p>${esc(step.text)}</p></div>`).join('')}</div>
+          <div class="sm-evidence">${LEARNING_DESIGN.evidence.map((item) => `<a href="${item.href}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
+          <p class="sm-note">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
         </div>
       </details>`;
   }
@@ -594,40 +634,45 @@
     if (!note) return renderHome();
     state.view = 'concept';
     state.concept = id;
+    setNav('concept');
     const index = SUBUNITS.findIndex((subunit) => subunit.id === id);
     const questionCount = QUESTIONS.filter((question) => question.sub === id).length;
     app.innerHTML = `
-      <section>
-        <div class="page-head">
-          <div>
-            <p class="eyebrow">${sub.unitId}단원 · 약 ${sub.time}분</p>
-            <h2>${esc(sub.title)}</h2>
-            <p>${esc(sub.keywords)}</p>
-          </div>
-          <button id="conceptHome" class="ghost compact">단원 목록</button>
+      <header class="view-head">
+        <div>
+          <span class="kicker">${sub.unitId}단원 · 약 ${sub.time}분</span>
+          <h1>${esc(sub.title)}</h1>
+          <p>${esc(sub.keywords)}</p>
         </div>
-        ${renderConceptNavigation(id, index)}
-        ${renderNotebookMenu()}
+        <button id="conceptHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
+      </header>
+      ${renderConceptNavigation(id, index)}
+      ${renderNotebookMenu()}
+      <div class="sm-note-body">
         ${renderNotebookHero(note)}
         ${renderExamAnalysis(id, note)}
         ${renderComparisonMatrix(note)}
         ${renderDecisionFlow(note)}
         ${renderConceptMap(sub)}
-        <section id="concept-detail" aria-labelledby="concept-detail-title">
-          <div class="notebook-heading concept-detail-heading"><div><p class="eyebrow">교과 개념을 차근차근</p><h3 id="concept-detail-title">개념을 하나씩 이해하기</h3></div></div>
-          <div class="concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
+        <section id="concept-detail" class="card sm-stack sm-section" aria-labelledby="concept-detail-title">
+          <div>
+            <span class="kicker">교과 개념을 차근차근</span>
+            <h3 class="title-2" id="concept-detail-title">개념을 하나씩 이해하기</h3>
+          </div>
+          <div class="sm-concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
         </section>
         ${renderDeepDive(note)}
         ${renderRecallLab(note)}
         ${renderLearningDesign()}
-        <div class="concept-finish">
-          <button id="markDone" class="secondary">
-            ${db.completed[id] ? '✓ 개념 확인 완료됨' : '개념 확인 완료로 표시'}
-          </button>
-          <button id="subQuiz" class="primary">이 중단원 퀴즈 ${questionCount}문제</button>
-        </div>
-        <p class="source-note">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항(중단원별 6문항)을 분석한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>
-      </section>`;
+      </div>
+      <div class="toolbar sm-concept-finish">
+        <button id="markDone" class="btn btn-secondary" type="button">
+          ${db.completed[id] ? '✓ 개념 확인 완료됨' : '개념 확인 완료로 표시'}
+        </button>
+        <div class="toolbar-spacer"></div>
+        <button id="subQuiz" class="btn btn-primary" type="button">이 중단원 퀴즈 ${questionCount}문제</button>
+      </div>
+      <p class="sm-source">개념 검토: 2027 불후의 명강 사회·문화 개념 완성·정답과 바른 해설, 2027 EBS 수능특강·해설. 빈출 표시는 이 사이트에 선별 수록된 2022~2026학년도 평가원 6월·9월·수능 실기출 78문항(중단원별 6문항)을 분석한 결과이며 전체 기출 전수 빈도를 뜻하지 않습니다. 문항·정답은 원문 PDF와 정답표를 대조했으며 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
     document.getElementById('nextConcept').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
@@ -698,26 +743,26 @@
   function renderQuestionMedia(question, options = {}) {
     const { className = '', loading = 'eager' } = options;
     return `
-      <figure class="question-media ${esc(className)}">
-        <a class="kice-paper-link" href="${esc(question.source.question)}" target="_blank"
+      <figure class="sm-media ${esc(className)}">
+        <a class="sm-media-link" href="${esc(question.source.question)}" target="_blank"
           rel="noopener" title="원문 PDF 열기">
-          <img class="question-image" data-question-image src="${esc(question.image)}"
+          <img class="sm-media-img" data-question-image src="${esc(question.image)}"
             alt="${esc(question.prompt)}의 제시문·보기·선지 전체 원문"
             loading="${loading}" decoding="async">
         </a>
         <figcaption>${question.year}학년도 ${esc(question.session)} ${question.number}번 · 제시문·보기·선지 전체를 원문 이미지로 제공합니다.</figcaption>
-        <div class="question-image-fallback" hidden>
+        <div class="sm-media-fallback" hidden>
           <strong>문제 이미지를 불러오지 못했습니다.</strong>
           <p>배포 지연이나 네트워크 오류일 수 있습니다. 평가원 원문 PDF에서 ${question.number}번을 확인해 주세요.</p>
-          <a class="ghost compact source-link" href="${esc(question.source.question)}" target="_blank" rel="noopener">원문 PDF 열기</a>
+          <a class="btn btn-secondary btn-sm" href="${esc(question.source.question)}" target="_blank" rel="noopener">원문 PDF 열기</a>
         </div>
       </figure>`;
   }
   function bindQuestionImages(root = document) {
     root.querySelectorAll('[data-question-image]').forEach(image => {
       const markFailed = () => {
-        image.closest('.kice-paper-link')?.classList.add('image-failed');
-        const fallback = image.closest('.question-media')?.querySelector('.question-image-fallback');
+        image.closest('.sm-media-link')?.classList.add('is-failed');
+        const fallback = image.closest('.sm-media')?.querySelector('.sm-media-fallback');
         if (fallback) fallback.hidden = false;
       };
       image.addEventListener('error', markFailed, { once: true });
@@ -728,22 +773,24 @@
     const choices = CHOICE_MARKS.map((mark, index) => {
       const selected = session.answered && Number(session.last.input) === index;
       const className = session.answered && index === question.correct
-        ? 'correct-option'
-        : selected ? 'wrong-option' : '';
+        ? 'is-correct'
+        : selected ? 'is-wrong' : '';
       return `
-        <button class="choice-option kice-choice ${className}" data-index="${index}"
+        <button class="choice-option sm-choice ${className}" type="button" data-index="${index}"
           aria-label="${index + 1}번" ${session.answered ? 'disabled' : ''}>
           <span>${mark}</span>
         </button>`;
     }).join('');
 
     const nextAction = session.answered
-      ? `<button id="submitAnswer" class="primary full choice-next">${current === total ? '결과 보기' : '다음 문제'}</button>`
-      : '<div class="key-hint">번호를 누르면 바로 채점됩니다.</div>';
+      ? `<button id="submitAnswer" class="btn btn-primary sm-full" type="button">${current === total ? '결과 보기' : '다음 문제'}</button>`
+      : '<p class="sm-hint">키보드 1~5를 누르면 바로 채점됩니다.</p>';
     return `
-      <div class="answer-prompt">정답을 선택하세요.</div>
-      <div class="kice-answer-grid">${choices}</div>
-      ${nextAction}`;
+      <div class="sm-answer">
+        <p class="field-label">정답을 선택하세요.</p>
+        <div class="sm-choices" role="group" aria-label="선지 선택">${choices}</div>
+        ${nextAction}
+      </div>`;
   }
 
   function bindQuizEvents(question, session) {
@@ -769,35 +816,39 @@
     const session = state.session;
     if (!session) return renderHome();
     state.view = 'quiz';
+    setNav('quiz');
     const question = session.questions[session.index];
     const subunit = SUB_BY_ID.get(question.sub);
     const current = session.index + 1;
     const total = session.questions.length;
+    const progress = Math.round((current / total) * 100);
     const sourceLabel = `${question.year}학년도 ${question.session} 기출 · 평가원`;
     app.innerHTML = `
-      <section class="quiz-wrap">
-        <div class="quiz-head">
-          <div class="quiz-meta">
-            <span>${esc(session.label)} · ${question.sub}</span>
-            <span>${current}/${total} · 정답 ${session.correct}</span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill" style="width:${Math.round((current / total) * 100)}%"></div>
-          </div>
+      <header class="view-head">
+        <div>
+          <span class="kicker">${esc(session.label)} · ${question.sub}</span>
+          <h1>기출 풀이</h1>
         </div>
-        <article class="question-card">
-          <div class="question-top">
-            <span class="question-kicker">평가원 원문 · ${esc(subunit.title)}</span>
-            <div class="source-meta">
-              <span>${esc(sourceLabel)} · ${question.number}번</span>
-              <strong>정답률 ${question.correctRate}% <small>· 통사랑 집계</small></strong>
-            </div>
+        <span class="badge ${session.wrong ? 'badge-red' : 'badge-green'}">정답 ${session.correct} · 오답 ${session.wrong}</span>
+      </header>
+
+      <section class="sm-progress" aria-label="진행 상황">
+        <div class="sm-progress-meta"><span>${current} / ${total}</span><span>${progress}%</span></div>
+        <div class="sm-track"><div class="sm-fill" style="width:${progress}%"></div></div>
+      </section>
+
+      <article class="card card-xl sm-stack sm-question">
+        <div class="view-head">
+          <div>
+            <span class="kicker">평가원 원문 · ${esc(subunit.title)}</span>
+            <p class="sm-note">${esc(sourceLabel)} · ${question.number}번</p>
           </div>
-          ${renderQuestionMedia(question)}
-          ${renderAnswerChoices(question, session, current, total)}
-          ${session.answered ? renderFeedback(question, session.last) : ''}
-        </article>
-      </section>`;
+          <span class="badge badge-accent">정답률 ${question.correctRate}%</span>
+        </div>
+        ${renderQuestionMedia(question)}
+        ${renderAnswerChoices(question, session, current, total)}
+        ${session.answered ? renderFeedback(question, session.last) : ''}
+      </article>`;
     bindQuestionImages(app);
     bindQuizEvents(question, session);
   }
@@ -809,28 +860,28 @@
     const selectedLabel = selectedAnswer === '(선택 없음)' ? selectedAnswer : `${selectedAnswer}번`;
     const checks = guide.checks.map((checkItem) => `<li>${esc(checkItem)}</li>`).join('');
     return `
-      <section class="solution-guide ${compact ? 'compact-guide' : ''}" aria-label="문항 해설">
-        <div class="solution-guide-head">
-          <span class="badge blue">평가원 정답 · EBS 해설 방식</span>
+      <section class="sm-solution ${compact ? 'is-compact' : ''}" aria-label="문항 해설">
+        <div class="sm-solution-head">
+          <span class="badge badge-accent">평가원 정답 · EBS 해설 방식</span>
           <small>${esc(guide.focus)}</small>
         </div>
-        <div class="solution-reason correct-reason">
-          <h4>정답 ${question.answerNumber}번이 되는 판단</h4>
+        <div class="sm-reason is-correct">
+          <h4 class="title-3">정답 ${question.answerNumber}번이 되는 판단</h4>
           <p>${esc(guide.correctReason)}</p>
         </div>
         ${result.correct ? '' : `
-          <div class="solution-reason selected-reason">
-            <h4>내가 고른 ${esc(selectedLabel)}이 아닌 이유</h4>
+          <div class="sm-reason is-wrong">
+            <h4 class="title-3">내가 고른 ${esc(selectedLabel)}이 아닌 이유</h4>
             <p>${esc(guide.wrongReason)}</p>
           </div>`}
-        <div class="solution-checks">
+        <div class="sm-solution-checks">
           <strong>원문 선지에서 다시 확인할 것</strong>
-          <ul>${checks}</ul>
+          <ul class="sm-bullets">${checks}</ul>
         </div>
-        <div class="solution-source">
+        <p class="sm-solution-source">
           <span>정답 번호는 평가원 정답표와 대조했습니다. 풀이는 EBS의 ‘정답 해설·오답 피하기’ 방식으로 핵심 기준을 재구성했습니다.</span>
           <a href="${esc(EBS_PAST_EXAMS)}" target="_blank" rel="noopener noreferrer">EBSi 기출 해설 찾기</a>
-        </div>
+        </p>
       </section>`;
   }
 
@@ -838,34 +889,34 @@
     const subunit = SUB_BY_ID.get(question.sub);
     const savedReason = db.wrongBank[question.id]?.reason || '';
     const reasonButtons = Object.entries(MISTAKE_REASONS).map(([key, label]) => `
-      <button class="reason-option ${savedReason === key ? 'selected' : ''}"
+      <button class="segmented-btn reason-option ${savedReason === key ? 'is-active' : ''}"
         data-reason="${key}" type="button">${esc(label)}</button>
     `).join('');
     return `
-      <div class="wrong-diagnosis">
+      <div class="sm-diagnosis">
         <strong>${esc(question.sub)} · ${esc(subunit.title)}에서 틀렸습니다.</strong>
         <p>위 해설과 원문 선지를 대조한 뒤 실제 실수 원인을 남기세요. 번호가 아니라 판단 기준을 복습 기록에 저장합니다.</p>
-        <div class="reason-options" role="group" aria-label="오답 원인 선택">${reasonButtons}</div>
+        <div class="segmented sm-reasons" role="group" aria-label="오답 원인 선택">${reasonButtons}</div>
       </div>`;
   }
 
   function renderFeedback(question, result) {
-    const className = result.correct ? 'correct' : 'wrong';
-    const title = result.correct ? '✓ 정답' : '✕ 오답';
+    const modifier = result.correct ? 'is-correct' : 'is-wrong';
+    const title = result.correct ? '정답' : '오답';
     return `
-      <div class="feedback ${className}">
-        <div class="feedback-title">${title}</div>
-        <div class="feedback-grid">
-          <div class="feedback-item"><small>평가원 정답</small><strong>${esc(question.answer)}</strong></div>
-          <div class="feedback-item"><small>내 답</small><strong>${esc(shownAnswer(question, result.input))}</strong></div>
+      <div class="sm-feedback ${modifier}" role="status">
+        <p class="sm-feedback-head">${title}</p>
+        <div class="sm-feedback-grid">
+          <div class="sm-feedback-cell"><small>평가원 정답</small><strong>${esc(question.answer)}</strong></div>
+          <div class="sm-feedback-cell"><small>내 답</small><strong>${esc(shownAnswer(question, result.input))}</strong></div>
         </div>
-        <p class="explain">평가원 원문 정답표와 대조한 답입니다. 통사랑 문항별 집계 정답률은 ${question.correctRate}%입니다.</p>
+        <p class="sm-note">평가원 원문 정답표와 대조한 답입니다. 통사랑 문항별 집계 정답률은 ${question.correctRate}%입니다.</p>
         ${renderExplanationGuide(question, result)}
         ${result.correct ? '' : renderWrongDiagnosis(question, result)}
-        <div class="feedback-actions">
-          <a class="ghost compact source-link" href="${esc(question.source.question)}" target="_blank" rel="noopener">문제 원문 PDF</a>
-          <a class="ghost compact source-link" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표 확인</a>
-          <a class="ghost compact source-link" href="https://tongsarang.kr/" target="_blank" rel="noopener">정답률 출처</a>
+        <div class="sm-links">
+          <a class="btn btn-secondary btn-sm" href="${esc(question.source.question)}" target="_blank" rel="noopener">문제 원문 PDF</a>
+          <a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표 확인</a>
+          <a class="btn btn-secondary btn-sm" href="https://tongsarang.kr/" target="_blank" rel="noopener">정답률 출처</a>
         </div>
       </div>`;
   }
@@ -880,31 +931,31 @@
       ? '같은 문항을 반복해서 틀렸습니다. 정답 번호보다 선지를 가르는 개념 기준부터 다시 확인하세요.'
       : '첫 오답입니다. 내 답과 정답 선지의 표현 차이를 표시한 뒤 개념 지도로 돌아가세요.';
     return `
-      <article class="mistake-card">
-        <div class="mistake-card-head">
+      <article class="card sm-stack sm-mistake">
+        <div class="view-head">
           <div>
-            <span class="badge red">누적 오답 ${info.count || 1}회 · 출제 정답률 ${question.correctRate}%</span>
-            <h3>${question.sub} · ${esc(subunit.title)}</h3>
-            <p>${question.year}학년도 ${esc(question.session)} ${question.number}번 · 평가원</p>
+            <span class="badge badge-red">누적 오답 ${info.count || 1}회 · 출제 정답률 ${question.correctRate}%</span>
+            <h3 class="title-3">${question.sub} · ${esc(subunit.title)}</h3>
+            <p class="sm-note">${question.year}학년도 ${esc(question.session)} ${question.number}번 · 평가원</p>
           </div>
-          <span class="reason-badge">${esc(reason)}</span>
+          <span class="badge badge-orange">${esc(reason)}</span>
         </div>
-        ${renderQuestionMedia(question, { className: 'review-question-media', loading: 'lazy' })}
-        <div class="answer-comparison">
-          <div><small>최근 내 답</small><strong class="answer-wrong">${esc(selected)}</strong></div>
+        ${renderQuestionMedia(question, { className: 'is-review', loading: 'lazy' })}
+        <div class="sm-compare">
+          <div><small>최근 내 답</small><strong class="sm-answer-wrong">${esc(selected)}</strong></div>
           <span aria-hidden="true">→</span>
-          <div><small>평가원 정답</small><strong class="answer-correct">${esc(question.answer)}</strong></div>
+          <div><small>평가원 정답</small><strong class="sm-answer-correct">${esc(question.answer)}</strong></div>
         </div>
         ${renderExplanationGuide(question, { input, correct: false }, true)}
-        <div class="mistake-diagnosis">
+        <div class="sm-diagnosis">
           <strong>${esc(subunit.unitId)}단원 · ${esc(subunit.title)} 취약 신호</strong>
           <p>${esc(repeatCopy)}</p>
           <small>핵심 판별어: ${esc(subunit.keywords)}</small>
         </div>
-        <div class="mistake-actions">
-          <button class="ghost compact mistake-concept" data-sub="${question.sub}">개념 지도 다시 보기</button>
-          <button class="secondary compact mistake-retry" data-id="${question.id}">이 문제 재시험</button>
-          <a class="ghost compact source-link" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표</a>
+        <div class="sm-links">
+          <button class="btn btn-secondary btn-sm mistake-concept" type="button" data-sub="${question.sub}">개념 지도 다시 보기</button>
+          <button class="btn btn-ghost btn-sm mistake-retry" type="button" data-id="${question.id}">이 문제 재시험</button>
+          <a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표</a>
         </div>
       </article>`;
   }
@@ -920,6 +971,7 @@
     const session = state.session;
     if (!session) return renderHome();
     state.view = 'result';
+    setNav('result');
     const total = session.questions.length;
     const accuracy = Math.round((session.correct / total) * 100);
     const wrongResults = session.results.filter((result) => !result.correct);
@@ -928,22 +980,33 @@
       return renderMistakeCard(question, db.wrongBank[question.id], result.input);
     }).join('');
     app.innerHTML = `
-      <section class="card result-card">
-        <p class="eyebrow result-eyebrow">${esc(session.label)} 완료</p>
-        <div class="result-score">${accuracy}%</div>
-        <p class="result-copy">${total}문제 중 ${session.correct}개 정답 · 오답 ${session.wrong}개</p>
-        <div class="button-row result-actions">
-          <button id="resultHome" class="secondary">단원 목록</button>
-          <button id="retryResult" class="primary" ${wrongResults.length ? '' : 'disabled'}>이번 오답 다시 풀기</button>
+      <header class="view-head">
+        <div>
+          <span class="kicker">${esc(session.label)} 완료</span>
+          <h1>풀이 결과</h1>
         </div>
-        ${wrongResults.length ? `
-          <div class="result-mistakes">
-            <h3>이번 오답 ${wrongResults.length}문제</h3>
-            <p>문제 원문과 선지 전체를 다시 보고, 내 답과 정답을 가른 기준을 확인하세요.</p>
-            <div class="mistake-list">${mistakeCards}</div>
+      </header>
+
+      <section class="card card-xl sm-stack sm-result">
+        <div>
+          <div class="sm-score">${accuracy}%</div>
+          <p class="text-secondary">${total}문제 중 ${session.correct}개 정답 · 오답 ${session.wrong}개</p>
+        </div>
+        <div class="sm-actions">
+          <button id="retryResult" class="btn btn-primary" type="button" ${wrongResults.length ? '' : 'disabled'}>이번 오답 다시 풀기</button>
+          <button id="resultHome" class="btn btn-secondary" type="button">단원 목록</button>
+        </div>
+      </section>
+
+      ${wrongResults.length ? `
+        <section class="sm-stack" aria-labelledby="resultMistakes">
+          <div>
+            <h2 class="title-2" id="resultMistakes">이번 오답 ${wrongResults.length}문제</h2>
+            <p class="sm-note">문제 원문과 선지 전체를 다시 보고, 내 답과 정답을 가른 기준을 확인하세요.</p>
           </div>
-        ` : '<div class="empty">완벽합니다. 이 범위의 오답은 모두 정리됐습니다.</div>'}
-      </section>`;
+          <div class="sm-mistakes">${mistakeCards}</div>
+        </section>
+      ` : '<p class="sm-empty">완벽합니다. 이 범위의 오답은 모두 정리됐습니다.</p>'}`;
     document.getElementById('resultHome').addEventListener('click', renderHome);
     document.getElementById('retryResult').addEventListener('click', () => {
       const retryQuestions = wrongResults.map((result) => Q_BY_ID.get(result.id)).filter(Boolean);
@@ -954,7 +1017,7 @@
   function renderAnalysisMeter(accuracy, label = '') {
     const value = accuracy ?? 0;
     return `
-      <div class="analysis-meter" aria-label="${esc(label || `${value}%`)}">
+      <div class="sm-meter" role="img" aria-label="${esc(label || `${value}%`)}">
         <span style="width:${value}%"></span>
       </div>`;
   }
@@ -970,7 +1033,7 @@
       ? `${analysis.dominantReason.label} · ${analysis.dominantReason.count}문제`
       : '오답 원인 없음';
     const unitRows = analysis.unitRows.map((row) => `
-      <div class="unit-analysis-row">
+      <div class="sm-rate-row">
         <div>
           <strong>${row.id} · ${esc(row.title)}</strong>
           <small>${row.attempts ? `${row.attempts}회 풀이 · ${masteryLabel(row)}` : '아직 풀이 없음'}</small>
@@ -980,29 +1043,27 @@
       </div>
     `).join('');
     return `
-      <article class="card weakness-panel">
-        <div class="page-head">
-          <div>
-            <span class="badge green">무료 자동 분석</span>
-            <h2>내 약점 한눈에</h2>
-            <p>외부 AI나 유료 토큰 없이 실제 풀이·오답 기록만으로 계산합니다.</p>
-          </div>
+      <section class="card sm-stack sm-section" aria-labelledby="weaknessTitle">
+        <div>
+          <span class="badge badge-green">무료 자동 분석</span>
+          <h2 class="title-2" id="weaknessTitle">내 약점 한눈에</h2>
+          <p class="sm-note">외부 AI나 유료 토큰 없이 실제 풀이·오답 기록만으로 계산합니다.</p>
         </div>
-        <div class="weakness-insights">
-          <div><small>가장 취약한 대단원</small><strong>${esc(weakestUnit)}</strong></div>
-          <div><small>가장 취약한 중단원</small><strong>${esc(weakestSubunit)}</strong></div>
-          <div><small>가장 많은 실수 원인</small><strong>${esc(reasonSummary)}</strong></div>
+        <div class="sm-exam-stats">
+          <div class="stat"><span class="stat-value">${esc(weakestUnit)}</span><span class="stat-label">가장 취약한 대단원</span></div>
+          <div class="stat"><span class="stat-value">${esc(weakestSubunit)}</span><span class="stat-label">가장 취약한 중단원</span></div>
+          <div class="stat"><span class="stat-value">${esc(reasonSummary)}</span><span class="stat-label">가장 많은 실수 원인</span></div>
         </div>
-        <div class="unit-analysis">${unitRows}</div>
-        <p class="analysis-note">3회 미만 기록은 ‘표본 부족’으로 표시합니다. 풀이가 쌓일수록 대단원·중단원 취약도와 실수 원인 분류가 정확해집니다.</p>
-      </article>`;
+        <div class="sm-rates">${unitRows}</div>
+        <p class="sm-note">3회 미만 기록은 ‘표본 부족’으로 표시합니다. 풀이가 쌓일수록 대단원·중단원 취약도와 실수 원인 분류가 정확해집니다.</p>
+      </section>`;
   }
 
   function renderSubunitStats(analysis) {
     const rows = analysis.subRows.map((row) => `
-      <div class="stats-row">
+      <div class="sm-rate-row">
         <div>
-          <span>${row.id} · ${esc(row.title)}</span>
+          <strong>${row.id} · ${esc(row.title)}</strong>
           <small>${db.completed[row.id] ? '개념 완료' : '개념 미완료'} · ${masteryLabel(row)}</small>
         </div>
         ${renderAnalysisMeter(row.accuracy)}
@@ -1010,10 +1071,10 @@
       </div>
     `).join('');
     return `
-      <div class="card stats-section">
-        <h2>중단원별 현황</h2>
-        <div class="stats-table">${rows}</div>
-      </div>`;
+      <section class="card sm-stack sm-section" aria-labelledby="subStatsTitle">
+        <h2 class="title-2" id="subStatsTitle">중단원별 현황</h2>
+        <div class="sm-rates">${rows}</div>
+      </section>`;
   }
 
   function getWrongEntries(order = state.wrongOrder) {
@@ -1029,55 +1090,60 @@
       renderMistakeCard(question, info, info.lastInput)
     )).join('');
     return `
-      <div class="card wrong-note stats-section">
-        <div class="page-head wrong-note-head">
+      <section class="sm-stack sm-section" aria-labelledby="wrongNoteTitle">
+        <div class="view-head">
           <div>
-            <h2>오답 원문 분석 노트</h2>
-            <p>${wrongEntries.length}문제 · 출제 정답률이나 내 최근 풀이 기록으로 정렬해 복습합니다.</p>
+            <h2 class="title-2" id="wrongNoteTitle">오답 원문 분석 노트</h2>
+            <p class="sm-note">${wrongEntries.length}문제 · 출제 정답률이나 내 최근 풀이 기록으로 정렬합니다.</p>
           </div>
-          <div class="wrong-note-actions">
-            <label for="wrongSortMode">오답 정렬</label>
-            <select id="wrongSortMode">${renderSortOptions(state.wrongOrder)}</select>
-            <button id="statsReview" class="primary compact" ${wrongEntries.length ? '' : 'disabled'}>전체 재시험</button>
+          <div class="toolbar-group">
+            <label class="field-label" for="wrongSortMode">정렬</label>
+            <select id="wrongSortMode" class="field-input">${renderSortOptions(state.wrongOrder)}</select>
+            <button id="statsReview" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>전체 재시험</button>
           </div>
         </div>
-        ${wrongEntries.length ? `<div class="mistake-list">${cards}</div>` : '<div class="empty">아직 오답이 없습니다.</div>'}
-      </div>`;
+        ${wrongEntries.length ? `<div class="sm-mistakes">${cards}</div>` : '<p class="sm-empty">아직 오답이 없습니다.</p>'}
+      </section>`;
   }
 
   function renderStats() {
     state.view = 'stats';
     state.session = null;
+    setNav('stats');
     const summary = stats();
     const analysis = weaknessAnalysis();
     const wrongEntries = getWrongEntries();
     app.innerHTML = `
-      <section>
-        <div class="page-head">
-          <div>
-            <p class="eyebrow">ACCOUNT STUDY DATA</p>
-            <h2>학습 기록·취약도 분석</h2>
-            <p>정답 번호가 아니라 문제 원문, 오답 원인, 대단원·중단원별 정확도를 함께 봅니다.</p>
-          </div>
-          <button id="statsHome" class="ghost compact">단원 목록</button>
+      <header class="view-head">
+        <div>
+          <span class="kicker">account study data</span>
+          <h1>학습 기록 · 취약도</h1>
+          <p>정답 번호가 아니라 문제 원문, 오답 원인, 대단원·중단원별 정확도를 함께 봅니다.</p>
         </div>
-        <div class="card">
-          <div class="overview">
-            <div class="stat"><span>총 풀이</span><strong>${db.attempts}</strong></div>
-            <div class="stat"><span>정답률</span><strong>${summary.accuracy}%</strong></div>
-            <div class="stat"><span>현재 오답</span><strong>${summary.wrong}</strong></div>
-          </div>
-          <div class="button-row data-actions">
-            <button id="exportData" class="secondary">기록 백업</button>
-            <label class="ghost file-button" for="importData" role="button">기록 복원</label>
-            <input id="importData" class="file-input" type="file" accept="application/json,.json">
-            <button id="resetData" class="danger">기록 초기화</button>
-          </div>
+        <button id="statsHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
+      </header>
+
+      <section class="card sm-stack" aria-label="누적 지표">
+        <div class="sm-metrics">
+          <div class="stat"><span class="stat-value">${db.attempts}</span><span class="stat-label">총 풀이</span></div>
+          <div class="stat"><span class="stat-value">${summary.accuracy}%</span><span class="stat-label">정답률</span></div>
+          <div class="stat"><span class="stat-value">${summary.wrong}</span><span class="stat-label">현재 오답</span></div>
         </div>
-        ${renderWeaknessPanel(analysis)}
-        ${renderSubunitStats(analysis)}
-        ${renderWrongNote(wrongEntries)}
-      </section>`;
+      </section>
+
+      <div class="toolbar" role="group" aria-label="기록 데이터 관리">
+        <div class="toolbar-group">
+          <button id="exportData" class="btn btn-secondary btn-sm" type="button">기록 백업</button>
+          <label class="btn btn-secondary btn-sm" for="importData">기록 복원</label>
+          <input id="importData" class="sm-file" type="file" accept="application/json,.json">
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="resetData" class="btn btn-danger btn-sm" type="button">기록 초기화</button>
+      </div>
+
+      ${renderWeaknessPanel(analysis)}
+      ${renderSubunitStats(analysis)}
+      ${renderWrongNote(wrongEntries)}`;
     document.getElementById('statsHome').addEventListener('click', renderHome);
     document.getElementById('wrongSortMode').addEventListener('change', (event) => {
       state.wrongOrder = event.target.value;
