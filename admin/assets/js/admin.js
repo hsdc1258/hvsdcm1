@@ -87,11 +87,11 @@
     ];
 
     elements.stats.innerHTML = cards.map(([label, value, description]) => `
-      <div class="stat">
-        <small>${escapeHtml(label)}</small>
-        <strong>${Number(value).toLocaleString()}</strong>
-        <p>${escapeHtml(description)}</p>
-      </div>
+      <article class="ad-stat">
+        <span class="stat-label">${escapeHtml(label)}</span>
+        <span class="stat-value">${Number(value).toLocaleString()}</span>
+        <p class="ad-stat-note">${escapeHtml(description)}</p>
+      </article>
     `).join('');
   }
 
@@ -103,16 +103,16 @@
         <td>${formatDate(user.last_login_at)}</td>
         <td>${formatDate(user.last_activity_at)}</td>
         <td>${Number(user.active_devices).toLocaleString()}</td>
-        <td class="ip-cell">${escapeHtml(user.recent_ip || '-')}</td>
+        <td class="ad-ip">${escapeHtml(user.recent_ip || '-')}</td>
         <td>${Number(user.logins).toLocaleString()}</td>
         <td>${Number(user.word_events).toLocaleString()}</td>
         <td>${Number(user.sm_events).toLocaleString()}</td>
         <td>
-          <div class="table-actions">
-            <button type="button" class="session-link view-sessions" data-id="${Number(user.id)}">접속</button>
+          <div class="ad-row-actions">
+            <button type="button" class="btn btn-secondary btn-sm view-sessions" data-id="${Number(user.id)}">접속</button>
             <button
               type="button"
-              class="danger delete-user"
+              class="btn btn-danger btn-sm delete-user"
               data-id="${Number(user.id)}"
               data-name="${escapeHtml(user.username)}"
             >삭제</button>
@@ -142,7 +142,7 @@
     elements.sessionCount.textContent = `${filtered.length.toLocaleString()}개 세션 · 활성 ${activeCount.toLocaleString()}개`;
 
     if (filtered.length === 0) {
-      elements.sessions.innerHTML = '<tr><td colspan="8" class="empty-row">조건에 맞는 접속 기록이 없습니다.</td></tr>';
+      elements.sessions.innerHTML = '<tr><td colspan="8" class="ad-empty">조건에 맞는 접속 기록이 없습니다.</td></tr>';
       return;
     }
 
@@ -155,11 +155,11 @@
           : '-';
       return `
         <tr>
-          <td><span class="status-badge ${session.active ? 'active' : ''}">${session.active ? '활성' : '만료'}</span></td>
+          <td><span class="badge ${session.active ? 'badge-green' : ''}">${session.active ? '활성' : '만료'}</span></td>
           <td>${escapeHtml(session.username)}</td>
-          <td class="device-cell"><strong>${escapeHtml(userAgent.device)}</strong><small title="${escapeHtml(session.user_agent || '')}">${escapeHtml(session.user_agent || 'User-Agent 없음')}</small></td>
+          <td><div class="ad-device"><strong>${escapeHtml(userAgent.device)}</strong><small title="${escapeHtml(session.user_agent || '')}">${escapeHtml(session.user_agent || 'User-Agent 없음')}</small></div></td>
           <td>${escapeHtml(userAgent.browser)}</td>
-          <td class="ip-cell">${escapeHtml(ip)}</td>
+          <td class="ad-ip">${escapeHtml(ip)}</td>
           <td>${formatDate(session.created_at)}</td>
           <td>${formatDate(session.last_seen_at)}</td>
           <td>${formatDate(session.expires_at)}</td>
@@ -170,7 +170,7 @@
 
   function renderAnswers(answers) {
     if (answers.length === 0) {
-      elements.answers.innerHTML = '<tr><td colspan="6" class="empty-row">아직 추가된 공용 정답이 없습니다.</td></tr>';
+      elements.answers.innerHTML = '<tr><td colspan="6" class="ad-empty">아직 추가된 공용 정답이 없습니다.</td></tr>';
       return;
     }
 

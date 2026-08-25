@@ -10,9 +10,9 @@
     drawer: document.getElementById('drawer'),
     drawerLogout: document.getElementById('drawerLogout'),
     drawerStudy: document.getElementById('drawerStudy'),
-    loginButton: document.getElementById('loginBtn'),
     loginError: document.getElementById('loginError'),
     loginForm: document.getElementById('loginForm'),
+    loginTriggers: document.querySelectorAll('[data-login-trigger]'),
     menuButton: document.getElementById('menuButton'),
     modal: document.getElementById('loginModal'),
     password: document.getElementById('password'),
@@ -57,6 +57,7 @@
     elements.title.dataset.user = username;
     elements.account.classList.add('logged');
     elements.drawer.classList.add('logged');
+    document.body.classList.add('logged');
     elements.drawerStudy.setAttribute('aria-hidden', 'false');
   }
 
@@ -122,11 +123,32 @@
     }
   }
 
+  // 스크롤 등장 — prefers-reduced-motion 환경에서는 숨김 자체를 만들지 않는다
+  // (system.css의 .js .reveal 규칙이 no-preference 미디어쿼리 안에만 존재).
+  function setupReveal() {
+    document.documentElement.classList.add('js');
+    const reveals = document.querySelectorAll('.reveal');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      reveals.forEach((element) => element.classList.add('in'));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in');
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { rootMargin: '0px 0px -12% 0px' });
+    reveals.forEach((element) => observer.observe(element));
+  }
+
   elements.menuButton.addEventListener('click', () => {
     setMenuOpen(!elements.drawer.classList.contains('open'));
   });
   elements.shade.addEventListener('click', () => setMenuOpen(false));
-  elements.loginButton.addEventListener('click', openLogin);
+  elements.loginTriggers.forEach((trigger) => trigger.addEventListener('click', openLogin));
   elements.closeLogin.addEventListener('click', closeLogin);
   elements.drawerLogout.addEventListener('click', logout);
   elements.loginForm.addEventListener('submit', login);
@@ -139,6 +161,8 @@
       closeLogin();
     }
   });
+
+  setupReveal();
 
   const savedUsername = localStorage.getItem('hvsdcm.user');
   const token = localStorage.getItem('hvsdcm.token');

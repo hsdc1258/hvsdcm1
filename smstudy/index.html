@@ -4,39 +4,76 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="description" content="2022~2026학년도 평가원 사회·문화 실기출 78문항과 1~4단원 개념 학습·오답 복습 웹앱">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="사회·문화 — HVS/DCM">
+  <meta property="og:site_name" content="hvsdcm">
+  <meta property="og:title" content="사회·문화 — hvsdcm">
   <meta property="og:description" content="13개 중단원 · 평가원 원문 78문항 · 오답 원인 분석">
   <meta property="og:url" content="https://hvsdcm1.xyz/smstudy/">
   <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="사회·문화 — HVS/DCM">
+  <meta name="twitter:title" content="사회·문화 — hvsdcm">
   <meta name="twitter:description" content="13개 중단원 · 평가원 원문 78문항 · 오답 원인 분석">
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>평가원 사회·문화 기출 회독</title>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="assets/css/style.css">
-  <link rel="stylesheet" href="/assets/css/site-nav.css">
-
 </head>
 <body>
-  <div class="app-shell">
-    <header class="site-header">
-      <div class="brand-cluster">
-        <a class="landing-home-link" href="/" aria-label="메인 랜딩 페이지로" title="메인으로">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10.5 8.5-7.5 8.5 7.5"/><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7"/></svg>
-        </a>
-        <button id="homeLogo" class="brand" type="button" aria-label="사회·문화 시작 화면으로">
-          <span class="brand-mark">社</span><span class="brand-copy"><strong>SOCIETY · CULTURE</strong><small>KICE PAST EXAM LOOP</small></span>
-        </button>
-      </div>
-      <div class="header-actions"><button id="openStats" class="ghost compact" type="button"><span class="label-wide">학습 </span>기록</button></div>
-    </header>
-    <main id="app" tabindex="-1"></main>
-    <footer class="site-footer"><span>평가원 사회·문화 · 2022~2026학년도 실기출</span><span>문항 저작권: 한국교육과정평가원 · 학습 기록은 계정 DB에 동기화</span></footer>
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">사회·문화</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+        <a class="topbar-link" href="/WordMaster/">WordMaster</a>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
+
+  <div class="container-wide sm-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="학습 메뉴">
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <p class="sidebar-label">화면</p>
+          <button id="homeLogo" class="sidebar-item is-active" type="button" data-nav="home" aria-current="page">단원 목록</button>
+          <button id="openStats" class="sidebar-item" type="button" data-nav="stats">학습 기록</button>
+        </nav>
+
+        <div class="sidebar-group">
+          <p class="sidebar-label">수록 범위</p>
+          <dl class="sm-facts">
+            <div><dt>대단원</dt><dd>4</dd></div>
+            <div><dt>중단원</dt><dd>13</dd></div>
+            <div><dt>실기출</dt><dd>78문항</dd></div>
+            <div><dt>출처</dt><dd>2022–2026 평가원</dd></div>
+          </dl>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-label">저작권</p>
+          <p class="sm-side-note">문항 저작권은 한국교육과정평가원에 있으며 비상업적 개인 학습용으로 발췌했습니다. 학습 기록은 계정 DB에 동기화됩니다.</p>
+        </div>
+      </aside>
+
+      <main id="app" class="app-main" tabindex="-1"></main>
+    </div>
   </div>
+
+  <footer class="sm-footer">
+    <div class="container-wide sm-footer-inner">
+      <span>평가원 사회·문화 · 2022~2026학년도 실기출 78문항</span>
+      <span class="text-tertiary">hvsdcm</span>
+    </div>
+  </footer>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
   <script src="/account.js" data-app="smstudy" data-key="samun2027.study.v1"></script>
   <script src="assets/js/data.js"></script>
   <script src="assets/js/notebook-data.js"></script>
