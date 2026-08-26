@@ -167,13 +167,32 @@ function validateUiContracts() {
   check(smstudyCss.includes('.sm-media-fallback'), 'smstudy: KICE image fallback styling is missing');
   check(smstudyJs.includes('function setNav('), 'smstudy: sidebar state must follow the rendered view');
   check(smstudyJs.includes("toast.classList.add('open')"), 'smstudy: toast must use the shared .toast.open contract');
-  check(smstudyJs.includes('data-question-image') && smstudyJs.includes('.sm-media-fallback'), 'smstudy: KICE image error fallback hook is missing');
+  // 이미지 폴백 — 존재 검사 두 개를 AND로 묶으면 서로 다른 요소를 봐도 통과한다 (LESSONS 규칙 4).
+  // 실제로 마크업의 속성만 바꿔도 바인더 쪽 선택자 문자열이 남아 모든 검사가 통과했다 (review B-4).
+  // 그래서 선택자를 **바인더에서 도출**해 그 값으로 마크업 한 덩어리를 검사한다.
+  // 어느 한쪽만 이름을 바꾸면 도출값과 마크업이 어긋나 즉시 실패한다.
+  const binderBody = /function bindQuestionImages\([^)]*\)\s*\{([\s\S]*?)\n {2}\}/u.exec(smstudyJs)?.[1] ?? '';
+  const imageHook = /querySelectorAll\('\[([\w-]+)\]'\)/u.exec(binderBody)?.[1];
+  const figureClass = /closest\('\.([\w-]+)'\)/u.exec(binderBody)?.[1];
+  const fallbackClass = /querySelector\('\.([\w-]+)'\)/u.exec(binderBody)?.[1];
+  check(Boolean(imageHook && figureClass && fallbackClass),
+    `smstudy: could not derive the image-fallback selectors from bindQuestionImages() (hook=${imageHook}, figure=${figureClass}, fallback=${fallbackClass})`);
+  if (imageHook && figureClass && fallbackClass) {
+    // 마크업 쪽 대상은 renderQuestionMedia()가 내는 <figure> 한 덩어리로 고정한다.
+    const mediaFigure = new RegExp(`<figure class="${figureClass}[^"]*"[\\s\\S]*?</figure>`, 'u').exec(smstudyJs)?.[0] ?? '';
+    check(mediaFigure.length > 0, `smstudy: renderQuestionMedia() must emit a <figure class="${figureClass}"> that the binder can find with closest()`);
+    check(new RegExp(`<img\\b[^>]*\\s${imageHook}(?=[\\s>])`, 'u').test(mediaFigure),
+      `smstudy: the question <img> inside <figure class="${figureClass}"> must carry the ${imageHook} attribute the binder selects on`);
+    check(new RegExp(`<div\\b[^>]*class="${fallbackClass}"[^>]*\\shidden(?=[\\s>])`, 'u').test(mediaFigure),
+      `smstudy: the same <figure> must hold a <div class="${fallbackClass}" hidden> for the binder to unhide`);
+    check(/\.sm-media\.is-failed \.sm-media-fallback \{[^}]*display: grid/su.test(smstudyCss), 'smstudy: fallback must be revealed by an explicit failure-state rule');
+    check(baseRuleDisplay(smstudyCss, fallbackClass) === 'none', `smstudy: .${fallbackClass} must default to display: none so a rendered-but-hidden fallback stays invisible`);
+    check(smstudyCss.includes(`.${fallbackClass}`), `smstudy: KICE image fallback styling for .${fallbackClass} is missing`);
+  }
   check(smstudyJs.includes("addEventListener('error', markFailed, { once: true })"), 'smstudy: image error handler must bind once');
   check(smstudyJs.includes("addEventListener('load', markLoaded, { once: true })"), 'smstudy: image success handler must be bound');
   check(smstudyJs.includes('image.naturalWidth > 0'), 'smstudy: cached images must be judged by naturalWidth, not by complete alone');
   check(/markLoaded = \(\) => \{[^}]*fallback\.hidden = true/su.test(smstudyJs), 'smstudy: image success path must re-hide the fallback block');
-  check(/\.sm-media\.is-failed \.sm-media-fallback \{[^}]*display: grid/su.test(smstudyCss), 'smstudy: fallback must be revealed by an explicit failure-state rule');
-  check(baseRuleDisplay(smstudyCss, 'sm-media-fallback') === 'none', 'smstudy: .sm-media-fallback must default to display: none so a rendered-but-hidden fallback stays invisible');
 
   // 회귀 방지: hidden 속성으로 렌더되는 블록을 저자 CSS의 display 선언이 되살리는 결함을 잡는다.
   // UA 스타일시트의 [hidden] { display: none } 은 저자 규칙에 항상 지므로, hidden 만으로는 숨겨지지 않는다.
@@ -285,7 +304,6 @@ function validateWordMasterData() {
 // 스키마에 필드가 새로 생겨도 검사가 자동으로 따라간다.
 const NOTEBOOK_STRING_LIMITS = {
   headline: 30,
-  center: 14,
   label: 12,
   items: 20,
   why: 40,
@@ -296,21 +314,216 @@ const NOTEBOOK_STRING_LIMITS = {
   rows: 24,
 };
 
-// kind별 nodes 개수 상·하한 (docs/kice-analysis.md 부록 D). kind 목록 자체는 여기서 정하지
-// 않는다 — 아래 derivedDiagramKinds()가 렌더러에서 뽑고, 뽑힌 kind에 여기 항목이 없으면
-// 실패시킨다. 즉 레이아웃을 새로 만들면 상·하한을 함께 적는 일이 강제된다.
-const DIAGRAM_NODE_BOUNDS = {
-  flow: [3, 5],
-  scale: [2, 2],
-  matrix2x2: [4, 4],
-  venn: [2, 3],
-  timeline: [3, 5],
-  pyramid: [3, 4],
-  radial: [5, 5],
+// 다이어그램 *안쪽* 문자열은 SVG 좌표가 직접 걸려 있어 위 표보다 좁다.
+// 이 값은 smstudy/assets/js/diagram.js 머리 주석의 좌표 전제와 **같은 숫자여야 한다**
+// (review 3c M-2: 주석은 7/14/6, 게이트는 12/20/14를 써서 스키마상 유효한 데이터가 겹쳤다).
+const DIAGRAM_TEXT_LIMITS = {
+  label: 8,
+  items: 16,
+  center: 8,
+  title: 20,
+  why: 40,
+};
+
+// kind별 nodes 개수와 node.items 개수 상·하한 (docs/kice-analysis.md 부록 D + M-2 좌표 재계산).
+// kind 목록 자체는 여기서 정하지 않는다 — 아래 derivedDiagramKinds()가 렌더러에서 뽑고,
+// 뽑힌 kind에 여기 항목이 없으면 실패시킨다. 즉 레이아웃을 새로 만들면 상·하한을 함께
+// 적는 일이 강제된다. items 상한은 각 레이아웃이 실제로 그릴 수 있는 줄 수에서 나온다.
+const DIAGRAM_SHAPE_BOUNDS = {
+  flow: { nodes: [3, 5], items: [0, 2] },        // 박스 92px / 칩 28+4px
+  scale: { nodes: [2, 2], items: [0, 4] },       // 접시 높이가 item 수에 따라 늘어난다
+  matrix2x2: { nodes: [4, 4], items: [0, 4] },   // 셀 190px / 줄 간격 26px
+  venn: { nodes: [2, 3], items: [0, 3] },        // 범례 칸 너비 245px / 줄 간격 22px
+  timeline: { nodes: [3, 5], items: [0, 2] },    // 교대 배치의 위쪽 블록이 축 위에 들어가야 한다
+  pyramid: { nodes: [3, 4], items: [0, 2] },     // 층 96px / 줄 간격 20px
+  radial: { nodes: [5, 5], items: [0, 2] },      // 카드 80px / 줄 간격 18px
+};
+
+// 렌더러가 실제로 읽는 필드의 구조 계약 (B-2). 배열 길이만 세던 검사를 대체한다.
+// **이 표는 하드코딩된 "검사 대상 목록"이 아니다** — 아래 derivedRenderedFields()가
+// 렌더러 소스에서 읽는 필드를 도출해 이 표와 양방향으로 대조하므로, 렌더러가 새 필드를
+// 읽기 시작하거나 읽기를 그만두면 표를 고치기 전까지 게이트가 실패한다 (LESSONS 규칙 5).
+//   min/max: 배열 길이. cell: 배열 원소 타입. optional: 값이 없어도 되지만 있으면 타입을 지킨다.
+const NOTEBOOK_FIELD_CONTRACT = {
+  headline: { type: 'string' },
+  summary: { type: 'array', cell: 'string', min: 2, max: 3 },
+  keyPoints: { type: 'array', cell: 'object', min: 3, max: 3 },
+  'keyPoints[].label': { type: 'string' },
+  'keyPoints[].text': { type: 'string' },
+  // keyPoints[].icon은 계약에 없다 — 감사가 히어로의 아이콘 칩을 제거해 렌더되지 않는다
+  // (plan.md D-3, review M-1). 아래 양방향 대조가 "렌더러가 다시 읽으면 계약을 적어라"를 강제한다.
+  'exam.trend': { type: 'string' },
+  'exam.trap': { type: 'string' },
+  'exam.tags': { type: 'array', cell: 'string', min: 1 },
+  diagrams: { type: 'array', cell: 'object', min: 1, max: 2 },
+  'matrix.title': { type: 'string' },
+  'matrix.headers': { type: 'array', cell: 'string', min: 3 },
+  'matrix.rows': { type: 'array', cell: 'array', min: 4 },
+  decision: { type: 'array', cell: 'string', min: 4, max: 5 },
+  deepDive: { type: 'array', cell: 'object', min: 4, max: 5 },
+  'deepDive[].term': { type: 'string' },
+  'deepDive[].icon': { type: 'icon' },
+  'deepDive[].points': { type: 'array', cell: 'string', min: 2, max: 4 },
+  recall: { type: 'array', cell: 'object', min: 3, max: 4 },
+  'recall[].question': { type: 'string' },
+  'recall[].answer': { type: 'string' },
+};
+
+// diagram.js가 읽는 필드. 개수 상·하한은 DIAGRAM_SHAPE_BOUNDS가 kind별로 따로 본다.
+const DIAGRAM_FIELD_CONTRACT = {
+  kind: { type: 'string' },
+  title: { type: 'string' },
+  why: { type: 'string' },
+  center: { type: 'string', optional: true },
+  nodes: { type: 'array', cell: 'object', min: 2, max: 5 },
+  'nodes[].label': { type: 'string' },
+  'nodes[].icon': { type: 'icon', optional: true },
+  'nodes[].items': { type: 'array', cell: 'string', optional: true },
 };
 
 const DIAGRAM_SOURCE = 'smstudy/assets/js/diagram.js';
+const APP_SOURCE = 'smstudy/assets/js/app.js';
 const ICON_SOURCE = 'assets/vendor/lucide/icons.js';
+
+// 프로퍼티 경로 도출에서 잘라 낼 JS 내장 멤버. 여기서 끊어야 note.matrix.headers.length가
+// 'matrix.headers.length'가 아니라 'matrix.headers'로 잡힌다.
+const JS_MEMBERS = new Set([
+  'length', 'map', 'filter', 'join', 'some', 'every', 'slice', 'forEach', 'reduce',
+  'find', 'findIndex', 'sort', 'includes', 'concat', 'flatMap', 'flat', 'indexOf', 'at',
+  'toString', 'push', 'keys', 'values', 'entries', 'split', 'trim', 'replace',
+  'startsWith', 'endsWith', 'padStart', 'reverse',
+]);
+
+// openIndex가 가리키는 '(' 부터 짝이 맞는 ')' 까지의 본문을 돌려준다.
+function balancedSlice(source, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === '(') depth += 1;
+    else if (source[index] === ')') {
+      depth -= 1;
+      if (depth === 0) return source.slice(openIndex + 1, index);
+    }
+  }
+  return source.slice(openIndex + 1);
+}
+
+// 렌더러 소스에서 "root 객체의 어떤 필드를 읽는가"를 도출한다.
+//   root.a.b       -> 'a.b'
+//   root.a.map((x) => x.b)  -> 'a[].b'
+function derivedRenderedFields(source, root) {
+  const fields = new Set();
+  const addChain = (chain) => {
+    const clean = [];
+    for (const segment of chain.split(/\??\./u).filter(Boolean)) {
+      if (JS_MEMBERS.has(segment)) break;
+      clean.push(segment);
+    }
+    if (clean.length > 0) fields.add(clean.join('.'));
+  };
+  for (const [, chain] of source.matchAll(new RegExp(`\\b${root}((?:\\??\\.[A-Za-z_$][\\w$]*)+)`, 'gu'))) {
+    addChain(chain);
+  }
+  for (const match of source.matchAll(new RegExp(`\\b${root}\\.([A-Za-z_$][\\w$]*)\\.map\\(\\(\\s*([A-Za-z_$][\\w$]*)`, 'gu'))) {
+    const open = source.indexOf('(', match.index + `${root}.${match[1]}.map`.length);
+    const body = balancedSlice(source, open);
+    for (const [, member] of body.matchAll(new RegExp(`\\b${match[2]}\\??\\.([A-Za-z_$][\\w$]*)`, 'gu'))) {
+      if (JS_MEMBERS.has(member)) continue;
+      fields.add(`${match[1]}[].${member}`);
+    }
+  }
+  return fields;
+}
+
+// 계약이 다루는 필드 집합 (부모 경로 포함). 'exam.trend'가 있으면 'exam'도 다뤄진 것으로 본다.
+function contractCoverage(contract) {
+  const covered = new Set();
+  for (const key of Object.keys(contract)) {
+    const segments = key.split('.');
+    for (let index = 1; index <= segments.length; index += 1) covered.add(segments.slice(0, index).join('.'));
+  }
+  return covered;
+}
+
+// 문자열 리터럴과 템플릿 리터럴의 *텍스트*만 뽑는다 (주석·식별자·${식} 제외).
+// ${...} 자리는 한 글자 placeholder로 접는다 — 그 안의 값은 스키마 길이 계약이 따로 잰다.
+function extractLiteralText(source) {
+  const chunks = [];
+  let index = 0;
+  const readString = (quote) => {
+    let text = '';
+    index += 1;
+    while (index < source.length && source[index] !== quote) {
+      if (source[index] === '\\') { text += source[index + 1] === 'n' ? '\n' : source[index + 1]; index += 2; continue; }
+      text += source[index];
+      index += 1;
+    }
+    index += 1;
+    chunks.push(text);
+  };
+  const readTemplate = () => {
+    let text = '';
+    index += 1;
+    while (index < source.length && source[index] !== '`') {
+      if (source[index] === '\\') { text += source[index + 1]; index += 2; continue; }
+      if (source[index] === '$' && source[index + 1] === '{') {
+        let depth = 0;
+        while (index < source.length) {
+          if (source[index] === '{') depth += 1;
+          else if (source[index] === '}') { depth -= 1; if (depth === 0) { index += 1; break; } }
+          index += 1;
+        }
+        text += '§';
+        continue;
+      }
+      text += source[index];
+      index += 1;
+    }
+    index += 1;
+    chunks.push(text);
+  };
+  // 정규식 리터럴을 건너뛴다. /[&<>"']/ 같은 리터럴 안의 따옴표를 문자열 시작으로 오인하면
+  // 그 뒤 전체가 어긋나 주석이 문구로 잡힌다. 앞의 유효 토큰으로 나눗셈과 구분한다.
+  const readRegExp = () => {
+    let inClass = false;
+    index += 1;
+    while (index < source.length) {
+      const char = source[index];
+      if (char === '\\') { index += 2; continue; }
+      if (char === '[') inClass = true;
+      else if (char === ']') inClass = false;
+      else if (char === '/' && !inClass) { index += 1; break; }
+      else if (char === '\n') break;
+      index += 1;
+    }
+    while (index < source.length && /[a-z]/u.test(source[index])) index += 1;
+  };
+  const REGEXP_PRECEDERS = new Set(['=', '(', '[', '{', ',', ';', ':', '!', '&', '|', '?', '+', '-', '*', '%', '~', '^', '<', '>', '\n']);
+  const REGEXP_KEYWORDS = new Set(['return', 'typeof', 'case', 'in', 'of', 'new', 'delete', 'void', 'do', 'else', 'yield', 'await']);
+  let lastSignificant = '\n';
+  let lastWord = '';
+  while (index < source.length) {
+    const char = source[index];
+    if (char === '/' && source[index + 1] === '/') { while (index < source.length && source[index] !== '\n') index += 1; continue; }
+    if (char === '/' && source[index + 1] === '*') { const end = source.indexOf('*/', index + 2); index = end === -1 ? source.length : end + 2; continue; }
+    if (char === '"' || char === "'") { readString(char); lastSignificant = char; lastWord = ''; continue; }
+    if (char === '`') { readTemplate(); lastSignificant = '`'; lastWord = ''; continue; }
+    if (char === '/' && (REGEXP_PRECEDERS.has(lastSignificant) || REGEXP_KEYWORDS.has(lastWord))) { readRegExp(); lastSignificant = '/'; lastWord = ''; continue; }
+    if (/\s/u.test(char)) { if (char === '\n') { lastSignificant = '\n'; lastWord = ''; } index += 1; continue; }
+    lastWord = /[A-Za-z_$]/u.test(char) ? lastWord + char : '';
+    lastSignificant = char;
+    index += 1;
+  }
+  return chunks;
+}
+
+// 마크업 조각에서 태그를 걷어내고 화면에 실제로 읽히는 텍스트 런만 남긴다.
+function visibleTextRuns(chunk) {
+  return chunk
+    .replace(/<[^>]*>/gu, '\n')
+    .split('\n')
+    .map((run) => run.replace(/\s+/gu, ' ').trim())
+    .filter((run) => /[가-힣]/u.test(run));
+}
 
 // 허용 kind는 렌더러의 레이아웃 함수 이름에서 뽑는다. LAYOUTS 등록부와 교차 대조해
 // "함수는 있는데 등록이 안 된" 또는 그 반대의 상태를 잡는다.
@@ -341,6 +554,107 @@ function walkNotebookStrings(node, location, key, visit) {
     for (const [childKey, value] of Object.entries(node)) {
       walkNotebookStrings(value, `${location}.${childKey}`, childKey, visit);
     }
+  }
+}
+
+// 실제 데이터가 들고 있는 필드 경로를 모은다 ('keyPoints[].icon' 같은 형태).
+// 계약 표와 대조해 "데이터에는 있는데 아무도 안 읽는" 죽은 필드를 잡는다.
+function collectDataFields(node, prefix, into, stopAt) {
+  if (Array.isArray(node)) {
+    for (const item of node) collectDataFields(item, `${prefix}[]`, into, stopAt);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  for (const [key, value] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    into.add(path);
+    if (!stopAt.has(key) && value && typeof value === 'object') collectDataFields(value, path, into, stopAt);
+  }
+}
+
+// 계약 키('keyPoints[].label')를 실제 값들로 펼친다.
+function resolveContractTargets(root, key, location) {
+  let nodes = [[root, location]];
+  for (const segment of key.split('.')) {
+    const isArray = segment.endsWith('[]');
+    const name = isArray ? segment.slice(0, -2) : segment;
+    const next = [];
+    for (const [value, where] of nodes) {
+      const child = value === null || value === undefined ? undefined : value[name];
+      if (!isArray) { next.push([child, `${where}.${name}`]); continue; }
+      if (!Array.isArray(child)) { next.push([undefined, `${where}.${name}[]`]); continue; }
+      child.forEach((item, index) => next.push([item, `${where}.${name}[${index}]`]));
+    }
+    nodes = next;
+  }
+  return nodes;
+}
+
+function applyFieldRule(value, rule, where, iconKeys) {
+  if (value === undefined || value === null) {
+    check(Boolean(rule.optional), `smstudy: ${where} is read by the renderer but missing (render contract)`);
+    return;
+  }
+  if (rule.type === 'string' || rule.type === 'icon') {
+    const ok = typeof value === 'string' && value.trim().length > 0;
+    check(ok, `smstudy: ${where} must be a non-empty string (render contract)`);
+    if (ok && rule.type === 'icon') {
+      check(iconKeys.has(value), `smstudy: ${where} uses icon key "${value}" that is not vendored in ${ICON_SOURCE}`);
+    }
+    return;
+  }
+  check(Array.isArray(value), `smstudy: ${where} must be an array (render contract)`);
+  if (!Array.isArray(value)) return;
+  if (rule.min !== undefined) check(value.length >= rule.min, `smstudy: ${where} must hold at least ${rule.min} entries, found ${value.length}`);
+  if (rule.max !== undefined) check(value.length <= rule.max, `smstudy: ${where} must hold at most ${rule.max} entries, found ${value.length}`);
+  value.forEach((item, index) => {
+    if (rule.cell === 'string') check(typeof item === 'string' && item.trim().length > 0, `smstudy: ${where}[${index}] must be a non-empty string`);
+    else if (rule.cell === 'array') check(Array.isArray(item), `smstudy: ${where}[${index}] must be an array`);
+    else if (rule.cell === 'object') check(Boolean(item) && typeof item === 'object' && !Array.isArray(item), `smstudy: ${where}[${index}] must be an object`);
+  });
+}
+
+function enforceContract(contract, root, location, iconKeys) {
+  for (const [key, rule] of Object.entries(contract)) {
+    for (const [value, where] of resolveContractTargets(root, key, location)) applyFieldRule(value, rule, where, iconKeys);
+  }
+}
+
+// 아이콘 집합이 렌더러에 **실제로 연결돼 있는지**는 소스에 전역명이 있는지로 알 수 없다.
+// ICON_SET = {} 로 바꾸고 `void window.SM_ICONS` 만 남긴 변형이 통과했다 (review B-3).
+// 그래서 렌더러를 격리 VM에서 평가해 주입한 아이콘 본문이 마크업으로 나오는지 본다.
+function evaluateDiagramRenderer(iconSet) {
+  const context = {};
+  context.window = context;
+  context.SM_ICONS = { ICONS: iconSet };
+  vm.createContext(context);
+  vm.runInContext(readFileSync(path.join(ROOT, DIAGRAM_SOURCE), 'utf8'), context, { filename: DIAGRAM_SOURCE });
+  return context.SMSTUDY_DIAGRAM;
+}
+
+// 화면에 그대로 나가는 렌더러 고정 문구도 R1(한 문장 60자)을 지켜야 한다.
+// 데이터 순회만으로는 app.js·diagram.js의 문구가 검사 밖에 남는다 (review B-1).
+function validateRenderedCopy() {
+  for (const file of [APP_SOURCE, DIAGRAM_SOURCE]) {
+    const source = readFileSync(path.join(ROOT, file), 'utf8');
+    let sentences = 0;
+    for (const chunk of extractLiteralText(source)) {
+      for (const run of visibleTextRuns(chunk)) {
+        for (const sentence of run.split(/(?<=[.!?])\s+/u)) {
+          const text = sentence.trim();
+          if (!/[가-힣]/u.test(text)) continue;
+          sentences += 1;
+          const length = [...text].length;
+          check(length <= 60, `${file}: rendered copy is ${length} characters, over the 60 limit — "${text}"`);
+        }
+      }
+    }
+    // 도출이 조용히 깨지면 이 검사가 통째로 무력해진다. 기대치는 파일에서 직접 뽑는다 —
+    // 주석이 아닌 줄 중 한글이 있는 줄 수의 절반은 문구로 잡혀야 한다 (하드코딩 금지, LESSONS 5).
+    const hangulCodeLines = source.split('\n')
+      .filter((line) => /[가-힣]/u.test(line) && !/^\s*(?:\/\/|\*|\/\*)/u.test(line)).length;
+    check(sentences >= Math.floor(hangulCodeLines / 2),
+      `${file}: rendered-copy scan looks truncated (found ${sentences} sentences for ${hangulCodeLines} Korean code lines) — extractLiteralText may be broken`);
   }
 }
 
@@ -380,25 +694,95 @@ function validateSmStudyData() {
   check(/window\.SM_ICONS(?![\w$])/u.test(diagramSource), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
   for (const kind of diagramKinds) {
     check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
-    check(Array.isArray(DIAGRAM_NODE_BOUNDS[kind]), `smstudy: diagram kind ${kind} has no node-count bound — add it to DIAGRAM_NODE_BOUNDS in scripts/validate.mjs`);
+    check(Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.nodes) && Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.items),
+      `smstudy: diagram kind ${kind} has no node/item bound — add it to DIAGRAM_SHAPE_BOUNDS in scripts/validate.mjs`);
   }
   for (const kind of registeredKinds) {
     check(diagramKinds.has(kind), `smstudy: LAYOUTS registers ${kind} but ${DIAGRAM_SOURCE} has no layout${kind[0].toUpperCase()}${kind.slice(1)} function`);
   }
 
+  // ---- B-3. 아이콘 집합 → 렌더러 → 마크업 연결을 실제 평가로 확인한다 ----
+  const PROBE_KEY = 'gate-probe-icon';
+  const PROBE_BODY = '<path d="M1 2 3 4" data-gate-probe="1"/>';
+  const probeRenderer = evaluateDiagramRenderer({ [PROBE_KEY]: PROBE_BODY });
+  check(typeof probeRenderer?.renderIcon === 'function' && typeof probeRenderer?.renderDiagram === 'function',
+    `smstudy: ${DIAGRAM_SOURCE} must publish renderIcon/renderDiagram on window.SMSTUDY_DIAGRAM`);
+  if (typeof probeRenderer?.renderIcon === 'function') {
+    check(probeRenderer.renderIcon(PROBE_KEY).includes(PROBE_BODY),
+      `smstudy: ${DIAGRAM_SOURCE} renderIcon() did not emit the body injected through window.SM_ICONS — the vendored icon set is not wired to the renderer`);
+    check(probeRenderer.renderIcon('gate-missing-icon') === '',
+      `smstudy: ${DIAGRAM_SOURCE} renderIcon() must emit nothing for an unknown key (no broken markup)`);
+  }
+  if (typeof probeRenderer?.renderDiagram === 'function') {
+    const probeDiagram = {
+      kind: 'radial', title: '게이트 탐침', why: '연결 확인용', center: '탐침',
+      nodes: Array.from({ length: 5 }, (item, index) => ({ label: `갈래${index + 1}`, icon: PROBE_KEY, items: [] })),
+    };
+    const emitted = probeRenderer.renderDiagram(probeDiagram).split(PROBE_BODY).length - 1;
+    check(emitted >= 10,
+      `smstudy: ${DIAGRAM_SOURCE} renderDiagram() emitted ${emitted} injected icon bodies for 5 icon keys (expected >= 10: SVG + fallback list)`);
+  }
+  // 실제 벤더 집합으로 21개 다이어그램을 렌더해, 데이터의 icon 키가 마크업까지 도달하는지 본다.
+  const liveRenderer = evaluateDiagramRenderer(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS')?.ICONS || {});
+
+  // ---- B-2. 계약표가 렌더러보다 뒤처지지 않게 양방향으로 대조한다 (LESSONS 규칙 5) ----
+  // 계약표를 손으로 유지하면 반드시 뒤처진다. 그래서 렌더러 소스에서 "실제로 읽는 필드"를
+  // 도출해 표와 맞춘다. 렌더러가 새 필드를 읽기 시작하면 표를 고치기 전까지 게이트가 실패하고,
+  // 반대로 렌더러가 읽지 않게 된 필드(D-3의 keyPoints[].icon)를 표에 남겨 둬도 실패한다.
+  const smstudyJsSource = readFileSync(path.join(ROOT, APP_SOURCE), 'utf8');
+  const notebookCoverage = contractCoverage(NOTEBOOK_FIELD_CONTRACT);
+  const diagramCoverage = contractCoverage(DIAGRAM_FIELD_CONTRACT);
+  const renderedNotebookFields = derivedRenderedFields(smstudyJsSource, 'note');
+  const renderedDiagramFields = new Set([
+    ...derivedRenderedFields(diagramSource, 'diagram'),
+    ...[...diagramSource.matchAll(/\bnode\??\.([A-Za-z_$][\w$]*)/gu)]
+      .map(([, member]) => member).filter((member) => !JS_MEMBERS.has(member)).map((member) => `nodes[].${member}`),
+  ]);
+  check(renderedNotebookFields.size >= 15,
+    `smstudy: notebook field derivation looks broken (parsed ${renderedNotebookFields.size} fields from ${APP_SOURCE})`);
+  check(renderedDiagramFields.size >= 6,
+    `smstudy: diagram field derivation looks broken (parsed ${renderedDiagramFields.size} fields from ${DIAGRAM_SOURCE})`);
+  for (const field of renderedNotebookFields) {
+    check(notebookCoverage.has(field),
+      `smstudy: ${APP_SOURCE} renders note.${field} but NOTEBOOK_FIELD_CONTRACT in scripts/validate.mjs does not declare it`);
+  }
+  for (const field of Object.keys(NOTEBOOK_FIELD_CONTRACT)) {
+    check(renderedNotebookFields.has(field),
+      `smstudy: NOTEBOOK_FIELD_CONTRACT declares ${field} but ${APP_SOURCE} never reads it — drop the contract entry or the field is dead`);
+  }
+  for (const field of renderedDiagramFields) {
+    check(diagramCoverage.has(field),
+      `smstudy: ${DIAGRAM_SOURCE} renders diagram.${field} but DIAGRAM_FIELD_CONTRACT in scripts/validate.mjs does not declare it`);
+  }
+  for (const field of Object.keys(DIAGRAM_FIELD_CONTRACT)) {
+    check(renderedDiagramFields.has(field),
+      `smstudy: DIAGRAM_FIELD_CONTRACT declares ${field} but ${DIAGRAM_SOURCE} never reads it — drop the contract entry or the field is dead`);
+  }
+
   // 문자열 계약 — 길이 상한 / 1문장 / 평문. 스키마를 재귀 순회해 전 문자열에 적용한다.
   // 아이콘 키 정합도 같은 순회에서 본다 (icon 값이 곧 문자열이므로 별도 목록이 필요 없다).
+  // 순회 대상은 노트뿐 아니라 **화면에 실제로 렌더되는 data.js의 개념 섹션·시각 가이드**까지다
+  // (review B-1: NOTEBOOKS·LEARNING_DESIGN만 보던 순회가 60자 초과 본문을 통과시켰다).
   let visitedStrings = 0;
   let visitedIcons = 0;
+  let visitedHrefs = 0;
   const inspectString = (value, location, key) => {
-    if (key === 'href') return;
+    if (key === 'href') {
+      // href는 esc()가 아니라 URL 형식으로 잠근다. 건너뛰면 속성 삽입 지점이 계약 사각지대가 된다.
+      visitedHrefs += 1;
+      check(/^https:\/\/[\w.-]+(?:\/[\w\-./~%+=&?#:@!$'()*,;]*)?$/u.test(value),
+        `smstudy: ${location} must be a plain https URL without quotes, spaces or angle brackets — "${value}"`);
+      return;
+    }
     if (key === 'icon') {
       visitedIcons += 1;
       check(iconKeys.has(value), `smstudy: ${location} uses icon key "${value}" that is not vendored in ${ICON_SOURCE}`);
       return;
     }
     visitedStrings += 1;
-    const limit = NOTEBOOK_STRING_LIMITS[key] ?? 60;
+    // 다이어그램 안쪽 문자열은 SVG 좌표가 걸려 있어 더 좁은 상한을 쓴다 (M-2).
+    const inDiagram = location.includes('.diagrams[');
+    const limit = (inDiagram ? DIAGRAM_TEXT_LIMITS[key] : undefined) ?? NOTEBOOK_STRING_LIMITS[key] ?? 60;
     const length = [...value].length;
     check(length <= limit, `smstudy: ${location} is ${length} characters, over the ${limit} limit — "${value}"`);
     check((value.match(/[.!?]/gu) || []).length <= 1, `smstudy: ${location} must be a single sentence — "${value}"`);
@@ -406,8 +790,21 @@ function validateSmStudyData() {
   };
   walkNotebookStrings(notebookData.NOTEBOOKS, 'NOTEBOOKS', '', inspectString);
   walkNotebookStrings(notebookData.LEARNING_DESIGN, 'LEARNING_DESIGN', '', inspectString);
-  check(visitedStrings >= 500, `smstudy: notebook string walk looks truncated (visited ${visitedStrings} strings)`);
+  for (const subunit of subunits) {
+    walkNotebookStrings(subunit.sections, `UNITS.${subunit.id}.sections`, 'sections', inspectString);
+    walkNotebookStrings(subunit.visual, `VISUAL_GUIDES.${subunit.id}`, 'visual', inspectString);
+    walkNotebookStrings(subunit.keywords, `UNITS.${subunit.id}.keywords`, 'keywords', inspectString);
+  }
+  // explanationData.GUIDES는 이 순회에 넣지 않는다 — 오답 해설은 개념 파트가 아니라
+  // 퀴즈 피드백이고, R1의 "한 문장 60자"는 개념 파트 본문에 건 계약이다 (plan.md §1).
+  check(visitedStrings >= 800, `smstudy: notebook string walk looks truncated (visited ${visitedStrings} strings)`);
   check(visitedIcons >= 50, `smstudy: notebook icon walk looks truncated (visited ${visitedIcons} icon keys)`);
+  check(visitedHrefs >= 3, `smstudy: href walk looks truncated (visited ${visitedHrefs} URLs)`);
+  // 속성 보간 지점 — URL을 이스케이프 없이 속성에 넣으면 값이 깨질 때 뒤 마크업까지 깨진다.
+  for (const [attribute, expression] of smstudyJsSource.matchAll(/\s(?:href|src)="\$\{([^}]+)\}/gu)) {
+    check(expression.trim().startsWith('esc('),
+      `smstudy: URL attribute interpolation must be escaped — found ${attribute.trim()} in ${APP_SOURCE}`);
+  }
 
   // 형식 다양성 — 13단원이 같은 형식으로 수렴하면 R3(내용에 맞는 형식 선택)가 무너진다.
   const usedKinds = new Set(
@@ -426,42 +823,60 @@ function validateSmStudyData() {
     check(Boolean(subunit.visual?.question), `smstudy: ${subunit.id} has no visual-guide question`);
     check(subunit.visual?.flow?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 flow steps`);
     check(subunit.visual?.checks?.length === 3, `smstudy: ${subunit.id} visual guide must contain 3 checks`);
-    check(Boolean(notebook?.headline), `smstudy: ${subunit.id} notebook has no headline`);
-    check(notebook?.summary?.length >= 2 && notebook?.summary?.length <= 3, `smstudy: ${subunit.id} notebook needs 2-3 summary lines`);
-    check(notebook?.keyPoints?.length === 3, `smstudy: ${subunit.id} must have three readable key points`);
-    check(notebook?.keyPoints?.every((item) => item.label && item.text && item.icon), `smstudy: ${subunit.id} has an incomplete key point`);
-    check(Boolean(notebook?.exam?.trend && notebook?.exam?.trap), `smstudy: ${subunit.id} exam note must carry both trend and trap`);
-    check(notebook?.exam?.tags?.length >= 1, `smstudy: ${subunit.id} exam.tags must not be empty`);
+    // ---- B-2. 렌더 필수 필드의 존재·타입·개수를 계약표로 검사한다 ----
+    // (배열 길이만 세던 이전 검사는 matrix.title / deepDive[].term·icon / recall[].answer를
+    //  통째로 지워도 초록이었다.)
+    enforceContract(NOTEBOOK_FIELD_CONTRACT, notebook || {}, subunit.id, iconKeys);
+    check(notebook?.matrix?.rows?.every((row) => Array.isArray(row) && row.length === notebook.matrix.headers.length),
+      `smstudy: ${subunit.id} comparison matrix row width mismatch`);
     // 수기 count가 자동 집계로 대체됐으므로 옛 필드가 되살아나면 실패시킨다 (plan.md §4.1).
     check(!('oneLine' in (notebook || {})) && !('examInsight' in (notebook || {})) && !('patterns' in (notebook || {})),
       `smstudy: ${subunit.id} still carries a removed field (oneLine / examInsight / patterns)`);
-    // 다이어그램 형태 — kind 허용 집합과 nodes 개수 상·하한 (plan.md §5, 부록 D).
-    check(notebook?.diagrams?.length >= 1, `smstudy: ${subunit.id} must carry at least one diagram`);
+    // 렌더되지 않는 필드가 데이터에 남는 것도 막는다 — D-3의 keyPoints[].icon이 이 사례였다.
+    const notebookFields = new Set();
+    collectDataFields(notebook || {}, '', notebookFields, new Set(['diagrams']));
+    for (const field of notebookFields) {
+      check(notebookCoverage.has(field),
+        `smstudy: NOTEBOOKS.${subunit.id}.${field} is not read by any renderer — remove it or declare it in NOTEBOOK_FIELD_CONTRACT`);
+    }
+    // 다이어그램 형태 — kind 허용 집합, nodes/items 개수 상·하한, 렌더 필수 필드 (plan.md §5, M-2).
     (notebook?.diagrams || []).forEach((diagram, index) => {
       const where = `${subunit.id}.diagrams[${index}]`;
       check(diagramKinds.has(diagram.kind), `smstudy: ${where} uses kind "${diagram.kind}" but ${DIAGRAM_SOURCE} has no layout for it`);
-      const bounds = DIAGRAM_NODE_BOUNDS[diagram.kind];
+      enforceContract(DIAGRAM_FIELD_CONTRACT, diagram, where, iconKeys);
+      const bounds = DIAGRAM_SHAPE_BOUNDS[diagram.kind];
       const nodeCount = Array.isArray(diagram.nodes) ? diagram.nodes.length : 0;
-      check(Boolean(bounds) && nodeCount >= bounds[0] && nodeCount <= bounds[1],
-        `smstudy: ${where} (${diagram.kind}) must hold ${bounds ? `${bounds[0]}-${bounds[1]}` : '?'} nodes, found ${nodeCount}`);
-      check(Boolean(diagram.title && diagram.why), `smstudy: ${where} must carry both a title and a why`);
+      check(Boolean(bounds) && nodeCount >= bounds.nodes[0] && nodeCount <= bounds.nodes[1],
+        `smstudy: ${where} (${diagram.kind}) must hold ${bounds ? `${bounds.nodes[0]}-${bounds.nodes[1]}` : '?'} nodes, found ${nodeCount}`);
+      (diagram.nodes || []).forEach((node, nodeIndex) => {
+        const itemCount = Array.isArray(node.items) ? node.items.length : 0;
+        check(Boolean(bounds) && itemCount >= bounds.items[0] && itemCount <= bounds.items[1],
+          `smstudy: ${where}.nodes[${nodeIndex}] (${diagram.kind}) must hold ${bounds ? `${bounds.items[0]}-${bounds.items[1]}` : '?'} items, found ${itemCount} — the SVG layout has no room for more`);
+      });
       check(diagram.kind !== 'radial' || Boolean(diagram.center), `smstudy: ${where} is radial and must carry a center label`);
-      check((diagram.nodes || []).every((node) => Boolean(node.label)), `smstudy: ${where} has a node without a label`);
+      const diagramFields = new Set();
+      collectDataFields(diagram, '', diagramFields, new Set());
+      for (const field of diagramFields) {
+        check(diagramCoverage.has(field),
+          `smstudy: ${where}.${field} is not read by ${DIAGRAM_SOURCE} — remove it or declare it in DIAGRAM_FIELD_CONTRACT`);
+      }
+      // 렌더러를 실제로 돌려 마크업까지 확인한다 (아이콘 도달 + figure 콘텐츠 모델).
+      if (typeof liveRenderer?.renderDiagram === 'function') {
+        const markup = liveRenderer.renderDiagram(diagram);
+        const expectedIcons = (diagram.nodes || []).filter((node) => node.icon).length + (diagram.center ? 1 : 0);
+        check((markup.match(/<svg class="sm-icon"/gu) || []).length === expectedIcons,
+          `smstudy: ${where} renders ${(markup.match(/<svg class="sm-icon"/gu) || []).length} fallback icons for ${expectedIcons} icon keys`);
+        check((markup.match(/<figcaption\b/gu) || []).length === 1,
+          `smstudy: ${where} must render exactly one <figcaption> — a <figure> may hold only one caption (HTML content model)`);
+      }
     });
-    check(notebook?.matrix?.headers?.length >= 3, `smstudy: ${subunit.id} comparison matrix has too few columns`);
-    check(notebook?.matrix?.rows?.length >= 4, `smstudy: ${subunit.id} comparison matrix has too few rows`);
-    check(notebook?.matrix?.rows?.every((row) => row.length === notebook.matrix.headers.length), `smstudy: ${subunit.id} comparison matrix row width mismatch`);
-    check(notebook?.decision?.length >= 4, `smstudy: ${subunit.id} decision flow is too short`);
-    check(notebook?.deepDive?.length >= 4, `smstudy: ${subunit.id} deep-dive notes are too short`);
-    check(notebook?.deepDive?.every((item) => item.points?.length >= 2 && item.points?.length <= 4), `smstudy: ${subunit.id} deep-dive entries must each carry 2-4 points`);
-    check(notebook?.recall?.length >= 3, `smstudy: ${subunit.id} recall practice is too short`);
     check(Boolean(explanation?.focus && explanation?.correctReason && explanation?.wrongReason), `smstudy: ${subunit.id} explanation guide is incomplete`);
     check(explanation?.checks?.length === 3, `smstudy: ${subunit.id} explanation guide must contain three checks`);
   }
 
   for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
-  check(explanationData.GUIDES['I-02']?.checks?.some((item) => item.includes('질문지·실험은 양적 연구')), 'smstudy: research-method feedback must use the standard quantitative pairing');
-  check(explanationData.GUIDES['III-03']?.checks?.some((item) => item.includes('2차적 발명은 사회 내부')), 'smstudy: cultural-change feedback must distinguish secondary invention from stimulus diffusion');
+  // 콘텐츠 문자열 하드코딩 검사는 전부 구조 계약으로 대체했다 (plan.md R7, review M-7).
+  // 기준선 2c49cb5에 있던 7건(NOTEBOOKS 5건 + explanation-data 2건)이 모두 사라졌다.
   check(Object.keys(explanationData.GUIDES || {}).length === 13, 'smstudy: expected 13 explanation guides');
   check(Boolean(explanationData.EBS_PAST_EXAMS?.startsWith('https://www.ebsi.co.kr/')), 'smstudy: EBS explanation source link is missing');
 
@@ -817,6 +1232,7 @@ validateGlobalsAndOrder();
 validateMigrations();
 validateWordMasterData();
 validateSmStudyData();
+validateRenderedCopy();
 
 if (failures.length > 0) {
   console.error(`Validation failed (${failures.length}/${checks})`);
