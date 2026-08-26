@@ -64,3 +64,65 @@
 - **다이어그램 형식이 그 단원 내용에 맞는지**: `kind`가 허용 집합에 있는지와 개수만 보고,
   그 형식이 개념 구조에 어울리는지는 판단하지 않는다. 근거는 데이터의 `why`가 사람에게 남긴다.
 - **아이콘이 의미에 맞는지**: 키가 벤더 파일에 있는지만 본다. `users` 자리에 `wallet`을 넣어도 통과한다.
+
+---
+
+# 추가 — 사이클3 6단계(수정 라운드)
+
+교차 리뷰(`docs/review.md`)가 blocker 4건을 "게이트가 초록인데 요구사항이 깨진다"로 판정하고,
+그 근거로 **실제 반증에 성공한 변형 6개**를 제시했다. 게이트를 고친 뒤 **그 변형들을 그대로
+재현해 이제 실패하는지** 확인하고, 신설 검사마다 변형을 추가했다.
+
+- 수행 방법은 위와 같다: `git archive HEAD` 사본, 케이스마다 원복, 마지막에 대조군으로 기준선 재확인.
+- 드라이버: 스크래치패드의 `negtests.mjs` (일회용, 저장소에 남기지 않는다).
+- 기준선: 사본 초기 상태 `Validation passed (13173 checks)`.
+
+## 결과 — 23/23 (리뷰가 제시한 반증 6건 전부 포함)
+
+| # | 겨냥한 지적 | 어떻게 위반시켰나 | 리뷰 시점 | 지금 | 실패 메시지(첫 줄) |
+|---|---|---|---|---|---|
+| N20 | B-1 | `data.js`의 렌더되는 concept section 본문을 76자로 늘렸다 | **통과(반증 성공)** | 실패 | `UNITS.IV-02.sections[1].points[1] is 76 characters, over the 60 limit` |
+| N21 | B-1 | `VISUAL_GUIDES`의 flow 항목을 60자 초과로 늘렸다 | 통과 | 실패 | `VISUAL_GUIDES.IV-02.flow[0] is … over the 60 limit` |
+| N22 | B-1 | `evidence[].href`에 `'"><b>broken</b>`를 삽입했다 | **통과(반증 성공)** | 실패 | `LEARNING_DESIGN.evidence[0].href must be a plain https URL without quotes, spaces or angle brackets` |
+| N23 | B-1 | `href` 속성 보간에서 `esc()`를 벗겼다 | (검사 없음) | 실패 | `URL attribute interpolation must be escaped — found href="${item.href}` |
+| N24 | B-1 | 렌더러 고정 문구를 81자 한 문장으로 늘렸다 | (검사 없음) | 실패 | `app.js: rendered copy is 81 characters, over the 60 limit` |
+| N25 | B-2 | `matrix.title`을 지웠다 | **통과(반증 성공)** | 실패 | `IV-01.matrix.title is read by the renderer but missing (render contract)` |
+| N26 | B-2 | `deepDive[0].term`을 지웠다 | **통과(반증 성공)** | 실패 | `IV-02.deepDive[0].term is read by the renderer but missing` |
+| N27 | B-2 | `deepDive[0].icon`을 지웠다 | **통과(반증 성공)** | 실패 | `IV-02.deepDive[0].icon is read by the renderer but missing` |
+| N28 | B-2 | `recall[0].answer`를 지웠다 | **통과(반증 성공)** | 실패 | `IV-02.recall[0].answer is read by the renderer but missing` |
+| N29 | B-2 | 계약에 없는 필드(`legacyCount`)를 데이터에 추가했다 | (검사 없음) | 실패 | `NOTEBOOKS.IV-02.legacyCount is not read by any renderer` |
+| N30 | M-1 | 렌더되지 않는 `keyPoints[].icon`을 되살렸다 | (반대로 필수였음) | 실패 | `NOTEBOOKS.IV-02.keyPoints[].icon is not read by any renderer` |
+| N31 | B-2 | 렌더러가 계약에 없는 필드를 읽게 만들었다 | (검사 없음) | 실패 | `app.js renders note.legacyCount but NOTEBOOK_FIELD_CONTRACT … does not declare it` |
+| N32 | B-3 | `ICON_SET = {}` 로 바꾸고 `void window.SM_ICONS`만 남겼다 | **통과(반증 성공)** | 실패 | `renderIcon() did not emit the body injected through window.SM_ICONS` (연쇄 23건) |
+| N33 | B-3 | `renderIcon()`이 아이콘 본문을 비우게 만들었다 | (검사 없음) | 실패 | `renderIcon() did not emit the body injected through window.SM_ICONS` |
+| N34 | B-4 | 마크업의 `data-question-image` **속성만** 이름을 바꿨다 | **통과(반증 성공)** | 실패 | `the question <img> inside <figure class="sm-media"> must carry the data-question-image attribute the binder selects on` |
+| N35 | B-4 | 마크업의 폴백 블록 **클래스만** 이름을 바꿨다 | 통과 | 실패 | `the same <figure> must hold a <div class="sm-media-fallback" hidden>` |
+| N36 | B-4 | 폴백 블록의 `hidden` 속성을 지웠다 | 통과 | 실패 | 같은 메시지 |
+| N37 | M-3 | `<figure>`에 `<figcaption>`을 하나 더 넣었다 | (검사 없음) | 실패 | `must render exactly one <figcaption> — a <figure> may hold only one caption` (21단원 전부) |
+| N38 | M-2 | radial `center`를 공백 없는 한글 11자로 바꿨다 | **통과(레이아웃 파손)** | 실패 | `diagrams[0].center is 11 characters, over the 8 limit` |
+| N39 | M-2 | 다이어그램 `label`을 9자로 늘렸다 | 통과(상한 12) | 실패 | `nodes[0].label is 9 characters, over the 8 limit` |
+| N40 | M-2 | 다이어그램 `items`를 20자로 늘렸다 | 통과(상한 20) | 실패 | `nodes[0].items[0] is 20 characters, over the 16 limit` |
+| N41 | M-2 | flow 노드의 `items`를 4개로 늘렸다 | 통과(개수 미검사) | 실패 | `(flow) must hold 0-2 items, found 4 — the SVG layout has no room for more` |
+| N42 | 대조군 | 아무것도 바꾸지 않았다 | 통과 | **통과** | `Validation passed (13173 checks)` |
+
+**리뷰가 제시한 반증 6건은 전부 재현해 지금은 실패한다.** 6번째("`keyPoints[0].icon` 제거가
+실패했다")는 방향이 반대인 사례였고, D-3대로 선택 필드로 내린 뒤 데이터에서도 지웠으므로
+N30이 그 자리를 대신한다(되살리면 실패).
+
+## 이번 라운드에서 검사 방식 자체가 바뀐 것
+
+- **아이콘 연결**: 소스에 전역명이 있는지(토큰 존재) → **렌더러를 격리 VM에서 평가**해 주입한
+  아이콘 본문이 마크업으로 나오는지. N32·N33이 이 전환을 증명한다.
+- **렌더 필수 필드**: 배열 길이 세기 → 계약표 + **렌더러 소스에서 읽는 필드를 도출해 양방향 대조**.
+  표가 렌더러보다 뒤처지면 게이트가 실패한다(N29·N30·N31).
+- **이미지 폴백**: 독립 존재 검사 2개의 AND(LESSONS 규칙 4 위반) → **바인더에서 선택자를 도출해
+  마크업 한 덩어리에 적용**. 한쪽만 이름을 바꾸면 어긋나 실패한다(N34·N35).
+- **문자열 계약 범위**: `NOTEBOOKS`·`LEARNING_DESIGN` → `data.js`의 개념 섹션·시각 가이드와
+  **렌더러 고정 문구**까지(N20·N21·N24).
+
+## 여전히 못 보는 것 (갱신)
+
+위 "이 게이트가 여전히 못 보는 것" 4개 항목은 그대로 유효하다. 다만 다이어그램 시각 정합성은
+이제 **계약 상한과 좌표 전제가 같은 숫자**라서 "스키마상 유효한데 겹치는" 구간은 없어졌다.
+남은 사각지대는 글꼴 폭 차이와 실제 컨테이너 폭이며, 이번 라운드에서는 브라우저 DOM의
+`getBBox()` 전수 계측과 `docs/snapshots/` 정적 스냅샷으로 메웠다(게이트에 상주하지 않는다).
