@@ -443,7 +443,7 @@
 
       <div class="wm-layout">
         <section class="wm-col" aria-labelledby="rangeHead">
-          <p class="list-group-head" id="rangeHead">출제 범위</p>
+          <h2 class="list-group-head" id="rangeHead">출제 범위</h2>
           <div class="list-group">
             <div class="list-row">
               ${emojiLead('range')}
@@ -672,7 +672,7 @@
 
       ${wrongRows.length ? `
         <section aria-labelledby="sessionMistakes">
-          <p class="list-group-head" id="sessionMistakes">이번 시험 오답 ${wrongRows.length}개</p>
+          <h2 class="list-group-head" id="sessionMistakes">이번 시험 오답 ${wrongRows.length}개</h2>
           <div class="list-group">
             ${wrongRows.map((row) => {
               const item = WORD_BY_ID.get(row.id);
@@ -723,7 +723,7 @@
       <div class="wm-layout">
         <section class="wm-col" aria-labelledby="wrongNoteTitle">
           <div class="list-group-head-row">
-            <p class="list-group-head" id="wrongNoteTitle">오답 암기 노트 · ${wrongEntries.length}개</p>
+            <h2 class="list-group-head" id="wrongNoteTitle">오답 암기 노트 · ${wrongEntries.length}개</h2>
             <div class="wm-sort">
               <label class="wm-sort-label" for="wrongSortMode">정렬</label>
               <select id="wrongSortMode" class="field-input-inline">${renderSortOptions(state.wrongOrder)}</select>

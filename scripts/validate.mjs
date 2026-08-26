@@ -6,7 +6,7 @@ import {
   APP_SOURCE, DIAGRAM_SOURCE, ICON_SOURCE,
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer, functionBody, readSource, trackReads,
 } from './render-sandbox.mjs';
-import { buildSnapshots } from './snapshot.mjs';
+import { buildSnapshots, SNAPSHOT_BY_SCREEN, SNAPSHOT_FILES } from './snapshot.mjs';
 
 const ROOT = process.cwd();
 const failures = [];
@@ -31,15 +31,49 @@ function walk(directory, predicate) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.wrangler') continue;
-    // docs/snapshots는 배포 표면이 아니라 렌더 결과를 얼려 둔 문서 산출물이다 (M-6).
-    // 파일 단독으로 열려야 하므로 CSS를 인라인하며, 그 때문에 표면 계약(인라인 style 금지 등)과
-    // 충돌한다. 대신 아래 validateDocSnapshots()가 이 파일들에 별도 계약을 건다.
-    if (relative(path.join(directory, entry.name)) === 'docs/snapshots') continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...walk(absolute, predicate));
     else if (predicate(absolute)) files.push(absolute);
   }
   return files;
+}
+
+// ---- B-1. "실제로 게시되는 HTML"을 저장소 상태에서 도출한다 ----
+// 저장소 루트가 곧 GitHub Pages의 배포 루트다. 그래서 "이 디렉터리는 배포면이 아니다"를
+// 손으로 적을 수 없다 — 이전 walk()가 docs/snapshots를 그렇게 제외했고, 그 전제가 틀려서
+// 로그인 없이 열리는 개념 본문이 공개됐다(B-1).
+// 게시 여부는 Pages의 규칙이 정한다: .nojekyll이 없으면 Jekyll이 빌드하고, Jekyll은
+// 경로의 어느 조각이든 '_'나 '.'로 시작하면 출력하지 않는다. .nojekyll이 생기는 순간
+// 저장소의 모든 HTML이 그대로 게시되므로 밑줄 디렉터리도 검사 대상이 된다.
+// 즉 배포 설정이 바뀌면 이 함수의 결과가 따라 바뀌고, 게이트가 자동으로 더 넓어진다.
+const JEKYLL_DISABLED = () => existsSync(path.join(ROOT, '.nojekyll'));
+function isJekyllHidden(relativePath) {
+  return relativePath.split('/').some((segment) => segment.startsWith('_') || segment.startsWith('.'));
+}
+function publishedHtml() {
+  const jekyllOff = JEKYLL_DISABLED();
+  return walk(ROOT, (item) => item.endsWith('.html'))
+    .filter((file) => jekyllOff || !isJekyllHidden(relative(file)));
+}
+
+// 미로그인 방문자에게 학습 내용을 노출하지 않는다는 계약을 **게시되는 모든 HTML**에 건다
+// (plan.md §3). 랜딩은 <template data-study>로, 앱 3면은 account.js / admin.js 게이트로
+// 가려진다. 그 어느 쪽도 아닌 게시 HTML은 학습 문구를 담고 있으면 안 된다.
+const STUDY_KEYWORDS = ['학습', 'WordMaster', 'smstudy', 'Study'];
+function validateStudyExposure() {
+  const pages = publishedHtml();
+  check(pages.length >= 4, `study exposure: only ${pages.length} published HTML files were derived — this check is inert`);
+  for (const file of pages) {
+    const name = relative(file);
+    if (name === 'index.html') continue;   // validateLandingGating()이 따로 본다
+    const source = readFileSync(file, 'utf8');
+    const gated = /<script\b[^>]*\bsrc=["'][^"']*\/(?:account|admin)\.js["']/u.test(source);
+    if (gated) continue;
+    for (const keyword of STUDY_KEYWORDS) {
+      check(!source.includes(keyword),
+        `${name}: published without a login gate but contains study keyword "${keyword}" — move it out of the published surface (a "_" directory) or gate it (plan.md §3)`);
+    }
+  }
 }
 
 // hidden 속성이 붙은 채로 렌더되는 요소의 class 토큰을 뽑는다 (템플릿 보간 토큰은 제외).
@@ -89,7 +123,7 @@ function resolveAsset(htmlFile, reference) {
 }
 
 function validateHtmlAssets() {
-  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+  for (const file of publishedHtml()) {
     const source = readFileSync(file, 'utf8');
     check(!/<style\b/iu.test(source), `${relative(file)}: inline <style> is not allowed`);
     check(!/<script(?![^>]*\bsrc=)[^>]*>/iu.test(source), `${relative(file)}: inline executable <script> is not allowed`);
@@ -1236,7 +1270,7 @@ function validateDesignTokens() {
   check(printPaletteOverrides >= 20,
     `smstudy: @media print light palette must remap the shared tokens on html (found ${printPaletteOverrides})`);
 
-  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+  for (const file of publishedHtml()) {
     const source = readFileSync(file, 'utf8');
     check(!legacyPalette.test(source), `${relative(file)}: legacy palette literal found`);
     // style="--token: …" 인라인 정의도 같은 우회로다.
@@ -1261,6 +1295,72 @@ function validateDesignTokens() {
 const EMOJI_PATTERN = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️|⃣/u;
 // system.css가 제공하는 이모지 슬롯 클래스 (DESIGN.md §5·§7.3).
 const EMOJI_SLOT_CLASS = /\bemoji(?:-box|-lg)?\b/u;
+
+// 랜딩의 이모지 단일 원본. 앱 키는 앱 디렉터리 이름이다 (assets/js/site-emoji.js 주석 참조).
+const SITE_EMOJI_SOURCE = 'assets/js/site-emoji.js';
+const siteEmoji = () => evaluateBrowserData(SITE_EMOJI_SOURCE, 'SITE_EMOJI') || {};
+
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+  'input', 'link', 'meta', 'source', 'track', 'wbr']);
+
+// ---- R4-M-6. 중첩을 세는 요소 절단 ----
+// 이전 행 검사는 `<(\w+)...>[^]*?</\1>`로 조각을 떴다. 비탐욕 매칭은 **같은 태그의 첫
+// 닫힘**에서 멈추므로 중첩된 div가 있으면 행이 중간에서 잘리고, 잘린 뒤의 두 번째 이모지가
+// "행 바깥"으로 오인돼 실제 위반이 통과했다. 여기서는 깊이를 추적해 짝이 맞는 닫는 태그까지
+// 간다 — 즉 행의 전체 자손이 검사 대상이 된다.
+//
+// 이 절단이 **못 보는 것**: 따옴표 안에 '>'가 들어간 속성값(`title="a > b"`)이나
+// 템플릿 보간(`${a > b}`)이 여는 태그를 일찍 끝내는 경우. 저장소 소스에는 없고,
+// 생기면 조각이 짧아져 **놓칠 뿐 거짓 실패는 내지 않는다**.
+function htmlElementSlice(source, openIndex) {
+  const name = /^<([a-z][\w-]*)/iu.exec(source.slice(openIndex, openIndex + 40));
+  if (!name) return '';
+  const tag = name[1].toLowerCase();
+  if (VOID_TAGS.has(tag)) return source.slice(openIndex, source.indexOf('>', openIndex) + 1);
+  const boundary = new RegExp(`<${tag}\\b[^>]*>|</${tag}\\s*>`, 'giu');
+  boundary.lastIndex = openIndex;
+  let depth = 0;
+  for (let hit = boundary.exec(source); hit; hit = boundary.exec(source)) {
+    if (hit[0].startsWith('</')) {
+      depth -= 1;
+      if (depth <= 0) return source.slice(openIndex, hit.index + hit[0].length);
+    } else if (!hit[0].endsWith('/>')) {
+      depth += 1;
+    }
+  }
+  return source.slice(openIndex);
+}
+
+// 조각이 이모지를 **몇 개 만들어 내는가**. 리터럴 글리프만 세면 매핑을 거치는 렌더러
+// (emojiLead('x') / emojiOf(id) / data-emoji="key")에서는 언제나 0이 되어 검사가 죽는다.
+// 템플릿 보간 `${...}` 하나는 문자열 하나를 내므로 1로 센다 — 삼항의 두 가지
+// (`cond ? emojiLead('a') : emojiLead('b')`)는 동시에 렌더되지 않는다.
+//
+// 이 셈이 **못 보는 것**: 보간 하나가 map()으로 여러 조각을 만드는 경우(그 경우 행은
+// 보통 보간 안에서 생성되므로 이 조각 밖이다), 그리고 런타임에만 정해지는 반복 횟수.
+function emojiSourceCount(chunk) {
+  let count = 0;
+  let plain = '';
+  for (let index = 0; index < chunk.length; index += 1) {
+    if (chunk[index] === '$' && chunk[index + 1] === '{') {
+      let depth = 0;
+      let end = index + 1;
+      for (; end < chunk.length; end += 1) {
+        if (chunk[end] === '{') depth += 1;
+        else if (chunk[end] === '}') { depth -= 1; if (depth === 0) break; }
+      }
+      const expression = chunk.slice(index + 2, end);
+      if (/\b(?:emojiLead|emojiOf)\(/u.test(expression)
+        || new RegExp(EMOJI_PATTERN.source, 'u').test(expression)) count += 1;
+      index = end;
+      continue;
+    }
+    plain += chunk[index];
+  }
+  count += (plain.match(new RegExp(EMOJI_PATTERN.source, 'gu')) || []).length;
+  count += (plain.match(/\sdata-emoji="/gu) || []).length;
+  return count;
+}
 
 // 마크업 문자열에서 "여는 태그 직후에 등장하는 그림문자"를 모은다.
 // HTML 파일과 JS 렌더러(템플릿 문자열)에 같은 판정을 적용할 수 있다.
@@ -1294,10 +1394,14 @@ function validateEmojiSystem() {
   // 대상 ↔ 이모지는 사이트 전체에서 일대일이어야 한다 (같은 대상엔 같은 이모지).
   const labelToGlyph = new Map();
   const glyphToLabel = new Map();
+  const site = siteEmoji();
   let sloted = 0;
 
+  check(Object.keys(site).length > 0,
+    `${SITE_EMOJI_SOURCE}: SITE_EMOJI mapping is missing — the landing emoji need a single source (DESIGN.md §5.1)`);
+
   const surfaces = [
-    ...walk(ROOT, (item) => item.endsWith('.html')).map(relative),
+    ...publishedHtml().map(relative),
     ...['assets/js/home.js', 'account.js', 'WordMaster/assets/js/app.js',
       'smstudy/assets/js/app.js', 'admin/assets/js/admin.js'],
   ];
@@ -1307,10 +1411,42 @@ function validateEmojiSystem() {
     const occurrences = emojiInMarkup(source);
     const isHtml = file.endsWith('.html');
 
+    // ---- R4-M-4. HTML 마크업에는 글리프 리터럴을 두지 않는다 ----
+    // 리터럴이 허용되면 같은 대상의 이모지가 두 곳에 적히고 한쪽만 바뀌어도 아무도 모른다.
+    // 모든 글리프는 매핑(SITE_EMOJI / SMSTUDY_DATA.EMOJI / WORDMASTER_EMOJI)에서 나온다.
+    if (isHtml) {
+      for (const occurrence of occurrences) {
+        check(false,
+          `${file}:${occurrence.line}: emoji literal "${occurrence.glyph}" in markup — put it in a mapping and use a data-emoji slot (DESIGN.md §5)`);
+      }
+      for (const hit of source.matchAll(/<[^>]*\sdata-emoji="([^"]*)"[^>]*>/gu)) {
+        const [tag, key] = hit;
+        const classAttribute = /\sclass="([^"]*)"/u.exec(tag);
+        check(Boolean(classAttribute) && EMOJI_SLOT_CLASS.test(classAttribute[1]),
+          `${file}: data-emoji="${key}" is not on an .emoji / .emoji-box / .emoji-lg slot (DESIGN.md §5)`);
+        check(Object.prototype.hasOwnProperty.call(site, key),
+          `${file}: data-emoji="${key}" has no entry in SITE_EMOJI (${SITE_EMOJI_SOURCE})`);
+        const glyph = site[key];
+        if (!glyph) continue;
+        sloted += 1;
+        const label = labelPattern.exec(source.slice(hit.index + tag.length, hit.index + tag.length + 700));
+        if (!label) continue;
+        const text = label[1].replace(/\s+/gu, ' ');
+        const knownGlyph = labelToGlyph.get(text);
+        const knownLabel = glyphToLabel.get(glyph);
+        check(knownGlyph === undefined || knownGlyph === glyph,
+          `${file}: "${text}" is marked with "${glyph}" here but with "${knownGlyph}" elsewhere — one target, one emoji (DESIGN.md §5)`);
+        check(knownLabel === undefined || knownLabel === text,
+          `${file}: emoji "${glyph}" marks both "${knownLabel}" and "${text}" — one emoji, one target (DESIGN.md §5)`);
+        labelToGlyph.set(text, glyph);
+        glyphToLabel.set(glyph, text);
+      }
+    }
+
     for (const occurrence of occurrences) {
       // JS는 데이터 위치의 이모지(매핑 단일 원본)를 허용한다 — 마크업에 박힌 것만 본다.
-      if (!isHtml && !occurrence.inMarkupTextPosition) continue;
-      check(occurrence.inMarkupTextPosition && occurrence.slotted,
+      if (isHtml || !occurrence.inMarkupTextPosition) continue;
+      check(occurrence.slotted,
         `${file}:${occurrence.line}: emoji "${occurrence.glyph}" must sit directly inside an .emoji / .emoji-box / .emoji-lg slot (DESIGN.md §5)`);
       if (!occurrence.slotted) continue;
       sloted += 1;
@@ -1319,26 +1455,21 @@ function validateEmojiSystem() {
       const slotBody = occurrence.after.slice(0, Math.max(occurrence.after.indexOf('<'), 0));
       check(!new RegExp(EMOJI_PATTERN.source, 'u').test(slotBody),
         `${file}:${occurrence.line}: an emoji slot must hold exactly one emoji (DESIGN.md §5)`);
-
-      const label = labelPattern.exec(occurrence.after);
-      if (!label) continue;
-      const text = label[1].replace(/\s+/gu, ' ');
-      const knownGlyph = labelToGlyph.get(text);
-      const knownLabel = glyphToLabel.get(occurrence.glyph);
-      check(knownGlyph === undefined || knownGlyph === occurrence.glyph,
-        `${file}:${occurrence.line}: "${text}" is marked with "${occurrence.glyph}" here but with "${knownGlyph}" elsewhere — one target, one emoji (DESIGN.md §5)`);
-      check(knownLabel === undefined || knownLabel === text,
-        `${file}:${occurrence.line}: emoji "${occurrence.glyph}" marks both "${knownLabel}" and "${text}" — one emoji, one target (DESIGN.md §5)`);
-      labelToGlyph.set(text, occurrence.glyph);
-      glyphToLabel.set(occurrence.glyph, text);
     }
 
-    // "한 행에 이모지 1개" — .list-row 하나가 그림문자를 둘 이상 담으면 안 된다.
+    // "한 행에 이모지 1개" — .list-row 하나가 이모지를 둘 이상 만들어 내면 안 된다.
     // \blist-row\b는 "list-row-title"에도 걸린다 — 클래스 토큰 경계까지 맞춘다.
-    for (const row of source.match(/<(\w+)[^>]*class="[^"]*\blist-row(?:\s[^"]*)?"[^>]*>[^]*?<\/\1>/gu) || []) {
-      const glyphs = row.match(new RegExp(EMOJI_PATTERN.source, 'gu')) || [];
-      check(glyphs.length <= 1,
-        `${file}: a .list-row carries ${glyphs.length} emoji (${glyphs.join('')}) — one emoji per row (DESIGN.md §5)`);
+    // 조각은 중첩을 세며 뜬다 (R4-M-6) — 행의 전체 자손이 검사 대상이다.
+    let rows = 0;
+    for (const hit of source.matchAll(/<[a-z][\w-]*\b[^>]*class="[^"]*\blist-row(?:\s[^"]*)?"[^>]*>/giu)) {
+      const row = htmlElementSlice(source, hit.index);
+      const count = emojiSourceCount(row);
+      rows += 1;
+      check(count <= 1,
+        `${file}: a .list-row produces ${count} emoji — one emoji per row (DESIGN.md §5)`);
+    }
+    if (file === 'index.html') {
+      check(rows >= 3, `${file}: only ${rows} .list-row elements were sliced — the per-row emoji check is inert`);
     }
   }
 
@@ -1383,14 +1514,19 @@ function validateSmStudyEmoji() {
       `smstudy: SMSTUDY_DATA.EMOJI["${key}"] = "${glyph}" is not a pictograph`);
   }
 
-  // 사이트의 다른 표면(HTML 마크업 슬롯)이 이미 쓰는 글리프와 교차 대조한다.
-  const markupGlyphs = markupGlyphSet();
-  check(markupGlyphs.size > 0, 'smstudy: no markup emoji found to cross-check the map against — this check is inert');
-  check(markupGlyphs.has(map.app),
-    `smstudy: SMSTUDY_DATA.EMOJI.app "${map.app}" is not the glyph the site markup already gives this app`);
+  // 랜딩의 매핑과 교차 대조한다. ---- R4-M-5 ----
+  // 이전 검사는 markupGlyphSet().has(map.app), 즉 "사이트가 쓰는 글리프 집합에 들어
+  // 있는가"만 봤다. 집합 포함 여부는 대상을 구분하지 못하므로 WordMaster의 📗와
+  // smstudy의 📘를 서로 바꿔도 두 글리프가 그대로 집합에 남아 통과했다. 이제 SITE_EMOJI의
+  // **키로** 대조한다 — 키는 앱 디렉터리 이름이라 대상이 한 벌로 정해진다.
+  const site = siteEmoji();
+  check(Object.keys(site).length > 0, 'smstudy: SITE_EMOJI is empty — this cross-check is inert');
+  check(map.app === site.smstudy,
+    `smstudy: SMSTUDY_DATA.EMOJI.app is "${map.app}" but SITE_EMOJI.smstudy is "${site.smstudy}" — one target, one emoji (DESIGN.md §5.1)`);
+  const siteGlyphs = new Set(Object.values(site));
   for (const id of subunitIds) {
-    check(!markupGlyphs.has(map[id]),
-      `smstudy: subunit ${id} takes "${map[id]}", which already marks another target in the site markup — one emoji, one target (DESIGN.md §5)`);
+    check(!siteGlyphs.has(map[id]),
+      `smstudy: subunit ${id} takes "${map[id]}", which SITE_EMOJI already assigns to another target — one emoji, one target (DESIGN.md §5)`);
   }
 
   // 마크업이 이모지를 리터럴로 박지 않고 매핑을 거치는지 — 렌더러가 실제로 매핑을 읽는가.
@@ -1399,16 +1535,6 @@ function validateSmStudyEmoji() {
     `smstudy: ${APP_SOURCE} must read glyphs from the SMSTUDY_DATA.EMOJI mapping, not from literals`);
   const slots = (appSource.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
   check(slots >= 2, `smstudy: ${APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
-}
-
-// 마크업 슬롯에 실제로 렌더된 그림문자를 모은다 (HTML 4면). 매핑 검사들이 "사이트가
-// 이미 쓰는 글리프"와 교차 대조할 때 쓰는 단일 도출점이다.
-function markupGlyphSet() {
-  const glyphs = new Set();
-  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
-    for (const occurrence of emojiInMarkup(readFileSync(file, 'utf8'))) glyphs.add(occurrence.glyph);
-  }
-  return glyphs;
 }
 
 // WordMaster의 이모지도 마크업이 아니라 데이터 매핑(words.js의 WORDMASTER_EMOJI)에서
@@ -1460,16 +1586,17 @@ function validateWordMasterEmoji() {
       `WordMaster: WORDMASTER_EMOJI["${key}"] = "${glyph}" is not a pictograph`);
   }
 
-  // 앱 글리프는 랜딩 타일이 이 앱에 이미 준 글리프와 같아야 하고, 나머지 키는
-  // 사이트 마크업이 다른 대상에 쓰는 글리프를 가져가면 안 된다.
-  const markupGlyphs = markupGlyphSet();
-  check(markupGlyphs.size > 0, 'WordMaster: no markup emoji found to cross-check the map against — this check is inert');
-  check(markupGlyphs.has(map.app),
-    `WordMaster: WORDMASTER_EMOJI.app "${map.app}" is not the glyph the site markup already gives this app`);
+  // 앱 글리프는 랜딩이 이 앱에 준 글리프와 **같아야** 하고(집합 포함이 아니라 키 대조 —
+  // R4-M-5), 나머지 키는 SITE_EMOJI가 다른 대상에 쓰는 글리프를 가져가면 안 된다.
+  const site = siteEmoji();
+  check(Object.keys(site).length > 0, 'WordMaster: SITE_EMOJI is empty — this cross-check is inert');
+  check(map.app === site.WordMaster,
+    `WordMaster: WORDMASTER_EMOJI.app is "${map.app}" but SITE_EMOJI.WordMaster is "${site.WordMaster}" — one target, one emoji (DESIGN.md §5.1)`);
+  const siteGlyphs = new Set(Object.values(site));
   for (const key of usedKeys) {
     if (key === 'app') continue;
-    check(!markupGlyphs.has(map[key]),
-      `WordMaster: "${key}" takes "${map[key]}", which already marks another target in the site markup — one emoji, one target (DESIGN.md §5)`);
+    check(!siteGlyphs.has(map[key]),
+      `WordMaster: "${key}" takes "${map[key]}", which SITE_EMOJI already assigns to another target — one emoji, one target (DESIGN.md §5)`);
   }
 }
 
@@ -1480,36 +1607,46 @@ function validateWordMasterEmoji() {
 // 새 앱이 매핑을 도입하면 그 항목만 늘린다.
 function validateEmojiCrossMaps() {
   const sources = [
+    { app: 'site', file: SITE_EMOJI_SOURCE, global: 'SITE_EMOJI', pick: (data) => data },
     { app: 'smstudy', file: 'smstudy/assets/js/data.js', global: 'SMSTUDY_DATA', pick: (data) => data?.EMOJI },
     { app: 'WordMaster', file: 'WordMaster/assets/js/words.js', global: 'WORDMASTER_EMOJI', pick: (data) => data },
   ];
-  const owner = new Map();   // glyph -> "app:key"
+
+  // 대상 이름 정규화. 앱 자신을 가리키는 항목은 랜딩과 앱 매핑 **양쪽에** 있는 것이
+  // 정상이므로 같은 대상으로 접어야 한다. 접는 조건도 손으로 적지 않는다 —
+  // SITE_EMOJI의 키가 저장소의 앱 디렉터리 이름이면 그것이 앱 자신이다.
+  const targetOf = (source, key) => {
+    if (key === 'app') return `app:${source.app}`;
+    const asDirectory = path.join(ROOT, key);
+    if (source.app === 'site' && existsSync(asDirectory) && statSync(asDirectory).isDirectory()) {
+      return `app:${key}`;
+    }
+    return `${source.app}:${key}`;
+  };
+
+  const owner = new Map();   // glyph -> target
   let pairs = 0;
 
   for (const source of sources) {
     const map = source.pick(evaluateBrowserData(source.file, source.global)) || {};
     for (const [key, glyph] of Object.entries(map)) {
-      // 'app' 키는 앱 자신을 가리키는 글리프이고 랜딩 마크업과 의도적으로 공유한다.
-      const target = `${source.app}:${key}`;
+      const target = targetOf(source, key);
       const known = owner.get(glyph);
-      check(known === undefined,
+      check(known === undefined || known === target,
         `emoji registry: "${glyph}" is assigned to both ${known} and ${target} — one emoji, one target (DESIGN.md §5)`);
       owner.set(glyph, target);
       pairs += 1;
     }
   }
-  // 두 앱 매핑이 모두 살아 있는지 — 하나가 사라지면 교차 검사는 무의미해진다.
-  check(sources.length >= 2 && pairs >= 20,
+  // 세 매핑이 모두 살아 있는지 — 하나가 사라지면 교차 검사는 무의미해진다.
+  check(sources.length >= 3 && pairs >= 25,
     `emoji registry: only ${pairs} glyph assignments were derived from ${sources.length} maps — the cross-app check is inert`);
-
-  // 앱 매핑의 글리프가 마크업이 다른 대상에 붙인 글리프와 겹치는지는 각 앱 검사가
-  // 보지만, 두 앱의 'app' 글리프가 서로 같아지는 경우는 위 레지스트리가 잡는다.
 }
 
 function validateBrandName() {
   // C-5: 브랜드는 소문자 "hvsdcm" 한 덩어리 (plan.md R-5). 분리 표기 전면 금지.
   const separated = /HVS[\s\-_]?DCM|hvs[\s\-_]dcm/u;
-  for (const file of walk(ROOT, (item) => item.endsWith('.html') || item.endsWith('.css'))) {
+  for (const file of [...publishedHtml(), ...walk(ROOT, (item) => item.endsWith('.css'))]) {
     check(!separated.test(readFileSync(file, 'utf8')), `${relative(file)}: separated brand name found (use "hvsdcm" in one piece)`);
   }
 
@@ -1517,7 +1654,7 @@ function validateBrandName() {
   const separator = /hvs\s*[/·.]\s*dcm/iu;
   const casing = /HVSDCM|HvsDcm|Hvsdcm|hvsDcm|HVSdcm|hvsDCM/u;
   const brandSurfaces = [
-    ...walk(ROOT, (item) => item.endsWith('.html') || item.endsWith('.css')).map(relative),
+    ...[...publishedHtml(), ...walk(ROOT, (item) => item.endsWith('.css'))].map(relative),
     'assets/js/home.js',
     'account.js',
     'WordMaster/assets/js/app.js',
@@ -1545,7 +1682,7 @@ function validateBrandName() {
 
 function validateGlobalsAndOrder() {
   // C-6: classic script + window 전역 유지 (plan.md §3.1, D6). type="module" 전면 금지.
-  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+  for (const file of publishedHtml()) {
     check(!/type=["']module["']/u.test(readFileSync(file, 'utf8')), `${relative(file)}: type="module" is forbidden`);
   }
 
@@ -1554,7 +1691,7 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/home.js'],
+    'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
@@ -1598,6 +1735,204 @@ function validateOgImageLock() {
     'og lock: assets/og.png bytes do not match OG_LOCK.sha256 — regenerate the image and update the lock in one commit');
 }
 
+// ---- R4-M-3. 섹션 라벨은 제목이어야 한다 ----
+// 사이클4 재조판에서 WordMaster의 rangeHead / sessionMistakes / wrongNoteTitle이 h2에서
+// 시각용 p로 바뀌었다. aria-labelledby는 그대로라 이름은 붙었지만, 스크린리더의 제목
+// 탐색점과 문서 위계는 사라졌다 — 문자열 검사로는 보이지 않는 종류의 회귀다.
+// 대상 목록을 하드코딩하지 않는다: 표면에서 aria-labelledby 값을 전부 뽑아 같은 소스 안의
+// id 정의와 맞춘다.
+//
+// 이 검사가 **못 보는 것**: 제목 레벨의 논리적 순서(h2 아래 h4), 라벨 문구의 적절성,
+// 런타임에 조립한 id, 그리고 다른 파일에 정의된 id. <summary> 안의 span처럼 제목이
+// 아니어도 정당한 라벨이 있으므로 "p 금지 + .list-group-head는 제목"까지만 강제한다.
+function validateLabelledBy() {
+  const surfaces = [
+    ...publishedHtml().map(relative),
+    ...['assets/js/home.js', 'WordMaster/assets/js/app.js',
+      'smstudy/assets/js/app.js', 'admin/assets/js/admin.js'],
+  ];
+  let resolved = 0;
+  for (const file of surfaces) {
+    const source = readFileSync(path.join(ROOT, file), 'utf8');
+    for (const [, id] of source.matchAll(/aria-labelledby="([^"]+)"/gu)) {
+      const escaped = id.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      const target = new RegExp(`<([a-z][\\w-]*)\\b([^>]*\\sid="${escaped}"[^>]*)>`, 'u').exec(source);
+      if (!target) continue;
+      resolved += 1;
+      const [, tag, attributes] = target;
+      const isHeading = /^h[1-6]$/u.test(tag);
+      const isGroupHead = /\sclass="[^"]*\blist-group-head\b/u.test(attributes);
+      check(tag !== 'p',
+        `${file}: aria-labelledby="${id}" points at a <p> — a section label must be a heading (DESIGN.md §7.1)`);
+      check(!isGroupHead || isHeading,
+        `${file}: aria-labelledby="${id}" is a .list-group-head on <${tag}> — section labels must be h1–h6 so the heading outline survives`);
+    }
+  }
+  check(resolved >= 15, `aria-labelledby: only ${resolved} targets resolved — this check is inert`);
+}
+
+// ---- R4-M-9. 대비표를 손으로 적지 않는다 ----
+// system.css 상단 대비표의 숫자 9개가 실제 알파 합성값과 어긋나 있었다. 주석은 사람이
+// 적는 순간 낡으므로, 여기서 주석을 **파싱해** :root 토큰에서 다시 계산한 값과 대조한다.
+// 검사 대상 목록은 표 자신에서 도출한다 — 표에 행을 추가하면 그 행도 자동으로 검산된다.
+//
+// 이 검사가 **못 보는 것**: (1) 어떤 조합이 실제 화면에 등장하는지 — 표에 없는 조합은
+// 검산되지 않으므로 아래 "모든 색 토큰이 표에 등장하는가"를 함께 건다. (2) 글자 크기에
+// 따른 하한 분기(큰 글자 3:1)와 ✗ 표시의 타당성. (3) opacity·filter로 합성되는 상태.
+// (4) CSS가 그 토큰을 실제로 규칙에 얹었는지 — 값이 맞아도 잘못된 곳에 쓰면 못 본다.
+const CONTRAST_SURFACES_LINE = /전경 \\ 배경\s+(.+)/u;
+function srgbToLinear(channel) {
+  const scaled = channel / 255;
+  return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
+}
+function relativeLuminance([r, g, b]) {
+  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+}
+function contrastRatio(a, b) {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+function compositeOver(color, background) {
+  return color.rgb.map((channel, index) => channel * color.alpha + background[index] * (1 - color.alpha));
+}
+function parseCssColor(value) {
+  const text = value.trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/iu.exec(text);
+  if (hex) {
+    const digits = hex[1].length === 3 ? [...hex[1]].map((d) => d + d) : [0, 2, 4].map((i) => hex[1].slice(i, i + 2));
+    return { rgb: digits.map((pair) => parseInt(pair, 16)), alpha: 1 };
+  }
+  const rgba = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/iu.exec(text);
+  if (rgba) {
+    return { rgb: [Number(rgba[1]), Number(rgba[2]), Number(rgba[3])], alpha: rgba[4] === undefined ? 1 : Number(rgba[4]) };
+  }
+  return null;
+}
+function validateContrastTable() {
+  const css = readFileSync(path.join(ROOT, 'assets/css/system.css'), 'utf8');
+  const header = /\/\*[^]*?대비 전수표[^]*?\*\//u.exec(css);
+  check(Boolean(header), 'system.css: the contrast table comment is missing — DESIGN.md §3.1 requires it');
+  if (!header) return;
+  const table = header[0];
+
+  const rootBlock = /:root\s*\{([^]*?)\n\}/u.exec(css);
+  const tokens = new Map();
+  for (const [, name, value] of (rootBlock?.[1] || '').matchAll(/(--[\w-]+)\s*:\s*([^;]+);/gu)) {
+    const color = parseCssColor(value.replace(/\/\*[^]*?\*\//gu, '').trim());
+    if (color) tokens.set(name, color);
+  }
+  check(tokens.size >= 15, `system.css: only ${tokens.size} color tokens were parsed from :root — the contrast gate is inert`);
+
+  const opaque = (name) => {
+    const token = tokens.get(name.startsWith('--') ? name : `--${name}`);
+    if (!token || token.alpha !== 1) return null;
+    return token.rgb;
+  };
+  const stated = (value) => Number(value).toFixed(2);
+  const computed = (ratio) => ratio.toFixed(2);
+  let compared = 0;
+  const compare = (label, expectedRatio, statedValue) => {
+    compared += 1;
+    check(computed(expectedRatio) === stated(statedValue),
+      `system.css contrast table: ${label} says ${stated(statedValue)} but the tokens compute ${computed(expectedRatio)}`);
+  };
+
+  // 1) 전경 × 배경 격자
+  const surfaceNames = (CONTRAST_SURFACES_LINE.exec(table)?.[1] || '').trim().split(/\s+/u);
+  check(surfaceNames.length >= 4, 'system.css contrast table: the surface header row could not be parsed');
+  for (const line of table.split('\n')) {
+    const row = /^\s*(--[\w-]+)\s+((?:\d+\.\d+\s+)*\d+\.\d+)/u.exec(line);
+    if (!row) continue;
+    const foreground = opaque(row[1]);
+    if (!foreground) continue;
+    const values = row[2].trim().split(/\s+/u);
+    if (values.length !== surfaceNames.length) continue;
+    surfaceNames.forEach((surface, index) => {
+      const background = opaque(surface);
+      if (!background) return;
+      compare(`${row[1]} on ${surface}`, contrastRatio(foreground, background), values[index]);
+    });
+  }
+
+  // 2) -soft 뱃지 (알파 배경을 부모 표면과 합성)
+  const softRows = table.matchAll(/(--[\w-]+)\s*\+\s*(--[\w-]+)((?:[^\n]*\n\s*\/[^\n]*)*[^\n]*)/gu);
+  for (const [, softName, foregroundName, body] of softRows) {
+    const soft = tokens.get(softName);
+    const foreground = opaque(foregroundName);
+    if (!soft || !foreground) continue;
+    for (const [, surface, value] of body.matchAll(/\b([a-z][\w-]*)\s+(\d+\.\d+)/gu)) {
+      const background = opaque(surface);
+      if (!background) continue;
+      compare(`${softName} + ${foregroundName} on ${surface}`,
+        contrastRatio(foreground, compositeOver(soft, background)), value);
+    }
+  }
+
+  // 3) "X on (TOKEN .aa over SURFACE) = N" — 알파 오버레이 위 전경
+  for (const [, foregroundName, tintName, alpha, surface, value] of
+    table.matchAll(/(--[\w-]+|#[0-9a-f]{3,6})\s+on\s+\((--[\w-]+)\s+(\.\d+)\s+over\s+([\w-]+)\)\s*=\s*(\d+\.\d+)/giu)) {
+    const foreground = parseCssColor(foregroundName)?.rgb || opaque(foregroundName);
+    const tint = tokens.get(tintName);
+    const background = opaque(surface);
+    if (!foreground || !tint || !background) continue;
+    compare(`${foregroundName} on (${tintName} ${alpha} over ${surface})`,
+      contrastRatio(foreground, compositeOver({ rgb: tint.rgb, alpha: Number(alpha) }, background)), value);
+  }
+
+  // 4) "X on Y = N" — 불투명 면 위 전경
+  for (const [, foregroundName, backgroundName, value] of
+    table.matchAll(/(--[\w-]+|#[0-9a-f]{3,6})\s+on\s+(--[\w-]+|#[0-9a-f]{3,6})(?:\s+#[0-9a-f]{3,6})?\s*=\s*(\d+\.\d+)/giu)) {
+    const foreground = parseCssColor(foregroundName)?.rgb || opaque(foregroundName);
+    const background = parseCssColor(backgroundName)?.rgb || opaque(backgroundName);
+    if (!foreground || !background) continue;
+    compare(`${foregroundName} on ${backgroundName}`, contrastRatio(foreground, background), value);
+  }
+
+  // 5) 헤어라인의 범위 표기 (min~max)
+  for (const [, lineName, low, high] of table.matchAll(/(--line[\w-]*)\s+(\d+\.\d+)~(\d+\.\d+)/gu)) {
+    const hairline = tokens.get(lineName);
+    if (!hairline) continue;
+    const ratios = surfaceNames
+      .map((surface) => opaque(surface))
+      .filter(Boolean)
+      .map((background) => contrastRatio(compositeOver(hairline, background), background));
+    compare(`${lineName} min`, Math.min(...ratios), low);
+    compare(`${lineName} max`, Math.max(...ratios), high);
+  }
+
+  check(compared >= 60, `system.css contrast table: only ${compared} values were re-computed — the parser lost the table`);
+
+  // 6) 전수 검산 — :root의 모든 색 토큰이 표에 등장해야 한다 (DESIGN.md §3.1).
+  for (const name of tokens.keys()) {
+    check(table.includes(name.slice(2)),
+      `system.css contrast table: ${name} is defined but never appears in the table — every color token needs its contrast recorded (DESIGN.md §3.1)`);
+  }
+
+  // 7) .btn-danger의 normal·hover는 CSS 선언에서 직접 재계산한다 (R4-M-10).
+  //    표의 숫자가 아니라 **규칙이 실제로 쓰는 토큰**을 본다 — 값이 맞아도 규칙이 다른
+  //    토큰을 쓰면 화면은 미달이다. :disabled는 WCAG 1.4.3 비활성 예외라 하한을 걸지 않는다.
+  const dangerForeground = /\.btn-danger\s*\{[^}]*color:\s*var\((--[\w-]+)\)/u.exec(css);
+  const dangerBase = /\.btn-danger\s*\{[^}]*background:\s*var\((--[\w-]+)\)/u.exec(css);
+  const dangerHover = /\.btn-danger:hover\s*\{[^}]*background:\s*var\((--[\w-]+)\)/u.exec(css);
+  check(Boolean(dangerForeground && dangerBase && dangerHover),
+    'system.css: .btn-danger normal/hover declarations could not be read — the danger contrast check is inert');
+  if (dangerForeground && dangerBase && dangerHover) {
+    const foreground = opaque(dangerForeground[1]);
+    for (const [state, rule] of [['normal', dangerBase], ['hover', dangerHover]]) {
+      const background = opaque(rule[1]);
+      check(Boolean(foreground && background),
+        `system.css: .btn-danger ${state} uses a non-opaque surface (${rule[1]}) — an alpha fill makes contrast depend on the parent (R4-M-10)`);
+      if (!foreground || !background) continue;
+      const ratio = contrastRatio(foreground, background);
+      check(ratio >= 4.5,
+        `system.css: .btn-danger ${state} is ${computed(ratio)}:1 (${dangerForeground[1]} on ${rule[1]}) — 14px semibold needs 4.5:1`);
+    }
+  }
+  check(/\.btn:disabled[^{]*\{[^}]*opacity:/u.test(css),
+    'system.css: .btn disabled state must be opacity-based (WCAG 1.4.3 exempts inactive controls from the contrast floor)');
+}
+
 function validateLandingGating() {
   // 사이클 #3 게이팅 잠금 (plan.md D7 철회) — 미로그인 랜딩은 "개인 웹사이트"여야 한다.
   // 학습 콘텐츠는 <template data-study>에만 존재하고 로그인 판정 후 home.js가 주입한다.
@@ -1614,7 +1949,7 @@ function validateLandingGating() {
       `index.html: logged-out static markup must not link to study app path ${appPath}`);
   }
   // 2) 학습을 드러내는 문구도 정적 마크업에 남으면 안 된다 (메타/OG 포함 전체 소스 기준).
-  for (const keyword of ['학습', 'WordMaster', 'smstudy', 'Study']) {
+  for (const keyword of STUDY_KEYWORDS) {
     check(!staticMarkup.includes(keyword),
       `index.html: logged-out static markup must not contain study keyword "${keyword}"`);
   }
@@ -1631,6 +1966,9 @@ validateJavaScriptSyntax();
 validateHtmlAssets();
 validateUiContracts();
 validateLandingGating();
+validateStudyExposure();
+validateLabelledBy();
+validateContrastTable();
 validateDesignTokens();
 validateBrandName();
 validateEmojiSystem();
@@ -1664,36 +2002,60 @@ function validateDocSnapshots() {
       + ` found "${committed.slice(at, at + 60).replace(/\n/gu, '\n')}") — run: node scripts/snapshot.mjs`);
   }
 
-  // 아래는 재생성 대조가 깨졌을 때에도 남는 구조 계약이다 (생성기 자체가 잘못될 수 있다).
-  const expected = {
-    'docs/snapshots/diagrams.html': 21,
-    'docs/snapshots/concept-sample.html': 2,
-  };
-  for (const file of Object.keys(expected)) {
-    check(Object.prototype.hasOwnProperty.call(regenerated, file),
-      `${file}: scripts/snapshot.mjs no longer produces this snapshot — the generator and the committed files disagree`);
+  // ---- R4-M-1. 화면 커버리지 ----
+  // 완료 조건(plan.md §4)은 4개 화면 **전부**의 스냅샷을 요구했는데, 이전 게이트는
+  // diagrams/concept 두 파일만 확인해 화면 두 개가 통째로 없어도 통과했다.
+  // 화면 목록을 손으로 적으면 화면이 늘어도 게이트는 모른다 — 게시되는 **진입 HTML**에서
+  // 도출해 생성기의 화면→스냅샷 표와 대조한다.
+  //
+  // 이 검사가 **못 보는 것**: 스냅샷이 그 화면의 "대표 상태"를 담고 있는지(예: 로그인
+  // 상태인지, 표에 행이 있는지). 각 스냅샷의 주석 상자가 반영한 상태를 사람이 읽도록 적는다.
+  // 그리고 뷰포트별(320/768/1280) 기하는 레이아웃 엔진이 필요해 여기서 재지 못한다.
+  const published = publishedHtml().map(relative);
+  const screens = published.filter((file) => file === 'index.html' || file.endsWith('/index.html'));
+  check(screens.length >= 4, `snapshot coverage: only ${screens.length} entry screens were derived — this check is inert`);
+  for (const screen of screens) {
+    const snapshot = SNAPSHOT_BY_SCREEN[screen];
+    check(Boolean(snapshot),
+      `${screen}: no snapshot is declared for this screen — add it to SNAPSHOT_BY_SCREEN in scripts/snapshot.mjs (docs/plan.md §4)`);
+    if (!snapshot) continue;
+    check(Object.prototype.hasOwnProperty.call(regenerated, snapshot),
+      `${snapshot}: scripts/snapshot.mjs no longer produces the snapshot for ${screen}`);
+    check(existsSync(path.join(ROOT, snapshot)),
+      `${snapshot}: the snapshot for ${screen} is missing — run: node scripts/snapshot.mjs`);
   }
-  for (const [file, figures] of Object.entries(expected)) {
+
+  // ---- B-1. 스냅샷은 공개 배포면 밖에 있어야 한다 ----
+  for (const file of Object.values(SNAPSHOT_FILES)) {
+    check(!published.includes(file),
+      `${file}: the snapshot is on the published surface — it renders study content with no login gate (plan.md §3)`);
+  }
+
+  // 아래는 재생성 대조가 깨졌을 때에도 남는 구조 계약이다 (생성기 자체가 잘못될 수 있다).
+  for (const file of Object.keys(regenerated)) {
     const absolute = path.join(ROOT, file);
-    check(existsSync(absolute), `${file}: visual snapshot is missing — regenerate it (docs/plan.md D-11)`);
+    check(existsSync(absolute), `${file}: visual snapshot is missing — regenerate it (docs/plan.md §4)`);
     if (!existsSync(absolute)) continue;
     const source = readFileSync(absolute, 'utf8');
     check(!/<link\b[^>]*rel=["']stylesheet/iu.test(source) && !/<script\b[^>]*\bsrc=/iu.test(source),
       `${file}: snapshot must inline every stylesheet and carry no scripts so the file opens standalone`);
-    check(source.includes('assets/css/system.css (inlined)') && source.includes('smstudy/assets/css/style.css (inlined)'),
-      `${file}: snapshot must inline both /assets/css/system.css and /smstudy/assets/css/style.css`);
-    const figureCount = (source.match(/<figure class="sm-diagram\b/gu) || []).length;
-    check(figureCount === figures, `${file}: expected ${figures} rendered diagrams, found ${figureCount}`);
-    // 한 figure에 figcaption은 하나뿐이어야 한다 (M-3 회귀 잠금 — 얼린 DOM에서도 확인한다).
-    const captions = (source.match(/<figcaption\b/gu) || []).length;
-    check(captions === figures, `${file}: expected one <figcaption> per <figure>, found ${captions} for ${figures} figures`);
+    check(source.includes('assets/css/system.css (inlined)'),
+      `${file}: snapshot must inline /assets/css/system.css`);
   }
-  const diagrams = readFileSync(path.join(ROOT, 'docs/snapshots/diagrams.html'), 'utf8');
+  const figuresIn = (file) => (readFileSync(path.join(ROOT, file), 'utf8').match(/<figure class="sm-diagram\b/gu) || []).length;
+  const captionsIn = (file) => (readFileSync(path.join(ROOT, file), 'utf8').match(/<figcaption\b/gu) || []).length;
+  for (const file of [SNAPSHOT_FILES.DIAGRAMS, SNAPSHOT_BY_SCREEN['smstudy/index.html']]) {
+    // 한 figure에 figcaption은 하나뿐이어야 한다 (M-3 회귀 잠금 — 얼린 DOM에서도 확인한다).
+    check(figuresIn(file) > 0, `${file}: no rendered diagram found — the frozen DOM lost its figures`);
+    check(captionsIn(file) === figuresIn(file),
+      `${file}: expected one <figcaption> per <figure>, found ${captionsIn(file)} for ${figuresIn(file)} figures`);
+  }
+  const diagrams = readFileSync(path.join(ROOT, SNAPSHOT_FILES.DIAGRAMS), 'utf8');
   const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
   for (const [id, notebook] of Object.entries(notebookData?.NOTEBOOKS || {})) {
     for (const diagram of notebook.diagrams || []) {
       check(diagrams.includes(`${id} — ${diagram.title} (${diagram.kind}`),
-        `docs/snapshots/diagrams.html: missing heading for ${id} — ${diagram.title} (${diagram.kind}) — regenerate the snapshot`);
+        `${SNAPSHOT_FILES.DIAGRAMS}: missing heading for ${id} — ${diagram.title} (${diagram.kind}) — regenerate the snapshot`);
     }
   }
 }

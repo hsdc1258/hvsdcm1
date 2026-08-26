@@ -1,3 +1,21 @@
+<!doctype html>
+<html lang="ko" data-snapshot="1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="hvsdcm의 개인 웹사이트.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="hvsdcm">
+  <meta property="og:description" content="hvsdcm의 개인 웹사이트.">
+  <meta property="og:url" content="https://hvsdcm1.xyz/">
+  <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="hvsdcm">
+  <meta name="twitter:description" content="hvsdcm의 개인 웹사이트.">
+  <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
+  <title>hvsdcm</title>
+<style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
    모든 표면(랜딩·WordMaster·smstudy·admin)이 이 파일을 가장 먼저 링크한다.
@@ -1126,3 +1144,475 @@ label.list-row { cursor: pointer; }
   }
   .js .reveal.in { opacity: 1; transform: none; }
 }
+</style>
+<style>/* assets/css/home.css (inlined) */
+/* ==========================================================================
+   home.css — 랜딩 전용 레이아웃.
+   레퍼런스: apple.com 다크 제품 페이지 (DESIGN.md §1).
+   짧은 헤드라인 → 한 줄 보조문 → 절제된 강조. 섹션 하나에 주장 하나.
+   토큰은 system.css만 소비한다(:root 정의 금지). 프리미티브를 다시 만들지 않는다 —
+   그룹 리스트·카드·뱃지·버튼은 system.css의 것을 그대로 쓴다.
+   ========================================================================== */
+
+/* ---- 상단바: 랜딩 전용 요소 ---- */
+
+.menu-button {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.menu-button:hover { background: var(--line-faint); }
+.menu-button span {
+  grid-area: 1 / 1;
+  width: 17px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--text);
+  transition: transform var(--dur-med) var(--ease-swift);
+}
+.menu-button span:first-child { transform: translateY(-3.5px); }
+.menu-button span:last-child { transform: translateY(3.5px); }
+.menu-button.open span:first-child { transform: rotate(45deg); }
+.menu-button.open span:last-child { transform: rotate(-45deg); }
+
+body.logged .topbar-login { display: none; }
+
+@media (max-width: 640px) {
+  .topbar-nav .topbar-link { display: none; }
+}
+
+/* ---- 드로어 ---- */
+
+.shade {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  /* blur 없는 순수 스크림 (DESIGN.md §3). */
+  background: rgba(0,0,0,.7);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
+}
+.shade.open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 120;
+  width: min(304px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
+  /* 그림자 없음. DESIGN.md §4가 --shadow-*를 허용한 대상은 시트·토스트·세그먼티드
+     인디케이터뿐이고, 드로어는 거기 없다. 분리는 스크림(.shade) 위 --surface 명도 단차와
+     1px 헤어라인으로 만든다 (R4-M-8). */
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  transform: translateX(-102%);
+  visibility: hidden;
+  transition: transform var(--dur-med) var(--ease-swift), visibility 0s linear var(--dur-med);
+}
+.drawer.open {
+  transform: none;
+  visibility: visible;
+  transition: transform var(--dur-med) var(--ease-swift);
+}
+
+.drawer-head { padding: var(--space-1) var(--space-2) 0; }
+.drawer-head .brand { font-size: 1.1875rem; }
+
+.drawer-study { display: none; }
+.drawer.logged .drawer-study { display: grid; gap: var(--space-2); }
+/* 드로어 안의 그룹은 --surface 위에 놓이므로 한 단 올려 경계를 만든다. */
+.drawer-study .list-group { background: var(--surface-2); border-color: transparent; }
+
+.drawer-bottom {
+  margin-top: auto;
+  display: grid;
+  gap: var(--space-1);
+  border-top: 1px solid var(--line-faint);
+  padding-top: var(--space-3);
+}
+.drawer-social { display: flex; gap: var(--space-1); }
+.drawer-logout { display: none; color: var(--red); }
+.drawer-logout:hover { color: var(--red); background: var(--red-soft); }
+.drawer.logged .drawer-logout { display: flex; }
+
+/* ---- 히어로 ---- */
+
+.hero {
+  padding: calc(var(--topbar-h) + clamp(56px, 3rem + 6vw, 120px)) 0 var(--section-gap);
+}
+
+.hero-inner {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: var(--space-3);
+}
+
+/* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠한다. */
+.hero-title {
+  max-width: 14ch;
+  color: var(--text);
+}
+
+/* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
+/* 로그인 후에는 "Welcome," + 사용자명 두 줄이 된다 — 행간을 한 단 더 연다. */
+.hero-title[data-user] { font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem); line-height: 1.2; max-width: 18ch; }
+.hero-title .welcome-user { display: block; }
+.hero-title a.welcome-user { color: var(--accent); }
+.hero-title a.welcome-user:hover { text-decoration: underline; }
+
+/* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
+.hero-sub { max-width: 26em; }
+/* 미로그인 소개 문구는 로그인 후 숨김 (학습 카피가 템플릿에서 주입된다) */
+body.logged .hero-sub-guest,
+body.logged .hero-browse-guest { display: none; }
+
+.hero-actions {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+
+/* 로그인 상태 전환: 로그인 버튼 ↔ 앱 바로가기 */
+.account .account-app { display: none; }
+.account.logged .account-app { display: inline-flex; }
+.account.logged #loginBtn { display: none; }
+
+/* ---- 섹션 리듬 ---- */
+
+.section {
+  /* #apps 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
+  padding-bottom: var(--section-gap);
+}
+.section-last { padding-bottom: var(--space-9); }
+
+.section-head {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.section-head h2 { max-width: 16em; }
+.section-sub { max-width: 30em; }
+
+/* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
+.section-last .section-head {
+  justify-items: start;
+  text-align: left;
+  margin-bottom: var(--space-3);
+}
+
+/* ---- 앱 타일 ---- */
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.tile {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+.tile-mark { margin-bottom: var(--space-1); }
+.tile-line {
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-snug);
+  max-width: 32em;
+}
+.tile-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tile .link-arrow { margin-top: var(--space-1); font-size: var(--fs-body-sm); }
+
+@media (max-width: 760px) {
+  .tile-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- 수치 줄 ---- */
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-faint);
+  text-align: center;
+}
+.stats-row .stat-value { font-size: var(--fs-title-1); }
+
+/* ---- 연락 리스트: 브랜드 마크를 이모지 슬롯에 담는다 ---- */
+
+.emoji-box svg { width: 17px; height: 17px; color: var(--text-2); }
+.list-row:hover .emoji-box svg { color: var(--text); }
+
+/* ---- 푸터 ---- */
+
+.footer {
+  border-top: 1px solid var(--line-faint);
+  padding: var(--space-5) 0;
+}
+.footer-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.footer-brand { font-size: var(--fs-caption); }
+.footer-nav { display: flex; gap: var(--space-4); }
+.footer-nav a { font-size: var(--fs-caption); color: var(--text-3); }
+.footer-nav a:hover { color: var(--text); text-decoration: none; }
+.footer-copy { margin-left: auto; font-size: var(--fs-caption); }
+
+/* ---- 로그인 시트 ---- */
+
+.login-sheet { display: grid; gap: var(--space-4); }
+.login-sheet .sheet-sub { margin: calc(var(--space-2) * -1) 0 var(--space-1); }
+.login-submit { margin-top: var(--space-1); }
+</style>
+<style>
+/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
+.snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
+.snap-note code { color: var(--text); }
+</style>
+</head>
+<body class="logged">
+  <div class="snap-note"><strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
+  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: <code>&lt;template data-study&gt;</code> 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>로그인한 방문자가 보는 화면</strong>이다.
+  <br><strong>주의</strong> — 드로어는 닫힌 상태(화면 밖)다. 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.
+  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <nav class="topbar-inner container-wide" aria-label="전역 내비게이션">
+      <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
+        <span aria-hidden="true"></span><span aria-hidden="true"></span>
+      </button>
+      <a class="brand" href="/" aria-label="hvsdcm 홈">hvsdcm</a>
+      <div class="topbar-nav">
+
+          <a class="topbar-link" href="/WordMaster/">WordMaster</a>
+          <a class="topbar-link" href="/smstudy/">사회·문화</a>
+
+        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
+      </div>
+    </nav>
+  </header>
+
+  <div id="shade" class="shade" aria-hidden="true"></div>
+
+  <aside id="drawer" class="drawer logged" aria-label="주 메뉴">
+    <div class="drawer-head">
+      <span class="brand">hvsdcm</span>
+    </div>
+
+      <div class="drawer-study">
+        <p class="list-group-head">학습</p>
+        <nav class="list-group" aria-label="학습 도구">
+          <a class="list-row list-row-nav" href="/WordMaster/">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="WordMaster" aria-hidden="true">📗</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">WordMaster</span>
+              <span class="list-row-sub">DAY 1–50 · 2,000단어</span>
+            </span>
+          </a>
+          <a class="list-row list-row-nav" href="/smstudy/">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="smstudy" aria-hidden="true">📘</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">사회·문화</span>
+              <span class="list-row-sub">13중단원 · 기출 78문항</span>
+            </span>
+          </a>
+        </nav>
+      </div>
+
+    <div class="drawer-bottom">
+      <div class="drawer-social">
+        <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+        </a>
+        <a class="icon-link" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
+        </a>
+      </div>
+      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button">로그아웃</button>
+    </div>
+  </aside>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-labelledby="welcomeTitle">
+      <div class="container hero-inner">
+        <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
+        <p class="hero-sub text-body-lg text-secondary hero-sub-guest">개인 웹사이트입니다.</p>
+        <p class="hero-sub text-body-lg text-secondary">범위를 고르고, 풀고, 틀린 것만 다시 봅니다.</p>
+        <div id="account" class="account hero-actions logged">
+          <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
+          <a class="link-arrow hero-browse-guest" href="#contact"><span>프로필 보기</span></a>
+
+            <a class="btn btn-secondary btn-lg account-app" href="/WordMaster/">WordMaster</a>
+            <a class="btn btn-secondary btn-lg account-app" href="/smstudy/">사회·문화</a>
+
+        </div>
+      </div>
+    </section>
+
+
+    <section id="apps" class="section reveal" aria-labelledby="appsTitle">
+      <div class="container">
+        <header class="section-head">
+          <h2 id="appsTitle" class="display">두 개의 앱. 하나의 계정.</h2>
+          <p class="section-sub text-body-lg text-secondary">범위는 직접 고르고, 채점과 복습은 앱이 맡습니다.</p>
+        </header>
+        <div class="tile-grid">
+          <article class="tile card" aria-labelledby="tileWordTitle">
+            <span class="emoji emoji-lg tile-mark" data-emoji="WordMaster" aria-hidden="true">📗</span>
+            <h3 id="tileWordTitle" class="title-2">WordMaster</h3>
+            <p class="tile-line text-secondary">DAY 1–50에서 범위를 고르면 시험이 만들어집니다. 표기가 달라도 정규화해 채점하고, 틀린 단어만 다시 냅니다.</p>
+            <div class="tile-meta">
+              <span class="badge">2,000단어</span>
+              <span class="badge">정규화 채점</span>
+            </div>
+            <a class="link-arrow" href="/WordMaster/"><span>WordMaster 열기</span></a>
+          </article>
+
+          <article class="tile card" aria-labelledby="tileSocietyTitle">
+            <span class="emoji emoji-lg tile-mark" data-emoji="smstudy" aria-hidden="true">📘</span>
+            <h3 id="tileSocietyTitle" class="title-2">사회·문화</h3>
+            <p class="tile-line text-secondary">평가원 기출을 원본 지문 그대로 풀고, 해설에서 정답 근거와 오답 원인을 확인합니다. 약한 개념은 노트로 돌아갑니다.</p>
+            <div class="tile-meta">
+              <span class="badge">기출 78문항</span>
+              <span class="badge">개념 노트 13장</span>
+            </div>
+            <a class="link-arrow" href="/smstudy/"><span>사회·문화 열기</span></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal" aria-labelledby="syncTitle">
+      <div class="container-text">
+        <header class="section-head">
+          <h2 id="syncTitle" class="display">기록은 계정에.</h2>
+          <p class="section-sub text-body-lg text-secondary">로그인 한 번이면 진행도·오답·통계가 기기를 따라옵니다.</p>
+        </header>
+        <div class="list-group">
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="save" aria-hidden="true">💾</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">즉시 저장</span>
+              <span class="list-row-sub">문항을 풀 때마다 서버로 올라갑니다. 저장 버튼은 없습니다.</span>
+            </span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="review" aria-hidden="true">🔁</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">오답 회독</span>
+              <span class="list-row-sub">틀린 항목은 오답률순으로 다시 나옵니다.</span>
+            </span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="anywhere" aria-hidden="true">📱</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">어디서나</span>
+              <span class="list-row-sub">브라우저만 있으면 됩니다. 설치도 동기화 버튼도 없습니다.</span>
+            </span>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat"><span class="stat-value">2,078</span><span class="stat-label">항목</span></div>
+          <div class="stat"><span class="stat-value">2</span><span class="stat-label">앱</span></div>
+          <div class="stat"><span class="stat-value">1</span><span class="stat-label">계정</span></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
+      <div class="container-text">
+        <header class="section-head">
+          <h2 id="contactTitle" class="title-1">연락</h2>
+        </header>
+        <div class="list-group">
+          <a class="list-row list-row-nav" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
+            <span class="list-row-lead">
+              <span class="emoji-box" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              </span>
+            </span>
+            <span class="list-row-body">
+              <span class="list-row-title">Discord</span>
+              <span class="list-row-sub">hvsdcm</span>
+            </span>
+          </a>
+          <a class="list-row list-row-nav" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
+            <span class="list-row-lead">
+              <span class="emoji-box" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
+              </span>
+            </span>
+            <span class="list-row-body">
+              <span class="list-row-title">Instagram</span>
+              <span class="list-row-sub">hvsdcm.exe</span>
+            </span>
+          </a>
+        </div>
+        <p class="list-group-foot">두 링크 모두 새 창으로 열립니다.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="brand footer-brand">hvsdcm</span>
+      <nav class="footer-nav" aria-label="바닥글">
+
+          <a href="/WordMaster/">WordMaster</a>
+          <a href="/smstudy/">사회·문화</a>
+
+      </nav>
+      <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
+    </div>
+  </footer>
+
+  <div id="loginModal" class="sheet-backdrop">
+    <form id="loginForm" class="sheet login-sheet" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <h2 id="loginTitle" class="sheet-title">로그인</h2>
+      <p class="sheet-sub">계정으로 계속합니다.</p>
+      <div class="field">
+        <label class="field-label" for="username">아이디</label>
+        <input class="field-input" id="username" autocomplete="username" placeholder="아이디" required>
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">비밀번호</label>
+        <input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
+      </div>
+      <div id="loginError" class="field-error" role="alert"></div>
+      <button class="btn btn-primary btn-lg login-submit" type="submit">계속</button>
+      <button class="btn btn-ghost" type="button" id="closeLogin">닫기</button>
+    </form>
+  </div>
+</body>
+</html>

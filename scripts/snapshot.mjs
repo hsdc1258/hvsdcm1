@@ -1,4 +1,4 @@
-// docs/snapshots/*.html 생성기.
+// docs/_snapshots/*.html 생성기.
 //
 // 왜 생성기인가 (review 라운드 2, R2-M-1)
 //   손으로 얼린 스냅샷은 낡아도 게이트가 모른다. 실제로 concept-sample.html의 키워드를
@@ -7,20 +7,38 @@
 //   커밋된 파일과 바이트 단위로 대조하므로, 데이터·렌더러·CSS 중 무엇이 바뀌든
 //   스냅샷을 다시 만들기 전에는 게이트가 실패한다.
 //
+// 왜 밑줄 디렉터리인가 (review 라운드 4, R4-B-1)
+//   저장소 루트가 곧 GitHub Pages 배포 루트다. docs/snapshots/*.html은 로그인 검사 없이
+//   개념 본문·표·회상 문제를 렌더하는 **공개 페이지**였고, 미로그인 학습 내용 비노출
+//   계약을 정면으로 깼다. Jekyll(.nojekyll 없음)은 경로 조각이 '_'로 시작하면 출력하지
+//   않으므로 docs/_snapshots로 옮긴다. 이 전제가 무너지는 순간(=.nojekyll이 생기는 순간)
+//   validate.mjs의 publishedHtml()이 이 파일들을 검사 대상으로 끌어와 게이트가 실패한다.
+//
 // 사용법:  node scripts/snapshot.mjs   (파일을 덮어쓴다)
 
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer,
-  ICON_SOURCE, NOTEBOOK_SOURCE, readSource,
+  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderWordMasterHome,
 } from './render-sandbox.mjs';
 
 const ROOT = process.cwd();
 
+export const SNAPSHOT_DIR = 'docs/_snapshots';
+
+// 화면(게시되는 진입 HTML) → 스냅샷 파일. 완료 조건 "4개 화면 전부"(plan.md §4)의
+// 근거이고, validate.mjs가 게시 진입 HTML 목록과 이 표를 대조한다 (R4-M-1).
+export const SNAPSHOT_BY_SCREEN = {
+  'index.html': `${SNAPSHOT_DIR}/landing.html`,
+  'WordMaster/index.html': `${SNAPSHOT_DIR}/wordmaster.html`,
+  'smstudy/index.html': `${SNAPSHOT_DIR}/concept-sample.html`,
+  'admin/index.html': `${SNAPSHOT_DIR}/admin.html`,
+};
+
 export const SNAPSHOT_FILES = {
-  DIAGRAMS: 'docs/snapshots/diagrams.html',
-  CONCEPT: 'docs/snapshots/concept-sample.html',
+  ...SNAPSHOT_BY_SCREEN,
+  DIAGRAMS: `${SNAPSHOT_DIR}/diagrams.html`,
 };
 
 // 개념 화면 스냅샷이 담는 중단원. 바꾸면 파일도 함께 다시 만들어야 한다.
@@ -37,22 +55,32 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
 .snap-item:first-of-type { border-top: 0; }
 .snap-head { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 0 0 14px; letter-spacing: normal; }`;
 
+// 문서 스냅샷(원본 HTML을 그대로 얼리는 쪽)은 페이지 자신의 레이아웃을 건드리면 안 되므로
+// 주석 상자 하나만 얹는다.
+const DOCUMENT_SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
+.snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
+.snap-note code { color: var(--text); }`;
+
 // 생성물이므로 줄 끝 공백을 남기지 않는다 (git diff --check).
 function normalize(html) {
   return `${html.split('\n').map((line) => line.replace(/[ \t]+$/u, '')).join('\n').replace(/\n+$/u, '')}\n`;
 }
 
-function page(title, note, items) {
-  const styles = INLINED_CSS
+function inlineStyles(files) {
+  return files
     .map((file) => `<style>/* ${file} (inlined) */\n${readSource(file).trimEnd()}\n</style>`)
     .join('\n');
+}
+
+function page(title, note, items) {
   return normalize(`<!doctype html>
 <html lang="ko" data-snapshot="1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <title>${title}</title>
-${styles}
+${inlineStyles(INLINED_CSS)}
 <style>
 ${SNAPSHOT_CSS}
 </style>
@@ -67,10 +95,40 @@ ${items.join('\n')}
 }
 
 const GENERATED_NOTE = '<br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다.'
-  + ' <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.';
+  + ' <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.'
+  + ' 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.';
 
 function section(heading, body) {
   return `<section class="snap-item"><h2 class="snap-head">${heading}</h2>${body}</section>`;
+}
+
+// ---- 원본 HTML 문서를 그대로 얼리는 스냅샷 ---------------------------------
+// 랜딩·admin은 마크업 자체가 화면이다. 렌더러를 통과시키는 대신 문서를 손대지 않고
+// (1) 외부 CSS·스크립트 참조를 인라인 스타일로 바꾸고, (2) 스크립트가 하는 일 중 화면
+// 상태에 해당하는 것만 정적으로 반영한다. 무엇을 반영했는지는 각 파일의 주석 상자에 적는다.
+function documentSnapshot(file, { note, mutate }) {
+  const source = readSource(file);
+  // 외부 호스트의 스타일시트(Pretendard CDN)는 인라인할 수 없다 — 링크째 걷어내고
+  // 시스템 폰트 폴백으로 둔다. 조판 검증 대상은 --font-sans의 첫 순위(시스템 서체)다.
+  const hrefs = [...source.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/gu)]
+    .map(([, href]) => href)
+    .filter((href) => !/^https?:/iu.test(href))
+    .map((href) => href.replace(/^\//u, ''));
+  let html = source
+    .replace(/\n?\s*<link\b[^>]*rel="stylesheet"[^>]*>/gu, '')
+    .replace(/\n?\s*<script\b[^>]*>\s*<\/script>/gu, '');
+  html = html.replace('</head>', `${inlineStyles(hrefs)}\n<style>\n${DOCUMENT_SNAPSHOT_CSS}\n</style>\n</head>`);
+  html = html.replace('<html lang="ko">', '<html lang="ko" data-snapshot="1">');
+  html = mutate(html);
+  html = html.replace(/<body([^>]*)>/u, `<body$1>\n  <div class="snap-note">${note}</div>`);
+  return normalize(html);
+}
+
+// home.js의 paintEmoji()와 같은 매핑으로 슬롯을 채운다 — 스냅샷이 매핑 배선까지 보여준다.
+function paintEmoji(html) {
+  const map = evaluateBrowserData('assets/js/site-emoji.js', 'SITE_EMOJI') || {};
+  return html.replace(/(<[^>]*\sdata-emoji="([^"]+)"[^>]*>)(<\/span>)/gu,
+    (whole, open, key, close) => `${open}${map[key] || ''}${close}`);
 }
 
 export function buildSnapshots() {
@@ -106,7 +164,7 @@ export function buildSnapshots() {
       + `\n  ${GENERATED_NOTE}`,
       diagramItems,
     ),
-    [SNAPSHOT_FILES.CONCEPT]: page(
+    [SNAPSHOT_BY_SCREEN['smstudy/index.html']]: page(
       `개념 화면 스냅샷 — ${CONCEPT_SAMPLE_ID} ${subunitTitle}`,
       `<strong>무엇인가</strong> — <code>smstudy/assets/js/app.js</code>의 <code>renderConcept('${CONCEPT_SAMPLE_ID}')</code>가 <code>#app</code>에 쓰는 마크업 전체다.`
       + '\n  히어로·구조도·기출 분석·비교표·문제 푸는 순서·개념 설명·회상 점검·학습 설계까지 화면 전체가 들어 있다.'
@@ -119,6 +177,36 @@ export function buildSnapshots() {
         `<div class="app-main">${conceptMarkup}</div>`,
       )],
     ),
+    [SNAPSHOT_BY_SCREEN['WordMaster/index.html']]: page(
+      'WordMaster 화면 스냅샷 — 시험 설정(첫 화면)',
+      '<strong>무엇인가</strong> — <code>WordMaster/assets/js/app.js</code>가 로드 직후 <code>#app</code>에 쓰는 첫 화면(시험 설정) 마크업 전체다.'
+      + '\n  출제 범위·학습 현황·오답 다루기 그룹과 행 안의 값 컨트롤(<code>.field-input-inline</code>)이 들어 있다.'
+      + '\n  <br><strong>주의</strong> — 학습 기록이 비어 있는 새 브라우저 상태다(localStorage 없음). 정적 사본이라 버튼은 동작하지 않는다.'
+      + `\n  ${GENERATED_NOTE}`,
+      [section('WordMaster — 시험 설정 (#app 전체)', `<div class="app-main">${renderWordMasterHome()}</div>`)],
+    ),
+    [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
+      note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: <code>&lt;template data-study&gt;</code> 주입,'
+        + ' <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기.'
+        + ' 즉 <strong>로그인한 방문자가 보는 화면</strong>이다.'
+        + '\n  <br><strong>주의</strong> — 드로어는 닫힌 상태(화면 밖)다. 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
+        + `\n  ${GENERATED_NOTE}`,
+      mutate: (html) => paintEmoji(html
+        .replace(/<template data-study>([^]*?)<\/template>/gu, '$1')
+        .replace('<body>', '<body class="logged">')
+        .replace('<aside id="drawer" class="drawer"', '<aside id="drawer" class="drawer logged"')
+        .replace('<div id="account" class="account hero-actions">', '<div id="account" class="account hero-actions logged">')),
+    }),
+    [SNAPSHOT_BY_SCREEN['admin/index.html']]: documentSnapshot('admin/index.html', {
+      note: '<strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었다.'
+        + '\n  <br><strong>주의</strong> — 표의 행은 Worker API가 채우므로 이 사본에서는 <code>&lt;tbody&gt;</code>가 비어 있다. 검증 대상은 셸·툴바·표 머리·접힘 그룹의 조판이다.'
+        + `\n  ${GENERATED_NOTE}`,
+      mutate: (html) => html
+        .replace('<section id="login" class="ad-login">', '<section id="login" class="ad-login hidden">')
+        .replace('<section id="panel" class="ad-panel hidden">', '<section id="panel" class="ad-panel">'),
+    }),
   };
 }
 

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <title>개념 화면 스냅샷 — III-01 문화의 이해</title>
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
@@ -65,7 +66,8 @@
    채움 버튼: #fff on --accent-strong #0071e3 = 4.70 (사용)
               --text on --accent-strong      = 4.31 ✗ (금지 — 흰색만)
               #fff on --accent #2997ff       = 3.02 ✗ (--accent를 채움색으로 쓰지 않는다)
-   선택 영역: --text on (accent .35 over bg) = 11.54 / over surface = 9.37
+   선택 영역: --text on (--accent .35 over bg)      = 11.54
+              --text on (--accent .35 over surface) = 9.37
    헤어라인(장식 구획선, 그래픽 3:1 요건 대상 아님 — 컨트롤 경계로 쓰지 않는다):
      --line 1.27~1.46 / --line-strong 1.79~2.05 / --line-faint 1.10~1.20
      → 컨트롤의 유일한 시각 경계로 쓰지 말 것. 컨트롤은 표면 단차로 구분한다.
@@ -1904,7 +1906,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
   CSS 두 개(<code>/assets/css/system.css</code>, <code>/smstudy/assets/css/style.css</code>)를 인라인했으므로 이 파일만 열면 된다.
   <br><strong>주의</strong> — 정적 사본이라 버튼·아코디언은 동작하지 않는다(회상 점검의 <code>&lt;details&gt;</code>는 열린다).
   기출 이미지는 저장소 상대 경로를 참조하므로 저장소 안에서 열어야 보인다.
-  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.</div>
+  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
 <section class="snap-item"><h2 class="snap-head">III-01 — 문화의 이해 (개념 화면 #app 전체)</h2><div class="app-main">
 
       <nav class="toolbar toolbar-sticky sm-concept-nav" aria-label="중단원 이동">

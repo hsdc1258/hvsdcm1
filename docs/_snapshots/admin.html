@@ -1,3 +1,13 @@
+<!doctype html>
+<html lang="ko" data-snapshot="1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>hvsdcm admin</title>
+<style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
    모든 표면(랜딩·WordMaster·smstudy·admin)이 이 파일을 가장 먼저 링크한다.
@@ -1126,3 +1136,270 @@ label.list-row { cursor: pointer; }
   }
   .js .reveal.in { opacity: 1; transform: none; }
 }
+</style>
+<style>/* admin/assets/css/admin.css (inlined) */
+/* ==========================================================================
+   admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
+   색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
+
+   사이클4 재조판 요지
+   - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
+     행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
+   - 섹션 머리를 다른 3면과 같은 어법으로 맞췄다: 뷰 제목은 h1(title-1),
+     섹션 라벨은 .list-group-head(마이크로 캡스). title-2 두 줄 헤더를 걷어냈다.
+   - 접기 카드(.ad-fold)는 system.css의 .disclosure 프리미티브로 대체했다.
+   - 로그인 카드의 box-shadow를 제거했다. 카드는 떠 있지 않다 — 그림자는 시트·토스트·
+     세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
+   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js)로 줄여
+     표가 가로로 밀리지 않게 했다.
+
+   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
+     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-stat-note / .ad-ip)
+     --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
+     --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
+   ========================================================================== */
+
+.hidden { display: none !important; }
+
+/* ---- 사이드바 ---- */
+
+.sidebar-item[href] { scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
+
+/* ---- 로그인 ---- */
+
+.ad-login { display: grid; place-items: center; min-height: 60dvh; }
+
+.ad-login-card {
+  display: grid;
+  gap: var(--space-4);
+  width: min(360px, 100%);
+}
+.ad-login-sub { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
+
+/* ---- 패널 ---- */
+
+.ad-panel { display: grid; gap: var(--space-6); }
+.ad-section { display: grid; gap: var(--space-3); scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
+/* 그리드 자식의 기본 min-width는 auto다. 그래서 넓은 표를 감싼 .table-wrap이 자기
+   가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
+   여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
+.ad-panel > *, .ad-section > * { min-width: 0; }
+
+.ad-filter-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-3);   /* on --bg 5.80:1 */
+}
+
+/* ---- 요약 타일 ---- */
+
+.ad-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: var(--space-2);
+}
+
+.ad-stat {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+}
+.ad-stat .stat-value { font-size: var(--fs-title-2); }
+.ad-stat-note { font-size: var(--fs-micro); line-height: 1.4; color: var(--text-2); }  /* on --surface 7.03:1 */
+
+/* ---- 툴바 ---- */
+
+.ad-add-fields { flex: 1 1 320px; gap: var(--space-2); }
+.ad-add-fields .field-input { flex: 1 1 150px; min-width: 0; }
+
+.ad-note { font-size: var(--fs-micro); color: var(--text-3); flex: 1 1 240px; }
+
+/* ---- 표 ---- */
+
+.ad-caption {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: var(--fs-micro);
+  color: var(--text-3);   /* on --surface 4.99:1 */
+  border-bottom: 1px solid var(--line-faint);
+}
+
+/* 수치 열 — 자릿수가 흔들리지 않게 우측 정렬 + 고정폭 숫자 (HIG의 표 정렬). */
+.ad-n { text-align: right; font-variant-numeric: tabular-nums; }
+.table th.ad-n { text-align: right; }
+
+.ad-ip { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-2); }
+
+.ad-device { display: grid; gap: 1px; max-width: 260px; }
+.ad-device strong { font-weight: 600; }
+.ad-device small {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-row-actions { display: flex; gap: var(--space-2); }
+
+.ad-empty { padding: var(--space-6); text-align: center; color: var(--text-2); }
+
+/* ---- 반응형 ---- */
+
+@media (max-width: 860px) {
+  .ad-panel { gap: var(--space-5); }
+}
+</style>
+<style>
+/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
+.snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
+.snap-note code { color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="snap-note"><strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
+  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었다.
+  <br><strong>주의</strong> — 표의 행은 Worker API가 채우므로 이 사본에서는 <code>&lt;tbody&gt;</code>가 비어 있다. 검증 대상은 셸·툴바·표 머리·접힘 그룹의 조판이다.
+  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
+  <a class="skip-link" href="#adminMain">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">admin</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+        <span class="topbar-link">private · secure</span>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
+
+  <div class="container-wide app-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="관리 메뉴">
+        <nav class="sidebar-group" aria-label="섹션 이동">
+          <p class="sidebar-label">대시보드</p>
+          <a class="sidebar-item" href="#statsSection">개요</a>
+          <a class="sidebar-item" href="#userSection">사용자</a>
+          <a class="sidebar-item" href="#sessionCard">접속 기기</a>
+          <a class="sidebar-item" href="#answerSection">공용 정답</a>
+        </nav>
+
+        <div class="sidebar-group">
+          <p class="sidebar-label">범위</p>
+          <p class="side-note">세션은 최근 90일, IP 통계는 최근 30일 기준입니다. 관리자 세션은 탭을 닫으면 사라집니다.</p>
+        </div>
+      </aside>
+
+      <main id="adminMain" class="app-main" tabindex="-1">
+        <section id="login" class="ad-login hidden">
+          <form id="adminLogin" class="card ad-login-card">
+            <div>
+              <h1 class="title-3">관리자 인증</h1>
+              <p class="ad-login-sub">계정 · 접속 기기 · 공용 정답</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="adminPassword">관리자 비밀번호</label>
+              <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required autofocus>
+            </div>
+            <button class="btn btn-primary" type="submit">로그인</button>
+            <p id="loginError" class="field-error" role="alert"></p>
+          </form>
+        </section>
+
+        <section id="panel" class="ad-panel">
+          <header class="view-head">
+            <div>
+              <h1 class="title-1">운영 대시보드</h1>
+              <p>계정 · 접속 기기 · 공용 정답</p>
+            </div>
+          </header>
+
+          <section id="statsSection" class="ad-section" aria-label="전체 통계">
+            <div id="stats" class="ad-stats"></div>
+          </section>
+
+          <section id="userSection" class="ad-section" aria-labelledby="userSectionTitle">
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="userSectionTitle">사용자</h2>
+            </div>
+
+            <form id="addUser" class="toolbar" aria-label="사용자 추가">
+              <div class="toolbar-group ad-add-fields">
+                <input id="newUsername" class="field-input field-input-sm" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
+                <input id="newPassword" class="field-input field-input-sm" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
+              </div>
+              <div class="toolbar-spacer"></div>
+              <button class="btn btn-primary btn-sm" type="submit">사용자 추가</button>
+            </form>
+            <p id="userError" class="field-error" role="alert"></p>
+
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="ad-caption">등록된 계정과 앱별 학습 이벤트</caption>
+                <thead>
+                  <tr><th scope="col">아이디</th><th scope="col">생성</th><th scope="col">최근 로그인</th><th scope="col">마지막 활동</th><th scope="col" class="ad-n">기기</th><th scope="col">최근 IP</th><th scope="col" class="ad-n">로그인</th><th scope="col" class="ad-n">영단어</th><th scope="col" class="ad-n">사문</th><th scope="col"><span class="sr-only">관리</span></th></tr>
+                </thead>
+                <tbody id="users"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="sessionCard" class="ad-section" aria-labelledby="sessionSectionTitle">
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="sessionSectionTitle">접속 기기 및 IP</h2>
+              <div class="toolbar-group">
+                <label class="ad-filter-label" for="sessionUserFilter">사용자</label>
+                <select id="sessionUserFilter" class="field-input field-input-sm">
+                  <option value="all">전체 사용자</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <span id="sessionCount" class="badge badge-accent">0개 세션</span>
+              <p class="ad-note">최근 90일. 이전 로그인은 IP 해시만 남아 있을 수 있습니다.</p>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="ad-caption">로그인 세션 상세 — 기기·브라우저·IP와 마지막 활동 시각</caption>
+                <thead>
+                  <tr><th scope="col">상태</th><th scope="col">아이디</th><th scope="col">기기</th><th scope="col">브라우저</th><th scope="col">IP</th><th scope="col">로그인</th><th scope="col">마지막 활동</th><th scope="col">만료</th></tr>
+                </thead>
+                <tbody id="sessions"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="answerSection" class="ad-section" aria-labelledby="answerSectionTitle">
+            <details class="disclosure">
+              <summary class="disclosure-head">
+                <span class="disclosure-title" id="answerSectionTitle">공용으로 인정된 답안</span>
+                <span class="disclosure-hint">모든 계정의 채점에 적용됩니다</span>
+              </summary>
+              <div class="disclosure-body">
+                <div class="table-wrap">
+                  <table class="table">
+                    <caption class="ad-caption">사용자가 직접 정답으로 추가한 표현</caption>
+                    <thead>
+                      <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
+                    </thead>
+                    <tbody id="answers"></tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

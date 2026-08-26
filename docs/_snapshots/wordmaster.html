@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>개념 다이어그램 스냅샷 — 13단원 21개</title>
+<meta name="robots" content="noindex, nofollow">
+<title>WordMaster 화면 스냅샷 — 시험 설정(첫 화면)</title>
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
@@ -65,7 +66,8 @@
    채움 버튼: #fff on --accent-strong #0071e3 = 4.70 (사용)
               --text on --accent-strong      = 4.31 ✗ (금지 — 흰색만)
               #fff on --accent #2997ff       = 3.02 ✗ (--accent를 채움색으로 쓰지 않는다)
-   선택 영역: --text on (accent .35 over bg) = 11.54 / over surface = 9.37
+   선택 영역: --text on (--accent .35 over bg)      = 11.54
+              --text on (--accent .35 over surface) = 9.37
    헤어라인(장식 구획선, 그래픽 3:1 요건 대상 아님 — 컨트롤 경계로 쓰지 않는다):
      --line 1.27~1.46 / --line-strong 1.79~2.05 / --line-faint 1.10~1.20
      → 컨트롤의 유일한 시각 경계로 쓰지 말 것. 컨트롤은 표면 단차로 구분한다.
@@ -1899,136 +1901,101 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
 </head>
 <body>
 <div class="snap-wrap">
-<div class="snap-note"><strong>무엇인가</strong> — <code>smstudy/assets/js/diagram.js</code>가 실제로 낸 마크업을 그대로 얼린 정적 스냅샷이다. 13개 중단원의 다이어그램 21개를 <code>단원ID — title (kind)</code> 소제목과 함께 모두 담았다. CSS 두 개(<code>/assets/css/system.css</code>, <code>/smstudy/assets/css/style.css</code>)를 인라인했으므로 이 파일만 열면 된다.
-  <br><strong>왜 있나</strong> — 이 환경에서 스크린샷을 찍을 수 없어(브라우저 pane 뷰포트 0px) DESIGN.md §6의 시각 확인을 대신한다.
-  스크린샷의 완전한 대체는 아니지만, 조판·겹침·잘림을 사람이 눈으로 볼 수 있는 산출물이다.
-  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.</div>
-<section class="snap-item"><h2 class="snap-head">I-01 — 현상 판별 3단계 (flow)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--flow">
-        <div class="sm-diagram-head"><strong>현상 판별 3단계</strong></div>
-        <ol class="sm-d-flow"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>의지 개입</strong></p><ul class="sm-d-items"><li>개입하면 사회·문화 현상</li><li>없으면 자연 현상</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>규칙성 성격</strong></p><ul class="sm-d-items"><li>필연성이면 자연 현상</li><li>개연성이면 사회·문화</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>가치 개입</strong></p><ul class="sm-d-items"><li>몰가치성이면 자연 현상</li><li>가치 함축이면 사회·문화</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">현상 판별 3단계 — 의지 개입부터 가치 개입까지 3단계를 위에서 아래로 차례로 판정한다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">I-01 — 기능론과 갈등론 (scale)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--scale">
-        <div class="sm-diagram-head"><strong>기능론과 갈등론</strong></div>
-        <ul class="sm-d-poles"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>기능론</strong></p><ul class="sm-d-items"><li>합의와 통합과 균형</li><li>기존 질서 옹호 비판</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>갈등론</strong></p><ul class="sm-d-items"><li>지배와 강제와 모순</li><li>통합과 합의 경시 비판</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">기능론과 갈등론 — 기능론과 갈등론이 하나의 축에서 정반대에 놓인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">I-02 — 연구 절차 5단계 (timeline)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--timeline">
-        <div class="sm-diagram-head"><strong>연구 절차 5단계</strong></div>
-        <ol class="sm-d-timeline"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>문제 인식</strong></p><ul class="sm-d-items"><li>연구 주제 선정</li><li>가치 개입 허용</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>가설 설정</strong></p><ul class="sm-d-items"><li>독립 변수와 종속 변수</li><li>검증 가능한 진술</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>연구 설계</strong></p><ul class="sm-d-items"><li>모집단과 표본 확정</li><li>자료 수집법 선택</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>자료 수집</strong></p><ul class="sm-d-items"><li>1차 자료와 2차 자료</li><li>가치 중립 요구</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">5</span><strong>분석과 검증</strong></p><ul class="sm-d-items"><li>가설 수용 또는 기각</li><li>활용 단계는 가치 개입</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">연구 절차 5단계 — 문제 인식에서 분석과 검증까지 5단계가 시간 순서로 이어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">I-02 — 자료 수집법 배치 (matrix2x2)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--matrix2x2">
-        <div class="sm-diagram-head"><strong>자료 수집법 배치</strong></div>
-        <ol class="sm-d-quads"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>질문지법</strong></p><ul class="sm-d-items"><li>양적 연구의 대표</li><li>표준화 문항과 통계</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>실험법</strong></p><ul class="sm-d-items"><li>양적 연구의 대표</li><li>조작과 통제가 필수</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>면접법</strong></p><ul class="sm-d-items"><li>질적 연구의 대표</li><li>동기와 맥락 파악</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>참여 관찰법</strong></p><ul class="sm-d-items"><li>질적 연구의 대표</li><li>생활 세계에 참여</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">자료 수집법 배치 — 두 기준이 교차해 질문지법, 실험법, 면접법, 참여 관찰법의 네 칸이 만들어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">I-03 — 윤리 위반 판별 (matrix2x2)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--matrix2x2">
-        <div class="sm-diagram-head"><strong>윤리 위반 판별</strong></div>
-        <ol class="sm-d-quads"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>동의·보호</strong></p><ul class="sm-d-items"><li>목적을 알리고 참여</li><li>윤리적으로 정당</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>동의·유출</strong></p><ul class="sm-d-items"><li>동의는 받았으나 유출</li><li>비밀 보장 위반</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>미고지·보호</strong></p><ul class="sm-d-items"><li>목적을 숨기고 참여</li><li>사후 설명이 필요</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>미고지·유출</strong></p><ul class="sm-d-items"><li>숨기고 유출까지 함</li><li>명백한 윤리 위반</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">윤리 위반 판별 — 두 기준이 교차해 동의·보호, 동의·유출, 미고지·보호, 미고지·유출의 네 칸이 만들어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-01 — 역할 갈등 판별 (flow)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--flow">
-        <div class="sm-diagram-head"><strong>역할 갈등 판별</strong></div>
-        <ol class="sm-d-flow"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>지위 세기</strong></p><ul class="sm-d-items"><li>지위가 하나면 갈등 아님</li><li>둘 이상이면 다음 단계</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>기대 확인</strong></p><ul class="sm-d-items"><li>각 지위의 기대를 적음</li><li>기대가 없으면 갈등 아님</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>충돌 여부</strong></p><ul class="sm-d-items"><li>동시 충돌이면 역할 갈등</li><li>한 지위 안이면 역할 긴장</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">역할 갈등 판별 — 지위 세기부터 충돌 여부까지 3단계를 위에서 아래로 차례로 판정한다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-01 — 사회화 기관 2축 (matrix2x2)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--matrix2x2">
-        <div class="sm-diagram-head"><strong>사회화 기관 2축</strong></div>
-        <ol class="sm-d-quads"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>공식·1차</strong></p><ul class="sm-d-items"><li>유아 교육 기관</li><li>보육과 기초 인성</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>공식·2차</strong></p><ul class="sm-d-items"><li>학교와 직업 훈련소</li><li>전문 지식과 역할</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>비공식·1차</strong></p><ul class="sm-d-items"><li>가족과 또래 집단</li><li>기초 인성과 정서</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>비공식·2차</strong></p><ul class="sm-d-items"><li>회사와 대중 매체</li><li>사회화는 부수적</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">사회화 기관 2축 — 두 기준이 교차해 공식·1차, 공식·2차, 비공식·1차, 비공식·2차의 네 칸이 만들어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-02 — 명목론과 실재론 (scale)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--scale">
-        <div class="sm-diagram-head"><strong>명목론과 실재론</strong></div>
-        <ul class="sm-d-poles"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>사회 명목론</strong></p><ul class="sm-d-items"><li>사회는 개인의 합</li><li>개인의 자율성 강조</li><li>계약론과 개인주의</li><li>구조의 힘을 경시</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>사회 실재론</strong></p><ul class="sm-d-items"><li>사회는 독자적 실체</li><li>구조의 구속성 강조</li><li>유기체론과 전체론</li><li>개인의 능동성 경시</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">명목론과 실재론 — 사회 명목론과 사회 실재론이 하나의 축에서 정반대에 놓인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-03 — 조직 세 범주의 겹침 (venn)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--venn">
-        <div class="sm-diagram-head"><strong>조직 세 범주의 겹침</strong></div>
-        <div class="sm-d-art"><svg class="sm-d-svg" viewBox="0 0 480 340" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><circle cx="185" cy="135" r="95" class="sm-d-venn"/><circle cx="295" cy="135" r="95" class="sm-d-venn"/><circle cx="240" cy="225" r="95" class="sm-d-venn"/><text x="135" y="108" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">1</text><text x="345" y="108" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">2</text><text x="240" y="282" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">3</text></svg></div><ol class="sm-d-legend"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>공식 조직</strong></p><ul class="sm-d-items"><li>회사와 학교</li><li>명시적 규칙과 위계</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>비공식 조직</strong></p><ul class="sm-d-items"><li>사내 동호회</li><li>공식 조직 안에서 생김</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>자발적 결사체</strong></p><ul class="sm-d-items"><li>시민 단체와 동호회</li><li>공통 관심과 자발 가입</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">조직 세 범주의 겹침 — 공식 조직, 비공식 조직, 자발적 결사체가 서로 겹칠 수 있다는 점을 원의 교집합으로 보인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-03 — 관료제와 탈관료제 (scale)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--scale">
-        <div class="sm-diagram-head"><strong>관료제와 탈관료제</strong></div>
-        <ul class="sm-d-poles"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>관료제</strong></p><ul class="sm-d-items"><li>수직 위계와 규칙</li><li>연공서열 보상</li><li>예측 가능성이 높음</li><li>목적 전치 위험</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>탈관료제</strong></p><ul class="sm-d-items"><li>수평적 의사 결정</li><li>능력 중심 보상</li><li>환경 적응이 빠름</li><li>책임 소재가 흐림</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">관료제와 탈관료제 — 관료제와 탈관료제가 하나의 축에서 정반대에 놓인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">II-04 — 일탈 이론 판별 (flow)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--flow">
-        <div class="sm-diagram-head"><strong>일탈 이론 판별</strong></div>
-        <ol class="sm-d-flow"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>규범 상태</strong></p><ul class="sm-d-items"><li>변동으로 규범이 약함</li><li>뒤르켐 아노미</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>목표와 수단</strong></p><ul class="sm-d-items"><li>목표는 있고 수단이 없음</li><li>머튼 아노미</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>접촉과 학습</strong></p><ul class="sm-d-items"><li>친밀 집단에서 배움</li><li>차별 교제 이론</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>사회적 반응</strong></p><ul class="sm-d-items"><li>낙인 뒤 자아가 바뀜</li><li>낙인 이론</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">일탈 이론 판별 — 규범 상태부터 사회적 반응까지 4단계를 위에서 아래로 차례로 판정한다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">III-01 — 문화의 다섯 속성 (radial)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--radial">
-        <div class="sm-diagram-head"><strong>문화의 다섯 속성</strong></div>
-        <p class="sm-d-center"><strong>문화의 속성</strong></p><ul class="sm-d-cards"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>공유성</strong></p><ul class="sm-d-items"><li>구성원이 함께 나눔</li><li>행동을 예측하게 함</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>학습성</strong></p><ul class="sm-d-items"><li>후천적으로 습득</li><li>본능과 구분됨</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>축적성</strong></p><ul class="sm-d-items"><li>전승 위에 새로 추가</li><li>세대를 넘어 쌓임</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>전체성</strong></p><ul class="sm-d-items"><li>요소끼리 유기적 연결</li><li>한 곳이 바뀌면 파급</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>변동성</strong></p><ul class="sm-d-items"><li>시간에 따라 달라짐</li><li>소멸과 대체도 포함</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">문화의 다섯 속성 — 문화의 속성을 5갈래로 나눠 우열 없이 나란히 놓는다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">III-01 — 자문화 중심과 사대 (scale)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--scale">
-        <div class="sm-diagram-head"><strong>자문화 중심과 사대</strong></div>
-        <ul class="sm-d-poles"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>자문화 중심</strong></p><ul class="sm-d-items"><li>자기 문화가 우월</li><li>국수주의로 이어짐</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>문화 사대주의</strong></p><ul class="sm-d-items"><li>다른 문화가 우월</li><li>고유 정체성 상실</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">자문화 중심과 사대 — 자문화 중심과 문화 사대주의가 하나의 축에서 정반대에 놓인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">III-02 — 문화의 포함 위계 (pyramid)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--pyramid">
-        <div class="sm-diagram-head"><strong>문화의 포함 위계</strong></div>
-        <ol class="sm-d-pyramid"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>반문화</strong></p><ul class="sm-d-items"><li>주류 가치에 저항</li><li>하위문화의 일부</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>하위문화</strong></p><ul class="sm-d-items"><li>특정 집단만 공유</li><li>소속감과 다양성</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>전체 문화</strong></p><ul class="sm-d-items"><li>사회 구성원 전체</li><li>주류 문화를 포함</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">문화의 포함 위계 — 위의 반문화에서 아래의 전체 문화까지 3층으로 쌓인 구조다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">III-03 — 변동 요인 판별 (flow)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--flow">
-        <div class="sm-diagram-head"><strong>변동 요인 판별</strong></div>
-        <ol class="sm-d-flow"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>시작점</strong></p><ul class="sm-d-items"><li>내부 시작이면 발명</li><li>접촉 시작이면 전파</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>발명 여부</strong></p><ul class="sm-d-items"><li>없던 것을 만들면 발명</li><li>있던 것을 알면 발견</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>전파 경로</strong></p><ul class="sm-d-items"><li>사람 접촉은 직접 전파</li><li>매체 경유는 간접 전파</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>착상 출처</strong></p><ul class="sm-d-items"><li>외부 착상은 자극 전파</li><li>내부 응용은 발명</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">변동 요인 판별 — 시작점부터 착상 출처까지 4단계를 위에서 아래로 차례로 판정한다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">III-03 — 접촉 뒤의 결과 (timeline)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--timeline">
-        <div class="sm-diagram-head"><strong>접촉 뒤의 결과</strong></div>
-        <ol class="sm-d-timeline"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>접촉 이전</strong></p><ul class="sm-d-items"><li>두 문화가 따로 존재</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>접변</strong></p><ul class="sm-d-items"><li>자발적 접변·강제적 접변</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>접변 결과</strong></p><ul class="sm-d-items"><li>공존·동화·융합</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">접촉 뒤의 결과 — 접촉 이전에서 접변 결과까지 3단계가 시간 순서로 이어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">IV-01 — 계층 구조 세 유형 (pyramid)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--pyramid">
-        <div class="sm-diagram-head"><strong>계층 구조 세 유형</strong></div>
-        <ol class="sm-d-pyramid"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>상층</strong></p><ul class="sm-d-items"><li>모래시계형에서 두꺼움</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>중층</strong></p><ul class="sm-d-items"><li>다이아몬드형에서 두꺼움</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>하층</strong></p><ul class="sm-d-items"><li>피라미드형에서 두꺼움</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">계층 구조 세 유형 — 위의 상층에서 아래의 하층까지 3층으로 쌓인 구조다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">IV-01 — 사회 이동 2축 (matrix2x2)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--matrix2x2">
-        <div class="sm-diagram-head"><strong>사회 이동 2축</strong></div>
-        <ol class="sm-d-quads"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>세대 간 수직</strong></p><ul class="sm-d-items"><li>부모와 자녀의 계층 차</li><li>대각선 밖에 놓임</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>세대 간 수평</strong></p><ul class="sm-d-items"><li>층은 같고 직업만 다름</li><li>이동표로는 판정 못 함</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>세대 내 수직</strong></p><ul class="sm-d-items"><li>한 사람의 두 시점 차</li><li>상승 또는 하강</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>세대 내 수평</strong></p><ul class="sm-d-items"><li>직업만 바뀌고 층은 같음</li><li>수직 이동이 아님</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">사회 이동 2축 — 두 기준이 교차해 세대 간 수직, 세대 간 수평, 세대 내 수직, 세대 내 수평의 네 칸이 만들어진다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">IV-02 — 두 빈곤의 겹침 (venn)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--venn">
-        <div class="sm-diagram-head"><strong>두 빈곤의 겹침</strong></div>
-        <div class="sm-d-art"><svg class="sm-d-svg" viewBox="0 0 480 300" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><circle cx="180" cy="150" r="105" class="sm-d-venn"/><circle cx="300" cy="150" r="105" class="sm-d-venn"/><text x="135" y="150" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">1</text><text x="345" y="150" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">2</text></svg></div><ol class="sm-d-legend"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>절대적 빈곤</strong></p><ul class="sm-d-items"><li>최저 생활 기준 미달</li><li>공식 빈곤선이 기준</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>상대적 빈곤</strong></p><ul class="sm-d-items"><li>사회 평균 대비 부족</li><li>중위 소득이 기준</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">두 빈곤의 겹침 — 절대적 빈곤과 상대적 빈곤이 서로 겹칠 수 있다는 점을 원의 교집합으로 보인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">IV-03 — 세 제도 중복 수급 (venn)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--venn">
-        <div class="sm-diagram-head"><strong>세 제도 중복 수급</strong></div>
-        <div class="sm-d-art"><svg class="sm-d-svg" viewBox="0 0 480 340" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><circle cx="185" cy="135" r="95" class="sm-d-venn"/><circle cx="295" cy="135" r="95" class="sm-d-venn"/><circle cx="240" cy="225" r="95" class="sm-d-venn"/><text x="135" y="108" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">1</text><text x="345" y="108" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">2</text><text x="240" y="282" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">3</text></svg></div><ol class="sm-d-legend"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>사회 보험</strong></p><ul class="sm-d-items"><li>보험료를 분담함</li><li>자격자는 강제 가입</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>공공 부조</strong></p><ul class="sm-d-items"><li>조세로 재원 마련</li><li>소득 조사로 선별</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>사회 서비스</strong></p><ul class="sm-d-items"><li>비금전적 지원 중심</li><li>이용자 부담 가능</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">세 제도 중복 수급 — 사회 보험, 공공 부조, 사회 서비스가 서로 겹칠 수 있다는 점을 원의 교집합으로 보인다.</figcaption>
-      </figure></div></section>
-<section class="snap-item"><h2 class="snap-head">IV-03 — 계산 순서 고정 (flow)</h2><div class="sm-diagrams">
-      <figure class="sm-diagram sm-diagram--flow">
-        <div class="sm-diagram-head"><strong>계산 순서 고정</strong></div>
-        <ol class="sm-d-flow"><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">1</span><strong>제도 식별</strong></p><ul class="sm-d-items"><li>강제 가입은 사회 보험</li><li>비금전은 사회 서비스</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">2</span><strong>겹침 표시</strong></p><ul class="sm-d-items"><li>중복과 3중 수혜자 표시</li><li>포함 관계 확인</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">3</span><strong>인원 환산</strong></p><ul class="sm-d-items"><li>비율에 전체 인구를 곱함</li><li>시점별 인구 확인</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><span class="sm-d-n">4</span><strong>선지 대조</strong></p><ul class="sm-d-items"><li>단위와 시점을 다시 확인</li></ul></li></ol>
-        <figcaption class="sm-diagram-note">계산 순서 고정 — 제도 식별부터 선지 대조까지 4단계를 위에서 아래로 차례로 판정한다.</figcaption>
-      </figure></div></section>
+<div class="snap-note"><strong>무엇인가</strong> — <code>WordMaster/assets/js/app.js</code>가 로드 직후 <code>#app</code>에 쓰는 첫 화면(시험 설정) 마크업 전체다.
+  출제 범위·학습 현황·오답 다루기 그룹과 행 안의 값 컨트롤(<code>.field-input-inline</code>)이 들어 있다.
+  <br><strong>주의</strong> — 학습 기록이 비어 있는 새 브라우저 상태다(localStorage 없음). 정적 사본이라 버튼은 동작하지 않는다.
+  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
+<section class="snap-item"><h2 class="snap-head">WordMaster — 시험 설정 (#app 전체)</h2><div class="app-main">
+      <header class="view-head">
+        <div class="view-head-main">
+          <span class="emoji emoji-lg" aria-hidden="true">📗</span>
+          <div>
+            <h1>시험 설정</h1>
+            <p>DAY 범위를 정하면 한국어 뜻 주관식 시험이 시작됩니다.</p>
+          </div>
+        </div>
+        <span class="badge badge-accent">DAY 01–01 · 40단어</span>
+      </header>
+
+      <div class="wm-layout">
+        <section class="wm-col" aria-labelledby="rangeHead">
+          <h2 class="list-group-head" id="rangeHead">출제 범위</h2>
+          <div class="list-group">
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">📅</span></span>
+              <span class="list-row-body"><span class="list-row-title">DAY 범위</span></span>
+              <span class="list-row-value wm-range">
+                <input id="startDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="시작 DAY" value="1">
+                <span aria-hidden="true">–</span>
+                <input id="endDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="끝 DAY" value="1">
+              </span>
+            </div>
+            <div class="list-row wm-row-wrap">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">⚡</span></span>
+              <span class="list-row-body"><span class="list-row-title">빠른 선택</span></span>
+              <span class="segmented wm-presets" role="group" aria-label="DAY 범위 빠른 선택">
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="1">1</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="10">1–10</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="25">1–25</button>
+                <button class="segmented-btn preset" type="button" data-start="26" data-end="50">26–50</button>
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="50">전체</button>
+              </span>
+            </div>
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">🔢</span></span>
+              <span class="list-row-body"><label class="list-row-title" for="questionCount">문제 수</label></span>
+              <span class="list-row-value">
+                <select id="questionCount" class="field-input-inline">
+                  <option value="25" >25개</option>
+                  <option value="50" >50개</option>
+                  <option value="100" >100개</option>
+                  <option value="all" selected>전체</option>
+                </select>
+              </span>
+            </div>
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">🎲</span></span>
+              <span class="list-row-body"><label class="list-row-title" for="orderMode">출제 순서</label></span>
+              <span class="list-row-value"><select id="orderMode" class="field-input-inline"><option value="random" selected>랜덤</option><option value="sequential" >DAY 순서</option><option value="wrong-high" >오답률 높은 순</option><option value="wrong-low" >오답률 낮은 순</option><option value="recent" >최근 풀이 순</option></select></span>
+            </div>
+          </div>
+          <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button">시험 시작</button>
+        </section>
+
+        <aside class="wm-panel">
+          <p class="list-group-head">학습 현황</p>
+          <div class="list-group">
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">✍️</span></span>
+              <span class="list-row-body"><span class="list-row-title">총 풀이</span></span>
+              <span class="list-row-value">0</span>
+            </div>
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">🎯</span></span>
+              <span class="list-row-body"><span class="list-row-title">정답률</span></span>
+              <span class="list-row-value">0%</span>
+            </div>
+            <div class="list-row">
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">📕</span></span>
+              <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
+              <span class="list-row-value">0</span>
+            </div>
+          </div>
+
+          <p class="list-group-head">오답 다루기</p>
+          <div class="list-group">
+            <button id="wrongStudyBtn" class="list-row list-row-nav" type="button" disabled>
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">👀</span></span>
+              <span class="list-row-body"><span class="list-row-title">오답 보고 외우기</span><span class="list-row-sub">뜻을 보면서 훑습니다</span></span>
+            </button>
+            <button id="reviewBtn" class="list-row list-row-nav" type="button" disabled>
+              <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">♻️</span></span>
+              <span class="list-row-body"><span class="list-row-title">오답 재시험</span><span class="list-row-sub">맞히면 노트에서 빠집니다</span></span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </div></section>
 </div>
 </body>
 </html>

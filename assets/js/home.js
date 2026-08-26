@@ -60,12 +60,25 @@
     document.title = 'hvsdcm — Study, distilled.';
   }
 
+  // 이모지 리터럴은 마크업에 없다. 슬롯은 data-emoji="<키>"만 갖고 글자는 여기서
+  // site-emoji.js의 매핑에서 채운다 (DESIGN.md §5 — 대상당 글리프 하나, 원본 한 곳).
+  // 매핑이 없거나 키가 빠지면 슬롯은 빈 채로 남는다 — 이모지는 aria-hidden이고 의미를
+  // 단독으로 지지 않으므로 화면은 그대로 읽힌다.
+  function paintEmoji(root) {
+    const map = window.SITE_EMOJI || {};
+    for (const slot of root.querySelectorAll('[data-emoji]')) {
+      slot.textContent = map[slot.dataset.emoji] || '';
+    }
+  }
+
   // 학습 콘텐츠는 <template data-study>로만 존재한다 — 미로그인 문서에는 아예 렌더되지
   // 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다. 로그인 판정 후 한 번만 주입한다.
   function mountStudyContent() {
     for (const template of document.querySelectorAll('template[data-study]')) {
       template.parentNode.insertBefore(template.content.cloneNode(true), template);
     }
+    // 템플릿 안의 슬롯은 주입되기 전까지 문서에 없다 — 주입 직후에 다시 칠한다.
+    paintEmoji(document);
   }
 
   // 로그인 후 이동은 동일 출처의 내부 경로만 허용한다.
@@ -173,6 +186,8 @@
       closeLogin();
     }
   });
+
+  paintEmoji(document);
 
   const savedUsername = localStorage.getItem('hvsdcm.user');
   const token = localStorage.getItem('hvsdcm.token');

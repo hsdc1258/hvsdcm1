@@ -243,6 +243,42 @@ export function createAppSandbox(options = {}) {
   };
 }
 
+// WordMaster의 app.js도 IIFE이고, 로드 끝에서 스스로 renderHome()을 불러 #app에 쓴다.
+// 그래서 export 라인을 끼울 필요 없이 **원본 그대로** 평가하고 #app의 innerHTML을 읽으면
+// 실제 첫 화면이 그대로 나온다. window.HvsAccount 접근은 전부 옵셔널 체이닝이라
+// account.js 없이도 안전하다 (계정 동기화는 스냅샷의 대상이 아니다).
+export const WORDMASTER_APP_SOURCE = 'WordMaster/assets/js/app.js';
+export function renderWordMasterHome() {
+  const store = new Map();
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = { href: 'about:blank', hash: '', search: '' };
+  context.localStorage = {
+    store: new Map(),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  context.setTimeout = (callback) => { void callback; return 0; };
+  context.clearTimeout = () => {};
+  context.requestAnimationFrame = (callback) => { callback(0); return 0; };
+  context.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  context.confirm = () => false;
+  context.alert = () => {};
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  for (const file of [UTILS_SOURCE, 'WordMaster/assets/js/words.js', WORDMASTER_APP_SOURCE]) {
+    vm.runInContext(readSource(file), context, { filename: file });
+  }
+  const markup = store.get('app')?.innerHTML || '';
+  if (!markup.includes('view-head')) {
+    throw new Error(`${WORDMASTER_APP_SOURCE}: the first view did not render — the WordMaster snapshot sandbox is broken`);
+  }
+  return markup;
+}
+
 // 함수 **본문 경계**를 잡는다. 소스 전체 정규식으로 마크업을 찾으면 함수 밖의 같은 모양
 // 문자열을 잡을 수 있다 (review R2-B-3: 앞선 미사용 <figure> 문자열이 진짜 검사를 가렸다).
 export function functionBody(source, name) {
