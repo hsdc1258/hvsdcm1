@@ -64,82 +64,138 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   align-items: start;
 }
 .sm-units { display: grid; gap: var(--space-4); }
-.sm-panel { display: grid; gap: var(--space-4); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
-
-/* 빠른 복습 — 카드 3장 대신 한 장 안의 구분선 그룹 (DESIGN.md §4). */
-.sm-quick { display: grid; gap: 0; }
-.sm-quick-item {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--line-faint);
-}
-.sm-quick-item:last-child { padding-bottom: 0; }
-.sm-quick > .title-3 { padding-bottom: var(--space-2); }
-.sm-quick-item > div { display: grid; gap: 2px; }
-/* h3이지만 카드 안의 항목 이름이므로 본문 캡션 크기로 조판한다 — 크기가 아니라
-   위치와 구분선이 위계를 만든다 (DESIGN.md §2). */
-.sm-quick-name { font-size: var(--fs-caption); font-weight: 600; line-height: 1.3; }
-.sm-quick-item small { font-size: var(--fs-micro); color: var(--text-3); }
+.sm-panel { display: grid; gap: var(--space-5); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
 
 .sm-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
 .sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
 
-/* ---- 대단원 카드 ---- */
+/* 행이 곧 동작인 그룹 리스트 — 비활성 행은 배경 반응도 끈다. */
+.list-group .list-row:disabled { opacity: .45; cursor: default; }
+.list-group .list-row:disabled:hover { background: transparent; }
 
-.sm-unit { display: grid; gap: var(--space-4); }
-.sm-unit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.sm-unit-copy { display: grid; gap: var(--space-2); }
-.sm-unit-select { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
-.sm-unit-tools { display: grid; gap: var(--space-2); justify-items: end; }
-.sm-unit-progress { display: grid; justify-items: end; gap: 2px; }
-.sm-unit-progress strong { font-size: var(--fs-title-3); font-variant-numeric: tabular-nums; }
-.sm-unit-progress small { font-size: var(--fs-micro); color: var(--text-3); }
+/* ---- 대단원 = 그룹 / 중단원 = 행 (DESIGN.md §7.1) ---- */
 
-.sm-sub-list { display: grid; gap: 2px; }
-
-.sm-sub {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.sm-unit { display: grid; gap: var(--space-2); }
+.sm-unit-head {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
+  min-height: 30px;
 }
-.sm-sub:hover { background: var(--surface-3); }
-.sm-check { display: grid; place-items: center; }
-.sm-check input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
-.sm-sub-copy { display: grid; gap: 2px; min-width: 0; }
-.sm-sub-copy strong { font-size: var(--fs-caption); font-weight: 600; }
-.sm-sub-copy small { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-sub-actions { display: flex; align-items: center; gap: var(--space-3); }
-.sm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line); }
-.sm-dot.is-on { background: var(--green); border-color: var(--green); }
+/* .list-group-head의 아래 여백은 그룹 사이 간격이 대신한다 — 헤더 줄 안에서는 뺀다. */
+.sm-unit-head .list-group-head { padding-bottom: 0; }
+
+/* 행 전체를 개념 학습 진입점으로 늘린다. 오른쪽 체크박스만 그 위로 올라온다.
+   버튼 안에 체크박스를 중첩하지 않으므로 마크업이 유효하고, 히트 영역은 행 전체다. */
+.sm-row-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.sm-row-open::after { content: ""; position: absolute; inset: 0; }
+.sm-row:hover { background: var(--line-faint); }
+.sm-row-pick { position: relative; z-index: 1; display: grid; place-items: center; flex: none; }
+.sm-row-pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
 /* ---- 개념 노트 ---- */
 
-/* 불투명 표면 — 유리 효과는 DESIGN.md §3이 금지한다. --surface 위 --text-2 7.03:1. */
-.sm-concept-nav { position: sticky; top: calc(var(--topbar-h) + var(--space-2)); z-index: 40; background: var(--surface); }
-.sm-jumps { flex-wrap: wrap; }
-.sm-jumps .segmented-btn { padding: 4px 10px; font-size: var(--fs-micro); }
+/* 툴바 — 중단원 이동(select)·홈·퀴즈를 한 줄에 모았다. 예전에는 칩 13개 줄과
+   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.2).
+   불투명 표면 — 유리 효과는 §3이 금지한다. --surface 위 --text-2 7.03:1. */
+.sm-concept-nav { z-index: 40; gap: var(--space-2); }
+.sm-jump-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-2);   /* on --surface 7.03:1 */
+}
+.sm-jump {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 340px;
+  padding-block: 6px;
+  font-size: var(--fs-caption);
+}
 
-.sm-toc { gap: var(--space-4); }
+/* 단원 머리 — 이모지 슬롯 + 제목 + 한 줄 메타. 눈썹 라벨을 두지 않는다. */
+.sm-concept-head { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-2); }
+.sm-concept-head > div { min-width: 0; }
+.sm-concept-meta { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
-/* 개념 노트 본문 — 카드 10연속 스택을 걷어내고 구분선 조판으로 낸다.
-   레퍼런스는 문제집·참고서다 (DESIGN.md §1): 높은 밀도, 조용한 위계, 훑기 좋은 리스트.
-   카드는 정보의 경계가 필요한 자리에만 남긴다 (§4). */
+/* 개념 노트 본문 — 카드 스택도 아니고 섹션마다 두 줄짜리 제목을 얹지도 않는다.
+   섹션 머리는 그룹 헤더 한 줄이고, 항상 볼 것과 접을 것을 나눈다 (DESIGN.md §6). */
 .sm-note-body { display: grid; gap: 0; }
 .sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
 /* 구분선 조판은 노트 본문 안에서만 적용한다 — 같은 클래스를 쓰는 학습 기록 화면의
    카드 섹션까지 건드리면 안 된다. */
 .sm-note-body > .sm-section {
-  padding: var(--space-7) 0;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
   border-top: 1px solid var(--line-faint);
 }
-.sm-note-body > .sm-section:first-child { padding-top: 0; border-top: 0; }
-.sm-note-body > .sm-section:last-of-type { padding-bottom: 0; }
+.sm-note-body > .sm-section:first-child { padding-top: var(--space-4); border-top: 0; }
+
+/* 섹션 머리 — iOS 그룹 헤더 어법. 제목 한 줄, 오른쪽에 짧은 힌트. */
+.sm-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.sm-sec-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-2);   /* on --bg 8.16:1 */
+}
+.sm-sec-hint { font-size: var(--fs-micro); color: var(--text-3); }  /* on --bg 5.80:1 */
+
+/* ---- 접히는 부속 섹션 ---- */
+
+.sm-fold {
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+.sm-note-body > .sm-fold { margin-top: var(--space-4); }
+.sm-note-body > .sm-fold + .sm-fold { margin-top: var(--space-2); }
+.sm-fold-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min-h);
+  padding: var(--row-pad-y) var(--row-pad-x);
+  cursor: pointer;
+  list-style: none;
+}
+.sm-fold-head::-webkit-details-marker { display: none; }
+.sm-fold-head::after {
+  content: "›";
+  flex: none;
+  margin-left: var(--space-2);
+  color: var(--text-3);
+  font-size: 1.2em;
+  line-height: 1;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.sm-fold[open] > .sm-fold-head::after { transform: rotate(90deg); }
+.sm-fold-head:hover { background: var(--line-faint); }
+.sm-fold-title { font-size: var(--fs-body); font-weight: 600; }
+.sm-fold-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
+.sm-fold-body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--row-pad-x) var(--space-5);
+  border-top: 1px solid var(--line-faint);
+}
+.sm-fold-lead { font-size: var(--fs-body); color: var(--text); }
+.sm-fold-body > .list-group-head { padding-bottom: 0; }
 
 /* 학습 기록 화면 전용 섹션 규칙 (M-2). 노트 본문 스코프 밖에 있는 기록 섹션들이
    여백·구분선을 잃지 않도록 같은 조판 언어를 여기서 따로 준다. 카드가 아닌 섹션에만
@@ -149,13 +205,7 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   border-top: 1px solid var(--line-faint);
 }
 
-/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조).
-   눈썹 라벨과 디스플레이급 헤드라인은 걷어냈다: 바로 위 <h1>이 이미 단원을 말하므로
-   같은 자리에 큰 제목이 두 번 쌓였다. 참고서 단원 도입부의 조판을 따른다. */
-.sm-note-hero { display: grid; gap: var(--space-3); }
-
-/* 헤드라인은 30자 이하 명사구 전용이고, 섹션 제목(.title-2)보다 한 단 아래에 놓는다.
-   도입부는 절(section)이 아니라 들어가는 말이므로 본문보다 조금 큰 정도면 충분하다
+/* 헤드라인은 30자 이하 명사구 전용이고, 본문보다 한 단만 위다
    (DESIGN.md §2 — 글 양과 글자 크기는 반비례). */
 .sm-headline {
   font-size: var(--fs-body-lg);
@@ -178,18 +228,6 @@ ul.sm-summary {
 ul.sm-summary li::marker { color: var(--text-3); }
 .sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
 
-/* 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩 리스트를 쓰지 않는다 — 일반 리스트가
-   기본값이다 (DESIGN.md §4). 위계는 굵은 라벨 하나로 충분하다. */
-.sm-keypoints {
-  display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-.sm-keypoint { display: grid; gap: 2px; }
-.sm-keypoint strong { font-size: var(--fs-caption); }
-.sm-keypoint p { font-size: var(--fs-caption); color: var(--text-2); }
-
 /* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
 .sm-icon {
   width: 16px;
@@ -201,19 +239,6 @@ ul.sm-summary li::marker { color: var(--text-3); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
-/* 대형 숫자 타일 대신 사실 나열로 낸다 — 장식 프리미티브를 뷰당 2종 이하로 유지한다 (DESIGN.md §4). */
-.sm-facts-inline {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
-  gap: var(--space-3) var(--space-5);
-  margin: 0;
-  padding: var(--space-3) 0;
-  border-block: 1px solid var(--line);
-}
-.sm-facts-inline > div { display: grid; gap: 2px; }
-.sm-facts-inline dt { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-facts-inline dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* 정적 집계(단원 평균 정답률)를 막대로 그리던 .sm-gauge는 제거했다 — 프로그레스 바는
    사용자의 진행 데이터에만 쓴다 (DESIGN.md §4). 같은 정보는 아래 .sm-hint 문장이 낸다. */
@@ -256,6 +281,7 @@ ol.sm-freq {
 .sm-matrix-wrap { max-height: 70dvh; }
 .sm-matrix th, .sm-matrix td { white-space: normal; min-width: 140px; vertical-align: top; }
 .sm-matrix tbody th { position: sticky; left: 0; background: var(--surface-2); z-index: 1; }
+/* 가로 스크롤 안내는 실제로 스크롤이 생기는 좁은 화면에서만 낸다. */
 .sm-swipe { display: none; }
 
 .sm-steps { display: grid; gap: var(--space-3); counter-reset: step; }
@@ -272,46 +298,30 @@ ol.sm-freq {
 .sm-steps p { font-size: var(--fs-caption); }
 
 .sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: var(--space-3); }
-.sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
-.sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
-.sm-deep h4 span { color: var(--text); }
+.sm-deep-item { padding: var(--space-3) var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
 ul.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
 ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-recall { display: grid; gap: var(--space-2); }
-.sm-recall-item { border-radius: var(--radius-m); background: var(--surface-2); overflow: hidden; }
+/* --bg 위에 --surface-2를 바로 얹지 않는다 — 한 단씩 올린다 (DESIGN.md §4). */
+.sm-recall-item { border-radius: var(--radius-m); background: var(--surface); overflow: hidden; }
 .sm-recall-item summary {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  font-size: var(--fs-caption);
+  font-size: var(--fs-body-sm);
   list-style: none;
 }
 .sm-recall-item summary::-webkit-details-marker { display: none; }
-.sm-recall-item > div { padding: 0 var(--space-4) var(--space-4); display: grid; gap: var(--space-1); }
-/* 채점 결과가 아니라 펼침 라벨이다 — 상태색을 쓰지 않는다 (§3).
-   --text-2 on --surface-2 7.03:1. */
-.sm-recall-item > div strong { font-size: var(--fs-micro); color: var(--text-2); }
-.sm-recall-item > div p { font-size: var(--fs-caption); color: var(--text-2); }
+/* 번호는 동그라미 뱃지가 아니라 숫자다 — .sm-d-n·.sm-steps와 같은 처리 (DESIGN.md §6).
+   --accent on --surface 6.00:1. */
+.sm-recall-n { flex: none; min-width: 1.2em; color: var(--accent); font-size: var(--fs-micro); font-weight: 700; }
+.sm-recall-item > p { margin: 0; padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 1.2em + var(--space-3)); font-size: var(--fs-body-sm); color: var(--text-2); }
 
-.sm-schedule {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-m);
-  background: var(--surface-2);
-  font-size: var(--fs-micro);
-  color: var(--text-2);
-}
-.sm-schedule strong { color: var(--text); }
-.sm-schedule i { width: 16px; height: 1px; background: var(--line-strong); }
-
-.sm-map .sm-flow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sm-flow { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .sm-flow-step {
   display: flex;
   align-items: center;
@@ -322,12 +332,16 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   font-size: var(--fs-caption);
 }
 .sm-flow-step > span { color: var(--accent); font-weight: 700; font-size: var(--fs-micro); }
-.sm-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
-.sm-check-item { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-1); }
-.sm-check-item p { font-size: var(--fs-caption); color: var(--text-2); }
 
-.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: var(--space-3); }
-.sm-concept-card { display: grid; gap: var(--space-3); align-content: start; background: var(--surface-2); }
+.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: var(--space-3); }
+.sm-concept-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
 /* 함정 칸은 색이 아니라 라벨로 구분한다 — 상태색은 상태 표시에만 쓴다 (DESIGN.md §3).
    205행의 .sm-callout.is-trap과 같은 처리다. */
 .sm-trap {
@@ -349,39 +363,9 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   margin-bottom: 2px;
 }
 
-/* 설계 근거는 본문이 아니라 접히는 부록이다 — 유일하게 상자를 유지하되
-   구분선 조판과 섞이지 않게 아래로 떼어 놓는다 (§4: 경계가 필요한 자리에만 카드). */
-.sm-note-body > .sm-design { margin-top: var(--space-7); }
-.sm-design { padding: 0; }
-.sm-design > summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-4) var(--space-5);
-  cursor: pointer;
-  list-style: none;
-  font-size: var(--fs-caption);
-}
-.sm-design > summary::-webkit-details-marker { display: none; }
-.sm-design-body { display: grid; gap: var(--space-4); padding: 0 var(--space-5) var(--space-5); }
-.sm-design-body > p { font-size: var(--fs-caption); color: var(--text-2); }
-.sm-design-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
-.sm-design-steps > div { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); }
-.sm-design-steps p { font-size: var(--fs-micro); color: var(--text-2); margin-top: 2px; }
-.sm-evidence { display: grid; gap: var(--space-2); }
-.sm-evidence a {
-  display: grid;
-  gap: 2px;
-  padding: var(--space-3);
-  border-radius: var(--radius-m);
-  border: 1px solid var(--line-faint);
-  text-decoration: none;
-}
-.sm-evidence a:hover { border-color: var(--line-strong); text-decoration: none; }
-.sm-evidence span { font-size: var(--fs-micro); color: var(--text-2); }
-
-.sm-concept-finish { position: sticky; bottom: var(--space-4); box-shadow: var(--shadow-2); }
+/* 마무리 줄 — 떠 있지 않으므로 그림자를 두지 않는다.
+   --shadow-*는 시트·토스트 전용이다 (DESIGN.md §4). 상단 툴바가 이미 sticky다. */
+.sm-concept-finish { margin-top: var(--space-5); }
 .sm-source { font-size: var(--fs-micro); line-height: 1.7; color: var(--text-3); }
 
 /* ---- 퀴즈 ---- */
@@ -510,19 +494,10 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
 
 /* ---- 통계 ---- */
 
-.sm-rates { display: grid; gap: var(--space-2); }
-.sm-rate-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
-}
-.sm-rate-row strong { display: block; font-size: var(--fs-caption); }
-.sm-rate-row small { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-rate-row b { font-variant-numeric: tabular-nums; font-size: var(--fs-caption); }
+/* 정확도 행 — 그룹 리스트 행에 진행 막대를 액세서리로 붙인다.
+   막대는 사용자의 실제 풀이 기록에만 쓴다 (DESIGN.md §6). */
+.sm-rate .sm-meter { flex: 0 1 110px; min-width: 60px; }
+.sm-rate .list-row-value { min-width: 3.2em; }
 
 /* ---- 푸터 ---- */
 
@@ -793,17 +768,18 @@ ul.sm-d-items {
 
 @media (max-width: 640px) {
   .sm-page { padding-top: var(--space-5); }
-  .sm-swipe { display: inline-flex; }
-  .sm-sub { grid-template-columns: auto minmax(0, 1fr); }
-  .sm-sub-actions { grid-column: 1 / -1; justify-content: flex-end; }
-  .sm-unit-tools { justify-items: start; }
+  .sm-swipe { display: inline; }
   .sm-choices { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); }
   .sm-choice { padding: var(--space-3) 0; font-size: var(--fs-title-3); }
   .sm-compare { grid-template-columns: minmax(0, 1fr); }
   .sm-compare > span { display: none; }
-  .sm-rate-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .sm-rate-row .sm-meter { grid-column: 1 / -1; }
-  .sm-concept-finish { position: static; }
+  /* 좁은 폭에서는 막대를 접는다 — 제목과 수치가 먼저다. */
+  .sm-rate .sm-meter { display: none; }
+  /* 좁은 폭에서는 select 앞의 라벨을 접는다 — 선택값 자체가 라벨 역할을 한다.
+     접근 가능한 이름은 aria-label로 유지한다. */
+  .sm-jump-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sm-jump { flex: 1 1 110px; max-width: none; }
+  .sm-concept-nav .toolbar-spacer { display: none; }
 }
 
 /* ==========================================================================
@@ -834,6 +810,14 @@ ul.sm-d-items {
     --red-soft: #fdeceb;
     --orange: #8a6800;
     --orange-soft: #fff9e8;
+    /* 사이클4에서 늘어난 토큰 3종. 인쇄 팔레트가 화면 팔레트보다 뒤처지면
+       컨트롤 배경이 검은 채로 인쇄된다. 대비 실측(흰 종이 기준):
+         #fff on --accent-strong #0e5570  8.23:1
+         --red-bright #8c1e17 on --red-soft #fdeceb  7.94:1
+         --text #101418 on --surface-4 #e7eaec  15.31:1 */
+    --surface-4: #e7eaec;
+    --accent-strong: #0e5570;
+    --red-bright: #8c1e17;
   }
 
   body { background: #fff; color: #101418; }
@@ -843,19 +827,21 @@ ul.sm-d-items {
   .sidebar,
   .sm-footer,
   .sm-concept-nav,
-  .sm-toc,
   .sm-concept-finish,
+  .sm-row-pick,
   .view-head .btn,
   .toast { display: none !important; }
 
   .app-shell { grid-template-columns: minmax(0, 1fr); }
   .sm-page { padding: 0; }
 
+  /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
+     실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */
+  .sm-fold-head::after { display: none; }
+
   .card,
   .sm-section,
-  .sm-note-hero,
-  .sm-map,
-  .sm-design,
+  .sm-fold,
   .sm-mistake { break-inside: avoid; box-shadow: none; border-color: #c9d0d5; }
 
   .sm-choice.is-correct { background: #187341; color: #fff; }

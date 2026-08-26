@@ -9,6 +9,7 @@
   const studyUtils = window.HvsStudyUtils;
   const {
     CHOICE_MARKS,
+    EMOJI,
     QUESTIONS,
     UNITS
   } = window.SMSTUDY_DATA || {};
@@ -26,7 +27,7 @@
   } = window.SMSTUDY_DIAGRAM || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !EMOJI || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -272,6 +273,12 @@
       </div>`;
   }
 
+  // 이모지는 데이터의 매핑(SMSTUDY_DATA.EMOJI)에서만 나온다 — 마크업에는 슬롯만 둔다
+  // (DESIGN.md §5). 값도 다른 데이터 문자열과 같이 예외 없이 이스케이프한다.
+  function emojiOf(key) {
+    return EMOJI[key] || EMOJI.app;
+  }
+
   function renderStartPanel(summary) {
     return `
       <div class="sm-panel">
@@ -294,10 +301,10 @@
               <select id="qOrder" class="field-input">${renderSortOptions(state.order)}</select>
             </div>
           </div>
-          <p class="sm-note">정답률은 통사랑 문항별 집계, 최근 순은 내 풀이 기록을 기준으로 합니다.</p>
+          <p class="sm-note">정답률은 통사랑 문항별 집계, 최근 순은 내 풀이 기록 기준입니다.</p>
 
           <button id="startSelected" class="btn btn-primary sm-full" type="button" ${state.selected.size ? '' : 'disabled'}>
-            선택 범위 퀴즈 (${state.selected.size}개 중단원)
+            선택 범위 퀴즈 ${state.selected.size}개 중단원
           </button>
           <div class="sm-actions">
             <button id="selectAll" class="btn btn-secondary btn-sm" type="button">전체 선택</button>
@@ -305,38 +312,39 @@
           </div>
         </section>
 
-        <!-- 카드 4연속 스택 대신 한 장 안의 구분선 그룹으로 낸다 (DESIGN.md §4).
-             시각적 통합과 의미 구조는 양립한다 — 각 항목은 이름 있는 하위 section과
-             제목(h3)을 그대로 유지해 스크린리더 탐색점을 잃지 않는다 (review M-3). -->
-        <section class="card sm-quick" aria-labelledby="quickTitle">
-          <h2 class="title-3" id="quickTitle">빠른 복습</h2>
-
-          <section class="sm-quick-item" aria-labelledby="weakTitle">
-            <div>
-              <h3 class="sm-quick-name" id="weakTitle">낮은 정답률 기출</h3>
-              <small>정답률 65% 이하</small>
-            </div>
-            <button id="weakQuiz" class="btn btn-secondary sm-full" type="button">낮은 정답률 기출 풀기</button>
-          </section>
-
-          <section class="sm-quick-item" aria-labelledby="wrongTitle">
-            <div>
-              <h3 class="sm-quick-name" id="wrongTitle">오답 복습</h3>
-              <small>원문 → 원인 → 재시험</small>
-            </div>
-            <div class="sm-actions">
-              <button id="wrongStudy" class="btn btn-secondary btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 보고 외우기</button>
-              <button id="wrongQuiz" class="btn btn-ghost btn-sm" type="button" ${summary.wrong ? '' : 'disabled'}>오답 ${summary.wrong}문제 재시험</button>
-            </div>
-          </section>
-
-          <section class="sm-quick-item" aria-labelledby="cumulativeTitle">
-            <div>
-              <h3 class="sm-quick-name" id="cumulativeTitle">누적 복습</h3>
-              <small>완료 범위 20문제</small>
-            </div>
-            <button id="cumulative" class="btn btn-secondary sm-full" type="button" ${summary.done ? '' : 'disabled'}>완료 범위 누적 복습</button>
-          </section>
+        <!-- 항목마다 카드와 버튼을 반복하던 조판을 그룹 리스트 한 장으로 합쳤다
+             (DESIGN.md §6). 행 자체가 동작이므로 행 안에 버튼을 또 두지 않는다. -->
+        <section aria-labelledby="quickTitle">
+          <h2 class="list-group-head" id="quickTitle">빠른 복습</h2>
+          <div class="list-group">
+            <button id="weakQuiz" class="list-row list-row-nav" type="button">
+              <span class="list-row-body">
+                <span class="list-row-title">낮은 정답률 기출</span>
+                <span class="list-row-sub">출제 정답률 65% 이하</span>
+              </span>
+            </button>
+            <button id="wrongStudy" class="list-row list-row-nav" type="button" ${summary.wrong ? '' : 'disabled'}>
+              <span class="list-row-body">
+                <span class="list-row-title">오답 보고 외우기</span>
+                <span class="list-row-sub">원문 · 원인 · 재시험</span>
+              </span>
+              <span class="list-row-value num">${summary.wrong}</span>
+            </button>
+            <button id="wrongQuiz" class="list-row list-row-nav" type="button" ${summary.wrong ? '' : 'disabled'}>
+              <span class="list-row-body">
+                <span class="list-row-title">오답 재시험</span>
+                <span class="list-row-sub">틀린 문항만 다시 출제</span>
+              </span>
+              <span class="list-row-value num">${summary.wrong}</span>
+            </button>
+            <button id="cumulative" class="list-row list-row-nav" type="button" ${summary.done ? '' : 'disabled'}>
+              <span class="list-row-body">
+                <span class="list-row-title">누적 복습</span>
+                <span class="list-row-sub">개념 완료 범위 20문제</span>
+              </span>
+              <span class="list-row-value num">${summary.done}</span>
+            </button>
+          </div>
         </section>
       </div>`;
   }
@@ -348,11 +356,10 @@
     app.innerHTML = `
       <header class="view-head">
         <div>
-          <span class="kicker">concept · kice · analysis</span>
           <h1>단원 목록</h1>
           <p>범위를 고르면 평가원 원문 그대로 출제됩니다. 13개 중단원 · 78문항.</p>
         </div>
-        <span class="badge badge-accent">선택 ${state.selected.size}/${SUBUNITS.length}</span>
+        <span class="badge badge-accent">출제 범위 ${state.selected.size}/${SUBUNITS.length}</span>
       </header>
 
       <div class="sm-layout">
@@ -363,51 +370,51 @@
     requestAnimationFrame(() => app.focus({ preventScroll: true }));
   }
 
-  function renderSubunit(sub) {
+  // 행의 보조 정보는 한 줄로 합친다 — 값 칸이 좁은 화면에서 제목을 밀지 않게 한다.
+  function subMeta(sub) {
     const progress = subStats(sub.id);
-    const completionLabel = db.completed[sub.id] ? '개념 완료' : '미완료';
+    const count = QUESTIONS.filter((question) => question.sub === sub.id).length;
+    const parts = [sub.id, `${sub.time}분`, `${count}문항`];
+    if (progress.attempts) parts.push(`정답률 ${progress.accuracy}%`);
+    return parts.join(' · ');
+  }
+
+  // 중단원 = 행. 행 자체가 개념 학습 진입점이고(늘린 히트 영역), 오른쪽 액세서리는
+  // 출제 범위 체크박스 하나뿐이다. 행마다 버튼을 반복하지 않는다 (DESIGN.md §6·§7.1).
+  function renderSubunit(sub) {
+    const done = Boolean(db.completed[sub.id]);
     return `
-      <div class="sm-sub">
-        <label class="sm-check">
+      <div class="list-row sm-row">
+        <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">${esc(emojiOf(sub.id))}</span></span>
+        <span class="list-row-body">
+          <button class="sm-row-open" type="button" data-id="${sub.id}">
+            <span class="list-row-title">${esc(sub.title)}</span>
+          </button>
+          <span class="list-row-sub">${esc(subMeta(sub))}</span>
+        </span>
+        ${done ? '<span class="list-row-value"><span class="badge badge-green">개념 완료</span></span>' : ''}
+        <label class="sm-row-pick">
           <input class="sub-check" type="checkbox" data-id="${sub.id}"
-            aria-label="${esc(sub.title)} 중단원 선택" ${state.selected.has(sub.id) ? 'checked' : ''}>
+            aria-label="${esc(sub.title)} 출제 범위 포함" ${state.selected.has(sub.id) ? 'checked' : ''}>
         </label>
-        <div class="sm-sub-copy">
-          <strong>${sub.id} · ${esc(sub.title)}</strong>
-          <small>${esc(sub.keywords)}${progress.attempts ? ` · 정답률 ${progress.accuracy}%` : ''}</small>
-        </div>
-        <div class="sm-sub-actions">
-          <span class="sm-dot ${db.completed[sub.id] ? 'is-on' : ''}" title="${completionLabel}" aria-label="${completionLabel}" role="img"></span>
-          <button class="btn btn-secondary btn-sm study-btn" type="button" data-id="${sub.id}">개념 학습</button>
-        </div>
       </div>`;
   }
 
+  // 대단원 = 그룹. 범위 선택은 그룹 헤더의 토글 하나로 모은다.
   function renderUnit(unit) {
+    const total = unit.subs.length;
     const completedCount = unit.subs.filter((sub) => db.completed[sub.id]).length;
     const selectedCount = unit.subs.filter((sub) => state.selected.has(sub.id)).length;
-    const allSelected = selectedCount === unit.subs.length;
+    const allSelected = selectedCount === total;
     return `
-      <article class="card sm-unit">
+      <section class="sm-unit" aria-labelledby="unit-${unit.id}">
         <div class="sm-unit-head">
-          <div class="sm-unit-copy">
-            <label class="sm-unit-select">
-              <input class="unit-check" type="checkbox" data-unit="${unit.id}"
-                aria-label="${esc(unit.title)} 전체 선택" ${allSelected ? 'checked' : ''}>
-              <span class="badge">${unit.id}단원</span>
-            </label>
-            <h2 class="title-3">${esc(unit.title)}</h2>
-            <p class="sm-note">${esc(unit.desc)}</p>
-          </div>
-          <div class="sm-unit-tools">
-            <button class="btn btn-ghost btn-sm unit-toggle" type="button" data-unit="${unit.id}">
-              ${allSelected ? '범위 해제' : '전체 선택'}
-            </button>
-            <p class="sm-unit-progress"><strong>${selectedCount}/${unit.subs.length}</strong><small>개념 완료 ${completedCount}/${unit.subs.length}</small></p>
-          </div>
+          <h2 class="list-group-head" id="unit-${unit.id}">${unit.id} · ${esc(unit.title)}</h2>
+          <button class="btn btn-ghost btn-sm unit-toggle" type="button" data-unit="${unit.id}">${allSelected ? '범위 해제' : '전체 선택'}</button>
         </div>
-        <div class="sm-sub-list">${unit.subs.map(renderSubunit).join('')}</div>
-      </article>`;
+        <div class="list-group">${unit.subs.map(renderSubunit).join('')}</div>
+        <p class="list-group-foot">${esc(unit.desc)} · 선택 ${selectedCount}/${total} · 개념 완료 ${completedCount}/${total}</p>
+      </section>`;
   }
   function bindHome() {
     const setUnitSelection = (unitId, selected) => {
@@ -416,12 +423,6 @@
       for (const sub of unit.subs) selected ? state.selected.add(sub.id) : state.selected.delete(sub.id);
       renderHome();
     };
-    document.querySelectorAll('.unit-check').forEach(el => {
-      const unit = UNIT_BY_ID.get(el.dataset.unit);
-      const selectedCount = unit?.subs.filter(sub => state.selected.has(sub.id)).length || 0;
-      el.indeterminate = selectedCount > 0 && selectedCount < (unit?.subs.length || 0);
-      el.addEventListener('change', () => setUnitSelection(el.dataset.unit, el.checked));
-    });
     document.querySelectorAll('.unit-toggle').forEach(el => el.addEventListener('click', () => {
       const unit = UNIT_BY_ID.get(el.dataset.unit);
       const allSelected = unit?.subs.every(sub => state.selected.has(sub.id));
@@ -431,7 +432,7 @@
       el.checked ? state.selected.add(el.dataset.id) : state.selected.delete(el.dataset.id);
       renderHome();
     }));
-    document.querySelectorAll('.study-btn').forEach(el => el.addEventListener('click', () => renderConcept(el.dataset.id)));
+    document.querySelectorAll('.sm-row-open').forEach(el => el.addEventListener('click', () => renderConcept(el.dataset.id)));
     document.getElementById('qCount').addEventListener('change', e => state.count = e.target.value);
     document.getElementById('qOrder').addEventListener('change', e => state.order = e.target.value);
     document.getElementById('startSelected').addEventListener('click', () => startQuiz(QUESTIONS.filter(q => state.selected.has(q.sub)), '선택 범위'));
@@ -448,81 +449,73 @@
     document.getElementById('wrongQuiz').addEventListener('click', () => startQuiz(Object.keys(db.wrongBank).map(id => Q_BY_ID.get(id)).filter(Boolean), '오답 재시험', 'all'));
     document.getElementById('cumulative').addEventListener('click', () => startQuiz(QUESTIONS.filter(q => db.completed[q.sub]), '누적 복습', '20'));
   }
-  function renderConceptMap(sub) {
-    const visual = sub.visual;
-    if (!visual) return '';
-    const flow = visual.flow.map((step, index) => `
-      <li class="sm-flow-step"><span>${index + 1}</span><strong>${esc(step)}</strong></li>
-    `).join('');
-    const checks = visual.checks.map((check, index) => `
-      <div class="sm-check-item"><span class="kicker">check ${index + 1}</span><p>${esc(check)}</p></div>
-    `).join('');
-    // 정적 라벨에 상태색(초록)을 쓰지 않는다 — 다른 섹션과 같은 kicker 어법으로 통일한다
-    // (DESIGN.md §3 강조색 1색, §4 장식 상한).
-    return `
-      <section class="sm-stack sm-map sm-section" aria-labelledby="conceptMapTitle">
-        <div>
-          <span class="kicker">개념 구조도</span>
-          <h3 class="title-2" id="conceptMapTitle">${esc(visual.question)}</h3>
-          <p class="sm-note">글을 외우기 전에 아래 흐름과 판별 기준을 먼저 잡으세요.</p>
-        </div>
-        <ol class="sm-flow">${flow}</ol>
-        <div class="sm-checks">${checks}</div>
-      </section>`;
+  // 섹션 머리 — 눈썹 라벨 + 큰 제목의 두 줄 조판을 한 줄짜리 그룹 헤더로 줄였다.
+  // 섹션마다 두 줄씩 붙던 chrome이 이 화면 세로 길이의 큰 몫이었다 (DESIGN.md §6).
+  function sectionHead(id, label, extra = '') {
+    return `<div class="sm-sec-head"><h2 class="sm-sec-label" id="${id}">${esc(label)}</h2>${extra}</div>`;
   }
 
-  function renderConceptNavigation(id, index) {
-    const jumps = SUBUNITS.map((subunit) => `
-      <button class="segmented-btn jump-concept" type="button" data-id="${subunit.id}" ${subunit.id === id ? 'aria-selected="true" disabled' : ''}>
-        ${subunit.id}
-      </button>
-    `).join('');
+  // 접히는 부속 섹션. 항상 보여야 하는 것(핵심·구조·변별표·판단 순서·회상)과
+  // 필요할 때만 펼치는 것(빈출 목록·세부 개념·설계 근거)을 나눈다.
+  // data-print-open은 인쇄 직전에 강제로 펼치기 위한 표지다.
+  function foldSection(id, label, hint, body) {
     return `
-      <nav class="toolbar sm-concept-nav" aria-label="중단원 이동">
-        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" ${index === 0 ? 'disabled' : ''}>← 이전</button>
-        <div class="segmented sm-jumps">${jumps}</div>
+      <details class="sm-fold" data-print-open>
+        <summary class="sm-fold-head">
+          <h2 class="sm-fold-title" id="${id}">${esc(label)}</h2>
+          <span class="sm-fold-hint">${esc(hint)}</span>
+        </summary>
+        <div class="sm-fold-body">${body}</div>
+      </details>`;
+  }
+
+  // 중단원 13개를 칩으로 늘어놓던 줄을 대단원별 optgroup을 가진 select 하나로 바꿨다.
+  // 배타 선택지가 5개를 넘으면 세그먼티드가 아니라 select다 (DESIGN.md §7.2).
+  function renderConceptNavigation(id, index, questionCount) {
+    const options = UNITS.map((unit) => {
+      const items = unit.subs.map((subunit) => (
+        `<option value="${subunit.id}" ${subunit.id === id ? 'selected' : ''}>${esc(`${subunit.id} · ${subunit.title}`)}</option>`
+      )).join('');
+      return `<optgroup label="${esc(`${unit.id} · ${unit.title}`)}">${items}</optgroup>`;
+    }).join('');
+    return `
+      <nav class="toolbar toolbar-sticky sm-concept-nav" aria-label="중단원 이동">
+        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" aria-label="이전 중단원" ${index === 0 ? 'disabled' : ''}>←</button>
+        <label class="sm-jump-label" for="jumpConcept">중단원</label>
+        <select id="jumpConcept" class="field-input sm-jump">${options}</select>
+        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" aria-label="다음 중단원" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>→</button>
         <div class="toolbar-spacer"></div>
-        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>다음 →</button>
+        <button id="conceptHome" class="btn btn-ghost btn-sm" type="button">단원 목록</button>
+        <button id="subQuiz" class="btn btn-primary btn-sm" type="button">퀴즈 ${questionCount}문제</button>
       </nav>`;
   }
 
   function renderConceptSection(section) {
     return `
-      <article class="card sm-concept-card">
-        <h4 class="title-3">${esc(section.title)}</h4>
+      <article class="sm-concept-card">
+        <h3 class="title-3">${esc(section.title)}</h3>
         <ul class="sm-bullets">${section.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul>
         <p class="sm-trap"><strong>함정 체크</strong>${esc(section.trap)}</p>
       </article>`;
   }
 
-  function renderNotebookMenu() {
-    return `
-      <nav class="toolbar sm-toc" aria-label="단권화 노트 목차">
-        <span class="kicker">이 노트의 순서</span>
-        <a class="topbar-link" href="#concept-diagrams">구조도</a>
-        <a class="topbar-link" href="#exam-analysis">기출 분석</a>
-        <a class="topbar-link" href="#concept-compare">비교표</a>
-        <a class="topbar-link" href="#concept-flow">문제 푸는 순서</a>
-        <a class="topbar-link" href="#concept-detail">개념 설명</a>
-        <a class="topbar-link" href="#recall-lab">회상 점검</a>
-      </nav>`;
-  }
-
-  function renderNotebookHero(note) {
+  // 핵심 — 헤드라인 + 요약 명제 + 핵심 개념 세 줄. 카드 스택이 아니라 그룹 리스트다.
+  function renderCore(sub, note) {
     const summary = note.summary.map((line) => `<li>${esc(line)}</li>`).join('');
-    // 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩을 쓰지 않는다 — 일반 리스트가
-    // 기본값이다 (DESIGN.md §4). 라벨과 설명 자체가 위계를 만든다.
     const keyPoints = note.keyPoints.map((item) => `
-      <li class="sm-keypoint"><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></li>
-    `).join('');
-    // 눈썹 라벨을 두지 않는다 — 바로 위 <h1>이 이미 단원을 말하므로 정보가 없었다.
-    // 헤드라인도 디스플레이급을 쓰지 않는다: 참고서 단원 도입부는 본문 위에 한 단만 올라간다
-    // (DESIGN.md §2, 크기가 아니라 배치로 강조).
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">${esc(item.label)}</span>
+          <span class="list-row-sub">${esc(item.text)}</span>
+        </span>
+      </div>`).join('');
     return `
-      <section class="sm-note-hero sm-section" aria-labelledby="noteHeroTitle">
-        <h3 class="sm-headline" id="noteHeroTitle">${esc(note.headline)}</h3>
+      <section class="sm-section" aria-labelledby="core-title">
+        ${sectionHead('core-title', '핵심')}
+        <p class="sm-headline">${esc(note.headline)}</p>
         <ul class="sm-summary">${summary}</ul>
-        <ul class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ul>
+        <div class="list-group">${keyPoints}</div>
+        <p class="list-group-foot">핵심어 ${esc(sub.keywords)}</p>
       </section>`;
   }
 
@@ -530,11 +523,8 @@
     const diagrams = (note.diagrams || []).map((diagram) => renderDiagram(diagram)).filter(Boolean).join('');
     if (!diagrams) return '';
     return `
-      <section id="concept-diagrams" class="sm-stack sm-section" aria-labelledby="diagrams-title">
-        <div>
-          <span class="kicker">글보다 구조를 먼저</span>
-          <h3 class="title-2" id="diagrams-title">한 장으로 보는 구조</h3>
-        </div>
+      <section id="concept-diagrams" class="sm-section" aria-labelledby="diagrams-title">
+        ${sectionHead('diagrams-title', '구조')}
         <div class="sm-diagrams">${diagrams}</div>
       </section>`;
   }
@@ -546,23 +536,14 @@
   // 아이콘 사용 기준 — 나란히 놓인 블록의 **성격이 서로 다를 때**(설명 vs 경고) 그 구분에만 쓴다.
   // 아래 두 콜아웃이 사이트에서 아이콘이 남은 유일한 자리다. 항목마다 하나씩 붙는 아이콘은
   // 아무것도 구별해 주지 않으므로 다이어그램 노드·세부 개념에서 전부 걷어냈다 (DESIGN.md §4).
-  function renderExamAnalysis(id, note) {
-    const questions = QUESTIONS.filter((question) => question.sub === id);
-    if (questions.length === 0) return '';
-    const tagRows = note.exam.tags
-      .map((tag) => ({ tag, hits: questions.filter((question) => (question.tags || []).includes(tag)).length }))
-      .sort((left, right) => right.hits - left.hits || left.tag.localeCompare(right.tag, 'ko'));
-    const freq = tagRows.map(({ tag }) => `<li class="sm-freq-item">${esc(tag)}</li>`).join('');
+  // 시험장 판단 순서 — 예전의 '문제 푸는 순서'와 '기출 분석' 콜아웃을 한 섹션으로 합쳤다.
+  // 둘 다 "무엇을 먼저 보고 무엇에 걸리는가"라는 같은 질문에 답한다.
+  function renderDecisionFlow(note) {
+    const steps = note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('');
     return `
-      <section id="exam-analysis" class="sm-stack sm-section" aria-labelledby="exam-analysis-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">이 단원 수록 기출 자동 집계</span>
-            <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
-          </div>
-          <span class="badge">선별 수록 표본 · 전수 통계 아님</span>
-        </div>
-        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위">${freq}</ol>
+      <section id="concept-flow" class="sm-section" aria-labelledby="decision-title">
+        ${sectionHead('decision-title', '시험장 판단 순서')}
+        <ol class="sm-steps">${steps}</ol>
         <div class="sm-callouts">
           <p class="sm-callout"><span class="kicker">${icon('trending-up')}출제 방식</span>${esc(note.exam.trend)}</p>
           <p class="sm-callout is-trap"><span class="kicker">${icon('alert-triangle')}자주 걸리는 함정</span>${esc(note.exam.trap)}</p>
@@ -574,14 +555,8 @@
     const headerCells = note.matrix.headers.map((header) => `<th scope="col">${esc(header)}</th>`).join('');
     const bodyRows = note.matrix.rows.map((row) => `<tr>${row.map((cell, index) => index === 0 ? `<th scope="row">${esc(cell)}</th>` : `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
     return `
-      <section id="concept-compare" class="sm-stack sm-section" aria-labelledby="comparison-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">헷갈리는 개념은 같은 기준으로</span>
-            <h3 class="title-2" id="comparison-title">${esc(note.matrix.title)}</h3>
-          </div>
-          <span class="badge sm-swipe">좌우로 밀어 전체 보기 →</span>
-        </div>
+      <section id="concept-compare" class="sm-section" aria-labelledby="comparison-title">
+        ${sectionHead('comparison-title', note.matrix.title, '<span class="sm-sec-hint sm-swipe">좌우로 밀어 전체 보기</span>')}
         <div class="table-wrap sm-matrix-wrap" tabindex="0">
           <table class="table sm-matrix">
             <thead><tr>${headerCells}</tr></thead>
@@ -591,66 +566,74 @@
       </section>`;
   }
 
-  function renderDecisionFlow(note) {
-    return `
-      <section id="concept-flow" class="sm-stack sm-section" aria-labelledby="decision-title">
-        <div>
-          <span class="kicker">시험장에서 이 순서대로</span>
-          <h3 class="title-2" id="decision-title">문제 푸는 순서</h3>
-        </div>
-        <ol class="sm-steps">${note.decision.map((step, index) => `<li><span>${index + 1}</span><p>${esc(step)}</p></li>`).join('')}</ol>
-      </section>`;
-  }
-
-  function renderDeepDive(note) {
-    return `
-      <section class="sm-stack sm-section" aria-labelledby="deep-dive-title">
-        <div>
-          <span class="kicker">헷갈리는 선지를 가르는 설명</span>
-          <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
-        </div>
-        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${esc(item.term)}</h4><ul class="sm-deep-points">${item.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul></article>`).join('')}</div>
-      </section>`;
-  }
-
   function renderRecallLab(note) {
     const recallItems = note.recall.map((item, index) => `
       <details class="sm-recall-item">
-        <summary><span class="badge">Q${index + 1}</span>${esc(item.question)}</summary>
-        <div><strong>정답</strong><p>${esc(item.answer)}</p></div>
+        <summary><span class="sm-recall-n num">${index + 1}</span><span>${esc(item.question)}</span></summary>
+        <p>${esc(item.answer)}</p>
       </details>`).join('');
     return `
-      <section id="recall-lab" class="sm-stack sm-section" aria-labelledby="recall-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">답을 말한 뒤 펼치기</span>
-            <h3 class="title-2" id="recall-title">덮고 답하는 회상 점검</h3>
-          </div>
-          <span class="badge">먼저 생각하고 답한 뒤 확인하세요</span>
-        </div>
+      <section id="recall-lab" class="sm-section" aria-labelledby="recall-title">
+        ${sectionHead('recall-title', '회상 점검', '<span class="sm-sec-hint">답을 말한 뒤 펼치세요</span>')}
         <div class="sm-recall">${recallItems}</div>
-        <div class="sm-schedule" aria-label="권장 복습 간격">
-          <strong>복습 간격</strong>
-          <span>오늘 · 첫 회상</span><i aria-hidden="true"></i><span>+1일</span><i aria-hidden="true"></i><span>+3일</span><i aria-hidden="true"></i><span>+7일</span>
-        </div>
+        <p class="list-group-foot">복습 간격 · 오늘 · 1일 뒤 · 3일 뒤 · 7일 뒤</p>
       </section>`;
   }
 
+  // 접힘 1 — 빈출 개념 순위와 판별 점검. 순위는 수록 기출에서 즉석 집계한다.
+  function renderExamFold(id, note, sub) {
+    const questions = QUESTIONS.filter((question) => question.sub === id);
+    const tagRows = note.exam.tags
+      .map((tag) => ({ tag, hits: questions.filter((question) => (question.tags || []).includes(tag)).length }))
+      .sort((left, right) => right.hits - left.hits || left.tag.localeCompare(right.tag, 'ko'));
+    const freq = tagRows.map(({ tag }) => `<li class="sm-freq-item">${esc(tag)}</li>`).join('');
+    const visual = sub.visual || { question: '', flow: [], checks: [] };
+    const flow = visual.flow.map((step, index) => `<li class="sm-flow-step"><span>${index + 1}</span>${esc(step)}</li>`).join('');
+    const checks = visual.checks.map((line) => `<li>${esc(line)}</li>`).join('');
+    return foldSection('exam-fold-title', '빈출 개념과 판별 점검', `${tagRows.length}개`, `
+      <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위">${freq}</ol>
+      <p class="sm-fold-lead">${esc(visual.question)}</p>
+      <ol class="sm-flow" aria-label="판별 순서">${flow}</ol>
+      <ul class="sm-bullets">${checks}</ul>
+      <p class="list-group-foot">선별 수록 표본의 순위입니다. 전수 통계가 아닙니다.</p>`);
+  }
+
+  // 접힘 2 — 교과 개념 설명과 세부 개념. 둘 다 "더 파고들 때" 읽는 글이라 한 서랍에 넣는다.
+  function renderDetailFold(sub, note) {
+    const sections = sub.sections.map(renderConceptSection).join('');
+    const deep = note.deepDive.map((item) => `
+      <article class="sm-deep-item">
+        <h3 class="title-3">${esc(item.term)}</h3>
+        <ul class="sm-deep-points">${item.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul>
+      </article>`).join('');
+    const count = sub.sections.length + note.deepDive.length;
+    return foldSection('detail-fold-title', '세부 개념 설명', `${count}항목`, `
+      <div class="sm-concept-grid">${sections}</div>
+      <div class="sm-deep">${deep}</div>`);
+  }
+
+  // 접힘 3 — 학습 설계 근거. 학습자가 매번 읽을 글이 아니라 부록이다.
   function renderLearningDesign() {
-    return `
-      <details class="card sm-design">
-        <summary>
-          <span class="badge badge-accent">학습과학 기반</span>
-          <strong>${esc(LEARNING_DESIGN.title)}</strong>
-          <span class="text-tertiary">설계 근거 보기</span>
-        </summary>
-        <div class="sm-design-body">
-          <p>${esc(LEARNING_DESIGN.summary)}</p>
-          <div class="sm-design-steps">${LEARNING_DESIGN.steps.map((step) => `<div><strong>${esc(step.label)}</strong><p>${esc(step.text)}</p></div>`).join('')}</div>
-          <div class="sm-evidence">${LEARNING_DESIGN.evidence.map((item) => `<a href="${esc(item.href)}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.label)}</strong><span>${esc(item.text)}</span></a>`).join('')}</div>
-          <p class="sm-note">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
-        </div>
-      </details>`;
+    const steps = LEARNING_DESIGN.steps.map((step) => `
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">${esc(step.label)}</span>
+          <span class="list-row-sub">${esc(step.text)}</span>
+        </span>
+      </div>`).join('');
+    const evidence = LEARNING_DESIGN.evidence.map((item) => `
+      <a class="list-row list-row-nav" href="${esc(item.href)}" target="_blank" rel="noopener noreferrer">
+        <span class="list-row-body">
+          <span class="list-row-title">${esc(item.label)}</span>
+          <span class="list-row-sub">${esc(item.text)}</span>
+        </span>
+      </a>`).join('');
+    return foldSection('design-fold-title', LEARNING_DESIGN.title, '설계 근거', `
+      <p class="sm-fold-lead">${esc(LEARNING_DESIGN.summary)}</p>
+      <div class="list-group is-inset">${steps}</div>
+      <p class="list-group-head">근거 연구</p>
+      <div class="list-group is-inset">${evidence}</div>
+      <p class="list-group-foot">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다.</p>`);
   }
 
   function renderConcept(id) {
@@ -664,46 +647,37 @@
     const index = SUBUNITS.findIndex((subunit) => subunit.id === id);
     const questionCount = QUESTIONS.filter((question) => question.sub === id).length;
     app.innerHTML = `
-      <header class="view-head">
+      ${renderConceptNavigation(id, index, questionCount)}
+      <header class="sm-concept-head">
+        <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf(id))}</span>
         <div>
-          <span class="kicker">${sub.unitId}단원 · 약 ${sub.time}분</span>
-          <h1>${esc(sub.title)}</h1>
-          <p>${esc(sub.keywords)}</p>
+          <h1 class="title-1">${esc(sub.title)}</h1>
+          <p class="sm-concept-meta">${esc(sub.unitTitle)} · 약 ${sub.time}분 · 수록 기출 ${questionCount}문항</p>
         </div>
-        <button id="conceptHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
       </header>
-      ${renderConceptNavigation(id, index)}
-      ${renderNotebookMenu()}
       <div class="sm-note-body">
-        ${renderNotebookHero(note)}
+        ${renderCore(sub, note)}
         ${renderDiagramSection(note)}
-        ${renderExamAnalysis(id, note)}
         ${renderComparisonMatrix(note)}
         ${renderDecisionFlow(note)}
-        ${renderConceptMap(sub)}
-        <section id="concept-detail" class="sm-stack sm-section" aria-labelledby="concept-detail-title">
-          <div>
-            <span class="kicker">교과 개념을 차근차근</span>
-            <h3 class="title-2" id="concept-detail-title">개념을 하나씩 이해하기</h3>
-          </div>
-          <div class="sm-concept-grid">${sub.sections.map(renderConceptSection).join('')}</div>
-        </section>
-        ${renderDeepDive(note)}
         ${renderRecallLab(note)}
+        ${renderExamFold(id, note, sub)}
+        ${renderDetailFold(sub, note)}
         ${renderLearningDesign()}
       </div>
       <div class="toolbar sm-concept-finish">
-        <button id="markDone" class="btn btn-secondary" type="button">
-          ${db.completed[id] ? '✓ 개념 확인 완료됨' : '개념 확인 완료로 표시'}
+        <button id="markDone" class="btn btn-secondary btn-sm" type="button">
+          ${db.completed[id] ? '개념 확인 완료됨' : '개념 확인 완료로 표시'}
         </button>
         <div class="toolbar-spacer"></div>
-        <button id="subQuiz" class="btn btn-primary" type="button">이 중단원 퀴즈 ${questionCount}문제</button>
+        <button id="nextConceptFoot" class="btn btn-ghost btn-sm" type="button" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>다음 중단원 →</button>
       </div>
-      <p class="sm-source">개념 검토는 2027 불후의 명강 사회·문화와 2027 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 이 사이트에 선별 수록한 실기출 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 전체 기출의 전수 빈도를 뜻하지는 않습니다. 문항과 정답은 원문 PDF·정답표와 대조했습니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
+      <p class="sm-source">개념 검토는 2027 불후의 명강과 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 수록 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
     document.getElementById('nextConcept').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
-    document.querySelectorAll('.jump-concept').forEach(b => b.addEventListener('click', () => renderConcept(b.dataset.id)));
+    document.getElementById('nextConceptFoot').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
+    document.getElementById('jumpConcept').addEventListener('change', (event) => renderConcept(event.target.value));
     document.getElementById('markDone').addEventListener('click', () => {
       db.completed[id] = Date.now();
       saveDb();
@@ -1077,48 +1051,55 @@
     const reasonSummary = analysis.dominantReason
       ? `${analysis.dominantReason.label} · ${analysis.dominantReason.count}문제`
       : '오답 원인 없음';
-    const unitRows = analysis.unitRows.map((row) => `
-      <div class="sm-rate-row">
-        <div>
-          <strong>${row.id} · ${esc(row.title)}</strong>
-          <small>${row.attempts ? `${row.attempts}회 풀이 · ${masteryLabel(row)}` : '아직 풀이 없음'}</small>
-        </div>
-        ${renderAnalysisMeter(row.accuracy)}
-        <b>${row.accuracy === null ? '-' : `${row.accuracy}%`}</b>
-      </div>
-    `).join('');
+    const unitRows = analysis.unitRows.map((row) => renderRateRow(
+      row.attempts ? `${row.attempts}회 풀이 · ${masteryLabel(row)}` : '아직 풀이 없음',
+      row,
+    )).join('');
     return `
-      <section class="card sm-stack sm-section" aria-labelledby="weaknessTitle">
-        <div>
-          <span class="kicker">무료 자동 분석</span>
-          <h2 class="title-2" id="weaknessTitle">내 약점 한눈에</h2>
-          <p class="sm-note">외부 AI나 유료 토큰 없이 실제 풀이·오답 기록만으로 계산합니다.</p>
+      <section class="sm-stack sm-section" aria-labelledby="weaknessTitle">
+        <h2 class="list-group-head" id="weaknessTitle">내 약점</h2>
+        <div class="list-group">
+          <div class="list-row">
+            <span class="list-row-body"><span class="list-row-title">가장 취약한 대단원</span></span>
+            <span class="list-row-value">${esc(weakestUnit)}</span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-body"><span class="list-row-title">가장 취약한 중단원</span></span>
+            <span class="list-row-value">${esc(weakestSubunit)}</span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-body"><span class="list-row-title">가장 많은 실수 원인</span></span>
+            <span class="list-row-value">${esc(reasonSummary)}</span>
+          </div>
         </div>
-        <dl class="sm-facts-inline">
-          <div><dt>가장 취약한 대단원</dt><dd>${esc(weakestUnit)}</dd></div>
-          <div><dt>가장 취약한 중단원</dt><dd>${esc(weakestSubunit)}</dd></div>
-          <div><dt>가장 많은 실수 원인</dt><dd>${esc(reasonSummary)}</dd></div>
-        </dl>
-        <div class="sm-rates">${unitRows}</div>
-        <p class="sm-note">3회 미만 기록은 ‘표본 부족’으로 표시합니다. 풀이가 쌓일수록 대단원·중단원 취약도와 실수 원인 분류가 정확해집니다.</p>
+        <p class="list-group-head">대단원별 정확도</p>
+        <div class="list-group">${unitRows}</div>
+        <p class="list-group-foot">3회 미만 기록은 표본 부족으로 표시합니다.</p>
       </section>`;
   }
 
+  function renderRateRow(sub, row) {
+    const title = `${row.id} · ${row.title}`;
+    return `
+      <div class="list-row sm-rate">
+        <span class="list-row-body">
+          <span class="list-row-title">${esc(title)}</span>
+          <span class="list-row-sub">${esc(sub)}</span>
+        </span>
+        ${renderAnalysisMeter(row.accuracy, `${title} 정확도`)}
+        <span class="list-row-value num">${row.accuracy === null ? '-' : `${row.accuracy}%`}</span>
+      </div>`;
+  }
+
   function renderSubunitStats(analysis) {
-    const rows = analysis.subRows.map((row) => `
-      <div class="sm-rate-row">
-        <div>
-          <strong>${row.id} · ${esc(row.title)}</strong>
-          <small>${db.completed[row.id] ? '개념 완료' : '개념 미완료'} · ${masteryLabel(row)}</small>
-        </div>
-        ${renderAnalysisMeter(row.accuracy)}
-        <b>${row.accuracy === null ? '-' : `${row.accuracy}%`}</b>
-      </div>
-    `).join('');
+    const rows = analysis.subRows.map((row) => renderRateRow(
+      `${db.completed[row.id] ? '개념 완료' : '개념 미완료'} · ${masteryLabel(row)}`,
+      row,
+    )).join('');
     return `
       <section class="sm-stack sm-section sm-record-section" aria-labelledby="subStatsTitle">
-        <h2 class="title-2" id="subStatsTitle">중단원별 현황</h2>
-        <div class="sm-rates">${rows}</div>
+        <h2 class="list-group-head" id="subStatsTitle">중단원별 현황</h2>
+        <div class="list-group">${rows}</div>
       </section>`;
   }
 
@@ -1161,9 +1142,8 @@
     app.innerHTML = `
       <header class="view-head">
         <div>
-          <span class="kicker">account study data</span>
-          <h1>학습 기록 · 취약도</h1>
-          <p>정답 번호가 아니라 문제 원문, 오답 원인, 대단원·중단원별 정확도를 함께 봅니다.</p>
+          <h1>학습 기록</h1>
+          <p>정답 번호가 아니라 원문·오답 원인·단원별 정확도를 함께 봅니다.</p>
         </div>
         <button id="statsHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
       </header>
@@ -1258,6 +1238,21 @@
     if (state.view === 'quiz' && !confirm('진행 중인 퀴즈를 끝내고 기록을 볼까요?')) return;
     renderStats();
   });
+  // 접힌 섹션은 인쇄물에서 통째로 사라진다. 인쇄 직전에 강제로 펼치고 끝나면 되돌린다.
+  // 인쇄 팔레트(@media print)와는 독립적인 경로이며, 팔레트 전환을 건드리지 않는다.
+  function setFoldsOpen(open) {
+    app.querySelectorAll('details[data-print-open]').forEach((element) => {
+      if (open) {
+        element.dataset.wasOpen = element.open ? '1' : '';
+        element.open = true;
+      } else {
+        element.open = element.dataset.wasOpen === '1';
+      }
+    });
+  }
+  window.addEventListener?.('beforeprint', () => setFoldsOpen(true));
+  window.addEventListener?.('afterprint', () => setFoldsOpen(false));
+
   document.addEventListener('keydown', e => {
     if (/^[1-5]$/.test(e.key) && state.view === 'quiz' && !state.session?.answered) {
       e.preventDefault();
