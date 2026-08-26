@@ -44,7 +44,11 @@ export const SNAPSHOT_FILES = {
 // 개념 화면 스냅샷이 담는 중단원. 바꾸면 파일도 함께 다시 만들어야 한다.
 const CONCEPT_SAMPLE_ID = 'III-01';
 
-const INLINED_CSS = ['assets/css/system.css', 'smstudy/assets/css/style.css'];
+// 화면마다 얹히는 CSS가 다르다. 여기를 한 벌로 두면 WordMaster 스냅샷이 smstudy의
+// 스타일로 조판돼 실제와 다른 화면을 보여 준다(실측으로 확인: .wm-layout 규칙이 없어
+// 320px에서 366px로 넘쳤다).
+const SMSTUDY_CSS = ['assets/css/system.css', 'smstudy/assets/css/style.css'];
+const WORDMASTER_CSS = ['assets/css/system.css', 'WordMaster/assets/css/style.css'];
 
 const SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
 body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 64px; }
@@ -72,7 +76,7 @@ function inlineStyles(files) {
     .join('\n');
 }
 
-function page(title, note, items) {
+function page(title, note, items, styles = SMSTUDY_CSS) {
   return normalize(`<!doctype html>
 <html lang="ko" data-snapshot="1">
 <head>
@@ -80,7 +84,7 @@ function page(title, note, items) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${title}</title>
-${inlineStyles(INLINED_CSS)}
+${inlineStyles(styles)}
 <style>
 ${SNAPSHOT_CSS}
 </style>
@@ -184,6 +188,7 @@ export function buildSnapshots() {
       + '\n  <br><strong>주의</strong> — 학습 기록이 비어 있는 새 브라우저 상태다(localStorage 없음). 정적 사본이라 버튼은 동작하지 않는다.'
       + `\n  ${GENERATED_NOTE}`,
       [section('WordMaster — 시험 설정 (#app 전체)', `<div class="app-main">${renderWordMasterHome()}</div>`)],
+      WORDMASTER_CSS,
     ),
     [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
