@@ -3,360 +3,141 @@
 
   // 개념 다이어그램 렌더러 (plan.md §4.3, kice-analysis.md 부록 D).
   //
-  // 계약
-  // - kind 하나당 layout* 함수 하나. 게이트(scripts/validate.mjs)가 이 파일의 함수 이름에서
-  //   허용 kind 집합을 정규식으로 자동 도출하므로, 이름 규칙(layout + PascalCase kind)을 지킨다.
-  // - SVG 속성에 색 리터럴을 쓰지 않는다. 색은 style.css의 클래스와 currentColor만 정한다.
-  // - 좌표는 **게이트가 허용하는 계약 상한**을 전제로 계산한다. 실측 최댓값이 아니다
-  //   (review 3c M-2: 주석은 실측 7/14/6을, 게이트는 12/20/14를 쓰고 있어 스키마상 유효한
-  //   데이터가 겹칠 수 있었다). 아래 숫자는 scripts/validate.mjs의 DIAGRAM_TEXT_LIMITS·
-  //   DIAGRAM_SHAPE_BOUNDS와 **같은 값이어야 하며**, 한쪽만 고치면 안 된다.
-  //     label 8자 / items 16자 / center 8자 / title 20자 / why 40자
-  //     node.items 개수 상한: flow 2 · scale 4 · matrix2x2 4 · venn 3 · timeline 2 · pyramid 2 · radial 2
-  //   글자 폭은 textWidth()로 근사하고, 상자 폭은 항상 그 근사값보다 넉넉하게 잡는다.
-  // - 좁은 화면 전환은 hidden 속성이 아니라 CSS 미디어쿼리가 한다(.sm-diagram-list).
+  // 조판 원칙 — 사이클3 후속 재설계
+  // - **레이아웃은 브라우저가 한다.** 좌표를 손으로 계산해 SVG <text>를 찍으면 글자 길이가
+  //   조금만 달라져도 도형·선·글자가 겹치고, 균등 배치된 상자와 화살표는 SmartArt로 보인다.
+  //   그래서 관계가 곧 기하학인 두 형식(venn·scale)만 SVG를 남기고, 나머지 다섯 형식은
+  //   HTML+CSS 조판(그리드·플렉스·일반 흐름)으로 낸다. 줄바꿈을 브라우저가 하므로
+  //   겹침이 원리적으로 발생하지 않는다.
+  // - 남긴 SVG에도 **문장을 넣지 않는다.** venn은 원 안에 한 글자짜리 번호만 두고,
+  //   scale은 빔·받침·접시만 그린다. 라벨과 항목은 SVG 밖 CSS 조판으로 뺀다.
+  // - 레퍼런스는 docs/DESIGN.md §1의 **문제집·참고서 조판**이다. 상자와 화살표 범벅이 아니라
+  //   표, 들여쓰기 위계, 얇은 구분선, 여백으로 관계를 말한다.
+  // - 색 리터럴을 쓰지 않는다. 색은 style.css의 클래스와 currentColor만 정한다.
+  // - 글자 수 상한은 더 이상 좌표가 아니라 **가독성**이 정한다 (아래 게이트 주석 참고).
+  //   scripts/validate.mjs의 DIAGRAM_TEXT_LIMITS와 같은 값이어야 한다:
+  //     label 14자 / items 28자 / center 14자 / title 20자 / why 40자
+  // - 좁은 화면 분기는 venn·scale의 장식 SVG를 숨기는 컨테이너 쿼리 하나뿐이다.
+  //   나머지 형식은 CSS 조판이 이미 반응형이라 폴백 목록이 필요 없다.
 
   const ICON_SET = (window.SM_ICONS && window.SM_ICONS.ICONS) || {};
   const esc = (window.HvsStudyUtils && window.HvsStudyUtils.escapeHtml)
     || ((value) => String(value).replace(/[&<>"']/gu, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
-  const CANVAS_WIDTH = 760;
-  // 순서가 의미를 갖는 형식은 폴백 목록도 번호가 붙은 <ol>로 낸다.
-  const ORDERED_KINDS = new Set(['flow', 'timeline', 'pyramid']);
+  // 순서가 의미를 갖는 형식은 <ol>로 낸다. matrix2x2·venn의 번호는 순서가 아니라
+  // 도형과 라벨을 짝짓는 열쇠지만, 번호를 화면에 내므로 같은 <ol>을 쓴다.
+  const NUMBERED_KINDS = new Set(['flow', 'timeline', 'pyramid', 'matrix2x2', 'venn']);
 
-  function round(value, digits = 2) {
-    return Number(value.toFixed(digits));
-  }
-
-  // 한글은 전각, 라틴/숫자는 반각으로 근사한다. 정확한 측정이 아니라 상한 계산용이다.
-  function textWidth(value, fontSize) {
-    let units = 0;
-    for (const char of String(value)) {
-      if (char === ' ') units += 0.32;
-      else if (/[ᄀ-ᇿ㄰-㆏가-힯　-〿＀-￯]/u.test(char)) units += 1;
-      else units += 0.56;
-    }
-    return units * fontSize;
-  }
-
-  function svgText(x, y, value, fontSize, className, anchor) {
-    const anchorAttribute = anchor ? ` text-anchor="${anchor}"` : '';
-    return `<text x="${round(x)}" y="${round(y)}" font-size="${fontSize}" class="${className}"${anchorAttribute}>${esc(value)}</text>`;
-  }
-
-  // 아이콘은 24x24 좌표계이므로 원하는 크기로 축소해 (x, y) 좌상단에 배치한다.
-  function svgIcon(key, x, y, size) {
+  function renderIcon(key, className = 'sm-icon') {
     const body = ICON_SET[key];
     if (!body) return '';
-    return `<g class="sm-d-icon" transform="translate(${round(x)} ${round(y)}) scale(${round(size / 24, 4)})">${body}</g>`;
+    return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
   }
 
-  function canvas(height, body) {
-    return `<div class="sm-diagram-canvas">`
-      + `<svg class="sm-d-svg" viewBox="0 0 ${CANVAS_WIDTH} ${round(height)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${body}</svg>`
+  // 노드 하나의 제목 줄. 번호는 동그라미 뱃지가 아니라 그냥 숫자다 (DESIGN.md §4 장식 상한).
+  function nodeHead(node, index, numbered) {
+    const number = numbered ? `<span class="sm-d-n">${index + 1}</span>` : '';
+    return `<p class="sm-d-head">${number}${renderIcon(node.icon)}<strong>${esc(node.label)}</strong></p>`;
+  }
+
+  function nodeItems(node) {
+    const list = node.items || [];
+    if (!list.length) return '';
+    return `<ul class="sm-d-items">${list.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+  }
+
+  // 모든 형식이 공유하는 노드 컨테이너. data-node는 게이트가 "출력 노드 수 = 데이터 노드 수"를
+  // 세는 표지이자 CSS 선택자다.
+  function nodeCell(node, index, numbered, className = '') {
+    return `<li class="sm-d-node${className ? ` ${className}` : ''}" data-node>`
+      + `${nodeHead(node, index, numbered)}${nodeItems(node)}</li>`;
+  }
+
+  function nodeList(kind, nodes, listClass, cellClass) {
+    const numbered = NUMBERED_KINDS.has(kind);
+    const tag = numbered ? 'ol' : 'ul';
+    const cells = nodes.map((node, index) => nodeCell(node, index, numbered, cellClass)).join('');
+    return `<${tag} class="${listClass}">${cells}</${tag}>`;
+  }
+
+  function art(viewBox, body) {
+    return `<div class="sm-d-art">`
+      + `<svg class="sm-d-svg" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${body}</svg>`
       + `</div>`;
   }
 
   // ---- kind별 레이아웃 -------------------------------------------------------
 
-  // 판정 단계를 위에서 아래로 쌓는다. 왼쪽은 판정 기준, 오른쪽은 그 결과 칩이다.
+  // 판별 순서를 세로 단계로 조판한다. 왼쪽이 판정 기준, 오른쪽이 그 결과다.
+  // 화살표를 그리지 않고 얇은 세로 규칙선과 들여쓰기로 흐름을 보인다.
   function layoutFlow(diagram) {
-    const nodes = diagram.nodes;
-    const boxHeight = 92;
-    const gap = 30;
-    const top = 6;
-    const height = top + nodes.length * boxHeight + (nodes.length - 1) * gap + 8;
-    const parts = [];
-
-    nodes.forEach((node, index) => {
-      const y = top + index * (boxHeight + gap);
-      const middle = y + boxHeight / 2;
-      parts.push(`<rect x="6" y="${y}" width="748" height="${boxHeight}" rx="18" class="sm-d-box"/>`);
-      parts.push(`<circle cx="42" cy="${middle}" r="17" class="sm-d-badge"/>`);
-      parts.push(svgText(42, middle + 5, String(index + 1), 14, 'sm-d-num', 'middle'));
-      parts.push(svgIcon(node.icon, 76, middle - 11, 22));
-      parts.push(svgText(108, middle + 6, node.label, 16, 'sm-d-label'));
-
-      const items = node.items || [];
-      const chipHeight = 28;
-      const chipTop = items.length > 1 ? y + 14 : y + (boxHeight - chipHeight) / 2;
-      items.forEach((item, itemIndex) => {
-        const chipY = chipTop + itemIndex * (chipHeight + 4);
-        const chipWidth = Math.min(textWidth(item, 12.5) + 28, 500);
-        parts.push(`<rect x="248" y="${round(chipY)}" width="${round(chipWidth)}" height="${chipHeight}" rx="14" class="sm-d-chip"/>`);
-        parts.push(svgText(262, chipY + 19, item, 12.5, 'sm-d-item'));
-      });
-
-      if (index < nodes.length - 1) {
-        const from = y + boxHeight + 5;
-        const to = y + boxHeight + gap - 6;
-        parts.push(`<path d="M42 ${round(from)}V${round(to)}" class="sm-d-connector"/>`);
-        parts.push(`<path d="M35 ${round(to - 7)}l7 7 7-7" class="sm-d-arrow"/>`);
-      }
-    });
-
-    return canvas(height, parts.join(''));
+    return nodeList('flow', diagram.nodes, 'sm-d-flow');
   }
 
-  // 대립하는 두 극을 저울 양쪽에 올린다. 축은 하나이고 양쪽은 그 축의 반대편이다.
+  // 대립하는 두 극. 저울의 기울기가 곧 의미라서 SVG를 남기되, 빔·받침·접시만 그린다.
+  // 접시 위 항목은 SVG 밖 두 열로 빼서 접시 아래에 나란히 놓는다.
+  // 두 접시의 중심을 viewBox의 25%·75%에 두어, 폭이 얼마든 아래 두 열의 중심과 맞는다.
   function layoutScale(diagram) {
-    const [left, right] = diagram.nodes;
-    const maxItems = Math.max(...diagram.nodes.map((node) => (node.items || []).length), 1);
-    const panTop = 132;
-    const panHeight = 58 + maxItems * 24;
-    const height = panTop + panHeight + 16;
-    const parts = [
-      `<path d="M60 96H700" class="sm-d-beam"/>`,
-      `<path d="M380 92L412 142H348Z" class="sm-d-fulcrum"/>`,
-      `<path d="M187 96V${panTop}" class="sm-d-connector"/>`,
-      `<path d="M573 96V${panTop}" class="sm-d-connector"/>`,
-      svgText(380, 178, 'vs', 13, 'sm-d-mute', 'middle'),
-    ];
-
-    [[left, 30], [right, 415]].forEach(([node, x]) => {
-      parts.push(`<rect x="${x}" y="${panTop}" width="315" height="${panHeight}" rx="18" class="sm-d-box"/>`);
-      parts.push(svgIcon(node.icon, x + 22, panTop + 20, 22));
-      parts.push(svgText(x + 54, panTop + 38, node.label, 16, 'sm-d-label'));
-      (node.items || []).forEach((item, index) => {
-        const y = panTop + 66 + index * 24;
-        parts.push(`<circle cx="${x + 28}" cy="${round(y - 4)}" r="3" class="sm-d-dot"/>`);
-        parts.push(svgText(x + 40, y, item, 12, 'sm-d-item'));
-      });
-    });
-
-    return canvas(height, parts.join(''));
+    const beam = [
+      `<path d="M160 44H800" class="sm-d-beam"/>`,
+      `<path d="M480 44L532 112H428Z" class="sm-d-fulcrum"/>`,
+      `<path d="M392 116H568" class="sm-d-beam"/>`,
+      `<path d="M240 44V80" class="sm-d-rule"/>`,
+      `<path d="M720 44V80" class="sm-d-rule"/>`,
+      `<path d="M160 80Q240 124 320 80" class="sm-d-pan"/>`,
+      `<path d="M640 80Q720 124 800 80" class="sm-d-pan"/>`,
+    ].join('');
+    return art('0 0 960 130', beam)
+      + nodeList('scale', diagram.nodes.slice(0, 2), 'sm-d-pans');
   }
 
   // 두 기준이 교차해 만드는 네 칸. nodes 순서는 좌상·우상·좌하·우하다(부록 D).
+  // 축 이름은 데이터에 없으므로 라벨을 붙이지 않는다. 교차는 칸 사이 실선이 말한다.
   function layoutMatrix2x2(diagram) {
-    const cellWidth = 364;
-    const cellHeight = 190;
-    const origins = [[8, 8], [388, 8], [8, 214], [388, 214]];
-    const height = 412;
-    const parts = [
-      `<path d="M380 8V404" class="sm-d-guide"/>`,
-      `<path d="M8 206H752" class="sm-d-guide"/>`,
-    ];
-
-    diagram.nodes.slice(0, 4).forEach((node, index) => {
-      const [x, y] = origins[index];
-      parts.push(`<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="16" class="sm-d-box"/>`);
-      parts.push(svgIcon(node.icon, x + 20, y + 22, 20));
-      parts.push(svgText(x + 50, y + 38, node.label, 15, 'sm-d-label'));
-      parts.push(svgText(x + cellWidth - 18, y + 32, String(index + 1), 12, 'sm-d-mute', 'end'));
-      (node.items || []).forEach((item, itemIndex) => {
-        const itemY = y + 80 + itemIndex * 26;
-        parts.push(`<circle cx="${x + 26}" cy="${round(itemY - 4)}" r="3" class="sm-d-dot"/>`);
-        parts.push(svgText(x + 38, itemY, item, 12, 'sm-d-item'));
-      });
-    });
-
-    return canvas(height, parts.join(''));
+    return nodeList('matrix2x2', diagram.nodes.slice(0, 4), 'sm-d-quads');
   }
 
-  // 원이 겹치는 그림이 곧 개념이다. 원 안에는 이름만 두고 세부는 아래 범례로 뺀다
-  // — 3원 벤의 배타 영역은 14자 항목을 넣을 만큼 넓지 않다.
+  // 원의 교집합이 곧 의미이므로 원은 SVG로 그린다. 원 안에는 한 글자짜리 번호만 두고
+  // (계약 상한 14자짜리 라벨은 3원 벤의 배타 영역에 들어가지 않는다) 이름과 세부는 아래 범례로 뺀다.
+  // 번호 자리는 각 원의 배타 영역 중심이라 어떤 데이터에서도 선·다른 원과 겹치지 않는다.
   function layoutVenn(diagram) {
     const nodes = diagram.nodes.slice(0, 3);
     const three = nodes.length >= 3;
     const circles = three
-      ? [{ cx: 300, cy: 190, r: 140 }, { cx: 460, cy: 190, r: 140 }, { cx: 380, cy: 330, r: 140 }]
-      : [{ cx: 295, cy: 200, r: 145 }, { cx: 465, cy: 200, r: 145 }];
-    const labelSpots = three
-      ? [{ x: 225, y: 150 }, { x: 535, y: 150 }, { x: 380, y: 415 }]
-      : [{ x: 215, y: 196 }, { x: 545, y: 196 }];
-    const legendTop = three ? 500 : 380;
-    const columnStart = three ? 20 : 30;
-    const columnGap = three ? 245 : 370;
-    const maxItems = Math.max(...nodes.map((node) => (node.items || []).length), 1);
-    const height = legendTop + 30 + maxItems * 22 + 18;
-
-    const parts = [];
-    circles.forEach((circle, index) => {
-      parts.push(`<circle cx="${circle.cx}" cy="${circle.cy}" r="${circle.r}" class="sm-d-venn"/>`);
-    });
-    parts.push(svgText(380, three ? 262 : 206, '겹침', 12, 'sm-d-mute', 'middle'));
-
-    // 원마다 색을 달리하지 않으므로(강조색 1색), 원과 범례는 같은 번호로 짝지어 읽는다.
-    nodes.forEach((node, index) => {
-      const spot = labelSpots[index];
-      const half = textWidth(node.label, 15) / 2;
-      parts.push(`<circle cx="${round(spot.x - half - 13)}" cy="${round(spot.y - 5)}" r="9" class="sm-d-badge"/>`);
-      parts.push(svgText(spot.x - half - 13, spot.y - 1, String(index + 1), 11, 'sm-d-num', 'middle'));
-      parts.push(svgText(spot.x, spot.y, node.label, 15, 'sm-d-label', 'middle'));
-    });
-
-    nodes.forEach((node, index) => {
-      const x = columnStart + index * columnGap;
-      parts.push(`<circle cx="${x + 9}" cy="${legendTop + 8}" r="9" class="sm-d-badge"/>`);
-      parts.push(svgText(x + 9, legendTop + 12, String(index + 1), 11, 'sm-d-num', 'middle'));
-      parts.push(svgText(x + 26, legendTop + 13, node.label, 13.5, 'sm-d-label'));
-      (node.items || []).forEach((item, itemIndex) => {
-        parts.push(svgText(x + 26, legendTop + 36 + itemIndex * 22, item, 11.5, 'sm-d-item'));
-      });
-    });
-
-    return canvas(height, parts.join(''));
+      ? [[185, 135], [295, 135], [240, 225]]
+      : [[180, 150], [300, 150]];
+    const radius = three ? 95 : 105;
+    const marks = three
+      ? [[135, 108], [345, 108], [240, 282]]
+      : [[135, 150], [345, 150]];
+    const shapes = circles
+      .map(([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${radius}" class="sm-d-venn"/>`)
+      .join('');
+    const digits = nodes
+      .map((node, index) => `<text x="${marks[index][0]}" y="${marks[index][1]}" class="sm-d-mark" text-anchor="middle" dominant-baseline="central">${index + 1}</text>`)
+      .join('');
+    return art(three ? '0 0 480 340' : '0 0 480 300', shapes + digits)
+      + nodeList('venn', nodes, 'sm-d-legend');
   }
 
-  // 시간 축 위의 단계. 4단계 이상이면 위·아래로 번갈아 놓아 라벨이 서로 닿지 않게 한다.
-  // 좌표는 계약 상한(label 8자 / item 16자 / items 2개)에서도 성립해야 한다.
-  // - 라벨·항목이 가운데 정렬이라 양 끝 노드의 x를 캔버스 안쪽으로 들여 놓는다.
-  //   16자 항목의 근사 폭은 11.5px 기준 184px이므로 좌우로 92px씩 필요하다 (100 ~ 660).
-  // - 위쪽 블록은 '라벨 → 항목' 순서로 내려오므로 커넥터는 마지막 항목 아래에서 시작한다.
-  //   이전 구현은 라벨 바로 아래(y=100)에서 축까지 선을 그어 항목 글자가 선과 축 위에 겹쳤다.
+  // 시간 축 위의 단계. 위아래 교대 배치(겹침의 주원인)를 없애고 그리드 열로 편다.
+  // grid-auto-flow가 열을 만들므로 단계 수를 마크업이 알 필요가 없다.
   function layoutTimeline(diagram) {
-    const nodes = diagram.nodes;
-    const count = nodes.length;
-    const startX = 100;
-    const span = 560;
-    const stepX = count > 1 ? span / (count - 1) : 0;
-    const alternate = count >= 4;
-    const maxItems = Math.max(...nodes.map((node) => (node.items || []).length), 1);
-    // 위쪽 블록 전체가 축 위에 들어가는 최소 높이를 축 위치로 삼는다 (고정 158은 상한에서 넘쳤다).
-    const axisY = alternate ? Math.max(158, 60 + maxItems * 20 + 52) : 70;
-    const height = alternate ? axisY + 62 + maxItems * 20 : 118 + maxItems * 22 + 24;
-
-    const parts = [
-      `<path d="M34 ${axisY}H716" class="sm-d-axis"/>`,
-      `<path d="M710 ${axisY - 6}l8 6-8 6" class="sm-d-arrow"/>`,
-    ];
-
-    nodes.forEach((node, index) => {
-      const x = startX + index * stepX;
-      const above = alternate && index % 2 === 0;
-      const items = node.items || [];
-      parts.push(`<circle cx="${round(x)}" cy="${axisY}" r="15" class="sm-d-badge"/>`);
-      parts.push(svgText(x, axisY + 5, String(index + 1), 13, 'sm-d-num', 'middle'));
-
-      if (alternate) {
-        // 위: 마지막 항목 기준선이 axisY-40, 라벨은 그보다 항목 개수만큼 위.
-        // 아래: 라벨이 axisY+44, 항목이 그 아래로 20px씩.
-        const lastAbove = axisY - 40;
-        const labelY = above ? lastAbove - items.length * 20 : axisY + 44;
-        const connectorFrom = above ? lastAbove + 8 : axisY + 16;
-        const connectorTo = above ? axisY - 16 : axisY + 32;
-        parts.push(`<path d="M${round(x)} ${round(connectorFrom)}V${round(connectorTo)}" class="sm-d-connector"/>`);
-        parts.push(svgText(x, labelY, node.label, 14, 'sm-d-label', 'middle'));
-        items.forEach((item, itemIndex) => {
-          const itemY = above
-            ? lastAbove - (items.length - 1 - itemIndex) * 20
-            : labelY + 22 + itemIndex * 20;
-          parts.push(svgText(x, itemY, item, 11.5, 'sm-d-item', 'middle'));
-        });
-      } else {
-        parts.push(`<path d="M${round(x)} ${axisY + 16}V96" class="sm-d-connector"/>`);
-        parts.push(svgText(x, 118, node.label, 15, 'sm-d-label', 'middle'));
-        items.forEach((item, itemIndex) => {
-          parts.push(svgText(x, 144 + itemIndex * 22, item, 12, 'sm-d-item', 'middle'));
-        });
-      }
-    });
-
-    return canvas(height, parts.join(''));
+    return nodeList('timeline', diagram.nodes, 'sm-d-timeline');
   }
 
-  // 위가 좁고 아래가 넓은 층. 위 층이 아래 층에 포함된다는 뜻을 도형이 직접 말한다.
+  // 위가 좁고 아래가 넓은 층. 폭이 줄어드는 가로 막대를 CSS가 그리고, 글자는 일반 흐름으로
+  // 막대 안에 들어간다. 사다리꼴 안에 글자를 맞춰 넣는 계산이 사라진다.
   function layoutPyramid(diagram) {
-    const nodes = diagram.nodes;
-    const layerHeight = 96;
-    const top = 20;
-    const centerX = 380;
-    const halfTop = 92;
-    const halfBottom = 320;
-    const total = nodes.length * layerHeight;
-    const halfAt = (y) => halfTop + (halfBottom - halfTop) * ((y - top) / total);
-    const height = top + total + 22;
-    const parts = [];
-
-    nodes.forEach((node, index) => {
-      const y0 = top + index * layerHeight;
-      const y1 = y0 + layerHeight;
-      const h0 = halfAt(y0);
-      const h1 = halfAt(y1);
-      const points = [
-        `${round(centerX - h0)},${round(y0)}`,
-        `${round(centerX + h0)},${round(y0)}`,
-        `${round(centerX + h1)},${round(y1)}`,
-        `${round(centerX - h1)},${round(y1)}`,
-      ].join(' ');
-      parts.push(`<polygon points="${points}" class="sm-d-box sm-d-layer-${index + 1}"/>`);
-
-      const labelWidth = textWidth(node.label, 15);
-      parts.push(svgIcon(node.icon, centerX - labelWidth / 2 - 26, y0 + 22, 18));
-      parts.push(svgText(centerX + 11, y0 + 36, node.label, 15, 'sm-d-label', 'middle'));
-      (node.items || []).forEach((item, itemIndex) => {
-        parts.push(svgText(centerX, y0 + 60 + itemIndex * 20, item, 11.5, 'sm-d-item', 'middle'));
-      });
-      parts.push(svgText(centerX - halfBottom - 14, y0 + 40, String(index + 1), 12, 'sm-d-mute', 'end'));
-    });
-
-    return canvas(height, parts.join(''));
+    return nodeList('pyramid', diagram.nodes, 'sm-d-pyramid');
   }
 
-  // 중심 개념 하나에서 대등한 갈래가 뻗는 지도. 5갈래를 72도 간격으로 고정 배치한다.
+  // 중심 개념 하나에서 대등한 갈래가 뻗는 지도. 바퀴살 자체는 정보를 주지 않으므로
+  // 중심을 제목 줄로 올리고 갈래는 카드 그리드로 편다.
   function layoutRadial(diagram) {
-    const nodes = diagram.nodes.slice(0, 5);
-    const centerX = 380;
-    const centerY = 280;
-    const centerR = 66;
-    const radius = 200;
-    const cardWidth = 204;
-    const cardHeight = 80;
-    const height = 522;
-    const lines = [];
-    const cards = [];
-
-    nodes.forEach((node, index) => {
-      const angle = (-90 + (360 / nodes.length) * index) * (Math.PI / 180);
-      const px = centerX + radius * Math.cos(angle);
-      const py = centerY + radius * Math.sin(angle);
-      const x = px - cardWidth / 2;
-      const y = py - cardHeight / 2;
-      lines.push(`<path d="M${round(centerX + centerR * Math.cos(angle))} ${round(centerY + centerR * Math.sin(angle))}L${round(px)} ${round(py)}" class="sm-d-connector"/>`);
-      cards.push(`<rect x="${round(x)}" y="${round(y)}" width="${cardWidth}" height="${cardHeight}" rx="16" class="sm-d-box"/>`);
-      cards.push(svgIcon(node.icon, x + 20, y + 16, 20));
-      cards.push(svgText(x + 50, y + 32, node.label, 15, 'sm-d-label'));
-      (node.items || []).forEach((item, itemIndex) => {
-        cards.push(svgText(x + 20, y + 56 + itemIndex * 18, item, 11, 'sm-d-item'));
-      });
-    });
-
-    // 중심 라벨은 최대 8자(계약 상한)까지 오므로 원 지름(132)에 맞춰 두 줄로 접는다.
-    // 8자 * 15px = 120px이라 한 줄로도 들어가지만, 접어야 원 안에서 상하 여백이 균형을 이룬다.
-    const centerLines = wrapCenter(diagram.center || diagram.title, 7);
-    const centerParts = [`<circle cx="${centerX}" cy="${centerY}" r="${centerR}" class="sm-d-center-circle"/>`];
-    centerLines.forEach((line, index) => {
-      const baseline = centerY + 6 - (centerLines.length - 1) * 10 + index * 20;
-      centerParts.push(svgText(centerX, baseline, line, 15, 'sm-d-center', 'middle'));
-    });
-
-    return canvas(height, lines.join('') + centerParts.join('') + cards.join(''));
-  }
-
-  // 중심 라벨을 원 안에 들어가는 두 줄로 접는다.
-  // 한국어 명사구는 공백 없이 8자가 올 수 있으므로(예: '사회복지제도확대') 공백만으로 접으면
-  // 한 줄이 그대로 남아 원을 넘친다 (review 3c M-2). 공백으로 못 접으면 글자 수로 접는다.
-  function wrapCenter(value, perLine) {
-    const text = String(value);
-    const words = text.split(' ').filter(Boolean);
-    const lines = [];
-    let current = '';
-    for (const word of words) {
-      if (!current) current = word;
-      else if ([...current].length + 1 + [...word].length <= perLine) current += ` ${word}`;
-      else { lines.push(current); current = word; }
-    }
-    if (current) lines.push(current);
-    if (lines.length === 0) return [text];
-    const folded = lines.length <= 2 ? lines : [lines[0], lines.slice(1).join(' ')];
-    // 여전히 상한을 넘는 줄이 있으면(공백이 없거나 한 어절이 긴 경우) 글자 수로 반씩 나눈다.
-    if (folded.some((line) => [...line].length > perLine)) {
-      const characters = [...text];
-      const half = Math.ceil(characters.length / 2);
-      return [characters.slice(0, half).join('').trim(), characters.slice(half).join('').trim()];
-    }
-    return folded;
+    const center = diagram.center || diagram.title;
+    return `<p class="sm-d-center">${renderIcon('target')}<strong>${esc(center)}</strong></p>`
+      + nodeList('radial', diagram.nodes, 'sm-d-cards');
   }
 
   const LAYOUTS = {
@@ -413,7 +194,7 @@
       case 'pyramid':
         return `위의 ${first}에서 아래의 ${last}까지 ${labels.length}층으로 쌓인 구조다.`;
       case 'radial':
-        return `${withParticle(diagram.center || diagram.title, '을', '를')} 중심으로 ${labels.length}갈래가 대등하게 뻗는다.`;
+        return `${withParticle(diagram.center || diagram.title, '을', '를')} ${labels.length}갈래로 나눠 우열 없이 나란히 놓는다.`;
       default:
         return `${labels.join(', ')}의 관계를 보인다.`;
     }
@@ -435,28 +216,8 @@
     venn: '벤 다이어그램',
     timeline: '단계 타임라인',
     pyramid: '포함 위계',
-    radial: '방사형 지도',
+    radial: '갈래 지도',
   };
-
-  function renderIcon(key, className = 'sm-icon') {
-    const body = ICON_SET[key];
-    if (!body) return '';
-    return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
-  }
-
-  function fallbackList(diagram) {
-    const tag = ORDERED_KINDS.has(diagram.kind) ? 'ol' : 'ul';
-    const center = diagram.center
-      ? `<li class="sm-diagram-node is-center"><p class="sm-diagram-node-head">${renderIcon('target', 'sm-icon')}<strong>${esc(diagram.center)}</strong></p></li>`
-      : '';
-    const items = diagram.nodes.map((node) => {
-      const detail = (node.items || []).length
-        ? `<ul class="sm-diagram-node-items">${node.items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`
-        : '';
-      return `<li class="sm-diagram-node"><p class="sm-diagram-node-head">${renderIcon(node.icon, 'sm-icon')}<strong>${esc(node.label)}</strong></p>${detail}</li>`;
-    }).join('');
-    return `<${tag} class="sm-diagram-list">${diagram.center ? center : ''}${items}</${tag}>`;
-  }
 
   function renderDiagram(diagram) {
     const layout = LAYOUTS[diagram.kind];
@@ -471,7 +232,6 @@
           <span class="badge">${esc(KIND_LABELS[diagram.kind] || diagram.kind)}</span>
         </div>
         ${layout(diagram)}
-        ${fallbackList(diagram)}
         <figcaption class="sm-diagram-note">${esc(diagram.title)} — ${esc(narrative(diagram))} ${esc(reason(diagram.why))}</figcaption>
       </figure>`;
   }
