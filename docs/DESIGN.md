@@ -172,11 +172,31 @@
 | `.list-row-value` | 행 우측 값(수치·상태). `--text-2`, tabular-nums. |
 | `.list-row-nav` | 우측 chevron(`›`)을 붙인다. 이동하는 행에만. |
 | `.list-group.is-inset` | 카드 안에 들어가는 그룹(배경을 `--surface-2`로 한 단 올림). |
+| `.list-group-head-row` | **헤더 + 우측 버튼 한 줄** 변형. `.list-group-head`를 안에 넣고 오른쪽에 `.btn-sm`을 둔다. 이 줄이 헤더의 좌우·아래 여백을 통째로 갖는다 — 부모에 `gap`을 또 주면 리듬이 두 배가 된다. |
+| `.list-row-stretch` | 행 전체를 진입점으로 늘리는 버튼/링크. 행 안에 **체크박스·스위치가 함께 있을 때 필수**다(컨트롤을 버튼 안에 중첩하면 마크업이 무효). `::after` 오버레이가 행을 덮고, hover는 행 전체가 받는다. |
+| `.list-row-accessory` | 오버레이 위로 올라오는 행 우측 컨트롤(체크박스·스위치). `.list-row-stretch`와 짝이다. |
+| `.list-row:disabled` / `[aria-disabled="true"]` | 비활성 행. `opacity: .45` + hover 배경 무효화. |
 
 행 사이 구분선은 `.list-row + .list-row`에 **인셋 헤어라인**으로 자동 생성된다.
 직접 `border-top`을 그리지 않는다.
 
-### 7.2 그 외
+### 7.2 접힘 그룹 (disclosure)
+
+`<details>` / `<summary>` 위에 얹는다. 그룹 리스트와 같은 곡률·헤어라인이고,
+summary 행의 기하는 `.list-row`와 같은 토큰(`--row-min-h` / `--row-pad-*`)을 쓴다.
+
+| 클래스 | 용법 |
+|---|---|
+| `.disclosure` | `<details>`. 둥근 컨테이너 + `overflow: hidden`. |
+| `.disclosure-head` | `<summary>`. 기본 마커를 지우고 우측에 회전하는 chevron을 붙인다. |
+| `.disclosure-title` | summary 제목(본문 크기, semibold). |
+| `.disclosure-hint` | summary 우측 짧은 힌트(개수·상태). chevron 앞에 온다. |
+| `.disclosure-body` | 펼침 본문. 위쪽 헤어라인으로 summary와 나뉜다. |
+
+인쇄·자동 측정 주의: 닫힌 `<details>`의 본문은 렌더 트리에 없다. 기하 측정은 그 하위
+트리를 제외하고, 인쇄 경로는 `beforeprint`에서 실제로 펼친 뒤 출력한다.
+
+### 7.3 그 외
 
 | 클래스 | 용법 |
 |---|---|

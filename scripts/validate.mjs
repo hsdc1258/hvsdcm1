@@ -1245,7 +1245,7 @@ function validateDesignTokens() {
 
 // 그림문자 = 이모지 표현이 기본인 문자 + VS16으로 이모지 표현을 강제한 문자 + 키캡.
 const EMOJI_PATTERN = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️|⃣/u;
-// system.css가 제공하는 이모지 슬롯 클래스 (DESIGN.md §5·§7.2).
+// system.css가 제공하는 이모지 슬롯 클래스 (DESIGN.md §5·§7.3).
 const EMOJI_SLOT_CLASS = /\bemoji(?:-box|-lg)?\b/u;
 
 // 마크업 문자열에서 "여는 태그 직후에 등장하는 그림문자"를 모은다.

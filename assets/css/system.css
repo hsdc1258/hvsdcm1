@@ -626,6 +626,104 @@ a.list-row:hover, button.list-row:hover { background: var(--line-faint); text-de
   line-height: 1;
 }
 
+/* 행 전체를 진입점으로 늘린다 (3b가 smstudy 로컬 .sm-row-open으로 만든 패턴의 승격본).
+   행 안에 체크박스·스위치가 함께 있을 때 필수다 — 버튼 안에 컨트롤을 중첩하면 마크업이
+   무효이므로, 진입 버튼을 작게 두고 ::after 오버레이로 히트 영역만 행 전체로 넓힌다.
+   .list-row가 position: relative이므로 오버레이의 기준 상자는 행이다.
+   같은 행의 다른 컨트롤은 .list-row-accessory로 오버레이 위에 올린다. */
+.list-row-stretch {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.list-row-stretch::after { content: ""; position: absolute; inset: 0; }
+/* 진입점이 행 전체이므로 hover도 행 전체가 받는다 (a/button .list-row와 같은 값). */
+.list-row:has(.list-row-stretch):hover { background: var(--line-faint); }
+
+.list-row-accessory {
+  position: relative;   /* 오버레이(z-index 0) 위로 올라와 클릭을 받는다 */
+  z-index: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.list-row-accessory input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 비활성 행 — 배경 반응까지 끈다. hover 규칙(0,2,1)보다 특이도가 높아야 이긴다. */
+.list-row:disabled,
+.list-row[aria-disabled="true"] { opacity: .45; cursor: default; }
+.list-row:disabled:hover,
+.list-row[aria-disabled="true"]:hover { background: transparent; }
+
+/* "헤더 + 우측 버튼 한 줄" 변형. 헤더의 좌우·아래 여백을 이 줄이 통째로 가져가고
+   안쪽 .list-group-head는 여백을 0으로 내린다 — 버튼이 붙어도 그룹 위 리듬(8px)이
+   그대로 유지된다. 3b는 이 여백을 부모 grid gap으로 메우고 padding-bottom을 0으로
+   덮어썼는데, 그러면 부모 gap이 없는 화면에서 헤더가 그룹에 붙는다. */
+.list-group-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 30px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+.list-group-head-row > .list-group-head { padding: 0; }
+
+/* ==========================================================================
+   접힘 그룹 (disclosure) — <details>/<summary>. 그룹 리스트와 같은 곡률·헤어라인이며
+   summary 행의 기하는 .list-row와 같은 토큰(--row-min-h / --row-pad-*)을 쓴다.
+   3b가 smstudy 로컬 .sm-fold로 만든 패턴의 승격본이다.
+   ========================================================================== */
+
+.disclosure {
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+
+.disclosure-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min-h);
+  padding: var(--row-pad-y) var(--row-pad-x);
+  cursor: pointer;
+  list-style: none;
+}
+.disclosure-head::-webkit-details-marker { display: none; }
+.disclosure-head::after {
+  content: "›";
+  flex: none;
+  margin-left: var(--space-2);
+  color: var(--text-3);
+  font-size: 1.2em;
+  line-height: 1;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.disclosure[open] > .disclosure-head::after { transform: rotate(90deg); }
+.disclosure-head:hover { background: var(--line-faint); }
+
+.disclosure-title { font-size: var(--fs-body); font-weight: 600; }
+.disclosure-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
+
+.disclosure-body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--row-pad-x) var(--space-5);
+  border-top: 1px solid var(--line-faint);
+}
+
 /* ==========================================================================
    시트 / 모달
    ========================================================================== */

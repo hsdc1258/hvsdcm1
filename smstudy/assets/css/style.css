@@ -70,44 +70,22 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
 .sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
 
-/* 행이 곧 동작인 그룹 리스트 — 비활성 행은 배경 반응도 끈다. */
-.list-group .list-row:disabled { opacity: .45; cursor: default; }
-.list-group .list-row:disabled:hover { background: transparent; }
+/* 행 비활성 / 행 전체 진입점 / 체크박스 액세서리는 system.css의 .list-row-stretch ·
+   .list-row-accessory · .list-row:disabled로 승격됐다 (DESIGN.md §7.1). 여기서 다시
+   만들지 않는다. */
 
 /* ---- 대단원 = 그룹 / 중단원 = 행 (DESIGN.md §7.1) ---- */
 
-.sm-unit { display: grid; gap: var(--space-2); }
-.sm-unit-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 30px;
-}
-/* .list-group-head의 아래 여백은 그룹 사이 간격이 대신한다 — 헤더 줄 안에서는 뺀다. */
-.sm-unit-head .list-group-head { padding-bottom: 0; }
-
-/* 행 전체를 개념 학습 진입점으로 늘린다. 오른쪽 체크박스만 그 위로 올라온다.
-   버튼 안에 체크박스를 중첩하지 않으므로 마크업이 유효하고, 히트 영역은 행 전체다. */
-.sm-row-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-.sm-row-open::after { content: ""; position: absolute; inset: 0; }
-.sm-row:hover { background: var(--line-faint); }
-.sm-row-pick { position: relative; z-index: 1; display: grid; place-items: center; flex: none; }
-.sm-row-pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+/* 헤더 줄의 아래 여백은 .list-group-head-row가 갖는다(8px). 그룹 아래 캡션의 간격은
+   .list-group-foot의 padding-top이 갖는다. 그래서 이 컨테이너는 gap을 두지 않는다 —
+   두면 두 여백이 겹쳐 리듬이 두 배가 된다. */
+.sm-unit { display: grid; }
+.sm-unit > .list-group-foot { padding-top: var(--space-4); }
 
 /* ---- 개념 노트 ---- */
 
 /* 툴바 — 중단원 이동(select)·홈·퀴즈를 한 줄에 모았다. 예전에는 칩 13개 줄과
-   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.2).
+   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.3).
    불투명 표면 — 유리 효과는 §3이 금지한다. --surface 위 --text-2 7.03:1. */
 .sm-concept-nav { z-index: 40; gap: var(--space-2); }
 .sm-jump-label {
@@ -155,47 +133,14 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
 }
 .sm-sec-hint { font-size: var(--fs-micro); color: var(--text-3); }  /* on --bg 5.80:1 */
 
-/* ---- 접히는 부속 섹션 ---- */
+/* ---- 접히는 부속 섹션 ----
+   컨테이너·summary 행·chevron·본문은 system.css의 .disclosure* 프리미티브다.
+   여기에는 노트 본문 안에서의 간격과 본문 리드 문장만 남긴다. */
 
-.sm-fold {
-  background: var(--surface);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-l);
-  overflow: hidden;
-}
-.sm-note-body > .sm-fold { margin-top: var(--space-4); }
-.sm-note-body > .sm-fold + .sm-fold { margin-top: var(--space-2); }
-.sm-fold-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--row-min-h);
-  padding: var(--row-pad-y) var(--row-pad-x);
-  cursor: pointer;
-  list-style: none;
-}
-.sm-fold-head::-webkit-details-marker { display: none; }
-.sm-fold-head::after {
-  content: "›";
-  flex: none;
-  margin-left: var(--space-2);
-  color: var(--text-3);
-  font-size: 1.2em;
-  line-height: 1;
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-.sm-fold[open] > .sm-fold-head::after { transform: rotate(90deg); }
-.sm-fold-head:hover { background: var(--line-faint); }
-.sm-fold-title { font-size: var(--fs-body); font-weight: 600; }
-.sm-fold-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
-.sm-fold-body {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--row-pad-x) var(--space-5);
-  border-top: 1px solid var(--line-faint);
-}
-.sm-fold-lead { font-size: var(--fs-body); color: var(--text); }
-.sm-fold-body > .list-group-head { padding-bottom: 0; }
+.sm-note-body > .disclosure { margin-top: var(--space-4); }
+.sm-note-body > .disclosure + .disclosure { margin-top: var(--space-2); }
+.sm-lead { font-size: var(--fs-body); color: var(--text); }
+.disclosure-body > .list-group-head { padding-bottom: 0; }
 
 /* 학습 기록 화면 전용 섹션 규칙 (M-2). 노트 본문 스코프 밖에 있는 기록 섹션들이
    여백·구분선을 잃지 않도록 같은 조판 언어를 여기서 따로 준다. 카드가 아닌 섹션에만
@@ -828,7 +773,7 @@ ul.sm-d-items {
   .sm-footer,
   .sm-concept-nav,
   .sm-concept-finish,
-  .sm-row-pick,
+  .list-row-accessory,
   .view-head .btn,
   .toast { display: none !important; }
 
@@ -837,11 +782,11 @@ ul.sm-d-items {
 
   /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
      실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */
-  .sm-fold-head::after { display: none; }
+  .disclosure-head::after { display: none; }
 
   .card,
   .sm-section,
-  .sm-fold,
+  .disclosure,
   .sm-mistake { break-inside: avoid; box-shadow: none; border-color: #c9d0d5; }
 
   .sm-choice.is-correct { background: #187341; color: #fff; }

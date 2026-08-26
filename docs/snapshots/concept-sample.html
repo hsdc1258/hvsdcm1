@@ -633,6 +633,104 @@ a.list-row:hover, button.list-row:hover { background: var(--line-faint); text-de
   line-height: 1;
 }
 
+/* 행 전체를 진입점으로 늘린다 (3b가 smstudy 로컬 .sm-row-open으로 만든 패턴의 승격본).
+   행 안에 체크박스·스위치가 함께 있을 때 필수다 — 버튼 안에 컨트롤을 중첩하면 마크업이
+   무효이므로, 진입 버튼을 작게 두고 ::after 오버레이로 히트 영역만 행 전체로 넓힌다.
+   .list-row가 position: relative이므로 오버레이의 기준 상자는 행이다.
+   같은 행의 다른 컨트롤은 .list-row-accessory로 오버레이 위에 올린다. */
+.list-row-stretch {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.list-row-stretch::after { content: ""; position: absolute; inset: 0; }
+/* 진입점이 행 전체이므로 hover도 행 전체가 받는다 (a/button .list-row와 같은 값). */
+.list-row:has(.list-row-stretch):hover { background: var(--line-faint); }
+
+.list-row-accessory {
+  position: relative;   /* 오버레이(z-index 0) 위로 올라와 클릭을 받는다 */
+  z-index: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.list-row-accessory input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 비활성 행 — 배경 반응까지 끈다. hover 규칙(0,2,1)보다 특이도가 높아야 이긴다. */
+.list-row:disabled,
+.list-row[aria-disabled="true"] { opacity: .45; cursor: default; }
+.list-row:disabled:hover,
+.list-row[aria-disabled="true"]:hover { background: transparent; }
+
+/* "헤더 + 우측 버튼 한 줄" 변형. 헤더의 좌우·아래 여백을 이 줄이 통째로 가져가고
+   안쪽 .list-group-head는 여백을 0으로 내린다 — 버튼이 붙어도 그룹 위 리듬(8px)이
+   그대로 유지된다. 3b는 이 여백을 부모 grid gap으로 메우고 padding-bottom을 0으로
+   덮어썼는데, 그러면 부모 gap이 없는 화면에서 헤더가 그룹에 붙는다. */
+.list-group-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 30px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+.list-group-head-row > .list-group-head { padding: 0; }
+
+/* ==========================================================================
+   접힘 그룹 (disclosure) — <details>/<summary>. 그룹 리스트와 같은 곡률·헤어라인이며
+   summary 행의 기하는 .list-row와 같은 토큰(--row-min-h / --row-pad-*)을 쓴다.
+   3b가 smstudy 로컬 .sm-fold로 만든 패턴의 승격본이다.
+   ========================================================================== */
+
+.disclosure {
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+
+.disclosure-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min-h);
+  padding: var(--row-pad-y) var(--row-pad-x);
+  cursor: pointer;
+  list-style: none;
+}
+.disclosure-head::-webkit-details-marker { display: none; }
+.disclosure-head::after {
+  content: "›";
+  flex: none;
+  margin-left: var(--space-2);
+  color: var(--text-3);
+  font-size: 1.2em;
+  line-height: 1;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.disclosure[open] > .disclosure-head::after { transform: rotate(90deg); }
+.disclosure-head:hover { background: var(--line-faint); }
+
+.disclosure-title { font-size: var(--fs-body); font-weight: 600; }
+.disclosure-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
+
+.disclosure-body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--row-pad-x) var(--space-5);
+  border-top: 1px solid var(--line-faint);
+}
+
 /* ==========================================================================
    시트 / 모달
    ========================================================================== */
@@ -971,44 +1069,22 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
 .sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
 
-/* 행이 곧 동작인 그룹 리스트 — 비활성 행은 배경 반응도 끈다. */
-.list-group .list-row:disabled { opacity: .45; cursor: default; }
-.list-group .list-row:disabled:hover { background: transparent; }
+/* 행 비활성 / 행 전체 진입점 / 체크박스 액세서리는 system.css의 .list-row-stretch ·
+   .list-row-accessory · .list-row:disabled로 승격됐다 (DESIGN.md §7.1). 여기서 다시
+   만들지 않는다. */
 
 /* ---- 대단원 = 그룹 / 중단원 = 행 (DESIGN.md §7.1) ---- */
 
-.sm-unit { display: grid; gap: var(--space-2); }
-.sm-unit-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 30px;
-}
-/* .list-group-head의 아래 여백은 그룹 사이 간격이 대신한다 — 헤더 줄 안에서는 뺀다. */
-.sm-unit-head .list-group-head { padding-bottom: 0; }
-
-/* 행 전체를 개념 학습 진입점으로 늘린다. 오른쪽 체크박스만 그 위로 올라온다.
-   버튼 안에 체크박스를 중첩하지 않으므로 마크업이 유효하고, 히트 영역은 행 전체다. */
-.sm-row-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-.sm-row-open::after { content: ""; position: absolute; inset: 0; }
-.sm-row:hover { background: var(--line-faint); }
-.sm-row-pick { position: relative; z-index: 1; display: grid; place-items: center; flex: none; }
-.sm-row-pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+/* 헤더 줄의 아래 여백은 .list-group-head-row가 갖는다(8px). 그룹 아래 캡션의 간격은
+   .list-group-foot의 padding-top이 갖는다. 그래서 이 컨테이너는 gap을 두지 않는다 —
+   두면 두 여백이 겹쳐 리듬이 두 배가 된다. */
+.sm-unit { display: grid; }
+.sm-unit > .list-group-foot { padding-top: var(--space-4); }
 
 /* ---- 개념 노트 ---- */
 
 /* 툴바 — 중단원 이동(select)·홈·퀴즈를 한 줄에 모았다. 예전에는 칩 13개 줄과
-   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.2).
+   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.3).
    불투명 표면 — 유리 효과는 §3이 금지한다. --surface 위 --text-2 7.03:1. */
 .sm-concept-nav { z-index: 40; gap: var(--space-2); }
 .sm-jump-label {
@@ -1056,47 +1132,14 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
 }
 .sm-sec-hint { font-size: var(--fs-micro); color: var(--text-3); }  /* on --bg 5.80:1 */
 
-/* ---- 접히는 부속 섹션 ---- */
+/* ---- 접히는 부속 섹션 ----
+   컨테이너·summary 행·chevron·본문은 system.css의 .disclosure* 프리미티브다.
+   여기에는 노트 본문 안에서의 간격과 본문 리드 문장만 남긴다. */
 
-.sm-fold {
-  background: var(--surface);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-l);
-  overflow: hidden;
-}
-.sm-note-body > .sm-fold { margin-top: var(--space-4); }
-.sm-note-body > .sm-fold + .sm-fold { margin-top: var(--space-2); }
-.sm-fold-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--row-min-h);
-  padding: var(--row-pad-y) var(--row-pad-x);
-  cursor: pointer;
-  list-style: none;
-}
-.sm-fold-head::-webkit-details-marker { display: none; }
-.sm-fold-head::after {
-  content: "›";
-  flex: none;
-  margin-left: var(--space-2);
-  color: var(--text-3);
-  font-size: 1.2em;
-  line-height: 1;
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-.sm-fold[open] > .sm-fold-head::after { transform: rotate(90deg); }
-.sm-fold-head:hover { background: var(--line-faint); }
-.sm-fold-title { font-size: var(--fs-body); font-weight: 600; }
-.sm-fold-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
-.sm-fold-body {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--row-pad-x) var(--space-5);
-  border-top: 1px solid var(--line-faint);
-}
-.sm-fold-lead { font-size: var(--fs-body); color: var(--text); }
-.sm-fold-body > .list-group-head { padding-bottom: 0; }
+.sm-note-body > .disclosure { margin-top: var(--space-4); }
+.sm-note-body > .disclosure + .disclosure { margin-top: var(--space-2); }
+.sm-lead { font-size: var(--fs-body); color: var(--text); }
+.disclosure-body > .list-group-head { padding-bottom: 0; }
 
 /* 학습 기록 화면 전용 섹션 규칙 (M-2). 노트 본문 스코프 밖에 있는 기록 섹션들이
    여백·구분선을 잃지 않도록 같은 조판 언어를 여기서 따로 준다. 카드가 아닌 섹션에만
@@ -1729,7 +1772,7 @@ ul.sm-d-items {
   .sm-footer,
   .sm-concept-nav,
   .sm-concept-finish,
-  .sm-row-pick,
+  .list-row-accessory,
   .view-head .btn,
   .toast { display: none !important; }
 
@@ -1738,11 +1781,11 @@ ul.sm-d-items {
 
   /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
      실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */
-  .sm-fold-head::after { display: none; }
+  .disclosure-head::after { display: none; }
 
   .card,
   .sm-section,
-  .sm-fold,
+  .disclosure,
   .sm-mistake { break-inside: avoid; box-shadow: none; border-color: #c9d0d5; }
 
   .sm-choice.is-correct { background: #187341; color: #fff; }
@@ -1874,25 +1917,25 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         <p class="list-group-foot">복습 간격 · 오늘 · 1일 뒤 · 3일 뒤 · 7일 뒤</p>
       </section>
 
-      <details class="sm-fold" data-print-open>
-        <summary class="sm-fold-head">
-          <h2 class="sm-fold-title" id="exam-fold-title">빈출 개념과 판별 점검</h2>
-          <span class="sm-fold-hint">6개</span>
+      <details class="disclosure" data-print-open>
+        <summary class="disclosure-head">
+          <h2 class="disclosure-title" id="exam-fold-title">빈출 개념과 판별 점검</h2>
+          <span class="disclosure-hint">6개</span>
         </summary>
-        <div class="sm-fold-body">
+        <div class="disclosure-body">
       <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위"><li class="sm-freq-item">공유성과 학습성</li><li class="sm-freq-item">문화 사대주의</li><li class="sm-freq-item">문화 상대주의</li><li class="sm-freq-item">자문화 중심주의</li><li class="sm-freq-item">축적성과 변동성</li><li class="sm-freq-item">전체성</li></ol>
-      <p class="sm-fold-lead">문화의 속성과 태도를 어떤 기준으로 나눌까?</p>
+      <p class="sm-lead">문화의 속성과 태도를 어떤 기준으로 나눌까?</p>
       <ol class="sm-flow" aria-label="판별 순서"><li class="sm-flow-step"><span>1</span>속성 판별</li><li class="sm-flow-step"><span>2</span>겹침 소거</li><li class="sm-flow-step"><span>3</span>태도 판별</li></ol>
       <ul class="sm-bullets"><li>추가면 축적성, 시간에 따른 변화면 변동성이다.</li><li>한 요소의 변화가 다른 영역을 바꾸면 전체성이다.</li><li>우열을 매기면 절대주의, 맥락을 보면 상대주의다.</li></ul>
       <p class="list-group-foot">선별 수록 표본의 순위입니다. 전수 통계가 아닙니다.</p></div>
       </details>
 
-      <details class="sm-fold" data-print-open>
-        <summary class="sm-fold-head">
-          <h2 class="sm-fold-title" id="detail-fold-title">세부 개념 설명</h2>
-          <span class="sm-fold-hint">8항목</span>
+      <details class="disclosure" data-print-open>
+        <summary class="disclosure-head">
+          <h2 class="disclosure-title" id="detail-fold-title">세부 개념 설명</h2>
+          <span class="disclosure-hint">8항목</span>
         </summary>
-        <div class="sm-fold-body">
+        <div class="disclosure-body">
       <div class="sm-concept-grid">
       <article class="sm-concept-card">
         <h3 class="title-3">문화의 다섯 속성</h3>
@@ -1932,13 +1975,13 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
       </article></div></div>
       </details>
 
-      <details class="sm-fold" data-print-open>
-        <summary class="sm-fold-head">
-          <h2 class="sm-fold-title" id="design-fold-title">꺼내 쓰는 노트</h2>
-          <span class="sm-fold-hint">설계 근거</span>
+      <details class="disclosure" data-print-open>
+        <summary class="disclosure-head">
+          <h2 class="disclosure-title" id="design-fold-title">꺼내 쓰는 노트</h2>
+          <span class="disclosure-hint">설계 근거</span>
         </summary>
-        <div class="sm-fold-body">
-      <p class="sm-fold-lead">구조를 먼저 잡고 비교한 뒤 노트를 덮고 스스로 답한다.</p>
+        <div class="disclosure-body">
+      <p class="sm-lead">구조를 먼저 잡고 비교한 뒤 노트를 덮고 스스로 답한다.</p>
       <div class="list-group is-inset">
       <div class="list-row">
         <span class="list-row-body">

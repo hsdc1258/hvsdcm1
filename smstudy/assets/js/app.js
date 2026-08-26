@@ -384,16 +384,16 @@
   function renderSubunit(sub) {
     const done = Boolean(db.completed[sub.id]);
     return `
-      <div class="list-row sm-row">
+      <div class="list-row">
         <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">${esc(emojiOf(sub.id))}</span></span>
         <span class="list-row-body">
-          <button class="sm-row-open" type="button" data-id="${sub.id}">
+          <button class="list-row-stretch" type="button" data-id="${sub.id}">
             <span class="list-row-title">${esc(sub.title)}</span>
           </button>
           <span class="list-row-sub">${esc(subMeta(sub))}</span>
         </span>
         ${done ? '<span class="list-row-value"><span class="badge badge-green">개념 완료</span></span>' : ''}
-        <label class="sm-row-pick">
+        <label class="list-row-accessory">
           <input class="sub-check" type="checkbox" data-id="${sub.id}"
             aria-label="${esc(sub.title)} 출제 범위 포함" ${state.selected.has(sub.id) ? 'checked' : ''}>
         </label>
@@ -408,7 +408,7 @@
     const allSelected = selectedCount === total;
     return `
       <section class="sm-unit" aria-labelledby="unit-${unit.id}">
-        <div class="sm-unit-head">
+        <div class="list-group-head-row">
           <h2 class="list-group-head" id="unit-${unit.id}">${unit.id} · ${esc(unit.title)}</h2>
           <button class="btn btn-ghost btn-sm unit-toggle" type="button" data-unit="${unit.id}">${allSelected ? '범위 해제' : '전체 선택'}</button>
         </div>
@@ -432,7 +432,7 @@
       el.checked ? state.selected.add(el.dataset.id) : state.selected.delete(el.dataset.id);
       renderHome();
     }));
-    document.querySelectorAll('.sm-row-open').forEach(el => el.addEventListener('click', () => renderConcept(el.dataset.id)));
+    document.querySelectorAll('.list-row-stretch').forEach(el => el.addEventListener('click', () => renderConcept(el.dataset.id)));
     document.getElementById('qCount').addEventListener('change', e => state.count = e.target.value);
     document.getElementById('qOrder').addEventListener('change', e => state.order = e.target.value);
     document.getElementById('startSelected').addEventListener('click', () => startQuiz(QUESTIONS.filter(q => state.selected.has(q.sub)), '선택 범위'));
@@ -460,12 +460,12 @@
   // data-print-open은 인쇄 직전에 강제로 펼치기 위한 표지다.
   function foldSection(id, label, hint, body) {
     return `
-      <details class="sm-fold" data-print-open>
-        <summary class="sm-fold-head">
-          <h2 class="sm-fold-title" id="${id}">${esc(label)}</h2>
-          <span class="sm-fold-hint">${esc(hint)}</span>
+      <details class="disclosure" data-print-open>
+        <summary class="disclosure-head">
+          <h2 class="disclosure-title" id="${id}">${esc(label)}</h2>
+          <span class="disclosure-hint">${esc(hint)}</span>
         </summary>
-        <div class="sm-fold-body">${body}</div>
+        <div class="disclosure-body">${body}</div>
       </details>`;
   }
 
@@ -592,7 +592,7 @@
     const checks = visual.checks.map((line) => `<li>${esc(line)}</li>`).join('');
     return foldSection('exam-fold-title', '빈출 개념과 판별 점검', `${tagRows.length}개`, `
       <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위">${freq}</ol>
-      <p class="sm-fold-lead">${esc(visual.question)}</p>
+      <p class="sm-lead">${esc(visual.question)}</p>
       <ol class="sm-flow" aria-label="판별 순서">${flow}</ol>
       <ul class="sm-bullets">${checks}</ul>
       <p class="list-group-foot">선별 수록 표본의 순위입니다. 전수 통계가 아닙니다.</p>`);
@@ -629,7 +629,7 @@
         </span>
       </a>`).join('');
     return foldSection('design-fold-title', LEARNING_DESIGN.title, '설계 근거', `
-      <p class="sm-fold-lead">${esc(LEARNING_DESIGN.summary)}</p>
+      <p class="sm-lead">${esc(LEARNING_DESIGN.summary)}</p>
       <div class="list-group is-inset">${steps}</div>
       <p class="list-group-head">근거 연구</p>
       <div class="list-group is-inset">${evidence}</div>
