@@ -75,9 +75,9 @@
 
 - 수행 방법은 위와 같다: `git archive HEAD` 사본, 케이스마다 원복, 마지막에 대조군으로 기준선 재확인.
 - 드라이버: 스크래치패드의 `negtests.mjs` (일회용, 저장소에 남기지 않는다).
-- 기준선: 사본 초기 상태 `Validation passed (13173 checks)`.
+- 기준선: 사본 초기 상태 `Validation passed (13204 checks)`.
 
-## 결과 — 23/23 (리뷰가 제시한 반증 6건 전부 포함)
+## 결과 — 25/25 (리뷰가 제시한 반증 6건 전부 포함)
 
 | # | 겨냥한 지적 | 어떻게 위반시켰나 | 리뷰 시점 | 지금 | 실패 메시지(첫 줄) |
 |---|---|---|---|---|---|
@@ -103,7 +103,9 @@
 | N39 | M-2 | 다이어그램 `label`을 9자로 늘렸다 | 통과(상한 12) | 실패 | `nodes[0].label is 9 characters, over the 8 limit` |
 | N40 | M-2 | 다이어그램 `items`를 20자로 늘렸다 | 통과(상한 20) | 실패 | `nodes[0].items[0] is 20 characters, over the 16 limit` |
 | N41 | M-2 | flow 노드의 `items`를 4개로 늘렸다 | 통과(개수 미검사) | 실패 | `(flow) must hold 0-2 items, found 4 — the SVG layout has no room for more` |
-| N42 | 대조군 | 아무것도 바꾸지 않았다 | 통과 | **통과** | `Validation passed (13173 checks)` |
+| N42 | M-6 | 스냅샷의 소제목 하나를 옛 제목으로 바꿔 데이터보다 낡게 만들었다 | (검사 없음) | 실패 | `docs/snapshots/diagrams.html: missing heading for I-01 — 현상 판별 3단계 (flow)` |
+| N43 | M-6 | 스냅샷이 외부 스타일시트를 링크하게 만들었다 | (검사 없음) | 실패 | `snapshot must inline every stylesheet and carry no scripts so the file opens standalone` |
+| N44 | 대조군 | 아무것도 바꾸지 않았다 | 통과 | **통과** | `Validation passed (13204 checks)` |
 
 **리뷰가 제시한 반증 6건은 전부 재현해 지금은 실패한다.** 6번째("`keyPoints[0].icon` 제거가
 실패했다")는 방향이 반대인 사례였고, D-3대로 선택 필드로 내린 뒤 데이터에서도 지웠으므로
