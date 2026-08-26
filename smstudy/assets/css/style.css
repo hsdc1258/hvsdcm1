@@ -41,7 +41,9 @@
 }
 .view-head h1 { font-size: var(--fs-title-1); line-height: var(--lh-title); letter-spacing: var(--ls-title); font-weight: 700; }
 .view-head p { font-size: var(--fs-caption); color: var(--text-2); margin-top: var(--space-1); }
-.view-head .kicker { margin-bottom: var(--space-1); }
+/* 눈썹 라벨(.kicker) 바로 아래 제목이 오면 최소 여백을 준다. 제목의 line-height가 1.16이라
+   폰트 상자가 줄 상자보다 커서, 붙여 두면 두 글자 상자가 실제로 1~2px 겹친다. */
+.app-main .kicker { margin-bottom: var(--space-1); }
 
 /* ---- 사이드바 ---- */
 
@@ -81,7 +83,7 @@
 
 .sm-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
-.sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); }
+.sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
 
 /* ---- 대단원 카드 ---- */
 
@@ -194,7 +196,7 @@
 /* 대형 숫자 타일 대신 사실 나열로 낸다 — 장식 프리미티브를 뷰당 2종 이하로 유지한다 (DESIGN.md §4). */
 .sm-facts-inline {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: var(--space-3) var(--space-5);
   margin: 0;
   padding: var(--space-3) 0;
@@ -259,7 +261,7 @@
 }
 .sm-steps p { font-size: var(--fs-caption); }
 
-.sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: var(--space-3); }
 .sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
 .sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
 .sm-deep h4 span { color: var(--text); }
@@ -309,11 +311,11 @@
   font-size: var(--fs-caption);
 }
 .sm-flow-step > span { color: var(--accent); font-weight: 700; font-size: var(--fs-micro); }
-.sm-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.sm-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
 .sm-check-item { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-1); }
 .sm-check-item p { font-size: var(--fs-caption); color: var(--text-2); }
 
-.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
+.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: var(--space-3); }
 .sm-concept-card { display: grid; gap: var(--space-3); align-content: start; background: var(--surface-2); }
 /* 함정 칸은 색이 아니라 라벨로 구분한다 — 상태색은 상태 표시에만 쓴다 (DESIGN.md §3).
    205행의 .sm-callout.is-trap과 같은 처리다. */
@@ -353,7 +355,7 @@
 .sm-design > summary::-webkit-details-marker { display: none; }
 .sm-design-body { display: grid; gap: var(--space-4); padding: 0 var(--space-5) var(--space-5); }
 .sm-design-body > p { font-size: var(--fs-caption); color: var(--text-2); }
-.sm-design-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.sm-design-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
 .sm-design-steps > div { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); }
 .sm-design-steps p { font-size: var(--fs-micro); color: var(--text-2); margin-top: 2px; }
 .sm-evidence { display: grid; gap: var(--space-2); }
@@ -440,7 +442,7 @@
 .sm-feedback-head { font-size: var(--fs-title-3); font-weight: 700; }
 .sm-feedback.is-correct .sm-feedback-head { color: var(--green); }
 .sm-feedback.is-wrong .sm-feedback-head { color: var(--red); }
-.sm-feedback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+.sm-feedback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: var(--space-3); }
 .sm-feedback-cell { display: grid; gap: 2px; }
 .sm-feedback-cell small { font-size: var(--fs-micro); color: var(--text-2); }
 .sm-feedback-cell strong { font-size: var(--fs-body); }
@@ -525,8 +527,17 @@
 
 /* ---- 개념 다이어그램 (diagram.js) ----
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
-   SVG는 컨테이너가 좁아지면 글자가 같이 줄어 읽히지 않으므로, 임계 아래에서는
-   같은 데이터의 목록으로 전환한다. 전환은 hidden 속성이 아니라 CSS가 한다.
+   조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
+   레퍼런스는 DESIGN.md §1의 문제집·참고서 조판이다: 얇은 구분선, 들여쓰기 위계, 여백.
+   SVG는 관계가 곧 기하학인 venn·scale의 장식(.sm-d-art)에만 남았고, 좁은 화면에서는
+   그 장식만 숨긴다. 나머지 형식은 CSS 조판이 이미 반응형이라 폴백 분기가 없다.
+
+   이 블록이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
+     --accent #2997ff on --surface  #161617  6.00:1   (.sm-d-n 숫자, .sm-icon 스트로크)
+     --accent #2997ff on --surface-2 #1d1d1f 5.58:1   (같은 요소가 카드 밖에 놓일 때)
+     --text-2 #a1a1a6 on --surface  #161617  7.03:1   (.sm-d-items 항목)
+     --text-2 #a1a1a6 on --surface-2 #1d1d1f 6.54:1   (캡션 하한 4.5:1 충족)
+     --text   #f5f5f7 on --surface-2 #1d1d1f 15.46:1  (.sm-d-head strong, .sm-d-mark)
    ---------------------------------------------------------------------- */
 
 .sm-diagrams {
@@ -537,8 +548,8 @@
 }
 .sm-diagram {
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius-l);
   background: var(--surface-2);
@@ -549,99 +560,222 @@
 .sm-diagram-head strong { font-size: var(--fs-body); font-weight: 600; }
 .sm-diagram-note { font-size: var(--fs-caption); color: var(--text-2); line-height: 1.55; }
 
-.sm-diagram-canvas { display: block; animation: sm-diagram-in var(--dur-med) var(--ease-out) both; }
-.sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
+/* ---- 노드 공통 (모든 형식이 같은 제목 줄·항목 목록을 쓴다) ---- */
 
-@keyframes sm-diagram-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+.sm-d-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
 }
-
-.sm-d-box { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
-.sm-d-badge { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
-.sm-d-num { fill: var(--accent); font-weight: 700; }
-.sm-d-label { fill: var(--text); font-weight: 600; }
-.sm-d-item { fill: var(--text-2); }
-.sm-d-mute { fill: var(--text-3); }
-.sm-d-chip { fill: var(--accent-soft); }
-.sm-d-dot { fill: var(--accent); }
-.sm-d-connector { fill: none; stroke: var(--line-strong); stroke-width: 2; }
-.sm-d-arrow { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.sm-d-beam { fill: none; stroke: var(--text-3); stroke-width: 4; stroke-linecap: round; }
-.sm-d-fulcrum { fill: var(--surface-3); stroke: var(--line-strong); stroke-width: 1; }
-.sm-d-guide { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 6; }
-.sm-d-axis { fill: none; stroke: var(--line-strong); stroke-width: 2; }
-/* 벤은 한 색의 겹침 농도로 교집합을 보인다 — 원마다 색을 달리하면 다색 규칙에 걸린다. */
-.sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
-.sm-d-center-circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
-.sm-d-center { fill: var(--text); font-weight: 700; }
-.sm-d-layer-1 { fill: var(--accent-soft); }
-.sm-d-icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-
-/* 넓은 화면에서 목록은 화면에서만 감춘다(접근성 트리에는 남긴다). */
-.sm-diagram-list {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
+.sm-d-head strong { color: var(--text); font-weight: 600; }
+.sm-d-head .sm-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+  align-self: center;
 }
-.sm-diagram-node { display: grid; gap: var(--space-1); padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--line); }
-.sm-diagram-node-head { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-caption); color: var(--accent); }
-.sm-diagram-node-head strong { color: var(--text); }
-.sm-diagram-node-items { display: grid; gap: 2px; padding-left: 1.6em; list-style: disc; }
-.sm-diagram-node-items li { font-size: var(--fs-micro); color: var(--text-2); }
-ol.sm-diagram-list { counter-reset: sm-diagram-step; }
-ol.sm-diagram-list .sm-diagram-node-head::before {
-  counter-increment: sm-diagram-step;
-  content: counter(sm-diagram-step);
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent-soft);
+/* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한). */
+.sm-d-n {
+  flex: none;
+  min-width: 1.1em;
+  color: var(--accent);
   font-size: var(--fs-micro);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sm-d-items {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+.sm-d-items li {
+  position: relative;
+  padding-left: var(--space-3);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.sm-d-items li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62em;
+  width: 4px;
+  height: 1px;
+  background: var(--line-strong);
 }
 
-@container smdiagram (max-width: 680px) {
-  .sm-diagram-canvas { display: none; }
-  .sm-diagram-list {
-    position: static;
-    display: grid;
-    gap: var(--space-2);
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-    white-space: normal;
-  }
+/* ---- flow — 세로 단계 조판 (왼쪽 판정 기준 / 오른쪽 결과) ---- */
+
+.sm-d-flow {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line-strong);
+  list-style: none;
+}
+.sm-d-flow > .sm-d-node {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line-faint);
+}
+.sm-d-flow > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
+.sm-d-flow > .sm-d-node:last-child { padding-bottom: 0; }
+.sm-d-flow .sm-d-items { margin-top: 0; }
+
+/* ---- timeline — 그리드 열 (교대 배치 없음) ---- */
+
+.sm-d-timeline {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-strong);
+  list-style: none;
+}
+.sm-d-timeline > .sm-d-node {
+  padding: var(--space-3) var(--space-3) 0 0;
+  border-left: 1px solid var(--line-faint);
+  padding-left: var(--space-3);
+}
+.sm-d-timeline > .sm-d-node:first-child { border-left: 0; padding-left: 0; }
+
+/* ---- pyramid — 폭이 줄어드는 가로 막대 스택 ---- */
+
+.sm-d-pyramid {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  justify-items: center;
+  list-style: none;
+}
+.sm-d-pyramid > .sm-d-node {
+  width: 100%;
+  min-width: min(100%, 200px);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  text-align: center;
+}
+/* 폭은 아래에서부터 센다 — 층 수를 마크업이 알려 주지 않아도 위가 좁아진다. */
+.sm-d-pyramid > .sm-d-node:nth-last-child(2) { width: 84%; }
+.sm-d-pyramid > .sm-d-node:nth-last-child(3) { width: 68%; }
+.sm-d-pyramid > .sm-d-node:nth-last-child(4) { width: 54%; }
+.sm-d-pyramid > .sm-d-node:nth-last-child(5) { width: 42%; }
+.sm-d-pyramid .sm-d-head { justify-content: center; }
+.sm-d-pyramid .sm-d-items li { padding-left: 0; text-align: center; }
+.sm-d-pyramid .sm-d-items li::before { content: none; }
+
+/* ---- matrix2x2 — 2×2 그리드. 칸 사이 실선이 교차하는 두 기준을 말한다. ---- */
+
+.sm-d-quads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--line);
+  overflow: hidden;
+  list-style: none;
+}
+.sm-d-quads > .sm-d-node { padding: var(--space-3) var(--space-4); background: var(--surface); }
+
+/* ---- radial — 중심 개념은 제목 줄, 갈래는 카드 그리드 ---- */
+
+.sm-d-center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-caption);
+}
+.sm-d-center .sm-icon { flex: none; width: 16px; height: 16px; color: var(--accent); }
+.sm-d-center strong { font-weight: 600; }
+.sm-d-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sm-d-cards > .sm-d-node {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
 }
 
-/* 컨테이너 쿼리를 못 쓰는 환경을 위한 뷰포트 기준 안전망 (같은 임계). */
-@media (max-width: 700px) {
-  .sm-diagram-canvas { display: none; }
-  .sm-diagram-list {
-    position: static;
-    display: grid;
-    gap: var(--space-2);
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-    white-space: normal;
-  }
+/* ---- venn — 원은 SVG, 이름과 세부는 아래 범례 ---- */
+
+.sm-d-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sm-diagram-canvas { animation: none; }
+/* ---- scale — 저울은 SVG, 접시 위 항목은 두 열 ---- */
+
+.sm-d-pans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sm-d-pans > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
+/* 저울 그림은 두 열과 같은 폭을 써야 접시가 열의 중심 위에 온다. */
+.sm-diagram--scale .sm-d-art { width: 100%; }
+
+/* ---- 장식 SVG (venn·scale 전용) ---- */
+
+.sm-d-art { display: block; margin-inline: auto; width: min(100%, 460px); }
+.sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
+.sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
+.sm-d-mark { fill: var(--text); font-size: 22px; font-weight: 700; }
+.sm-d-beam { fill: none; stroke: var(--text-3); stroke-width: 4; stroke-linecap: round; }
+.sm-d-rule { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.sm-d-pan { fill: none; stroke: var(--text-3); stroke-width: 3; stroke-linecap: round; }
+.sm-d-fulcrum { fill: var(--surface-3); stroke: var(--line-strong); stroke-width: 1; }
+
+/* 좁은 컨테이너·좁은 뷰포트에서 같은 조판으로 접는다. 장식 SVG는 숨기고, 열은 행으로 편다. */
+@container smdiagram (max-width: 420px) {
+  .sm-d-art { display: none; }
+  .sm-d-flow > .sm-d-node { grid-template-columns: minmax(0, 1fr); }
+  .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
+  .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
+  .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
+  .sm-d-quads { grid-template-columns: minmax(0, 1fr); }
+  .sm-d-pyramid > .sm-d-node { width: 100%; }
+}
+
+/* 컨테이너 쿼리를 못 쓰는 환경을 위한 뷰포트 기준 안전망 (같은 조판). */
+@media (max-width: 460px) {
+  .sm-d-art { display: none; }
+  .sm-d-flow > .sm-d-node { grid-template-columns: minmax(0, 1fr); }
+  .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
+  .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
+  .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
+  .sm-d-quads { grid-template-columns: minmax(0, 1fr); }
+  .sm-d-pyramid > .sm-d-node { width: 100%; }
 }
 
 
@@ -649,7 +783,7 @@ ol.sm-diagram-list .sm-diagram-node-head::before {
 
 @media (max-width: 1024px) {
   .sm-layout { grid-template-columns: minmax(0, 1fr); }
-  .sm-panel { position: static; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .sm-panel { position: static; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -722,8 +856,7 @@ ol.sm-diagram-list .sm-diagram-node-head::before {
   .sm-choice.is-correct { background: #187341; color: #fff; }
   .sm-choice.is-wrong { background: #a3231b; color: #fff; }
 
-  .sm-diagram-canvas { display: block; animation: none; }
-  .sm-diagram-list { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sm-d-art { display: block; }
   .sm-diagram { break-inside: avoid; }
 
   .sm-matrix-wrap { overflow: visible; max-height: none; }
