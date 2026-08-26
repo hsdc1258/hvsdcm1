@@ -13,7 +13,7 @@
      동그라미 수치는 전부 그룹 리스트 행으로 흡수했다 (§6 장식 상한 2종).
 
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
-     --text  #f5f5f7 on --surface-3 #2c2c2e  12.80:1  (.wm-num / .wm-select 값)
+     --text  #f5f5f7 on --surface-3 #2c2c2e  12.80:1  (.field-input-inline 값 — system.css)
      --text-2 #a1a1a6 on --surface  #161617   7.03:1  (.wm-meta 우측 메타)
      --text-3 #86868b on --surface  #161617   4.99:1  (.wm-meta small — 캡션 하한 충족)
      --text-3 #86868b on --bg       #000      5.80:1  (.wm-hint / .wm-sort-label)
@@ -40,38 +40,17 @@
 
 /* ---- 행 안의 컨트롤 ---- */
 
-/* 행 우측 값 자리에 들어가는 입력. .field-input을 쓰면 행 높이가 두 배가 되므로
-   같은 표면 단차(--surface-3)를 쓰되 컴팩트한 기하로 따로 조판한다. */
+/* 행 우측 값 자리의 입력·셀렉트는 system.css의 .field-input-inline을 그대로 쓴다.
+   여기 남는 것은 숫자 입력의 폭·정렬 델타뿐이다 (R4-M-7: 셀렉트 화살표를 두 벌
+   구현하지 않는다 — 글리프는 --select-arrow 하나가 원본이다). */
 .wm-range { display: flex; align-items: center; gap: var(--space-2); }
 .wm-num {
   width: 3.4em;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: var(--radius-s);
-  background: var(--surface-3);
-  color: var(--text);          /* on --surface-3 12.80:1 */
-  font-size: var(--fs-body-sm);
+  padding-left: 6px;
+  padding-right: 6px;
   font-weight: 600;
   text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-.wm-select {
-  max-width: 100%;
-  padding: 4px 24px 4px 9px;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  border-radius: var(--radius-s);
-  background-color: var(--surface-3);
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
-    linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  color: var(--text);          /* on --surface-3 12.80:1 */
-  font-size: var(--fs-body-sm);
-  cursor: pointer;
 }
 
 /* 세그먼티드가 들어가는 행은 좁은 폭에서 두 줄로 접힌다. */

@@ -69,9 +69,11 @@ body.logged .topbar-login { display: none; }
   flex-direction: column;
   gap: var(--space-5);
   padding: var(--space-5) var(--space-4);
+  /* 그림자 없음. DESIGN.md §4가 --shadow-*를 허용한 대상은 시트·토스트·세그먼티드
+     인디케이터뿐이고, 드로어는 거기 없다. 분리는 스크림(.shade) 위 --surface 명도 단차와
+     1px 헤어라인으로 만든다 (R4-M-8). */
   background: var(--surface);
-  border-right: 1px solid var(--line-faint);
-  box-shadow: var(--shadow-2);   /* 떠 있는 오버레이 — §4 예외 */
+  border-right: 1px solid var(--line);
   transform: translateX(-102%);
   visibility: hidden;
   transition: transform var(--dur-med) var(--ease-swift), visibility 0s linear var(--dur-med);

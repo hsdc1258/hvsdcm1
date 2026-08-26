@@ -216,6 +216,7 @@ summary 행의 기하는 `.list-row`와 같은 토큰(`--row-min-h` / `--row-pad
 | `.side-facts` / `.side-note` | 사이드바의 정의 목록과 각주. |
 | `.sr-only` | 시각적으로만 숨김. `position: absolute`이므로 스크롤 컨테이너 안에 둘 때는 그 컨테이너가 `position: relative`여야 한다(`.table-wrap`이 그렇다). |
 | `.field-input-sm` | 툴바에 들어가는 작은 입력·셀렉트(`.btn-sm`과 같은 높이). |
+| `.field-input-inline` | `.list-row-value` 자리에 들어가는 행 안의 값 컨트롤. 테두리 대신 `--surface-3` 면으로 구분한다. 셀렉트 화살표는 `--select-arrow`(인라인 SVG) 하나가 원본이며 화면별 CSS에서 다시 그리지 않는다. |
 | `.emoji` / `.emoji-box` / `.emoji-lg` | §5의 이모지 슬롯. |
 | `.stat` / `.stat-value` / `.stat-label` | 수치 타일. 뷰당 1묶음까지(§6 장식 상한). |
 | `.display-xl` / `.display` / `.title-1~3` / `.kicker` | 텍스트 위계. |

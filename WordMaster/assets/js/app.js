@@ -449,9 +449,9 @@
               ${emojiLead('range')}
               <span class="list-row-body"><span class="list-row-title">DAY 범위</span></span>
               <span class="list-row-value wm-range">
-                <input id="startDay" class="wm-num" type="number" min="1" max="50" inputmode="numeric" aria-label="시작 DAY" value="${state.home.startDay}">
+                <input id="startDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="시작 DAY" value="${state.home.startDay}">
                 <span aria-hidden="true">–</span>
-                <input id="endDay" class="wm-num" type="number" min="1" max="50" inputmode="numeric" aria-label="끝 DAY" value="${state.home.endDay}">
+                <input id="endDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="끝 DAY" value="${state.home.endDay}">
               </span>
             </div>
             <div class="list-row wm-row-wrap">
@@ -469,7 +469,7 @@
               ${emojiLead('count')}
               <span class="list-row-body"><label class="list-row-title" for="questionCount">문제 수</label></span>
               <span class="list-row-value">
-                <select id="questionCount" class="wm-select">
+                <select id="questionCount" class="field-input-inline">
                   <option value="25" ${state.home.questionCount === '25' ? 'selected' : ''}>25개</option>
                   <option value="50" ${state.home.questionCount === '50' ? 'selected' : ''}>50개</option>
                   <option value="100" ${state.home.questionCount === '100' ? 'selected' : ''}>100개</option>
@@ -480,7 +480,7 @@
             <div class="list-row">
               ${emojiLead('order')}
               <span class="list-row-body"><label class="list-row-title" for="orderMode">출제 순서</label></span>
-              <span class="list-row-value"><select id="orderMode" class="wm-select">${renderSortOptions(state.home.order)}</select></span>
+              <span class="list-row-value"><select id="orderMode" class="field-input-inline">${renderSortOptions(state.home.order)}</select></span>
             </div>
           </div>
           <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button">시험 시작</button>
@@ -726,7 +726,7 @@
             <p class="list-group-head" id="wrongNoteTitle">오답 암기 노트 · ${wrongEntries.length}개</p>
             <div class="wm-sort">
               <label class="wm-sort-label" for="wrongSortMode">정렬</label>
-              <select id="wrongSortMode" class="wm-select">${renderSortOptions(state.wrongOrder)}</select>
+              <select id="wrongSortMode" class="field-input-inline">${renderSortOptions(state.wrongOrder)}</select>
               <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
             </div>
           </div>
