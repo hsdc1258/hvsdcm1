@@ -128,3 +128,57 @@ N30이 그 자리를 대신한다(되살리면 실패).
 이제 **계약 상한과 좌표 전제가 같은 숫자**라서 "스키마상 유효한데 겹치는" 구간은 없어졌다.
 남은 사각지대는 글꼴 폭 차이와 실제 컨테이너 폭이며, 이번 라운드에서는 브라우저 DOM의
 `getBBox()` 전수 계측과 `docs/snapshots/` 정적 스냅샷으로 메웠다(게이트에 상주하지 않는다).
+
+---
+
+# 3라운드 추가 — 라운드 2가 통과시킨 우회 4종
+
+라운드 2 재검토는 "값을 직접 지우는" 반증은 모두 실패시켰지만, **같은 결함을 다른 표현으로
+다시 만든** 네 가지 변형을 통과시켰다(R2-B-1·B-2·B-3·M-1). 아래는 그 넷을 직접 재현해
+**지금은 실패하는지** 확인한 기록이다.
+
+## 수행 방법 (3라운드)
+
+`git archive HEAD` 대신 **작업 트리 사본**을 썼다 — 이번 라운드의 수정이 아직 커밋 전이었고,
+같은 저장소에서 다른 세션이 병렬 작업 중이라 작업 트리 자체를 훼손할 수 없었다.
+`tar`로 `.git`·`node_modules`를 뺀 사본을 스크래치패드에 만들고, 케이스마다 사본을 원본에서
+다시 복사한 뒤 위반시키고 `node scripts/validate.mjs`를 돌렸다.
+기준선: 사본 초기 상태 `Validation passed (13279 checks)`.
+
+## 결과 — 4/4가 이제 실패한다
+
+| # | 라운드 2 판정 | 어떻게 위반시켰나 | 라운드 2 결과 | 지금 | 실패 메시지 |
+|---|---|---|---|---|---|
+| N45 | R2-B-1 | `renderNotebookHero()`에 `const noteAlias = note;`를 넣고 화면에 `${esc(noteAlias.gateGhost)}`를 추가했다 | **통과(13204 checks)** | 실패 3건 | `rendered concept markup holds an empty <p> slot — a template renders a field with no value` / `app.js renders note.gateGhost but NOTEBOOK_FIELD_CONTRACT ... does not declare it` / `concept-sample.html: snapshot is stale` |
+| N46 | R2-B-2 | `layoutFlow()`의 `parts.push(svgIcon(node.icon, 76, middle - 11, 22));` 한 줄만 지웠다 | **통과(13204 checks)** | 실패 7건 | `layoutFlow() painted 0 canvas icons for 5 icon keys (expected 5) — the wide-screen SVG lost its icons` (+ flow를 쓰는 실데이터 5개가 각각 실패) |
+| N47 | R2-B-3 | `renderQuestionMedia()` **앞**에 올바른 모양의 미사용 `<figure class="sm-media">` 문자열을 두고, 실제 `<img>`의 훅을 `data-question-image-broken`으로 바꿨다 | **통과(13204 checks)** | 실패 2건 | `app.js emits <figure class="sm-media"> outside renderQuestionMedia() — the image-fallback contract must have exactly one target` / `the question <img> inside <figure class="sm-media"> must carry the data-question-image attribute the binder selects on` |
+| N48 | R2-M-1 | `docs/snapshots/concept-sample.html`의 키워드 `공유성`을 `낡은공유성`으로 바꿨다 | **통과(13204 checks)** | 실패 1건 | `concept-sample.html: snapshot is stale — it does not match what scripts/snapshot.mjs produces from the current sources (first difference at offset 51364 ...) — run: node scripts/snapshot.mjs` |
+
+## 라운드 1 반증의 회귀 확인 (검사 방식을 바꿨으므로 다시 봤다)
+
+| # | 어떻게 위반시켰나 | 결과 |
+|---|---|---|
+| N49 | `NOTEBOOKS['IV-01'].matrix.title`을 지웠다 | 실패 2건 — `IV-01.matrix.title is read by the renderer but missing (render contract)` / `rendered concept markup holds an empty <h3> slot` |
+| N50 | `ICON_SET = {}`로 바꾸고 `void window.SM_ICONS`만 남겼다 | 실패 52건 — `renderIcon() did not emit the body injected through window.SM_ICONS` 외 kind 7종 × 두 렌더 경로 |
+
+## 이번 라운드에서 검사 방식 자체가 바뀐 것 (3라운드)
+
+- **렌더 필드 도출**: 소스 정규식(`note.x` 모양 매칭) → **렌더러를 실제 데이터로 실행하고
+  데이터를 Proxy로 감싸 읽힌 키를 런타임에 수집**. 표현이 어떻든 `get` 트랩을 지난다.
+  더해서 **출력 마크업**에 `undefined`·`null`·빈 슬롯이 있는지 본다 — 필드명을 몰라도 잡힌다.
+  정규식 도출은 합집합의 **보조**로만 남겼다(실행되지 않는 경로를 덮는다).
+- **아이콘 연결**: radial 하나 → **도출된 kind 전부**를 넓은 화면 SVG 캔버스와 좁은 화면
+  폴백 목록 **양쪽**으로 렌더해 개수를 데이터와 맞춘다. kind 목록은 여전히 도출하고,
+  캔버스가 아이콘을 그리는지 여부만 `DIAGRAM_SHAPE_BOUNDS`에 선언하게 했다.
+- **이미지 폴백 대상**: 소스 전체 첫 매칭 → **`renderQuestionMedia()` 함수 본문 안**으로 한정.
+  같은 모양의 `<figure>`가 함수 밖에 또 있으면 그것 자체를 실패로 본다.
+- **스냅샷**: 손으로 얼린 문서 → **`scripts/snapshot.mjs`의 생성물**. 게이트가 현재 소스로
+  다시 만들어 커밋된 파일과 그대로 대조하므로, 데이터·렌더러·CSS 중 무엇이 바뀌어도
+  재생성 전에는 실패한다.
+
+## 여전히 못 보는 것 (3라운드 갱신)
+
+`docs/plan.md` §13 D-13 "게이트 강화 중단선"에 무엇을 막고 무엇을 안 막기로 했는지 적었다.
+요약하면 **막지 않는 것**은 (1) 계약 파일 자체를 고치는 커밋, (2) 오해를 부르도록 일부러 쓴 코드,
+(3) 사람 눈이 필요한 판정(스크린샷·대비 인상·교과 정확성), (4) 이번 범위 밖 화면(퀴즈·통계)이다.
+이들은 "실수로 회귀가 새는" 경로가 아니므로 1인 정적 사이트의 위협 모델 밖으로 둔다.
