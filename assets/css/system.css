@@ -582,7 +582,9 @@ select.field-input {
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out);
 }
-a.list-row:hover, button.list-row:hover { background: var(--line-faint); text-decoration: none; }
+/* 행 자체가 동작인 경우(링크·버튼·파일 선택 라벨)만 hover를 받는다. */
+a.list-row:hover, button.list-row:hover, label.list-row:hover { background: var(--line-faint); text-decoration: none; }
+label.list-row { cursor: pointer; }
 
 /* 행 사이 인셋 헤어라인. 직접 border-top을 그리지 않는다. */
 .list-row + .list-row::before {

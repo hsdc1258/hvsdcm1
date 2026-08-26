@@ -19,6 +19,20 @@
 
   const { SORT_MODES, escapeHtml, sortStudyItems } = studyUtils;
 
+  // 이모지는 words.js의 WORDMASTER_EMOJI 매핑에서만 나온다 (DESIGN.md §5).
+  // 마크업에는 슬롯만 두고 글리프 리터럴을 박지 않는다. 키는 항상 리터럴로 넘긴다 —
+  // scripts/validate.mjs가 이 호출에서 매핑 키를 도출해 죽은 항목·누락을 잡는다.
+  const EMOJI = window.WORDMASTER_EMOJI || {};
+
+  function emojiLead(key, variant) {
+    const glyph = escapeHtml(EMOJI[key] || EMOJI.app || '');
+    return variant === 'lg'
+      ? `<span class="emoji emoji-lg" aria-hidden="true">${glyph}</span>`
+      : `<span class="list-row-lead"><span class="emoji-box" aria-hidden="true">${glyph}</span></span>`;
+  }
+
+  const pad2 = (value) => String(value).padStart(2, '0');
+
   const state = {
     view: 'home',
     session: null,
@@ -414,82 +428,95 @@
     state.session = null;
     setNav('home');
     const s = summaryStats();
+    const poolSize = getRangeWords(state.home.startDay, state.home.endDay).length;
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">select · solve · retest</span>
-          <h1>시험 설정</h1>
-          <p>DAY 범위와 문항 수를 고르면 바로 주관식 뜻 시험이 시작됩니다.</p>
+        <div class="wm-head-main">
+          ${emojiLead('app', 'lg')}
+          <div>
+            <h1>시험 설정</h1>
+            <p>DAY 범위를 정하면 한국어 뜻 주관식 시험이 시작됩니다.</p>
+          </div>
         </div>
-        <span class="badge badge-accent">DAY ${String(state.home.startDay).padStart(2, '0')}–${String(state.home.endDay).padStart(2, '0')}</span>
+        <span class="badge badge-accent">DAY ${pad2(state.home.startDay)}–${pad2(state.home.endDay)} · ${poolSize.toLocaleString()}단어</span>
       </header>
 
       <div class="wm-layout">
-        <section class="card wm-config" aria-labelledby="rangeTitle">
-          <h2 class="title-3" id="rangeTitle">DAY 범위</h2>
-
-          <div class="wm-range">
-            <div class="field">
-              <label class="field-label" for="startDay">시작</label>
-              <input id="startDay" class="field-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.startDay}">
+        <section class="wm-col" aria-labelledby="rangeHead">
+          <p class="list-group-head" id="rangeHead">출제 범위</p>
+          <div class="list-group">
+            <div class="list-row">
+              ${emojiLead('range')}
+              <span class="list-row-body"><span class="list-row-title">DAY 범위</span></span>
+              <span class="list-row-value wm-range">
+                <input id="startDay" class="wm-num" type="number" min="1" max="50" inputmode="numeric" aria-label="시작 DAY" value="${state.home.startDay}">
+                <span aria-hidden="true">–</span>
+                <input id="endDay" class="wm-num" type="number" min="1" max="50" inputmode="numeric" aria-label="끝 DAY" value="${state.home.endDay}">
+              </span>
             </div>
-            <div class="wm-range-sep" aria-hidden="true">→</div>
-            <div class="field">
-              <label class="field-label" for="endDay">끝</label>
-              <input id="endDay" class="field-input" type="number" min="1" max="50" inputmode="numeric" value="${state.home.endDay}">
-            </div>
-          </div>
-
-          <div class="field">
-            <span class="field-label">빠른 선택</span>
-            <div class="wm-presets">
-              <div class="segmented" role="group" aria-label="DAY 범위 빠른 선택">
-                <button class="segmented-btn preset" type="button" data-start="1" data-end="1">DAY 1</button>
+            <div class="list-row wm-row-wrap">
+              ${emojiLead('preset')}
+              <span class="list-row-body"><span class="list-row-title">빠른 선택</span></span>
+              <span class="segmented wm-presets" role="group" aria-label="DAY 범위 빠른 선택">
+                <button class="segmented-btn preset" type="button" data-start="1" data-end="1">1</button>
                 <button class="segmented-btn preset" type="button" data-start="1" data-end="10">1–10</button>
                 <button class="segmented-btn preset" type="button" data-start="1" data-end="25">1–25</button>
                 <button class="segmented-btn preset" type="button" data-start="26" data-end="50">26–50</button>
                 <button class="segmented-btn preset" type="button" data-start="1" data-end="50">전체</button>
-              </div>
+              </span>
+            </div>
+            <div class="list-row">
+              ${emojiLead('count')}
+              <span class="list-row-body"><label class="list-row-title" for="questionCount">문제 수</label></span>
+              <span class="list-row-value">
+                <select id="questionCount" class="wm-select">
+                  <option value="25" ${state.home.questionCount === '25' ? 'selected' : ''}>25개</option>
+                  <option value="50" ${state.home.questionCount === '50' ? 'selected' : ''}>50개</option>
+                  <option value="100" ${state.home.questionCount === '100' ? 'selected' : ''}>100개</option>
+                  <option value="all" ${state.home.questionCount === 'all' ? 'selected' : ''}>전체</option>
+                </select>
+              </span>
+            </div>
+            <div class="list-row">
+              ${emojiLead('order')}
+              <span class="list-row-body"><label class="list-row-title" for="orderMode">출제 순서</label></span>
+              <span class="list-row-value"><select id="orderMode" class="wm-select">${renderSortOptions(state.home.order)}</select></span>
             </div>
           </div>
-
-          <div class="wm-options">
-            <div class="field">
-              <label class="field-label" for="questionCount">문제 수</label>
-              <select id="questionCount" class="field-input">
-                <option value="25" ${state.home.questionCount === '25' ? 'selected' : ''}>25개</option>
-                <option value="50" ${state.home.questionCount === '50' ? 'selected' : ''}>50개</option>
-                <option value="100" ${state.home.questionCount === '100' ? 'selected' : ''}>100개</option>
-                <option value="all" ${state.home.questionCount === 'all' ? 'selected' : ''}>전체</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field-label" for="orderMode">출제 순서</label>
-              <select id="orderMode" class="field-input">${renderSortOptions(state.home.order)}</select>
-            </div>
-          </div>
-
           <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button">시험 시작</button>
         </section>
 
         <aside class="wm-panel">
-          <section class="card wm-stack">
-            <h2 class="title-3">누적 기록</h2>
-            <div class="wm-metrics">
-              <div class="stat"><span class="stat-value">${s.attempts.toLocaleString()}</span><span class="stat-label">총 풀이</span></div>
-              <div class="stat"><span class="stat-value">${s.accuracy}%</span><span class="stat-label">정답률</span></div>
+          <p class="list-group-head">학습 현황</p>
+          <div class="list-group">
+            <div class="list-row">
+              ${emojiLead('attempts')}
+              <span class="list-row-body"><span class="list-row-title">총 풀이</span></span>
+              <span class="list-row-value">${s.attempts.toLocaleString()}</span>
             </div>
-          </section>
+            <div class="list-row">
+              ${emojiLead('accuracy')}
+              <span class="list-row-body"><span class="list-row-title">정답률</span></span>
+              <span class="list-row-value">${s.accuracy}%</span>
+            </div>
+            <div class="list-row">
+              ${emojiLead('wrong')}
+              <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
+              <span class="list-row-value">${s.wrongCount.toLocaleString()}</span>
+            </div>
+          </div>
 
-          <section class="card wm-review">
-            <span class="kicker">오답 노트</span>
-            <div class="wm-review-count">${s.wrongCount}</div>
-            <p class="text-secondary">보기 → 기억 → 재시험</p>
-            <div class="wm-actions">
-              <button id="wrongStudyBtn" class="btn btn-secondary" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 보고 외우기</button>
-              <button id="reviewBtn" class="btn btn-ghost" type="button" ${s.wrongCount ? '' : 'disabled'}>오답 재시험</button>
-            </div>
-          </section>
+          <p class="list-group-head">오답 다루기</p>
+          <div class="list-group">
+            <button id="wrongStudyBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
+              ${emojiLead('study')}
+              <span class="list-row-body"><span class="list-row-title">오답 보고 외우기</span><span class="list-row-sub">뜻을 보면서 훑습니다</span></span>
+            </button>
+            <button id="reviewBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
+              ${emojiLead('retest')}
+              <span class="list-row-body"><span class="list-row-title">오답 재시험</span><span class="list-row-sub">맞히면 노트에서 빠집니다</span></span>
+            </button>
+          </div>
         </aside>
       </div>
     `;
@@ -520,9 +547,12 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
-          <h1>뜻 시험</h1>
+        <div class="wm-head-main">
+          ${emojiLead('app', 'lg')}
+          <div>
+            <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
+            <h1>뜻 시험</h1>
+          </div>
         </div>
         <span class="badge ${session.wrong ? 'badge-red' : 'badge-green'}">정답 ${session.correct} · 오답 ${session.wrong}</span>
       </header>
@@ -532,9 +562,11 @@
         <div class="wm-track"><div class="wm-fill" style="width:${progress}%"></div></div>
       </section>
 
-      <section class="card card-xl wm-question">
-        <span class="kicker">DAY ${String(item.day).padStart(2, '0')} · 번호 ${String(item.number).padStart(2, '0')}</span>
-        <h2 class="wm-word">${escapeHtml(item.word)}</h2>
+      <section class="card wm-question">
+        <div class="wm-word-line">
+          <h2 class="wm-word">${escapeHtml(item.word)}</h2>
+          <span class="badge">DAY ${pad2(item.day)} · ${pad2(item.number)}</span>
+        </div>
 
         <div class="field">
           <label class="field-label" for="answerInput">한국어 뜻</label>
@@ -566,20 +598,30 @@
     }
   }
 
+  // 채점 결과는 색 패널이 아니라 인셋 그룹 리스트 3행이다 — 문장 하나에 상자 하나를
+  // 두르지 않는다 (DESIGN.md §6). 상태는 행 선두 이모지와 판정 라벨 색이 낸다.
   function renderFeedback(item, result) {
     const isCorrect = result.correct;
     return `
       <div class="wm-feedback ${isCorrect ? 'is-correct' : 'is-wrong'}" role="status">
-        <p class="wm-feedback-head">${isCorrect ? '정답' : '오답'}${result.overridden ? ' · 사용자 정답으로 저장됨' : ''}</p>
-        <div class="wm-feedback-grid">
-          <div class="wm-feedback-cell"><small>교재 정답</small><strong>${escapeHtml(item.meaning)}</strong></div>
-          <div class="wm-feedback-cell"><small>내 답</small><strong>${escapeHtml(result.input || '(빈 답)')}</strong></div>
-        </div>
-        ${!isCorrect && result.input ? `
-          <div class="wm-feedback-actions">
-            <button id="acceptMineBtn" class="btn btn-secondary btn-sm" type="button">내 답도 정답으로 인정</button>
+        <div class="list-group is-inset">
+          <div class="list-row">
+            ${isCorrect ? emojiLead('correct') : emojiLead('incorrect')}
+            <span class="list-row-body"><span class="list-row-title wm-verdict">${isCorrect ? '정답' : '오답'}</span></span>
+            ${result.overridden ? '<span class="list-row-value">내 답을 정답으로 저장함</span>' : ''}
           </div>
-        ` : ''}
+          <div class="list-row">
+            <span class="list-row-body"><span class="list-row-title">교재 정답</span></span>
+            <span class="list-row-value wm-gloss">${escapeHtml(item.meaning)}</span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-body"><span class="list-row-title">내 답</span></span>
+            <span class="list-row-value wm-gloss">${escapeHtml(result.input || '(빈 답)')}</span>
+          </div>
+        </div>
+        ${!isCorrect && result.input
+          ? '<button id="acceptMineBtn" class="btn btn-secondary btn-sm" type="button">내 답도 정답으로 인정</button>'
+          : ''}
       </div>
     `;
   }
@@ -595,43 +637,55 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">${escapeHtml(sessionLabel(session))} 완료</span>
-          <h1>시험 결과</h1>
+        <div class="wm-head-main">
+          ${emojiLead('app', 'lg')}
+          <div>
+            <span class="kicker">${escapeHtml(sessionLabel(session))} 완료</span>
+            <h1>시험 결과</h1>
+          </div>
         </div>
+        <div class="wm-score">${accuracy}%</div>
       </header>
 
-      <section class="card card-xl wm-result">
-        <div>
-          <div class="wm-score">${accuracy}%</div>
-          <p class="text-secondary">${total}문제 중 ${session.correct}개 정답</p>
+      <div class="list-group">
+        <div class="list-row">
+          ${emojiLead('correct')}
+          <span class="list-row-body"><span class="list-row-title">정답</span></span>
+          <span class="list-row-value">${session.correct}</span>
         </div>
+        <div class="list-row">
+          ${emojiLead('incorrect')}
+          <span class="list-row-body"><span class="list-row-title">오답</span></span>
+          <span class="list-row-value">${session.wrong}</span>
+        </div>
+        <div class="list-row">
+          ${emojiLead('count')}
+          <span class="list-row-body"><span class="list-row-title">문항</span></span>
+          <span class="list-row-value">${total}</span>
+        </div>
+      </div>
 
-        <div class="wm-result-stats">
-          <div class="stat"><span class="stat-value">${session.correct}</span><span class="stat-label">정답</span></div>
-          <div class="stat"><span class="stat-value">${session.wrong}</span><span class="stat-label">오답</span></div>
-          <div class="stat"><span class="stat-value">${total}</span><span class="stat-label">문항</span></div>
-        </div>
-
-        <div class="wm-result-actions">
-          <button id="retryWrongBtn" class="btn btn-primary" type="button" ${wrongRows.length ? '' : 'disabled'}>이번 오답만 재시험</button>
-          <button id="resultHomeBtn" class="btn btn-secondary" type="button">시험 설정으로</button>
-        </div>
-      </section>
+      <div class="wm-actions-row">
+        <button id="retryWrongBtn" class="btn btn-primary" type="button" ${wrongRows.length ? '' : 'disabled'}>이번 오답만 재시험</button>
+        <button id="resultHomeBtn" class="btn btn-secondary" type="button">시험 설정으로</button>
+      </div>
 
       ${wrongRows.length ? `
-        <section class="card wm-stack" aria-labelledby="sessionMistakes">
-          <h2 class="title-3" id="sessionMistakes">이번 시험 오답 ${wrongRows.length}개</h2>
-          <div class="wm-mistakes">
+        <section aria-labelledby="sessionMistakes">
+          <p class="list-group-head" id="sessionMistakes">이번 시험 오답 ${wrongRows.length}개</p>
+          <div class="list-group">
             ${wrongRows.map((row) => {
               const item = WORD_BY_ID.get(row.id);
               return `
-                <div class="wm-mistake">
-                  <div class="wm-mistake-term">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2, '0')} · ${String(item.number).padStart(2, '0')}</small></div>
-                  <div class="wm-mistake-gloss">
-                    <span>${escapeHtml(item.meaning)}</span>
-                    <span class="wm-mine">내 답 · ${escapeHtml(row.input || '(빈 답)')}</span>
-                  </div>
+                <div class="list-row wm-mistake">
+                  <span class="list-row-body">
+                    <span class="list-row-title wm-term">${escapeHtml(item.word)}</span>
+                    <span class="list-row-sub">${escapeHtml(item.meaning)}</span>
+                  </span>
+                  <span class="list-row-value wm-meta">
+                    <span>DAY ${pad2(item.day)} · ${pad2(item.number)}</span>
+                    <small>내 답 · ${escapeHtml(row.input || '(빈 답)')}</small>
+                  </span>
                 </div>`;
             }).join('')}
           </div>
@@ -656,59 +710,81 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">account study data</span>
-          <h1>학습 기록</h1>
-          <p>계정 DB에 저장된 풀이 기록입니다. 이 브라우저에는 사본만 보관됩니다.</p>
+        <div class="wm-head-main">
+          ${emojiLead('app', 'lg')}
+          <div>
+            <h1>학습 기록</h1>
+            <p>계정 DB에 저장된 풀이 기록입니다. 이 브라우저에는 사본만 남습니다.</p>
+          </div>
         </div>
         <button id="statsBackBtn" class="btn btn-secondary btn-sm" type="button">시험 설정</button>
       </header>
 
-      <section class="card wm-stack" aria-label="누적 지표">
-        <div class="wm-result-stats">
-          <div class="stat"><span class="stat-value">${s.attempts.toLocaleString()}</span><span class="stat-label">총 풀이</span></div>
-          <div class="stat"><span class="stat-value">${s.accuracy}%</span><span class="stat-label">정답률</span></div>
-          <div class="stat"><span class="stat-value">${s.wrongCount}</span><span class="stat-label">오답 노트</span></div>
-        </div>
-      </section>
-
-      <div class="toolbar" role="group" aria-label="기록 데이터 관리">
-        <div class="toolbar-group">
-          <button id="exportBtn" class="btn btn-secondary btn-sm" type="button">기록 백업</button>
-          <label class="btn btn-secondary btn-sm" for="importFile">기록 복원</label>
-          <input id="importFile" class="wm-file" type="file" accept="application/json,.json">
-        </div>
-        <div class="toolbar-spacer"></div>
-        <button id="resetBtn" class="btn btn-danger btn-sm" type="button">기록 초기화</button>
-      </div>
-
-      <section class="card wm-stack" aria-labelledby="wrongNoteTitle">
-        <div class="view-head">
-          <div>
-            <h2 class="title-3" id="wrongNoteTitle">오답 암기 노트</h2>
-            <p>${wrongEntries.length}개 · 개인 풀이 기록 기준으로 정렬합니다.</p>
+      <div class="wm-layout">
+        <section class="wm-col" aria-labelledby="wrongNoteTitle">
+          <div class="list-group-head-row">
+            <p class="list-group-head" id="wrongNoteTitle">오답 암기 노트 · ${wrongEntries.length}개</p>
+            <div class="wm-sort">
+              <label class="wm-sort-label" for="wrongSortMode">정렬</label>
+              <select id="wrongSortMode" class="wm-select">${renderSortOptions(state.wrongOrder)}</select>
+              <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
+            </div>
           </div>
-          <div class="toolbar-group">
-            <label class="field-label" for="wrongSortMode">정렬</label>
-            <select id="wrongSortMode" class="field-input">${renderSortOptions(state.wrongOrder)}</select>
-            <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
-          </div>
-        </div>
-
-        ${wrongEntries.length ? `
-          <div class="wm-mistakes">
-            ${wrongEntries.slice(0, 200).map(({ item, info }) => `
-              <div class="wm-mistake">
-                <div class="wm-mistake-term">${escapeHtml(item.word)}<small>DAY ${String(item.day).padStart(2, '0')} · 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</small></div>
-                <div class="wm-mistake-gloss">
-                  <span>${escapeHtml(item.meaning)}</span>
-                  <span class="wm-mine">최근 답 · ${escapeHtml(info.lastAnswer || '(빈 답)')}</span>
-                </div>
+          <div class="list-group">
+            ${wrongEntries.length ? wrongEntries.slice(0, 200).map(({ item, info }) => `
+              <div class="list-row wm-mistake">
+                <span class="list-row-body">
+                  <span class="list-row-title wm-term">${escapeHtml(item.word)}</span>
+                  <span class="list-row-sub">${escapeHtml(item.meaning)}</span>
+                </span>
+                <span class="list-row-value wm-meta">
+                  <span>DAY ${pad2(item.day)} · 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</span>
+                  <small>최근 답 · ${escapeHtml(info.lastAnswer || '(빈 답)')}</small>
+                </span>
               </div>
-            `).join('')}
+            `).join('') : '<p class="wm-empty">아직 오답이 없습니다.</p>'}
           </div>
-        ` : '<p class="wm-empty">아직 오답이 없습니다.</p>'}
-      </section>
+        </section>
+
+        <aside class="wm-panel">
+          <p class="list-group-head">누적 지표</p>
+          <div class="list-group">
+            <div class="list-row">
+              ${emojiLead('attempts')}
+              <span class="list-row-body"><span class="list-row-title">총 풀이</span></span>
+              <span class="list-row-value">${s.attempts.toLocaleString()}</span>
+            </div>
+            <div class="list-row">
+              ${emojiLead('accuracy')}
+              <span class="list-row-body"><span class="list-row-title">정답률</span></span>
+              <span class="list-row-value">${s.accuracy}%</span>
+            </div>
+            <div class="list-row">
+              ${emojiLead('wrong')}
+              <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
+              <span class="list-row-value">${s.wrongCount.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <p class="list-group-head">기록 데이터</p>
+          <div class="list-group">
+            <button id="exportBtn" class="list-row list-row-nav" type="button">
+              ${emojiLead('backup')}
+              <span class="list-row-body"><span class="list-row-title">기록 백업</span></span>
+            </button>
+            <label class="list-row list-row-nav" for="importFile">
+              ${emojiLead('restore')}
+              <span class="list-row-body"><span class="list-row-title">기록 복원</span></span>
+            </label>
+            <button id="resetBtn" class="list-row wm-row-danger" type="button">
+              ${emojiLead('reset')}
+              <span class="list-row-body"><span class="list-row-title">기록 초기화</span></span>
+            </button>
+          </div>
+          <!-- 파일 입력은 그룹 밖에 둔다 — 행 사이에 끼우면 .list-row + .list-row 구분선이 끊긴다. -->
+          <input id="importFile" class="wm-file" type="file" accept="application/json,.json">
+        </aside>
+      </div>
     `;
 
     document.getElementById('statsBackBtn').addEventListener('click', renderHome);

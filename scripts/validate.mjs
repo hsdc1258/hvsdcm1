@@ -1340,9 +1340,10 @@ function validateEmojiSystem() {
 // 검사 대상 목록을 하드코딩하지 않는다 (LESSONS 규칙 5): 키는 data.js의 UNITS에서,
 // 비교 대상 글리프는 마크업 스캔에서 도출한다.
 //
-// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🧩가 문화의 속성에 맞는지),
-// 그리고 WordMaster·admin이 같은 방식의 매핑을 도입했을 때의 교차 충돌 —
-// 그 매핑이 생기면 여기와 같은 도출을 3c가 추가해야 한다.
+// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🧩가 문화의 속성에 맞는지).
+// 3c에서 WordMaster가 같은 방식의 매핑(WORDMASTER_EMOJI)을 도입했으므로,
+// 앱 사이의 교차 충돌은 아래 validateWordMasterEmoji() + validateEmojiCrossMaps()가 본다.
+// (admin은 매핑을 두지 않는다 — macOS HIG 어법의 조작 화면이라 이모지를 쓰지 않는다.)
 function validateSmStudyEmoji() {
   const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
   const map = data?.EMOJI;
@@ -1369,10 +1370,7 @@ function validateSmStudyEmoji() {
   }
 
   // 사이트의 다른 표면(HTML 마크업 슬롯)이 이미 쓰는 글리프와 교차 대조한다.
-  const markupGlyphs = new Set();
-  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
-    for (const occurrence of emojiInMarkup(readFileSync(file, 'utf8'))) markupGlyphs.add(occurrence.glyph);
-  }
+  const markupGlyphs = markupGlyphSet();
   check(markupGlyphs.size > 0, 'smstudy: no markup emoji found to cross-check the map against — this check is inert');
   check(markupGlyphs.has(map.app),
     `smstudy: SMSTUDY_DATA.EMOJI.app "${map.app}" is not the glyph the site markup already gives this app`);
@@ -1387,6 +1385,111 @@ function validateSmStudyEmoji() {
     `smstudy: ${APP_SOURCE} must read glyphs from the SMSTUDY_DATA.EMOJI mapping, not from literals`);
   const slots = (appSource.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
   check(slots >= 2, `smstudy: ${APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
+}
+
+// 마크업 슬롯에 실제로 렌더된 그림문자를 모은다 (HTML 4면). 매핑 검사들이 "사이트가
+// 이미 쓰는 글리프"와 교차 대조할 때 쓰는 단일 도출점이다.
+function markupGlyphSet() {
+  const glyphs = new Set();
+  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+    for (const occurrence of emojiInMarkup(readFileSync(file, 'utf8'))) glyphs.add(occurrence.glyph);
+  }
+  return glyphs;
+}
+
+// WordMaster의 이모지도 마크업이 아니라 데이터 매핑(words.js의 WORDMASTER_EMOJI)에서
+// 나온다. smstudy와 같은 사각지대이므로 같은 도출을 여기서 한 벌 더 한다.
+// 검사 대상 키를 하드코딩하지 않는다 (LESSONS 규칙 5): 키는 **렌더러의 호출부**에서
+// 도출한다. 그래서 렌더러가 키를 리터럴로 넘기는지도 함께 강제한다 — 동적 키가 하나라도
+// 있으면 도출이 조용히 뒤처지기 때문이다.
+//
+// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🎲가 출제 순서에 맞는지),
+// 그리고 런타임에 조립한 키(`emojiLead('a' + b)`처럼 리터럴이 아닌 호출) —
+// 후자는 아래 "동적 호출 금지" 검사가 대신 막는다.
+const WORDMASTER_APP_SOURCE = 'WordMaster/assets/js/app.js';
+
+function validateWordMasterEmoji() {
+  const map = evaluateBrowserData('WordMaster/assets/js/words.js', 'WORDMASTER_EMOJI');
+  check(Boolean(map), 'WordMaster: WORDMASTER_EMOJI mapping is missing — row emoji need a single source (DESIGN.md §5)');
+  if (!map) return;
+
+  const source = readFileSync(path.join(ROOT, WORDMASTER_APP_SOURCE), 'utf8');
+  // 렌더러가 매핑을 통해서만 글리프를 얻는지 — 슬롯에 리터럴을 박으면 여기서 걸린다.
+  check(/window\.WORDMASTER_EMOJI/u.test(source),
+    `WordMaster: ${WORDMASTER_APP_SOURCE} must read glyphs from window.WORDMASTER_EMOJI, not from literals`);
+  const slots = (source.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
+  check(slots >= 2, `WordMaster: ${WORDMASTER_APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
+
+  // 키 도출: emojiLead('key') 호출부. 함수 정의를 제외한 모든 호출은 리터럴이어야 한다.
+  const calls = [...source.matchAll(/emojiLead\('([\w-]+)'/gu)].map(([, key]) => key);
+  const dynamic = source.replace(/function emojiLead\(/gu, 'function __def(')
+    .match(/emojiLead\((?!')/gu) || [];
+  check(dynamic.length === 0,
+    `WordMaster: emojiLead() must be called with a literal key (${dynamic.length} dynamic calls) — the mapping derivation depends on it`);
+  const usedKeys = new Set(calls);
+  check(usedKeys.size > 0, 'WordMaster: emoji key derivation from the renderer looks broken');
+
+  const expectedKeys = new Set([...usedKeys, 'app']);
+  for (const key of expectedKeys) {
+    check(typeof map[key] === 'string' && map[key].length > 0,
+      `WordMaster: WORDMASTER_EMOJI has no glyph for "${key}"`);
+  }
+  for (const key of Object.keys(map)) {
+    check(expectedKeys.has(key),
+      `WordMaster: WORDMASTER_EMOJI carries "${key}", which the renderer never asks for — dead mapping`);
+  }
+  const glyphs = Object.values(map);
+  check(new Set(glyphs).size === glyphs.length,
+    'WordMaster: WORDMASTER_EMOJI reuses a glyph for two targets — one target, one emoji (DESIGN.md §5)');
+  for (const [key, glyph] of Object.entries(map)) {
+    check(new RegExp(EMOJI_PATTERN.source, 'u').test(glyph),
+      `WordMaster: WORDMASTER_EMOJI["${key}"] = "${glyph}" is not a pictograph`);
+  }
+
+  // 앱 글리프는 랜딩 타일이 이 앱에 이미 준 글리프와 같아야 하고, 나머지 키는
+  // 사이트 마크업이 다른 대상에 쓰는 글리프를 가져가면 안 된다.
+  const markupGlyphs = markupGlyphSet();
+  check(markupGlyphs.size > 0, 'WordMaster: no markup emoji found to cross-check the map against — this check is inert');
+  check(markupGlyphs.has(map.app),
+    `WordMaster: WORDMASTER_EMOJI.app "${map.app}" is not the glyph the site markup already gives this app`);
+  for (const key of usedKeys) {
+    if (key === 'app') continue;
+    check(!markupGlyphs.has(map[key]),
+      `WordMaster: "${key}" takes "${map[key]}", which already marks another target in the site markup — one emoji, one target (DESIGN.md §5)`);
+  }
+}
+
+// 앱별 매핑이 둘 이상이 되면 각각의 검사만으로는 **앱 사이의 중복 배정**을 못 본다
+// (smstudy의 🔭와 WordMaster의 🔭가 서로 다른 대상을 가리켜도 각자는 통과한다).
+// 여기서 두 매핑을 한 레지스트리로 합쳐 글리프 소유자를 하나로 강제한다.
+// 매핑 목록도 하드코딩하지 않는다 — 아래 sources는 "전역 이름 → 파일" 한 쌍이고,
+// 새 앱이 매핑을 도입하면 그 항목만 늘린다.
+function validateEmojiCrossMaps() {
+  const sources = [
+    { app: 'smstudy', file: 'smstudy/assets/js/data.js', global: 'SMSTUDY_DATA', pick: (data) => data?.EMOJI },
+    { app: 'WordMaster', file: 'WordMaster/assets/js/words.js', global: 'WORDMASTER_EMOJI', pick: (data) => data },
+  ];
+  const owner = new Map();   // glyph -> "app:key"
+  let pairs = 0;
+
+  for (const source of sources) {
+    const map = source.pick(evaluateBrowserData(source.file, source.global)) || {};
+    for (const [key, glyph] of Object.entries(map)) {
+      // 'app' 키는 앱 자신을 가리키는 글리프이고 랜딩 마크업과 의도적으로 공유한다.
+      const target = `${source.app}:${key}`;
+      const known = owner.get(glyph);
+      check(known === undefined,
+        `emoji registry: "${glyph}" is assigned to both ${known} and ${target} — one emoji, one target (DESIGN.md §5)`);
+      owner.set(glyph, target);
+      pairs += 1;
+    }
+  }
+  // 두 앱 매핑이 모두 살아 있는지 — 하나가 사라지면 교차 검사는 무의미해진다.
+  check(sources.length >= 2 && pairs >= 20,
+    `emoji registry: only ${pairs} glyph assignments were derived from ${sources.length} maps — the cross-app check is inert`);
+
+  // 앱 매핑의 글리프가 마크업이 다른 대상에 붙인 글리프와 겹치는지는 각 앱 검사가
+  // 보지만, 두 앱의 'app' 글리프가 서로 같아지는 경우는 위 레지스트리가 잡는다.
 }
 
 function validateBrandName() {
@@ -1518,6 +1621,8 @@ validateDesignTokens();
 validateBrandName();
 validateEmojiSystem();
 validateSmStudyEmoji();
+validateWordMasterEmoji();
+validateEmojiCrossMaps();
 validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
