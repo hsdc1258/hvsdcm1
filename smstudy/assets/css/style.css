@@ -489,29 +489,52 @@ ul.sm-d-items {
 }
 .sm-d-items li::marker { color: var(--line-strong); }
 
-/* ---- flow — 세로 단계 조판 (왼쪽 판정 기준 / 오른쪽 결과) ---- */
+/* ---- flow — 판별 절차 스테퍼 (번호 거터 + 연결선) ----
+   이전 조판(왼쪽 라벨 / 오른쪽 결과의 두 열 grid)은 넓은 카드에서 두 열 사이가 빈
+   벌판이 되고, 라벨 caption·항목 micro가 전부 잿빛이라 와이어프레임처럼 보였다.
+   번호를 고정 폭 거터(--space-5)에 세우고 그 아래로 얇은 연결선을 내려 "위에서
+   아래로 차례로 판정한다"를 조판이 직접 말하게 한다. 항목은 라벨 바로 아래
+   들여쓰기로 붙인다. 화살표·뱃지·상자는 여전히 쓰지 않는다 (DESIGN.md §4). */
 
 .sm-d-flow {
   display: grid;
   gap: 0;
   margin: 0;
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--line-strong);
+  padding: 0;
   list-style: none;
 }
-/* 좌우 두 열의 **첫 줄 baseline을 맞춘다.** 왼쪽 라벨(.sm-d-head, caption)과 오른쪽 항목
-   (.sm-d-items li, micro)은 글자 크기가 달라, 위 정렬(start)로는 첫 줄이 서로 어긋났다. */
 .sm-d-flow > .sm-d-node {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
-  align-items: baseline;
-  gap: var(--space-3) var(--space-4);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--line-faint);
+  position: relative;
+  padding: 0 0 var(--space-4);
 }
-.sm-d-flow > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
 .sm-d-flow > .sm-d-node:last-child { padding-bottom: 0; }
-.sm-d-flow .sm-d-items { margin-top: 0; }
+/* 단계를 잇는 연결선 — 번호 밑에서 다음 번호 직전까지, 번호 거터 중앙을 지난다. */
+.sm-d-flow > .sm-d-node::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--fs-body-sm) * 1.4 + var(--space-1));
+  bottom: var(--space-1);
+  left: calc(var(--space-5) / 2);
+  width: 1px;
+  background: var(--line-strong);
+}
+.sm-d-flow > .sm-d-node:last-child::before { content: none; }
+.sm-d-flow .sm-d-head {
+  gap: var(--space-2);
+  font-size: var(--fs-body-sm);
+}
+/* 번호는 라벨과 같은 크기로 — 거터 중앙에 서야 연결선이 그 밑으로 이어진다. */
+.sm-d-flow .sm-d-n {
+  width: var(--space-5);
+  min-width: 0;
+  font-size: inherit;
+  text-align: center;
+}
+.sm-d-flow .sm-d-items {
+  margin-top: var(--space-1);
+  margin-left: calc(var(--space-5) + var(--space-2));
+}
+.sm-d-flow .sm-d-items li { font-size: var(--fs-caption); }
 
 /* ---- timeline — 그리드 열 (교대 배치 없음) ---- */
 
@@ -634,7 +657,6 @@ ul.sm-d-items {
 /* 좁은 컨테이너·좁은 뷰포트에서 같은 조판으로 접는다. 장식 SVG는 숨기고, 열은 행으로 편다. */
 @container smdiagram (max-width: 420px) {
   .sm-d-art { display: none; }
-  .sm-d-flow > .sm-d-node { grid-template-columns: minmax(0, 1fr); }
   .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
   .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
   .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
@@ -645,7 +667,6 @@ ul.sm-d-items {
 /* 컨테이너 쿼리를 못 쓰는 환경을 위한 뷰포트 기준 안전망 (같은 조판). */
 @media (max-width: 460px) {
   .sm-d-art { display: none; }
-  .sm-d-flow > .sm-d-node { grid-template-columns: minmax(0, 1fr); }
   .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
   .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
   .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
