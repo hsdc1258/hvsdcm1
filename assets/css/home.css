@@ -1,12 +1,16 @@
 /* ==========================================================================
-   home.css — 랜딩 전용 레이아웃. 토큰은 system.css만 소비한다(:root 정의 금지, C-3).
+   home.css — 랜딩 전용 레이아웃.
+   레퍼런스: apple.com 다크 제품 페이지 (DESIGN.md §1).
+   짧은 헤드라인 → 한 줄 보조문 → 절제된 강조. 섹션 하나에 주장 하나.
+   토큰은 system.css만 소비한다(:root 정의 금지). 프리미티브를 다시 만들지 않는다 —
+   그룹 리스트·카드·뱃지·버튼은 system.css의 것을 그대로 쓴다.
    ========================================================================== */
 
 /* ---- 상단바: 랜딩 전용 요소 ---- */
 
 .menu-button {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex: none;
   display: grid;
   place-items: center;
@@ -19,7 +23,7 @@
 .menu-button:hover { background: var(--line-faint); }
 .menu-button span {
   grid-area: 1 / 1;
-  width: 18px;
+  width: 17px;
   height: 1.5px;
   border-radius: 1px;
   background: var(--text);
@@ -60,13 +64,14 @@ body.logged .topbar-login { display: none; }
   bottom: 0;
   left: 0;
   z-index: 120;
-  width: min(320px, 86vw);
+  width: min(304px, 86vw);
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-6) var(--space-5);
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-4);
   background: var(--surface);
   border-right: 1px solid var(--line-faint);
+  box-shadow: var(--shadow-2);   /* 떠 있는 오버레이 — §4 예외 */
   transform: translateX(-102%);
   visibility: hidden;
   transition: transform var(--dur-med) var(--ease-swift), visibility 0s linear var(--dur-med);
@@ -77,39 +82,22 @@ body.logged .topbar-login { display: none; }
   transition: transform var(--dur-med) var(--ease-swift);
 }
 
-.drawer-head { display: grid; gap: var(--space-1); }
-.drawer-head .brand { font-size: 1.25rem; }
-.drawer-tagline { font-size: var(--fs-caption); color: var(--text-3); }
+.drawer-head { padding: var(--space-1) var(--space-2) 0; }
+.drawer-head .brand { font-size: 1.1875rem; }
 
 .drawer-study { display: none; }
 .drawer.logged .drawer-study { display: grid; gap: var(--space-2); }
-
-.drawer-app { padding: 10px 12px; }
-/* 앱마다 색을 달리하면 한 화면의 강조색이 갈라진다 — 강조는 --accent 1색이다 (§3). */
-.drawer-app-glyph {
-  width: 36px;
-  height: 36px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-s);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 800;
-  font-size: .9375rem;
-}
-.drawer-app-copy { display: grid; line-height: 1.35; }
-.drawer-app-copy strong { color: var(--text); font-size: var(--fs-body); }
-.drawer-app-copy small { color: var(--text-3); font-size: var(--fs-micro); }
+/* 드로어 안의 그룹은 --surface 위에 놓이므로 한 단 올려 경계를 만든다. */
+.drawer-study .list-group { background: var(--surface-2); border-color: transparent; }
 
 .drawer-bottom {
   margin-top: auto;
   display: grid;
   gap: var(--space-1);
   border-top: 1px solid var(--line-faint);
-  padding-top: var(--space-4);
+  padding-top: var(--space-3);
 }
-.drawer-social { display: flex; gap: var(--space-2); }
+.drawer-social { display: flex; gap: var(--space-1); }
 .drawer-logout { display: none; color: var(--red); }
 .drawer-logout:hover { color: var(--red); background: var(--red-soft); }
 .drawer.logged .drawer-logout { display: flex; }
@@ -117,255 +105,133 @@ body.logged .topbar-login { display: none; }
 /* ---- 히어로 ---- */
 
 .hero {
-  padding: calc(var(--topbar-h) + clamp(72px, 4rem + 9vw, 176px)) 0 var(--section-gap);
+  padding: calc(var(--topbar-h) + clamp(56px, 3rem + 6vw, 120px)) 0 var(--section-gap);
 }
 
 .hero-inner {
   display: grid;
   justify-items: center;
   text-align: center;
-  gap: var(--space-5);
+  gap: var(--space-3);
 }
 
-.hero-kicker { color: var(--text-3); }
-
-/* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠하므로
-   forced-colors 우회 블록(background-image 제거 대비)도 더는 필요하지 않다. */
+/* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠한다. */
 .hero-title {
   max-width: 14ch;
   color: var(--text);
 }
 
 /* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
-.hero-title[data-user] { font-size: clamp(2.25rem, 1.7rem + 3.6vw, 4.25rem); }
+/* 로그인 후에는 "Welcome," + 사용자명 두 줄이 된다 — 행간을 한 단 더 연다. */
+.hero-title[data-user] { font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem); line-height: 1.2; max-width: 18ch; }
 .hero-title .welcome-user { display: block; }
 .hero-title a.welcome-user { color: var(--accent); }
 .hero-title a.welcome-user:hover { text-decoration: underline; }
 
 /* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
-.hero-sub { max-width: 24em; }
+.hero-sub { max-width: 26em; }
 /* 미로그인 소개 문구는 로그인 후 숨김 (학습 카피가 템플릿에서 주입된다) */
-body.logged .hero-sub-guest { display: none; }
+body.logged .hero-sub-guest,
+body.logged .hero-browse-guest { display: none; }
 
 .hero-actions {
-  margin-top: var(--space-3);
+  margin-top: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: var(--space-4) var(--space-5);
+  gap: var(--space-3) var(--space-5);
 }
 
-/* 로그인 상태 전환: 시작 버튼 ↔ 앱 바로가기 */
+/* 로그인 상태 전환: 로그인 버튼 ↔ 앱 바로가기 */
 .account .account-app { display: none; }
 .account.logged .account-app { display: inline-flex; }
 .account.logged #loginBtn { display: none; }
 
-/* ---- 쇼케이스 (제품 섹션) ---- */
+/* ---- 섹션 리듬 ---- */
 
-.showcase {
-  /* #apps 앵커 스크롤 시 고정 상단바에 첫 카드가 가리지 않게 (N-1) */
+.section {
+  /* #apps 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
   scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
-  display: grid;
-  gap: clamp(20px, 3vw, 36px);
-  width: min(var(--container-wide), 100% - clamp(24px, 5vw, 56px));
-  margin-inline: auto;
   padding-bottom: var(--section-gap);
 }
+.section-last { padding-bottom: var(--space-9); }
 
-.feature {
+.section-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(28px, 5vw, 72px);
-  /* 시작점을 --surface로 — .feature-sub(--text-2 본문)가 밝은 끝에서도 7.03:1 ≥ 7:1 (plan §5, M-4) */
-  background: linear-gradient(160deg, var(--surface), var(--bg-alt) 70%);
-  overflow: hidden;
-}
-
-.feature-flip .feature-copy { order: 2; }
-.feature-flip .feature-visual { order: 1; }
-
-.feature-copy { display: grid; gap: var(--space-5); justify-items: start; }
-/* 섹션마다 색을 바꾸지 않는다 — 강조는 뷰당 1색 (§3). */
-.feature-kicker { color: var(--accent); }
-/* 헤드라인 줄 수는 <br>가 아니라 폭으로 잡는다 (§2). */
-.feature-copy h2 { max-width: 12em; }
-.feature-sub { max-width: 30em; }
-.feature-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-
-@media (max-width: 860px) {
-  .feature { grid-template-columns: minmax(0, 1fr); }
-  .feature-flip .feature-copy { order: 1; }
-  .feature-flip .feature-visual { order: 2; }
-}
-
-/* ---- 쇼케이스 비주얼: WordMaster 플래시카드 스택 ---- */
-
-.feature-visual { display: grid; place-items: center; min-height: 300px; }
-
-.visual-word { position: relative; }
-.word-card {
-  grid-area: 1 / 1;
-  width: min(280px, 78%);
-  aspect-ratio: 5 / 3.4;
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
-  box-shadow: var(--shadow-2);
-}
-.word-card-back { transform: rotate(-7deg) translate(-26px, 10px); opacity: .35; }
-.word-card-mid { transform: rotate(4deg) translate(20px, 2px); opacity: .6; }
-.word-card-front {
-  display: grid;
-  align-content: center;
   justify-items: center;
-  gap: var(--space-2);
-  background: var(--surface-2);
   text-align: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
 }
-.word-day {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--ls-caps);
-  color: var(--text-3);
-}
-.word-term {
-  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.2rem);
-  font-weight: 800;
-  letter-spacing: var(--ls-title);
-}
-.word-answer {
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--green);
-}
-.word-answer b { font-weight: 800; }
+.section-head h2 { max-width: 16em; }
+.section-sub { max-width: 30em; }
 
-/* ---- 쇼케이스 비주얼: 사회·문화 기출 시트 ---- */
+/* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
+.section-last .section-head {
+  justify-items: start;
+  text-align: left;
+  margin-bottom: var(--space-3);
+}
 
-.society-sheet {
-  width: min(320px, 84%);
+/* ---- 앱 타일 ---- */
+
+.tile-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.tile {
+  display: grid;
+  align-content: start;
   gap: var(--space-3);
   padding: var(--space-5);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
-  box-shadow: var(--shadow-2);
 }
-.society-tag {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--ls-caps);
-  color: var(--text-3);
+.tile-mark { margin-bottom: var(--space-1); }
+.tile-line {
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-snug);
+  max-width: 32em;
 }
-.society-stem {
-  height: 10px;
-  border-radius: 5px;
-  background: var(--surface-3);
-}
-.society-stem-short { width: 62%; }
-.society-choices {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-}
-.society-choices li {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-}
-.society-choices .is-picked {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 700;
-}
-.society-verdict {
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--accent);
-}
-
-/* ---- 동기화 섹션 ---- */
-
-.sync { padding-bottom: var(--section-gap); }
-.sync-head {
-  display: grid;
-  gap: var(--space-4);
-  text-align: center;
-  justify-items: center;
-  margin-bottom: var(--space-8);
-}
-.sync-head h2 { max-width: 10em; }
-/* 카드 3연속 대신 구분선 — 정보의 경계가 필요한 자리가 아니다 (§4). */
-.sync-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-5) var(--space-6);
-}
-.sync-point {
-  display: grid;
-  gap: var(--space-2);
-  align-content: start;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-.sync-point p { max-width: 26em; }
+.tile-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tile .link-arrow { margin-top: var(--space-1); font-size: var(--fs-body-sm); }
 
 @media (max-width: 760px) {
-  .sync-grid { grid-template-columns: minmax(0, 1fr); }
+  .tile-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ---- 수치 밴드 ---- */
+/* ---- 수치 줄 ---- */
 
-.stats-band {
-  border-top: 1px solid var(--line-faint);
-  border-bottom: 1px solid var(--line-faint);
-  background: var(--bg-alt);
-  padding: var(--space-8) 0;
-  margin-bottom: var(--section-gap);
-}
-.stats-inner {
+.stats-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-5);
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-faint);
   text-align: center;
 }
-.stats-inner .stat-value { font-size: var(--fs-display); }
+.stats-row .stat-value { font-size: var(--fs-title-1); }
 
-@media (max-width: 560px) {
-  .stats-inner { grid-template-columns: minmax(0, 1fr); }
-}
+/* ---- 연락 리스트: 브랜드 마크를 이모지 슬롯에 담는다 ---- */
 
-/* ---- 소셜 ---- */
-
-.socials { padding-bottom: var(--section-gap); }
-.socials-row {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-4);
-}
+.emoji-box svg { width: 17px; height: 17px; color: var(--text-2); }
+.list-row:hover .emoji-box svg { color: var(--text); }
 
 /* ---- 푸터 ---- */
 
 .footer {
   border-top: 1px solid var(--line-faint);
-  padding: var(--space-6) 0;
+  padding: var(--space-5) 0;
 }
 .footer-inner {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
-.footer-brand { font-size: var(--fs-body); }
+.footer-brand { font-size: var(--fs-caption); }
 .footer-nav { display: flex; gap: var(--space-4); }
 .footer-nav a { font-size: var(--fs-caption); color: var(--text-3); }
 .footer-nav a:hover { color: var(--text); text-decoration: none; }
@@ -374,5 +240,5 @@ body.logged .hero-sub-guest { display: none; }
 /* ---- 로그인 시트 ---- */
 
 .login-sheet { display: grid; gap: var(--space-4); }
-.login-sheet .sheet-sub { margin: calc(var(--space-2) * -1) 0 var(--space-2); }
-.login-submit { margin-top: var(--space-2); }
+.login-sheet .sheet-sub { margin: calc(var(--space-2) * -1) 0 var(--space-1); }
+.login-submit { margin-top: var(--space-1); }

@@ -117,8 +117,11 @@
   --fs-caption: .875rem;                                       /* 14 */
   --fs-micro: .75rem;                                          /* 12 */
 
-  --lh-display: 1.06;
-  --lh-title: 1.2;
+  /* 한글 행간 하한: Apple SD Gothic Neo·Pretendard는 ascent+descent가 ~1.15em이라
+     lh 1.05~1.06(애플 영문 디스플레이 값)에서는 두 줄짜리 한글 헤드라인의 잉크가
+     맞닿는다. 디스플레이도 1.14 밑으로 내리지 않는다. */
+  --lh-display: 1.14;
+  --lh-title: 1.26;
   --lh-snug: 1.35;
   --lh-body: 1.5;
   --ls-display: -.022em;

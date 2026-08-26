@@ -44,19 +44,24 @@
   <aside id="drawer" class="drawer" aria-label="주 메뉴">
     <div class="drawer-head">
       <span class="brand">hvsdcm</span>
-      <template data-study><p class="drawer-tagline">Study, distilled.</p></template>
     </div>
     <template data-study>
       <div class="drawer-study">
-        <p class="sidebar-label">학습</p>
-        <nav class="sidebar-group" aria-label="학습 도구">
-          <a class="sidebar-item drawer-app" href="/WordMaster/">
-            <span class="drawer-app-glyph" aria-hidden="true">W</span>
-            <span class="drawer-app-copy"><strong>WordMaster</strong><small>DAY 1–50 · 2,000단어</small></span>
+        <p class="list-group-head">학습</p>
+        <nav class="list-group" aria-label="학습 도구">
+          <a class="list-row list-row-nav" href="/WordMaster/">
+            <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">📗</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">WordMaster</span>
+              <span class="list-row-sub">DAY 1–50 · 2,000단어</span>
+            </span>
           </a>
-          <a class="sidebar-item drawer-app" href="/smstudy/">
-            <span class="drawer-app-glyph" aria-hidden="true">社</span>
-            <span class="drawer-app-copy"><strong>사회·문화</strong><small>13중단원 · 기출 78문항</small></span>
+          <a class="list-row list-row-nav" href="/smstudy/">
+            <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">📘</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">사회·문화</span>
+              <span class="list-row-sub">13중단원 · 기출 78문항</span>
+            </span>
           </a>
         </nav>
       </div>
@@ -77,116 +82,121 @@
   <main id="main" tabindex="-1">
     <section class="hero" aria-labelledby="welcomeTitle">
       <div class="container hero-inner">
-        <template data-study><p class="kicker hero-kicker">두 개의 학습 앱 · 하나의 계정</p></template>
         <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
-        <p class="hero-sub text-body-lg text-secondary hero-sub-guest">개인 웹사이트입니다. 소식과 연락은 아래 프로필로.</p>
-        <template data-study><p class="hero-sub text-body-lg text-secondary">범위를 고르고, 문제를 풀고, 틀린 것만 다시 봅니다. 학습 기록은 어느 기기에서든 이어집니다.</p></template>
+        <p class="hero-sub text-body-lg text-secondary hero-sub-guest">개인 웹사이트입니다.</p>
+        <template data-study><p class="hero-sub text-body-lg text-secondary">범위를 고르고, 풀고, 틀린 것만 다시 봅니다.</p></template>
         <div id="account" class="account hero-actions">
           <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
+          <a class="link-arrow hero-browse-guest" href="#contact"><span>프로필 보기</span></a>
           <template data-study>
-            <a class="link-arrow hero-browse" href="#apps">학습 앱 둘러보기</a>
-            <a class="btn btn-secondary btn-lg account-app" href="/WordMaster/">WordMaster 열기</a>
-            <a class="btn btn-secondary btn-lg account-app" href="/smstudy/">사회·문화 열기</a>
+            <a class="btn btn-secondary btn-lg account-app" href="/WordMaster/">WordMaster</a>
+            <a class="btn btn-secondary btn-lg account-app" href="/smstudy/">사회·문화</a>
           </template>
         </div>
       </div>
     </section>
 
     <template data-study>
-    <section id="apps" class="showcase" aria-label="학습 앱">
-      <article class="feature card-xl reveal" aria-labelledby="featWordTitle">
-        <div class="feature-copy">
-          <p class="kicker feature-kicker">WordMaster</p>
-          <h2 id="featWordTitle" class="display">2,000단어를, 오답이 사라질 때까지.</h2>
-          <p class="feature-sub text-secondary">DAY 1–50에서 범위를 고르면 시험이 만들어집니다.
-            주관식 답은 표기가 달라도 정규화해서 채점하고, 틀린 단어만 다시 시험을 봅니다.</p>
-          <div class="feature-meta">
-            <span class="badge">DAY 1–50</span>
-            <span class="badge">2,000단어</span>
-            <span class="badge">정규화 채점</span>
-            <span class="badge">오답만 재시험</span>
-          </div>
-          <a class="link-arrow" href="/WordMaster/">WordMaster 시작하기</a>
-        </div>
-        <div class="feature-visual visual-word" aria-hidden="true">
-          <div class="word-card word-card-back"></div>
-          <div class="word-card word-card-mid"></div>
-          <div class="word-card word-card-front">
-            <span class="word-day">DAY 07 · 23/40</span>
-            <span class="word-term">resilient</span>
-            <span class="word-answer">회복력 있는 <b>✓</b></span>
-          </div>
-        </div>
-      </article>
+    <section id="apps" class="section reveal" aria-labelledby="appsTitle">
+      <div class="container">
+        <header class="section-head">
+          <h2 id="appsTitle" class="display">두 개의 앱. 하나의 계정.</h2>
+          <p class="section-sub text-body-lg text-secondary">범위는 직접 고르고, 채점과 복습은 앱이 맡습니다.</p>
+        </header>
+        <div class="tile-grid">
+          <article class="tile card" aria-labelledby="tileWordTitle">
+            <span class="emoji emoji-lg tile-mark" aria-hidden="true">📗</span>
+            <h3 id="tileWordTitle" class="title-2">WordMaster</h3>
+            <p class="tile-line text-secondary">DAY 1–50에서 범위를 고르면 시험이 만들어집니다. 표기가 달라도 정규화해 채점하고, 틀린 단어만 다시 냅니다.</p>
+            <div class="tile-meta">
+              <span class="badge">2,000단어</span>
+              <span class="badge">정규화 채점</span>
+            </div>
+            <a class="link-arrow" href="/WordMaster/"><span>WordMaster 열기</span></a>
+          </article>
 
-      <article class="feature feature-flip card-xl reveal" aria-labelledby="featSocietyTitle">
-        <div class="feature-copy">
-          <p class="kicker feature-kicker">사회·문화</p>
-          <h2 id="featSocietyTitle" class="display">기출 78문항, 개념 노트 13장.</h2>
-          <p class="feature-sub text-secondary">평가원 기출을 원본 지문 그대로 풀고,
-            해설에서 정답 근거와 오답 원인을 확인합니다. 취약한 개념은 노트로 되돌아가 회독합니다.</p>
-          <div class="feature-meta">
-            <span class="badge">4단원 · 13중단원</span>
-            <span class="badge">KICE 기출 78</span>
-            <span class="badge">개념 노트</span>
-            <span class="badge">취약 개념 퀴즈</span>
-          </div>
-          <a class="link-arrow" href="/smstudy/">사회·문화 시작하기</a>
-        </div>
-        <div class="feature-visual visual-society" aria-hidden="true">
-          <div class="society-sheet">
-            <span class="society-tag">평가원 기출 · 원본 지문</span>
-            <span class="society-stem"></span>
-            <span class="society-stem society-stem-short"></span>
-            <ol class="society-choices">
-              <li>①</li><li>②</li><li class="is-picked">③</li><li>④</li><li>⑤</li>
-            </ol>
-            <span class="society-verdict">정답 · 근거 확인 →</span>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section class="sync reveal" aria-labelledby="syncTitle">
-      <div class="container-text sync-head">
-        <p class="kicker">계정 동기화</p>
-        <h2 id="syncTitle" class="display">기록은 계정에. 기기는 자유롭게.</h2>
-        <p class="text-body-lg text-secondary">로그인 한 번이면 진행도·오답노트·통계가 계정에 저장됩니다.
-          PC에서 풀던 범위를 휴대폰에서 그대로 이어서 봅니다.</p>
-      </div>
-      <div class="container sync-grid">
-        <div class="sync-point">
-          <h3 class="title-3">즉시 저장</h3>
-          <p class="text-secondary">문제를 풀 때마다 진행도가 서버로 올라갑니다. 저장 버튼은 없습니다.</p>
-        </div>
-        <div class="sync-point">
-          <h3 class="title-3">오답 회독</h3>
-          <p class="text-secondary">틀린 항목은 오답률순으로 정렬되어, 약한 것부터 다시 만납니다.</p>
-        </div>
-        <div class="sync-point">
-          <h3 class="title-3">어디서나</h3>
-          <p class="text-secondary">브라우저만 있으면 됩니다. 설치도, 동기화 버튼도 필요 없습니다.</p>
+          <article class="tile card" aria-labelledby="tileSocietyTitle">
+            <span class="emoji emoji-lg tile-mark" aria-hidden="true">📘</span>
+            <h3 id="tileSocietyTitle" class="title-2">사회·문화</h3>
+            <p class="tile-line text-secondary">평가원 기출을 원본 지문 그대로 풀고, 해설에서 정답 근거와 오답 원인을 확인합니다. 약한 개념은 노트로 돌아갑니다.</p>
+            <div class="tile-meta">
+              <span class="badge">기출 78문항</span>
+              <span class="badge">개념 노트 13장</span>
+            </div>
+            <a class="link-arrow" href="/smstudy/"><span>사회·문화 열기</span></a>
+          </article>
         </div>
       </div>
     </section>
 
-    <section class="stats-band reveal" aria-label="핵심 수치">
-      <div class="container stats-inner">
-        <div class="stat"><span class="stat-value">2,078</span><span class="stat-label">학습 항목</span></div>
-        <div class="stat"><span class="stat-value">2</span><span class="stat-label">학습 앱</span></div>
-        <div class="stat"><span class="stat-value">1</span><span class="stat-label">동기화 계정</span></div>
+    <section class="section reveal" aria-labelledby="syncTitle">
+      <div class="container-text">
+        <header class="section-head">
+          <h2 id="syncTitle" class="display">기록은 계정에.</h2>
+          <p class="section-sub text-body-lg text-secondary">로그인 한 번이면 진행도·오답·통계가 기기를 따라옵니다.</p>
+        </header>
+        <div class="list-group">
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">💾</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">즉시 저장</span>
+              <span class="list-row-sub">문항을 풀 때마다 서버로 올라갑니다. 저장 버튼은 없습니다.</span>
+            </span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">🔁</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">오답 회독</span>
+              <span class="list-row-sub">틀린 항목은 오답률순으로 다시 나옵니다.</span>
+            </span>
+          </div>
+          <div class="list-row">
+            <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">📱</span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">어디서나</span>
+              <span class="list-row-sub">브라우저만 있으면 됩니다. 설치도 동기화 버튼도 없습니다.</span>
+            </span>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat"><span class="stat-value">2,078</span><span class="stat-label">항목</span></div>
+          <div class="stat"><span class="stat-value">2</span><span class="stat-label">앱</span></div>
+          <div class="stat"><span class="stat-value">1</span><span class="stat-label">계정</span></div>
+        </div>
       </div>
     </section>
     </template>
 
-    <section class="socials reveal" aria-label="소셜 프로필">
-      <div class="container socials-row">
-        <a class="icon-link icon-link-lg" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-        </a>
-        <a class="icon-link icon-link-lg" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
-        </a>
+    <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
+      <div class="container-text">
+        <header class="section-head">
+          <h2 id="contactTitle" class="title-1">연락</h2>
+        </header>
+        <div class="list-group">
+          <a class="list-row list-row-nav" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
+            <span class="list-row-lead">
+              <span class="emoji-box" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              </span>
+            </span>
+            <span class="list-row-body">
+              <span class="list-row-title">Discord</span>
+              <span class="list-row-sub">hvsdcm</span>
+            </span>
+          </a>
+          <a class="list-row list-row-nav" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
+            <span class="list-row-lead">
+              <span class="emoji-box" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
+              </span>
+            </span>
+            <span class="list-row-body">
+              <span class="list-row-title">Instagram</span>
+              <span class="list-row-sub">hvsdcm.exe</span>
+            </span>
+          </a>
+        </div>
+        <p class="list-group-foot">두 링크 모두 새 창으로 열립니다.</p>
       </div>
     </section>
   </main>
@@ -217,7 +227,7 @@
         <input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
       </div>
       <div id="loginError" class="field-error" role="alert"></div>
-      <button class="btn btn-primary login-submit" type="submit">계속</button>
+      <button class="btn btn-primary btn-lg login-submit" type="submit">계속</button>
       <button class="btn btn-ghost" type="button" id="closeLogin">닫기</button>
     </form>
   </div>
