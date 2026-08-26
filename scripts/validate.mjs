@@ -1334,6 +1334,61 @@ function validateEmojiSystem() {
   check(labelToGlyph.size > 0, 'emoji system: no emoji↔label pair could be derived — the consistency check is inert');
 }
 
+// smstudy의 단원 이모지는 마크업이 아니라 데이터 매핑(SMSTUDY_DATA.EMOJI)에서 나온다.
+// 그것이 §5.2가 적어 둔 위 검사의 사각지대다 — 위 스캔은 "슬롯을 거쳤는가"만 보고
+// 매핑 자체의 일대일성은 못 본다. 여기서 매핑을 소스에서 도출해 직접 잠근다.
+// 검사 대상 목록을 하드코딩하지 않는다 (LESSONS 규칙 5): 키는 data.js의 UNITS에서,
+// 비교 대상 글리프는 마크업 스캔에서 도출한다.
+//
+// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🧩가 문화의 속성에 맞는지),
+// 그리고 WordMaster·admin이 같은 방식의 매핑을 도입했을 때의 교차 충돌 —
+// 그 매핑이 생기면 여기와 같은 도출을 3c가 추가해야 한다.
+function validateSmStudyEmoji() {
+  const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
+  const map = data?.EMOJI;
+  check(Boolean(map), 'smstudy: SMSTUDY_DATA.EMOJI mapping is missing — unit emoji need a single source (DESIGN.md §5)');
+  if (!map) return;
+
+  const subunitIds = (data.UNITS || []).flatMap((unit) => unit.subs.map((sub) => sub.id));
+  const expectedKeys = new Set([...subunitIds, 'app']);
+  check(subunitIds.length > 0, 'smstudy: subunit id derivation for the emoji map looks broken');
+  for (const id of expectedKeys) {
+    check(typeof map[id] === 'string' && map[id].length > 0,
+      `smstudy: SMSTUDY_DATA.EMOJI has no glyph for "${id}"`);
+  }
+  for (const key of Object.keys(map)) {
+    check(expectedKeys.has(key),
+      `smstudy: SMSTUDY_DATA.EMOJI carries "${key}", which is neither a subunit id nor "app" — dead mapping`);
+  }
+  const glyphs = Object.values(map);
+  check(new Set(glyphs).size === glyphs.length,
+    'smstudy: SMSTUDY_DATA.EMOJI reuses a glyph for two targets — one target, one emoji (DESIGN.md §5)');
+  for (const [key, glyph] of Object.entries(map)) {
+    check(new RegExp(EMOJI_PATTERN.source, 'u').test(glyph),
+      `smstudy: SMSTUDY_DATA.EMOJI["${key}"] = "${glyph}" is not a pictograph`);
+  }
+
+  // 사이트의 다른 표면(HTML 마크업 슬롯)이 이미 쓰는 글리프와 교차 대조한다.
+  const markupGlyphs = new Set();
+  for (const file of walk(ROOT, (item) => item.endsWith('.html'))) {
+    for (const occurrence of emojiInMarkup(readFileSync(file, 'utf8'))) markupGlyphs.add(occurrence.glyph);
+  }
+  check(markupGlyphs.size > 0, 'smstudy: no markup emoji found to cross-check the map against — this check is inert');
+  check(markupGlyphs.has(map.app),
+    `smstudy: SMSTUDY_DATA.EMOJI.app "${map.app}" is not the glyph the site markup already gives this app`);
+  for (const id of subunitIds) {
+    check(!markupGlyphs.has(map[id]),
+      `smstudy: subunit ${id} takes "${map[id]}", which already marks another target in the site markup — one emoji, one target (DESIGN.md §5)`);
+  }
+
+  // 마크업이 이모지를 리터럴로 박지 않고 매핑을 거치는지 — 렌더러가 실제로 매핑을 읽는가.
+  const appSource = readFileSync(path.join(ROOT, APP_SOURCE), 'utf8');
+  check(/emojiOf\(/u.test(appSource) && /EMOJI\[/u.test(appSource),
+    `smstudy: ${APP_SOURCE} must read glyphs from the SMSTUDY_DATA.EMOJI mapping, not from literals`);
+  const slots = (appSource.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
+  check(slots >= 2, `smstudy: ${APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
+}
+
 function validateBrandName() {
   // C-5: 브랜드는 소문자 "hvsdcm" 한 덩어리 (plan.md R-5). 분리 표기 전면 금지.
   const separated = /HVS[\s\-_]?DCM|hvs[\s\-_]dcm/u;
@@ -1462,6 +1517,7 @@ validateLandingGating();
 validateDesignTokens();
 validateBrandName();
 validateEmojiSystem();
+validateSmStudyEmoji();
 validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();

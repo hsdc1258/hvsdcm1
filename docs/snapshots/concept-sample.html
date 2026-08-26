@@ -965,82 +965,138 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   align-items: start;
 }
 .sm-units { display: grid; gap: var(--space-4); }
-.sm-panel { display: grid; gap: var(--space-4); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
-
-/* 빠른 복습 — 카드 3장 대신 한 장 안의 구분선 그룹 (DESIGN.md §4). */
-.sm-quick { display: grid; gap: 0; }
-.sm-quick-item {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--line-faint);
-}
-.sm-quick-item:last-child { padding-bottom: 0; }
-.sm-quick > .title-3 { padding-bottom: var(--space-2); }
-.sm-quick-item > div { display: grid; gap: 2px; }
-/* h3이지만 카드 안의 항목 이름이므로 본문 캡션 크기로 조판한다 — 크기가 아니라
-   위치와 구분선이 위계를 만든다 (DESIGN.md §2). */
-.sm-quick-name { font-size: var(--fs-caption); font-weight: 600; line-height: 1.3; }
-.sm-quick-item small { font-size: var(--fs-micro); color: var(--text-3); }
+.sm-panel { display: grid; gap: var(--space-5); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
 
 .sm-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .sm-metrics .stat-value { font-size: var(--fs-title-3); }
 .sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
 
-/* ---- 대단원 카드 ---- */
+/* 행이 곧 동작인 그룹 리스트 — 비활성 행은 배경 반응도 끈다. */
+.list-group .list-row:disabled { opacity: .45; cursor: default; }
+.list-group .list-row:disabled:hover { background: transparent; }
 
-.sm-unit { display: grid; gap: var(--space-4); }
-.sm-unit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.sm-unit-copy { display: grid; gap: var(--space-2); }
-.sm-unit-select { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
-.sm-unit-tools { display: grid; gap: var(--space-2); justify-items: end; }
-.sm-unit-progress { display: grid; justify-items: end; gap: 2px; }
-.sm-unit-progress strong { font-size: var(--fs-title-3); font-variant-numeric: tabular-nums; }
-.sm-unit-progress small { font-size: var(--fs-micro); color: var(--text-3); }
+/* ---- 대단원 = 그룹 / 중단원 = 행 (DESIGN.md §7.1) ---- */
 
-.sm-sub-list { display: grid; gap: 2px; }
-
-.sm-sub {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.sm-unit { display: grid; gap: var(--space-2); }
+.sm-unit-head {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
+  min-height: 30px;
 }
-.sm-sub:hover { background: var(--surface-3); }
-.sm-check { display: grid; place-items: center; }
-.sm-check input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
-.sm-sub-copy { display: grid; gap: 2px; min-width: 0; }
-.sm-sub-copy strong { font-size: var(--fs-caption); font-weight: 600; }
-.sm-sub-copy small { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-sub-actions { display: flex; align-items: center; gap: var(--space-3); }
-.sm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line); }
-.sm-dot.is-on { background: var(--green); border-color: var(--green); }
+/* .list-group-head의 아래 여백은 그룹 사이 간격이 대신한다 — 헤더 줄 안에서는 뺀다. */
+.sm-unit-head .list-group-head { padding-bottom: 0; }
+
+/* 행 전체를 개념 학습 진입점으로 늘린다. 오른쪽 체크박스만 그 위로 올라온다.
+   버튼 안에 체크박스를 중첩하지 않으므로 마크업이 유효하고, 히트 영역은 행 전체다. */
+.sm-row-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.sm-row-open::after { content: ""; position: absolute; inset: 0; }
+.sm-row:hover { background: var(--line-faint); }
+.sm-row-pick { position: relative; z-index: 1; display: grid; place-items: center; flex: none; }
+.sm-row-pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
 /* ---- 개념 노트 ---- */
 
-/* 불투명 표면 — 유리 효과는 DESIGN.md §3이 금지한다. --surface 위 --text-2 7.03:1. */
-.sm-concept-nav { position: sticky; top: calc(var(--topbar-h) + var(--space-2)); z-index: 40; background: var(--surface); }
-.sm-jumps { flex-wrap: wrap; }
-.sm-jumps .segmented-btn { padding: 4px 10px; font-size: var(--fs-micro); }
+/* 툴바 — 중단원 이동(select)·홈·퀴즈를 한 줄에 모았다. 예전에는 칩 13개 줄과
+   목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.2).
+   불투명 표면 — 유리 효과는 §3이 금지한다. --surface 위 --text-2 7.03:1. */
+.sm-concept-nav { z-index: 40; gap: var(--space-2); }
+.sm-jump-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-2);   /* on --surface 7.03:1 */
+}
+.sm-jump {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 340px;
+  padding-block: 6px;
+  font-size: var(--fs-caption);
+}
 
-.sm-toc { gap: var(--space-4); }
+/* 단원 머리 — 이모지 슬롯 + 제목 + 한 줄 메타. 눈썹 라벨을 두지 않는다. */
+.sm-concept-head { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-2); }
+.sm-concept-head > div { min-width: 0; }
+.sm-concept-meta { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
-/* 개념 노트 본문 — 카드 10연속 스택을 걷어내고 구분선 조판으로 낸다.
-   레퍼런스는 문제집·참고서다 (DESIGN.md §1): 높은 밀도, 조용한 위계, 훑기 좋은 리스트.
-   카드는 정보의 경계가 필요한 자리에만 남긴다 (§4). */
+/* 개념 노트 본문 — 카드 스택도 아니고 섹션마다 두 줄짜리 제목을 얹지도 않는다.
+   섹션 머리는 그룹 헤더 한 줄이고, 항상 볼 것과 접을 것을 나눈다 (DESIGN.md §6). */
 .sm-note-body { display: grid; gap: 0; }
 .sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
 /* 구분선 조판은 노트 본문 안에서만 적용한다 — 같은 클래스를 쓰는 학습 기록 화면의
    카드 섹션까지 건드리면 안 된다. */
 .sm-note-body > .sm-section {
-  padding: var(--space-7) 0;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
   border-top: 1px solid var(--line-faint);
 }
-.sm-note-body > .sm-section:first-child { padding-top: 0; border-top: 0; }
-.sm-note-body > .sm-section:last-of-type { padding-bottom: 0; }
+.sm-note-body > .sm-section:first-child { padding-top: var(--space-4); border-top: 0; }
+
+/* 섹션 머리 — iOS 그룹 헤더 어법. 제목 한 줄, 오른쪽에 짧은 힌트. */
+.sm-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.sm-sec-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-2);   /* on --bg 8.16:1 */
+}
+.sm-sec-hint { font-size: var(--fs-micro); color: var(--text-3); }  /* on --bg 5.80:1 */
+
+/* ---- 접히는 부속 섹션 ---- */
+
+.sm-fold {
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+.sm-note-body > .sm-fold { margin-top: var(--space-4); }
+.sm-note-body > .sm-fold + .sm-fold { margin-top: var(--space-2); }
+.sm-fold-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min-h);
+  padding: var(--row-pad-y) var(--row-pad-x);
+  cursor: pointer;
+  list-style: none;
+}
+.sm-fold-head::-webkit-details-marker { display: none; }
+.sm-fold-head::after {
+  content: "›";
+  flex: none;
+  margin-left: var(--space-2);
+  color: var(--text-3);
+  font-size: 1.2em;
+  line-height: 1;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.sm-fold[open] > .sm-fold-head::after { transform: rotate(90deg); }
+.sm-fold-head:hover { background: var(--line-faint); }
+.sm-fold-title { font-size: var(--fs-body); font-weight: 600; }
+.sm-fold-hint { margin-left: auto; font-size: var(--fs-caption); color: var(--text-2); }  /* on --surface 7.03:1 */
+.sm-fold-body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--row-pad-x) var(--space-5);
+  border-top: 1px solid var(--line-faint);
+}
+.sm-fold-lead { font-size: var(--fs-body); color: var(--text); }
+.sm-fold-body > .list-group-head { padding-bottom: 0; }
 
 /* 학습 기록 화면 전용 섹션 규칙 (M-2). 노트 본문 스코프 밖에 있는 기록 섹션들이
    여백·구분선을 잃지 않도록 같은 조판 언어를 여기서 따로 준다. 카드가 아닌 섹션에만
@@ -1050,13 +1106,7 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   border-top: 1px solid var(--line-faint);
 }
 
-/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조).
-   눈썹 라벨과 디스플레이급 헤드라인은 걷어냈다: 바로 위 <h1>이 이미 단원을 말하므로
-   같은 자리에 큰 제목이 두 번 쌓였다. 참고서 단원 도입부의 조판을 따른다. */
-.sm-note-hero { display: grid; gap: var(--space-3); }
-
-/* 헤드라인은 30자 이하 명사구 전용이고, 섹션 제목(.title-2)보다 한 단 아래에 놓는다.
-   도입부는 절(section)이 아니라 들어가는 말이므로 본문보다 조금 큰 정도면 충분하다
+/* 헤드라인은 30자 이하 명사구 전용이고, 본문보다 한 단만 위다
    (DESIGN.md §2 — 글 양과 글자 크기는 반비례). */
 .sm-headline {
   font-size: var(--fs-body-lg);
@@ -1079,18 +1129,6 @@ ul.sm-summary {
 ul.sm-summary li::marker { color: var(--text-3); }
 .sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
 
-/* 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩 리스트를 쓰지 않는다 — 일반 리스트가
-   기본값이다 (DESIGN.md §4). 위계는 굵은 라벨 하나로 충분하다. */
-.sm-keypoints {
-  display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-.sm-keypoint { display: grid; gap: 2px; }
-.sm-keypoint strong { font-size: var(--fs-caption); }
-.sm-keypoint p { font-size: var(--fs-caption); color: var(--text-2); }
-
 /* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
 .sm-icon {
   width: 16px;
@@ -1102,19 +1140,6 @@ ul.sm-summary li::marker { color: var(--text-3); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
-/* 대형 숫자 타일 대신 사실 나열로 낸다 — 장식 프리미티브를 뷰당 2종 이하로 유지한다 (DESIGN.md §4). */
-.sm-facts-inline {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
-  gap: var(--space-3) var(--space-5);
-  margin: 0;
-  padding: var(--space-3) 0;
-  border-block: 1px solid var(--line);
-}
-.sm-facts-inline > div { display: grid; gap: 2px; }
-.sm-facts-inline dt { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-facts-inline dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* 정적 집계(단원 평균 정답률)를 막대로 그리던 .sm-gauge는 제거했다 — 프로그레스 바는
    사용자의 진행 데이터에만 쓴다 (DESIGN.md §4). 같은 정보는 아래 .sm-hint 문장이 낸다. */
@@ -1157,6 +1182,7 @@ ol.sm-freq {
 .sm-matrix-wrap { max-height: 70dvh; }
 .sm-matrix th, .sm-matrix td { white-space: normal; min-width: 140px; vertical-align: top; }
 .sm-matrix tbody th { position: sticky; left: 0; background: var(--surface-2); z-index: 1; }
+/* 가로 스크롤 안내는 실제로 스크롤이 생기는 좁은 화면에서만 낸다. */
 .sm-swipe { display: none; }
 
 .sm-steps { display: grid; gap: var(--space-3); counter-reset: step; }
@@ -1173,46 +1199,30 @@ ol.sm-freq {
 .sm-steps p { font-size: var(--fs-caption); }
 
 .sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: var(--space-3); }
-.sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
-.sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
-.sm-deep h4 span { color: var(--text); }
+.sm-deep-item { padding: var(--space-3) var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
 ul.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
 ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-recall { display: grid; gap: var(--space-2); }
-.sm-recall-item { border-radius: var(--radius-m); background: var(--surface-2); overflow: hidden; }
+/* --bg 위에 --surface-2를 바로 얹지 않는다 — 한 단씩 올린다 (DESIGN.md §4). */
+.sm-recall-item { border-radius: var(--radius-m); background: var(--surface); overflow: hidden; }
 .sm-recall-item summary {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  font-size: var(--fs-caption);
+  font-size: var(--fs-body-sm);
   list-style: none;
 }
 .sm-recall-item summary::-webkit-details-marker { display: none; }
-.sm-recall-item > div { padding: 0 var(--space-4) var(--space-4); display: grid; gap: var(--space-1); }
-/* 채점 결과가 아니라 펼침 라벨이다 — 상태색을 쓰지 않는다 (§3).
-   --text-2 on --surface-2 7.03:1. */
-.sm-recall-item > div strong { font-size: var(--fs-micro); color: var(--text-2); }
-.sm-recall-item > div p { font-size: var(--fs-caption); color: var(--text-2); }
+/* 번호는 동그라미 뱃지가 아니라 숫자다 — .sm-d-n·.sm-steps와 같은 처리 (DESIGN.md §6).
+   --accent on --surface 6.00:1. */
+.sm-recall-n { flex: none; min-width: 1.2em; color: var(--accent); font-size: var(--fs-micro); font-weight: 700; }
+.sm-recall-item > p { margin: 0; padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 1.2em + var(--space-3)); font-size: var(--fs-body-sm); color: var(--text-2); }
 
-.sm-schedule {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-m);
-  background: var(--surface-2);
-  font-size: var(--fs-micro);
-  color: var(--text-2);
-}
-.sm-schedule strong { color: var(--text); }
-.sm-schedule i { width: 16px; height: 1px; background: var(--line-strong); }
-
-.sm-map .sm-flow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sm-flow { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .sm-flow-step {
   display: flex;
   align-items: center;
@@ -1223,12 +1233,16 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   font-size: var(--fs-caption);
 }
 .sm-flow-step > span { color: var(--accent); font-weight: 700; font-size: var(--fs-micro); }
-.sm-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
-.sm-check-item { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-1); }
-.sm-check-item p { font-size: var(--fs-caption); color: var(--text-2); }
 
-.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: var(--space-3); }
-.sm-concept-card { display: grid; gap: var(--space-3); align-content: start; background: var(--surface-2); }
+.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: var(--space-3); }
+.sm-concept-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
 /* 함정 칸은 색이 아니라 라벨로 구분한다 — 상태색은 상태 표시에만 쓴다 (DESIGN.md §3).
    205행의 .sm-callout.is-trap과 같은 처리다. */
 .sm-trap {
@@ -1250,39 +1264,9 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   margin-bottom: 2px;
 }
 
-/* 설계 근거는 본문이 아니라 접히는 부록이다 — 유일하게 상자를 유지하되
-   구분선 조판과 섞이지 않게 아래로 떼어 놓는다 (§4: 경계가 필요한 자리에만 카드). */
-.sm-note-body > .sm-design { margin-top: var(--space-7); }
-.sm-design { padding: 0; }
-.sm-design > summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-4) var(--space-5);
-  cursor: pointer;
-  list-style: none;
-  font-size: var(--fs-caption);
-}
-.sm-design > summary::-webkit-details-marker { display: none; }
-.sm-design-body { display: grid; gap: var(--space-4); padding: 0 var(--space-5) var(--space-5); }
-.sm-design-body > p { font-size: var(--fs-caption); color: var(--text-2); }
-.sm-design-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: var(--space-3); }
-.sm-design-steps > div { padding: var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); }
-.sm-design-steps p { font-size: var(--fs-micro); color: var(--text-2); margin-top: 2px; }
-.sm-evidence { display: grid; gap: var(--space-2); }
-.sm-evidence a {
-  display: grid;
-  gap: 2px;
-  padding: var(--space-3);
-  border-radius: var(--radius-m);
-  border: 1px solid var(--line-faint);
-  text-decoration: none;
-}
-.sm-evidence a:hover { border-color: var(--line-strong); text-decoration: none; }
-.sm-evidence span { font-size: var(--fs-micro); color: var(--text-2); }
-
-.sm-concept-finish { position: sticky; bottom: var(--space-4); box-shadow: var(--shadow-2); }
+/* 마무리 줄 — 떠 있지 않으므로 그림자를 두지 않는다.
+   --shadow-*는 시트·토스트 전용이다 (DESIGN.md §4). 상단 툴바가 이미 sticky다. */
+.sm-concept-finish { margin-top: var(--space-5); }
 .sm-source { font-size: var(--fs-micro); line-height: 1.7; color: var(--text-3); }
 
 /* ---- 퀴즈 ---- */
@@ -1411,19 +1395,10 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
 
 /* ---- 통계 ---- */
 
-.sm-rates { display: grid; gap: var(--space-2); }
-.sm-rate-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
-}
-.sm-rate-row strong { display: block; font-size: var(--fs-caption); }
-.sm-rate-row small { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-rate-row b { font-variant-numeric: tabular-nums; font-size: var(--fs-caption); }
+/* 정확도 행 — 그룹 리스트 행에 진행 막대를 액세서리로 붙인다.
+   막대는 사용자의 실제 풀이 기록에만 쓴다 (DESIGN.md §6). */
+.sm-rate .sm-meter { flex: 0 1 110px; min-width: 60px; }
+.sm-rate .list-row-value { min-width: 3.2em; }
 
 /* ---- 푸터 ---- */
 
@@ -1694,17 +1669,18 @@ ul.sm-d-items {
 
 @media (max-width: 640px) {
   .sm-page { padding-top: var(--space-5); }
-  .sm-swipe { display: inline-flex; }
-  .sm-sub { grid-template-columns: auto minmax(0, 1fr); }
-  .sm-sub-actions { grid-column: 1 / -1; justify-content: flex-end; }
-  .sm-unit-tools { justify-items: start; }
+  .sm-swipe { display: inline; }
   .sm-choices { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); }
   .sm-choice { padding: var(--space-3) 0; font-size: var(--fs-title-3); }
   .sm-compare { grid-template-columns: minmax(0, 1fr); }
   .sm-compare > span { display: none; }
-  .sm-rate-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .sm-rate-row .sm-meter { grid-column: 1 / -1; }
-  .sm-concept-finish { position: static; }
+  /* 좁은 폭에서는 막대를 접는다 — 제목과 수치가 먼저다. */
+  .sm-rate .sm-meter { display: none; }
+  /* 좁은 폭에서는 select 앞의 라벨을 접는다 — 선택값 자체가 라벨 역할을 한다.
+     접근 가능한 이름은 aria-label로 유지한다. */
+  .sm-jump-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sm-jump { flex: 1 1 110px; max-width: none; }
+  .sm-concept-nav .toolbar-spacer { display: none; }
 }
 
 /* ==========================================================================
@@ -1735,6 +1711,14 @@ ul.sm-d-items {
     --red-soft: #fdeceb;
     --orange: #8a6800;
     --orange-soft: #fff9e8;
+    /* 사이클4에서 늘어난 토큰 3종. 인쇄 팔레트가 화면 팔레트보다 뒤처지면
+       컨트롤 배경이 검은 채로 인쇄된다. 대비 실측(흰 종이 기준):
+         #fff on --accent-strong #0e5570  8.23:1
+         --red-bright #8c1e17 on --red-soft #fdeceb  7.94:1
+         --text #101418 on --surface-4 #e7eaec  15.31:1 */
+    --surface-4: #e7eaec;
+    --accent-strong: #0e5570;
+    --red-bright: #8c1e17;
   }
 
   body { background: #fff; color: #101418; }
@@ -1744,19 +1728,21 @@ ul.sm-d-items {
   .sidebar,
   .sm-footer,
   .sm-concept-nav,
-  .sm-toc,
   .sm-concept-finish,
+  .sm-row-pick,
   .view-head .btn,
   .toast { display: none !important; }
 
   .app-shell { grid-template-columns: minmax(0, 1fr); }
   .sm-page { padding: 0; }
 
+  /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
+     실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */
+  .sm-fold-head::after { display: none; }
+
   .card,
   .sm-section,
-  .sm-note-hero,
-  .sm-map,
-  .sm-design,
+  .sm-fold,
   .sm-mistake { break-inside: avoid; box-shadow: none; border-color: #c9d0d5; }
 
   .sm-choice.is-correct { background: #187341; color: #fff; }
@@ -1791,102 +1777,53 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
   기출 이미지는 저장소 상대 경로를 참조하므로 저장소 안에서 열어야 보인다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.</div>
 <section class="snap-item"><h2 class="snap-head">III-01 — 문화의 이해 (개념 화면 #app 전체)</h2><div class="app-main">
-      <header class="view-head">
-        <div>
-          <span class="kicker">III단원 · 약 22분</span>
-          <h1>문화의 이해</h1>
-          <p>공유성 · 학습성 · 축적성 · 전체성 · 변동성 · 문화 이해 태도</p>
-        </div>
-        <button id="conceptHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
-      </header>
 
-      <nav class="toolbar sm-concept-nav" aria-label="중단원 이동">
-        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" >← 이전</button>
-        <div class="segmented sm-jumps">
-      <button class="segmented-btn jump-concept" type="button" data-id="I-01" >
-        I-01
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="I-02" >
-        I-02
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="I-03" >
-        I-03
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="II-01" >
-        II-01
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="II-02" >
-        II-02
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="II-03" >
-        II-03
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="II-04" >
-        II-04
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="III-01" aria-selected="true" disabled>
-        III-01
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="III-02" >
-        III-02
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="III-03" >
-        III-03
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-01" >
-        IV-01
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-02" >
-        IV-02
-      </button>
-
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-03" >
-        IV-03
-      </button>
-    </div>
+      <nav class="toolbar toolbar-sticky sm-concept-nav" aria-label="중단원 이동">
+        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" aria-label="이전 중단원" >←</button>
+        <label class="sm-jump-label" for="jumpConcept">중단원</label>
+        <select id="jumpConcept" class="field-input sm-jump"><optgroup label="I · 사회·문화 현상의 탐구"><option value="I-01" >I-01 · 탐구 대상으로서의 사회·문화 현상</option><option value="I-02" >I-02 · 사회·문화 현상의 탐구 방법</option><option value="I-03" >I-03 · 사회·문화 현상의 탐구와 연구 윤리</option></optgroup><optgroup label="II · 개인과 사회 구조"><option value="II-01" >II-01 · 사회화와 사회적 상호 작용</option><option value="II-02" >II-02 · 사회 구조와 개인의 삶</option><option value="II-03" >II-03 · 사회 집단과 사회 조직의 이해</option><option value="II-04" >II-04 · 일탈 행동의 원인과 해결 방안</option></optgroup><optgroup label="III · 문화와 사회"><option value="III-01" selected>III-01 · 문화의 이해</option><option value="III-02" >III-02 · 다양한 하위문화와 현대의 대중문화</option><option value="III-03" >III-03 · 문화의 변동과 한국 문화의 세계화</option></optgroup><optgroup label="IV · 사회 계층과 불평등"><option value="IV-01" >IV-01 · 사회 계층화 현상의 이해</option><option value="IV-02" >IV-02 · 다양한 사회적 불평등과 해결 방안</option><option value="IV-03" >IV-03 · 불평등 해소를 위한 사회 복지 제도</option></optgroup></select>
+        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" aria-label="다음 중단원" >→</button>
         <div class="toolbar-spacer"></div>
-        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" >다음 →</button>
+        <button id="conceptHome" class="btn btn-ghost btn-sm" type="button">단원 목록</button>
+        <button id="subQuiz" class="btn btn-primary btn-sm" type="button">퀴즈 6문제</button>
       </nav>
-
-      <nav class="toolbar sm-toc" aria-label="단권화 노트 목차">
-        <span class="kicker">이 노트의 순서</span>
-        <a class="topbar-link" href="#concept-diagrams">구조도</a>
-        <a class="topbar-link" href="#exam-analysis">기출 분석</a>
-        <a class="topbar-link" href="#concept-compare">비교표</a>
-        <a class="topbar-link" href="#concept-flow">문제 푸는 순서</a>
-        <a class="topbar-link" href="#concept-detail">개념 설명</a>
-        <a class="topbar-link" href="#recall-lab">회상 점검</a>
-      </nav>
+      <header class="sm-concept-head">
+        <span class="emoji emoji-lg" aria-hidden="true">🧩</span>
+        <div>
+          <h1 class="title-1">문화의 이해</h1>
+          <p class="sm-concept-meta">문화와 사회 · 약 22분 · 수록 기출 6문항</p>
+        </div>
+      </header>
       <div class="sm-note-body">
 
-      <section class="sm-note-hero sm-section" aria-labelledby="noteHeroTitle">
-        <h3 class="sm-headline" id="noteHeroTitle">속성은 소거법 태도는 기준으로</h3>
+      <section class="sm-section" aria-labelledby="core-title">
+        <div class="sm-sec-head"><h2 class="sm-sec-label" id="core-title">핵심</h2></div>
+        <p class="sm-headline">속성은 소거법 태도는 기준으로</p>
         <ul class="sm-summary"><li>속성 3문항과 태도 3문항으로 반씩 나뉘어 나왔다.</li><li>사례 하나에 두 속성이 겹쳐 나와 소거법이 필요하다.</li><li>2024학년도 수능 문항은 정답률 37%로 최저권이었다.</li></ul>
-        <ul class="sm-keypoints" aria-label="핵심 개념 세 가지">
-      <li class="sm-keypoint"><strong>축적과 변동</strong><p>더해지면 축적성이고 모습이 달라지면 변동성이다.</p></li>
-
-      <li class="sm-keypoint"><strong>전체성</strong><p>한 요소의 변화가 다른 영역을 바꾸면 전체성이다.</p></li>
-
-      <li class="sm-keypoint"><strong>세 태도</strong><p>우열을 매기면 절대주의이고 맥락을 보면 상대주의다.</p></li>
-    </ul>
+        <div class="list-group">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">축적과 변동</span>
+          <span class="list-row-sub">더해지면 축적성이고 모습이 달라지면 변동성이다.</span>
+        </span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">전체성</span>
+          <span class="list-row-sub">한 요소의 변화가 다른 영역을 바꾸면 전체성이다.</span>
+        </span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">세 태도</span>
+          <span class="list-row-sub">우열을 매기면 절대주의이고 맥락을 보면 상대주의다.</span>
+        </span>
+      </div></div>
+        <p class="list-group-foot">핵심어 공유성 · 학습성 · 축적성 · 전체성 · 변동성 · 문화 이해 태도</p>
       </section>
 
-      <section id="concept-diagrams" class="sm-stack sm-section" aria-labelledby="diagrams-title">
-        <div>
-          <span class="kicker">글보다 구조를 먼저</span>
-          <h3 class="title-2" id="diagrams-title">한 장으로 보는 구조</h3>
-        </div>
+      <section id="concept-diagrams" class="sm-section" aria-labelledby="diagrams-title">
+        <div class="sm-sec-head"><h2 class="sm-sec-label" id="diagrams-title">구조</h2></div>
         <div class="sm-diagrams">
       <figure class="sm-diagram sm-diagram--radial">
         <div class="sm-diagram-head"><strong>문화의 다섯 속성</strong></div>
@@ -1900,29 +1837,8 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
       </figure></div>
       </section>
 
-      <section id="exam-analysis" class="sm-stack sm-section" aria-labelledby="exam-analysis-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">이 단원 수록 기출 자동 집계</span>
-            <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
-          </div>
-          <span class="badge">선별 수록 표본 · 전수 통계 아님</span>
-        </div>
-        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위"><li class="sm-freq-item">공유성과 학습성</li><li class="sm-freq-item">문화 사대주의</li><li class="sm-freq-item">문화 상대주의</li><li class="sm-freq-item">자문화 중심주의</li><li class="sm-freq-item">축적성과 변동성</li><li class="sm-freq-item">전체성</li></ol>
-        <div class="sm-callouts">
-          <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
-          <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
-        </div>
-      </section>
-
-      <section id="concept-compare" class="sm-stack sm-section" aria-labelledby="comparison-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">헷갈리는 개념은 같은 기준으로</span>
-            <h3 class="title-2" id="comparison-title">다섯 속성 변별표</h3>
-          </div>
-          <span class="badge sm-swipe">좌우로 밀어 전체 보기 →</span>
-        </div>
+      <section id="concept-compare" class="sm-section" aria-labelledby="comparison-title">
+        <div class="sm-sec-head"><h2 class="sm-sec-label" id="comparison-title">다섯 속성 변별표</h2><span class="sm-sec-hint sm-swipe">좌우로 밀어 전체 보기</span></div>
         <div class="table-wrap sm-matrix-wrap" tabindex="0">
           <table class="table sm-matrix">
             <thead><tr><th scope="col">속성</th><th scope="col">핵심 단서</th><th scope="col">대표 사례</th><th scope="col">헷갈리는 속성</th></tr></thead>
@@ -1931,115 +1847,160 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         </div>
       </section>
 
-      <section id="concept-flow" class="sm-stack sm-section" aria-labelledby="decision-title">
-        <div>
-          <span class="kicker">시험장에서 이 순서대로</span>
-          <h3 class="title-2" id="decision-title">문제 푸는 순서</h3>
-        </div>
+      <section id="concept-flow" class="sm-section" aria-labelledby="decision-title">
+        <div class="sm-sec-head"><h2 class="sm-sec-label" id="decision-title">시험장 판단 순서</h2></div>
         <ol class="sm-steps"><li><span>1</span><p>속성 문제는 제시문이 강조한 장면을 먼저 찾는다.</p></li><li><span>2</span><p>두 속성이 겹치면 나머지 사례로 소거해 확정한다.</p></li><li><span>3</span><p>태도 문제는 무엇을 절대 기준으로 삼는지 본다.</p></li><li><span>4</span><p>보편 윤리로 비판하는 발언은 상대주의가 아니다.</p></li></ol>
-      </section>
-
-      <section class="sm-stack sm-map sm-section" aria-labelledby="conceptMapTitle">
-        <div>
-          <span class="kicker">개념 구조도</span>
-          <h3 class="title-2" id="conceptMapTitle">문화의 속성과 태도를 어떤 기준으로 나눌까?</h3>
-          <p class="sm-note">글을 외우기 전에 아래 흐름과 판별 기준을 먼저 잡으세요.</p>
+        <div class="sm-callouts">
+          <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
+          <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
         </div>
-        <ol class="sm-flow">
-      <li class="sm-flow-step"><span>1</span><strong>속성 판별</strong></li>
-
-      <li class="sm-flow-step"><span>2</span><strong>겹침 소거</strong></li>
-
-      <li class="sm-flow-step"><span>3</span><strong>태도 판별</strong></li>
-    </ol>
-        <div class="sm-checks">
-      <div class="sm-check-item"><span class="kicker">check 1</span><p>추가면 축적성, 시간에 따른 변화면 변동성이다.</p></div>
-
-      <div class="sm-check-item"><span class="kicker">check 2</span><p>한 요소의 변화가 다른 영역을 바꾸면 전체성이다.</p></div>
-
-      <div class="sm-check-item"><span class="kicker">check 3</span><p>우열을 매기면 절대주의, 맥락을 보면 상대주의다.</p></div>
-    </div>
       </section>
-        <section id="concept-detail" class="sm-stack sm-section" aria-labelledby="concept-detail-title">
-          <div>
-            <span class="kicker">교과 개념을 차근차근</span>
-            <h3 class="title-2" id="concept-detail-title">개념을 하나씩 이해하기</h3>
-          </div>
-          <div class="sm-concept-grid">
-      <article class="card sm-concept-card">
-        <h4 class="title-3">문화의 다섯 속성</h4>
+
+      <section id="recall-lab" class="sm-section" aria-labelledby="recall-title">
+        <div class="sm-sec-head"><h2 class="sm-sec-label" id="recall-title">회상 점검</h2><span class="sm-sec-hint">답을 말한 뒤 펼치세요</span></div>
+        <div class="sm-recall">
+      <details class="sm-recall-item">
+        <summary><span class="sm-recall-n num">1</span><span>기존 기술에 새 기능이 계속 더해지면?</span></summary>
+        <p>전승 위에 새 요소가 쌓이는 축적성이다.</p>
+      </details>
+      <details class="sm-recall-item">
+        <summary><span class="sm-recall-n num">2</span><span>기술 변화가 가족과 직업을 함께 바꾸면?</span></summary>
+        <p>요소들이 유기적으로 연결된 전체성이다.</p>
+      </details>
+      <details class="sm-recall-item">
+        <summary><span class="sm-recall-n num">3</span><span>자문화 중심주의와 사대주의의 공통점은?</span></summary>
+        <p>특정 문화를 절대 기준으로 삼는 문화 절대주의다.</p>
+      </details></div>
+        <p class="list-group-foot">복습 간격 · 오늘 · 1일 뒤 · 3일 뒤 · 7일 뒤</p>
+      </section>
+
+      <details class="sm-fold" data-print-open>
+        <summary class="sm-fold-head">
+          <h2 class="sm-fold-title" id="exam-fold-title">빈출 개념과 판별 점검</h2>
+          <span class="sm-fold-hint">6개</span>
+        </summary>
+        <div class="sm-fold-body">
+      <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위"><li class="sm-freq-item">공유성과 학습성</li><li class="sm-freq-item">문화 사대주의</li><li class="sm-freq-item">문화 상대주의</li><li class="sm-freq-item">자문화 중심주의</li><li class="sm-freq-item">축적성과 변동성</li><li class="sm-freq-item">전체성</li></ol>
+      <p class="sm-fold-lead">문화의 속성과 태도를 어떤 기준으로 나눌까?</p>
+      <ol class="sm-flow" aria-label="판별 순서"><li class="sm-flow-step"><span>1</span>속성 판별</li><li class="sm-flow-step"><span>2</span>겹침 소거</li><li class="sm-flow-step"><span>3</span>태도 판별</li></ol>
+      <ul class="sm-bullets"><li>추가면 축적성, 시간에 따른 변화면 변동성이다.</li><li>한 요소의 변화가 다른 영역을 바꾸면 전체성이다.</li><li>우열을 매기면 절대주의, 맥락을 보면 상대주의다.</li></ul>
+      <p class="list-group-foot">선별 수록 표본의 순위입니다. 전수 통계가 아닙니다.</p></div>
+      </details>
+
+      <details class="sm-fold" data-print-open>
+        <summary class="sm-fold-head">
+          <h2 class="sm-fold-title" id="detail-fold-title">세부 개념 설명</h2>
+          <span class="sm-fold-hint">8항목</span>
+        </summary>
+        <div class="sm-fold-body">
+      <div class="sm-concept-grid">
+      <article class="sm-concept-card">
+        <h3 class="title-3">문화의 다섯 속성</h3>
         <ul class="sm-bullets"><li>공유성은 구성원이 함께 나눠 행동을 예측하게 만든다.</li><li>학습성은 후천적 습득, 축적성은 전승 위의 추가를 뜻한다.</li><li>전체성은 요소 간 연결, 변동성은 시간에 따른 변화를 뜻한다.</li></ul>
         <p class="sm-trap"><strong>함정 체크</strong>새 요소가 더해지면 축적성, 모습이 달라지면 변동성이다.</p>
       </article>
-      <article class="card sm-concept-card">
-        <h4 class="title-3">속성 판별 요령</h4>
+      <article class="sm-concept-card">
+        <h3 class="title-3">속성 판별 요령</h3>
         <ul class="sm-bullets"><li>사례 하나에 두 속성이 겹쳐 제시되므로 소거법으로 확정한다.</li><li>전체성은 한 요소의 변화가 다른 영역을 바꿀 때 쓴다.</li><li>문화 요소는 물질문화와 비물질문화로도 나뉜다.</li></ul>
         <p class="sm-trap"><strong>함정 체크</strong>동질성을 강조하면 축적성이 아니라 공유성이다.</p>
       </article>
-      <article class="card sm-concept-card">
-        <h4 class="title-3">문화를 대하는 세 태도</h4>
+      <article class="sm-concept-card">
+        <h3 class="title-3">문화를 대하는 세 태도</h3>
         <ul class="sm-bullets"><li>자문화 중심주의는 자기 문화를 절대 기준으로 삼는다.</li><li>문화 사대주의는 다른 문화를 절대 기준으로 삼는다.</li><li>문화 상대주의는 그 사회의 맥락에서 문화를 이해한다.</li></ul>
         <p class="sm-trap"><strong>함정 체크</strong>보편 윤리로 비판하는 발언은 문화 상대주의가 아니다.</p>
       </article></div>
-        </section>
-
-      <section class="sm-stack sm-section" aria-labelledby="deep-dive-title">
-        <div>
-          <span class="kicker">헷갈리는 선지를 가르는 설명</span>
-          <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
-        </div>
-        <div class="sm-deep"><article><h4 class="title-3">공유성과 학습성</h4><ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul></article><article><h4 class="title-3">축적성과 변동성</h4><ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul></article><article><h4 class="title-3">전체성</h4><ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul></article><article><h4 class="title-3">문화 절대주의</h4><ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul></article><article><h4 class="title-3">극단적 상대주의</h4><ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul></article></div>
-      </section>
-
-      <section id="recall-lab" class="sm-stack sm-section" aria-labelledby="recall-title">
-        <div class="view-head">
-          <div>
-            <span class="kicker">답을 말한 뒤 펼치기</span>
-            <h3 class="title-2" id="recall-title">덮고 답하는 회상 점검</h3>
-          </div>
-          <span class="badge">먼저 생각하고 답한 뒤 확인하세요</span>
-        </div>
-        <div class="sm-recall">
-      <details class="sm-recall-item">
-        <summary><span class="badge">Q1</span>기존 기술에 새 기능이 계속 더해지면?</summary>
-        <div><strong>정답</strong><p>전승 위에 새 요소가 쌓이는 축적성이다.</p></div>
+      <div class="sm-deep">
+      <article class="sm-deep-item">
+        <h3 class="title-3">공유성과 학습성</h3>
+        <ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul>
+      </article>
+      <article class="sm-deep-item">
+        <h3 class="title-3">축적성과 변동성</h3>
+        <ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul>
+      </article>
+      <article class="sm-deep-item">
+        <h3 class="title-3">전체성</h3>
+        <ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul>
+      </article>
+      <article class="sm-deep-item">
+        <h3 class="title-3">문화 절대주의</h3>
+        <ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul>
+      </article>
+      <article class="sm-deep-item">
+        <h3 class="title-3">극단적 상대주의</h3>
+        <ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul>
+      </article></div></div>
       </details>
-      <details class="sm-recall-item">
-        <summary><span class="badge">Q2</span>기술 변화가 가족과 직업을 함께 바꾸면?</summary>
-        <div><strong>정답</strong><p>요소들이 유기적으로 연결된 전체성이다.</p></div>
-      </details>
-      <details class="sm-recall-item">
-        <summary><span class="badge">Q3</span>자문화 중심주의와 사대주의의 공통점은?</summary>
-        <div><strong>정답</strong><p>특정 문화를 절대 기준으로 삼는 문화 절대주의다.</p></div>
-      </details></div>
-        <div class="sm-schedule" aria-label="권장 복습 간격">
-          <strong>복습 간격</strong>
-          <span>오늘 · 첫 회상</span><i aria-hidden="true"></i><span>+1일</span><i aria-hidden="true"></i><span>+3일</span><i aria-hidden="true"></i><span>+7일</span>
-        </div>
-      </section>
 
-      <details class="card sm-design">
-        <summary>
-          <span class="badge badge-accent">학습과학 기반</span>
-          <strong>꺼내 쓰는 노트</strong>
-          <span class="text-tertiary">설계 근거 보기</span>
+      <details class="sm-fold" data-print-open>
+        <summary class="sm-fold-head">
+          <h2 class="sm-fold-title" id="design-fold-title">꺼내 쓰는 노트</h2>
+          <span class="sm-fold-hint">설계 근거</span>
         </summary>
-        <div class="sm-design-body">
-          <p>구조를 먼저 잡고 비교한 뒤 노트를 덮고 스스로 답한다.</p>
-          <div class="sm-design-steps"><div><strong>1 · 구조화</strong><p>헤드라인과 다이어그램으로 큰 틀을 먼저 잡는다.</p></div><div><strong>2 · 변별</strong><p>헷갈리는 개념을 같은 기준의 표에서 대조한다.</p></div><div><strong>3 · 인출</strong><p>회상 질문에 먼저 답한 뒤 정답을 펼쳐 확인한다.</p></div><div><strong>4 · 간격 복습</strong><p>오늘, 1일 뒤, 3일 뒤, 7일 뒤에 다시 인출한다.</p></div></div>
-          <div class="sm-evidence"><a href="https://pubmed.ncbi.nlm.nih.gov/16507066/" target="_blank" rel="noopener noreferrer"><strong>인출 대 재독</strong><span>지연된 기억에서는 반복 재독보다 인출 연습이 유리</span></a><a href="https://pubmed.ncbi.nlm.nih.gov/21252317/" target="_blank" rel="noopener noreferrer"><strong>인출 대 개념도</strong><span>단순 개념도 작성보다 지연된 기억과 추론에 유리</span></a><a href="https://www.escholarship.org/content/qt3rr6q10c/qt3rr6q10c.pdf" target="_blank" rel="noopener noreferrer"><strong>분산 학습</strong><span>한 번에 몰아보기보다 간격을 둔 복습이 유리</span></a><a href="https://pubmed.ncbi.nlm.nih.gov/18578849/" target="_blank" rel="noopener noreferrer"><strong>교차·대조</strong><span>비슷한 범주를 섞어 비교하면 구별 능력이 향상</span></a></div>
-          <p class="sm-note">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다. 이 노트는 다시 읽기만 하기보다 회상과 분산 복습을 쉽게 실행하도록 구성했습니다.</p>
-        </div>
+        <div class="sm-fold-body">
+      <p class="sm-fold-lead">구조를 먼저 잡고 비교한 뒤 노트를 덮고 스스로 답한다.</p>
+      <div class="list-group is-inset">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">1 · 구조화</span>
+          <span class="list-row-sub">헤드라인과 다이어그램으로 큰 틀을 먼저 잡는다.</span>
+        </span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">2 · 변별</span>
+          <span class="list-row-sub">헷갈리는 개념을 같은 기준의 표에서 대조한다.</span>
+        </span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">3 · 인출</span>
+          <span class="list-row-sub">회상 질문에 먼저 답한 뒤 정답을 펼쳐 확인한다.</span>
+        </span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">4 · 간격 복습</span>
+          <span class="list-row-sub">오늘, 1일 뒤, 3일 뒤, 7일 뒤에 다시 인출한다.</span>
+        </span>
+      </div></div>
+      <p class="list-group-head">근거 연구</p>
+      <div class="list-group is-inset">
+      <a class="list-row list-row-nav" href="https://pubmed.ncbi.nlm.nih.gov/16507066/" target="_blank" rel="noopener noreferrer">
+        <span class="list-row-body">
+          <span class="list-row-title">인출 대 재독</span>
+          <span class="list-row-sub">지연된 기억에서는 반복 재독보다 인출 연습이 유리</span>
+        </span>
+      </a>
+      <a class="list-row list-row-nav" href="https://pubmed.ncbi.nlm.nih.gov/21252317/" target="_blank" rel="noopener noreferrer">
+        <span class="list-row-body">
+          <span class="list-row-title">인출 대 개념도</span>
+          <span class="list-row-sub">단순 개념도 작성보다 지연된 기억과 추론에 유리</span>
+        </span>
+      </a>
+      <a class="list-row list-row-nav" href="https://www.escholarship.org/content/qt3rr6q10c/qt3rr6q10c.pdf" target="_blank" rel="noopener noreferrer">
+        <span class="list-row-body">
+          <span class="list-row-title">분산 학습</span>
+          <span class="list-row-sub">한 번에 몰아보기보다 간격을 둔 복습이 유리</span>
+        </span>
+      </a>
+      <a class="list-row list-row-nav" href="https://pubmed.ncbi.nlm.nih.gov/18578849/" target="_blank" rel="noopener noreferrer">
+        <span class="list-row-body">
+          <span class="list-row-title">교차·대조</span>
+          <span class="list-row-sub">비슷한 범주를 섞어 비교하면 구별 능력이 향상</span>
+        </span>
+      </a></div>
+      <p class="list-group-foot">연구 결과는 학습 조건과 개인에 따라 달라질 수 있습니다.</p></div>
       </details>
       </div>
       <div class="toolbar sm-concept-finish">
-        <button id="markDone" class="btn btn-secondary" type="button">
+        <button id="markDone" class="btn btn-secondary btn-sm" type="button">
           개념 확인 완료로 표시
         </button>
         <div class="toolbar-spacer"></div>
-        <button id="subQuiz" class="btn btn-primary" type="button">이 중단원 퀴즈 6문제</button>
+        <button id="nextConceptFoot" class="btn btn-ghost btn-sm" type="button" >다음 중단원 →</button>
       </div>
-      <p class="sm-source">개념 검토는 2027 불후의 명강 사회·문화와 2027 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 이 사이트에 선별 수록한 실기출 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 전체 기출의 전수 빈도를 뜻하지는 않습니다. 문항과 정답은 원문 PDF·정답표와 대조했습니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p></div></section>
+      <p class="sm-source">개념 검토는 2027 불후의 명강과 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 수록 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p></div></section>
 </div>
 </body>
 </html>
