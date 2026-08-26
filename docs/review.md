@@ -162,3 +162,102 @@ center 14, items 0~4)까지 넣으면 아래 레이아웃은 성립하지 않는
 기계 게이트는 초록이지만 네 가지 독립 반증에서 요구사항 또는 기존 이미지 폴백이 깨진 상태가
 통과했다. 특히 B-1~B-4는 LESSONS 규칙 4~6이 금지한 “검사 통과와 요구사항 충족의 분리”가
 재발한 것이므로 blocker 해소 전에는 완료로 판정할 수 없다.
+
+## 라운드 2 재검토
+
+### 범위와 방법
+
+- 재검토 범위: `3710f72..HEAD`.
+- 기준선은 작업 트리가 아니라 `git archive HEAD` 사본이며 `Validation passed (13204 checks)`였다.
+- 파괴 실험은 서로의 실패가 다른 결함을 가리지 않도록 케이스마다 별도 사본에서 실행했다.
+- 다이어그램 경계 검산은 브라우저 `getBBox()`를 재사용하지 않았다. 계약 상한의 한글을 넣어 7종을
+  실제 렌더한 뒤 SVG 좌표와 글꼴 크기에서 보수적 text box를 독립 계산했다.
+
+### 라운드 1 지적 16건 판정
+
+| # | 판정 | 라운드 2 근거 |
+|---|---|---|
+| B-1 | **해소** | `data.js`의 78자 section, 마크업이 든 `evidence.href`, 무이스케이프 URL 보간이 각각 실패한다. 문자열 순회와 URL 계약의 원래 반증은 닫혔다. |
+| B-2 | **부분해소** | `matrix.title`·`deepDive[].term/icon`·`recall[].answer`의 개별 삭제는 모두 실패하지만, 변수 별칭으로 새 누락 필드를 출력하면 13204 checks로 통과한다(R2-B-1). |
+| B-3 | **부분해소** | `ICON_SET={}` 변형은 23건 실패하지만, `layoutFlow()`의 SVG 아이콘 출력 한 줄만 지우면 통과한다(R2-B-2). |
+| B-4 | **부분해소** | 실제 `<img>` 속성만 바꾸면 실패한다. 그러나 앞선 무관 문자열이 올바른 `<figure>` 모양을 가지면 깨진 실제 `renderQuestionMedia()`가 통과한다(R2-B-3). |
+| M-1 | **해소** | 데이터의 `keyPoints[].icon`은 모두 삭제됐고, 유효 아이콘 하나를 되살린 독립 실험도 죽은 필드로 실패했다. |
+| M-2 | **해소** | label 8 / item 16 / center 8과 kind별 최대 items로 7종을 렌더해 text 이탈·겹침 0을 독립 계산했다. 최소 내부 여백도 3.25px로 양수다. |
+| M-3 | **해소** | 현재 렌더는 figure당 마지막 자식 `figcaption` 하나이며, 캡션 하나를 추가한 변형은 21개 다이어그램 모두 실패했다. |
+| M-4 | **해소** | `data.js:236`과 `notebook-data.js:933`은 절대적 빈곤선도 사회·시대에 따라 달라진다고 바로잡았다. `2023-csat-09.webp`의 오답 ③과 정답 ②에도 맞는다. 별개의 IV-01 사실 오류는 R2-M-3이다. |
+| M-5 | **해소** | `QUESTION_ROWS`를 직접 집계해 78문항·73태그, IV-03 6문항의 3중 4/2중 2, 각 태그 빈도가 `kice-analysis.md` §2·부록 A/B와 전부 일치했다. |
+| M-6 | **부분해소** | 상한 좌표 검산은 유효해졌고 정적 HTML도 존재하지만 사람의 320/768/1280 스크린샷 대조는 여전히 미완료다. 스냅샷 내용 신선도도 gate가 잠그지 않는다(R2-M-1). |
+| M-7 | **해소** | 기준선의 콘텐츠 문자열 7건은 검사에서 사라졌고 현재 `validate.mjs`에는 구조 계약만 남았다. |
+| M-8 | **해소** | 실제 CSS에서 `backdrop-filter`가 모두 사라졌고 `design-audit.md:34-37`도 예외 판단이 틀렸다고 정정했다. |
+| M-9 | **해소** | `app.js:314-339`의 빠른 복습 세 항목이 각각 이름 있는 `section`과 `h3`를 다시 가진다. |
+| M-10 | **해소** | `git diff --check 3710f72..HEAD`와 작업 트리 `git diff --check`가 모두 출력 없이 통과했다. |
+| N-1 | **해소** | 지적한 세 어색한 고정 문구가 사라졌고 radial의 “대등하게 뻗는다”도 설명에서 한 번만 나온다. |
+| N-2 | **해소** | `design-audit.md:70-80`이 “신설·값 변경 없음, 미사용 5개 삭제”를 구분하고 중립 badge 5.42:1까지 명시한다. |
+
+집계는 **해소 12 / 부분해소 4 / 미해소 0 / 재발 0**이다. 최종 반환의 미해소 수에는
+부분해소 4건을 포함한다.
+
+### 라운드 1 파괴 실험 재현
+
+| 변형 | 기대 | 실제 |
+|---|---|---|
+| 렌더되는 `data.js` section 본문을 78자로 변경 | 실패 | **실패** — `UNITS.IV-02.sections[0].points[0] ... over the 60 limit` |
+| `LEARNING_DESIGN.evidence[0].href`에 `"><b>broken</b>` 삽입 | 실패 | **실패** — plain https URL 계약 1건 |
+| `matrix.title` / `deepDive[0].term·icon` / `recall[0].answer` 삭제 | 각각 실패 | **모두 실패** — 격리 실행에서 각각 1 / 2 / 1건의 render contract 오류 |
+| `ICON_SET={}`로 바꾸고 `void window.SM_ICONS`만 유지 | 실패 | **실패** — 주입 본문 미출력과 실제 21개 렌더를 합쳐 23건 |
+| 삭제된 `keyPoints[].icon`을 유효 키로 되살림(라운드 1의 반대 방향 계약) | 실패 | **실패** — 렌더러가 읽지 않는 필드 1건 |
+| radial center를 라운드 1 상한이던 공백 없는 한글 14자로 변경 | 새 상한 8 때문에 실패 | **실패** — 14 characters, over the 8 limit |
+
+직접 반증 6종은 현재 의도한 방향으로 모두 실패한다. 단, 이것은 새 검사가 다른 표현과 다른
+렌더 경로에서도 충분조건이라는 뜻은 아니며, 아래 우회 실험 세 건은 다시 초록이다.
+
+### 새 지적사항
+
+| # | 심각도 | 파일:줄 | 내용과 실제 파손 |
+|---|---|---|---|
+| R2-B-1 | **blocker** | `scripts/validate.mjs:417-438,739-763` | `derivedRenderedFields()`는 `note.*` 정규식과 정해진 `.map((x)` 모양만 본다. 옵셔널 체이닝은 통과했지만 동등한 구조분해는 거짓 실패했고, 더 중요하게 `const noteAlias=note` 뒤 `${esc(noteAlias.gateGhost)}`를 실제 화면에 추가한 변형은 누락 필드가 `undefined`인데도 **13204 checks로 통과**했다. 최소 개수 15는 기존 직접 접근이 남아 있어 무력하다. **실제 파손:** 렌더러 표현을 변수 경유로 바꾸면 새 필수 필드가 계약표에 없고 데이터에도 없어도 빈 화면 조각을 초록으로 배포한다. |
+| R2-B-2 | **blocker** | `scripts/validate.mjs:708-730,867-872`; `smstudy/assets/js/diagram.js:63-99,447-458` | VM 연결 탐침은 `radial` 하나만 본다. 실제 데이터 검사는 좁은 화면 fallback의 `<svg class="sm-icon">` 개수만 세며 넓은 화면 canvas의 `<g class="sm-d-icon">`를 kind별로 확인하지 않는다. `layoutFlow()`의 `svgIcon(node.icon,...)` 한 줄을 삭제해 넓은 화면 flow 아이콘을 전부 없앤 변형이 **13204 checks로 통과**했다. **실제 파손:** 680px 초과에서 flow 아이콘이 사라져도 gate가 초록이다. |
+| R2-B-3 | **blocker** | `scripts/validate.mjs:178-191`; `smstudy/assets/js/app.js:786-808` | 폴백 검사는 바인더에서 선택자를 도출하지만 마크업은 `renderQuestionMedia()` 본문이 아니라 소스 전체에서 처음 만난 `<figure class="sm-media...">`를 잡는다. 함수 앞에 올바른 모양의 미사용 문자열을 두고 실제 이미지 속성을 `data-question-image-broken`으로 바꾼 변형이 **13204 checks로 통과**했다. **실제 파손:** 다른 미디어 템플릿이나 죽은 문자열이 앞에 생기면 실제 문제 이미지의 error 바인딩이 끊겨도 gate가 잘못된 figure를 검사한다. |
+| R2-M-1 | **major** | `scripts/validate.mjs:1240-1267`; `docs/snapshots/concept-sample.html` | `validateDocSnapshots()`는 파일 존재·인라인 표식·figure/caption 수와 다이어그램 제목만 본다. `concept-sample.html`의 실제 키워드를 `낡은공유성`으로 바꾼 변형이 **13204 checks로 통과**했다. CSS 본문과 다이어그램 label/items도 현행 소스와 대조하지 않는다. **실제 파손:** 데이터·렌더러·CSS가 바뀐 뒤 낡은 화면 문서를 시각 검증 근거로 계속 제시할 수 있다. |
+| R2-M-2 | **major** | `docs/plan.md:113-122,181-191,324-344`; `scripts/validate.mjs:324-343,691-705` | 총괄 D-6/D-7은 8/16/8 상한과 `keyPoints[].icon` 삭제를 확정했지만 본 계약 §4.2·§5는 아직 12/20/14, items 0~4, 필수 icon을 적고 kind·아이콘 원본도 `app.js`라고 쓴다. 실제 원본은 `diagram.js`와 `assets/vendor/lucide/icons.js`다. **실제 파손:** 다음 변경과 리뷰가 서로 다른 완료 계약을 참조해 안전한 데이터가 거절되거나 오래된 상한이 다시 들어온다. |
+| R2-M-3 | **major** | `smstudy/assets/js/notebook-data.js:818-845`; `smstudy/assets/js/data.js:221-223` | IV-01의 “사회 이동 2축”은 부모와 자녀가 같은 계층이고 표 대각선인 경우를 `세대 간 수평`으로 표시한다. 그러나 같은 노트의 비교표와 `data.js`는 대각선을 `이동 없음`·`대물림`으로 올바르게 설명한다. 동일 계층이라는 사실만으로 직업·지위가 달라진 수평 이동을 알 수도 없다. **실제 파손:** 학습자가 계층 대물림을 수평 이동으로 암기한다. |
+
+신규 집계는 **blocker 3 / major 3 / nit 0**이다.
+
+### M-2 경계 좌표 독립 검산
+
+모든 label은 공백 없는 한글 8자, item은 16자, radial center는 8자로 채우고 kind별 node/items
+최댓값을 사용했다. 한글 한 글자를 해당 font-size 1em으로 잡고 baseline 위 1em·아래 0.25em을
+text box로 잡았다. 이는 구현자의 이전 `innerWidth=0` 브라우저 계측과 독립이다.
+
+| kind | 최대 nodes × items | SVG | text | viewBox 이탈 | text 겹침 | 최소 산식 여백 |
+|---|---:|---:|---:|---:|---:|---:|
+| flow | 5 × 2 | 760×594 | 20 | 0 | 0 | label→chip 12px |
+| scale | 2 × 4 | 760×302 | 11 | 0 | 0 | 마지막 item 하단 13px |
+| matrix2x2 | 4 × 4 | 760×412 | 24 | 0 | 0 | 마지막 item 하단 29px |
+| venn | 3 × 3 | 760×614 | 22 | 0 | 0 | 범례 열 사이 35px |
+| timeline | 5 × 2 | 760×260 | 20 | 0 | 0 | 좌우 viewBox 8px |
+| pyramid | 4 × 2 | 760×426 | 16 | 0 | 0 | 다음 층까지 13.13px |
+| radial | 5 × 2 | 760×522 | 17 | 0 | 0 | 두 번째 item 하단 3.25px |
+
+### 사실성·집계·회귀
+
+- IV-02의 절대적 빈곤 수정은 저장소의 2023학년도 수능 9번 원문과 정답 메타데이터에 맞는다.
+  IV-01~03을 모두 읽은 결과 추가로 확정한 오류는 R2-M-3 한 건이다. I-01·II-03/04·III-01~03
+  표본에서는 교과 개념상 확정할 추가 오류를 찾지 못했다.
+- `QUESTION_ROWS` 직접 집계: 단원별 문항 수
+  `6,10,2,5,6,7,6,6,6,6,6,6,6`, 총 78; 태그 종류 총 73; 죽은/미선언 태그 0.
+  IV-03은 6문항·평균 44.0%·3중 4/2중 2이며 각 태그 빈도 `5/4/3/2/2`로 문서와 같다.
+- `git archive HEAD`에서 `npm test` 통과: validate **13204 checks**, Node tests **14/14**.
+  WordMaster 2000개, smstudy 4 units / 13 subunits / 78 questions, 정렬 유틸과 Worker 보안·라우팅 회귀가 포함된다.
+- `git diff --check 3710f72..HEAD`와 작업 트리 `git diff --check` 모두 통과했다. localStorage 키,
+  API app 이름, Worker 모듈은 이 범위에서 바뀌지 않았다.
+
+### 라운드 2 최종 판정
+
+- [ ] 승인
+- [x] **수정 후 재검토**
+- [ ] 중단
+
+라운드 1의 직접 반증은 닫혔지만, 같은 완료 조건을 표현만 바꿔 다시 깨뜨린 세 변형이 gate를
+통과한다. R2-B-1~B-3과 사실 오류 R2-M-3을 해소하기 전에는 승인할 수 없다.
