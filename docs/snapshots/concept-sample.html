@@ -702,7 +702,6 @@ select.field-input {
   }
   .js .reveal.in { opacity: 1; transform: none; }
 }
-
 </style>
 <style>/* smstudy/assets/css/style.css (inlined) */
 /* ==========================================================================
@@ -1438,7 +1437,6 @@ ol.sm-diagram-list .sm-diagram-node-head::before {
   .sm-matrix th, .sm-matrix td { min-width: 0; }
   .sm-matrix tbody th { position: static; background: #f6f7f8; color: #101418; }
 }
-
 </style>
 <style>
 /* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
@@ -1453,12 +1451,12 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
 </head>
 <body>
 <div class="snap-wrap">
-<div class="snap-note"><strong>무엇인가</strong> — 실행 중인 smstudy에서 III-01 개념 화면을 연 뒤 <code>#app</code>의 DOM을 그대로 직렬화한 정적 스냅샷이다.
+<div class="snap-note"><strong>무엇인가</strong> — <code>smstudy/assets/js/app.js</code>의 <code>renderConcept('III-01')</code>가 <code>#app</code>에 쓰는 마크업 전체다.
   히어로·구조도·기출 분석·비교표·문제 푸는 순서·개념 설명·회상 점검·학습 설계까지 화면 전체가 들어 있다.
   CSS 두 개(<code>/assets/css/system.css</code>, <code>/smstudy/assets/css/style.css</code>)를 인라인했으므로 이 파일만 열면 된다.
   <br><strong>주의</strong> — 정적 사본이라 버튼·아코디언은 동작하지 않는다(회상 점검의 <code>&lt;details&gt;</code>는 열린다).
   기출 이미지는 저장소 상대 경로를 참조하므로 저장소 안에서 열어야 보인다.
-  <br><strong>기준</strong> — 2026-08-26 · <code>b508f53</code></div>
+  <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다.</div>
 <section class="snap-item"><h2 class="snap-head">III-01 — 문화의 이해 (개념 화면 #app 전체)</h2><div class="app-main">
       <header class="view-head">
         <div>
@@ -1470,62 +1468,62 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
       </header>
 
       <nav class="toolbar sm-concept-nav" aria-label="중단원 이동">
-        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button">← 이전</button>
+        <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" >← 이전</button>
         <div class="segmented sm-jumps">
-      <button class="segmented-btn jump-concept" type="button" data-id="I-01">
+      <button class="segmented-btn jump-concept" type="button" data-id="I-01" >
         I-01
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="I-02">
+      <button class="segmented-btn jump-concept" type="button" data-id="I-02" >
         I-02
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="I-03">
+      <button class="segmented-btn jump-concept" type="button" data-id="I-03" >
         I-03
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="II-01">
+      <button class="segmented-btn jump-concept" type="button" data-id="II-01" >
         II-01
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="II-02">
+      <button class="segmented-btn jump-concept" type="button" data-id="II-02" >
         II-02
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="II-03">
+      <button class="segmented-btn jump-concept" type="button" data-id="II-03" >
         II-03
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="II-04">
+      <button class="segmented-btn jump-concept" type="button" data-id="II-04" >
         II-04
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="III-01" aria-selected="true" disabled="">
+      <button class="segmented-btn jump-concept" type="button" data-id="III-01" aria-selected="true" disabled>
         III-01
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="III-02">
+      <button class="segmented-btn jump-concept" type="button" data-id="III-02" >
         III-02
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="III-03">
+      <button class="segmented-btn jump-concept" type="button" data-id="III-03" >
         III-03
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-01">
+      <button class="segmented-btn jump-concept" type="button" data-id="IV-01" >
         IV-01
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-02">
+      <button class="segmented-btn jump-concept" type="button" data-id="IV-02" >
         IV-02
       </button>
 
-      <button class="segmented-btn jump-concept" type="button" data-id="IV-03">
+      <button class="segmented-btn jump-concept" type="button" data-id="IV-03" >
         IV-03
       </button>
     </div>
         <div class="toolbar-spacer"></div>
-        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button">다음 →</button>
+        <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" >다음 →</button>
       </nav>
 
       <nav class="toolbar sm-toc" aria-label="단권화 노트 목차">
@@ -1565,8 +1563,8 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
           <strong>문화의 다섯 속성</strong>
           <span class="badge">방사형 지도</span>
         </div>
-        <div class="sm-diagram-canvas"><svg class="sm-d-svg" viewBox="0 0 760 522" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><path d="M380 214L380 80" class="sm-d-connector"></path><path d="M442.77 259.6L570.21 218.2" class="sm-d-connector"></path><path d="M418.79 333.4L497.56 441.8" class="sm-d-connector"></path><path d="M341.21 333.4L262.44 441.8" class="sm-d-connector"></path><path d="M317.23 259.6L189.79 218.2" class="sm-d-connector"></path><circle cx="380" cy="280" r="66" class="sm-d-center-circle"></circle><text x="380" y="286" font-size="15" class="sm-d-center" text-anchor="middle">문화의 속성</text><rect x="278" y="40" width="204" height="80" rx="16" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(298 56) scale(0.8333)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></g><text x="328" y="72" font-size="15" class="sm-d-label">공유성</text><text x="298" y="96" font-size="11" class="sm-d-item">구성원이 함께 나눔</text><text x="298" y="114" font-size="11" class="sm-d-item">행동을 예측하게 함</text><rect x="468.21" y="178.2" width="204" height="80" rx="16" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(488.21 194.2) scale(0.8333)"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"></path></g><text x="518.21" y="210.2" font-size="15" class="sm-d-label">학습성</text><text x="488.21" y="234.2" font-size="11" class="sm-d-item">후천적으로 습득</text><text x="488.21" y="252.2" font-size="11" class="sm-d-item">본능과 구분됨</text><rect x="395.56" y="401.8" width="204" height="80" rx="16" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(415.56 417.8) scale(0.8333)"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path></g><text x="445.56" y="433.8" font-size="15" class="sm-d-label">축적성</text><text x="415.56" y="457.8" font-size="11" class="sm-d-item">전승 위에 새로 추가</text><text x="415.56" y="475.8" font-size="11" class="sm-d-item">세대를 넘어 쌓임</text><rect x="160.44" y="401.8" width="204" height="80" rx="16" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(180.44 417.8) scale(0.8333)"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></g><text x="210.44" y="433.8" font-size="15" class="sm-d-label">전체성</text><text x="180.44" y="457.8" font-size="11" class="sm-d-item">요소끼리 유기적 연결</text><text x="180.44" y="475.8" font-size="11" class="sm-d-item">한 곳이 바뀌면 파급</text><rect x="87.79" y="178.2" width="204" height="80" rx="16" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(107.79 194.2) scale(0.8333)"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></g><text x="137.79" y="210.2" font-size="15" class="sm-d-label">변동성</text><text x="107.79" y="234.2" font-size="11" class="sm-d-item">시간에 따라 달라짐</text><text x="107.79" y="252.2" font-size="11" class="sm-d-item">소멸과 대체도 포함</text></svg></div>
-        <ul class="sm-diagram-list"><li class="sm-diagram-node is-center"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg><strong>문화의 속성</strong></p></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg><strong>공유성</strong></p><ul class="sm-diagram-node-items"><li>구성원이 함께 나눔</li><li>행동을 예측하게 함</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"></path></svg><strong>학습성</strong></p><ul class="sm-diagram-node-items"><li>후천적으로 습득</li><li>본능과 구분됨</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path></svg><strong>축적성</strong></p><ul class="sm-diagram-node-items"><li>전승 위에 새로 추가</li><li>세대를 넘어 쌓임</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><strong>전체성</strong></p><ul class="sm-diagram-node-items"><li>요소끼리 유기적 연결</li><li>한 곳이 바뀌면 파급</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg><strong>변동성</strong></p><ul class="sm-diagram-node-items"><li>시간에 따라 달라짐</li><li>소멸과 대체도 포함</li></ul></li></ul>
+        <div class="sm-diagram-canvas"><svg class="sm-d-svg" viewBox="0 0 760 522" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><path d="M380 214L380 80" class="sm-d-connector"/><path d="M442.77 259.6L570.21 218.2" class="sm-d-connector"/><path d="M418.79 333.4L497.56 441.8" class="sm-d-connector"/><path d="M341.21 333.4L262.44 441.8" class="sm-d-connector"/><path d="M317.23 259.6L189.79 218.2" class="sm-d-connector"/><circle cx="380" cy="280" r="66" class="sm-d-center-circle"/><text x="380" y="286" font-size="15" class="sm-d-center" text-anchor="middle">문화의 속성</text><rect x="278" y="40" width="204" height="80" rx="16" class="sm-d-box"/><g class="sm-d-icon" transform="translate(298 56) scale(0.8333)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></g><text x="328" y="72" font-size="15" class="sm-d-label">공유성</text><text x="298" y="96" font-size="11" class="sm-d-item">구성원이 함께 나눔</text><text x="298" y="114" font-size="11" class="sm-d-item">행동을 예측하게 함</text><rect x="468.21" y="178.2" width="204" height="80" rx="16" class="sm-d-box"/><g class="sm-d-icon" transform="translate(488.21 194.2) scale(0.8333)"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></g><text x="518.21" y="210.2" font-size="15" class="sm-d-label">학습성</text><text x="488.21" y="234.2" font-size="11" class="sm-d-item">후천적으로 습득</text><text x="488.21" y="252.2" font-size="11" class="sm-d-item">본능과 구분됨</text><rect x="395.56" y="401.8" width="204" height="80" rx="16" class="sm-d-box"/><g class="sm-d-icon" transform="translate(415.56 417.8) scale(0.8333)"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></g><text x="445.56" y="433.8" font-size="15" class="sm-d-label">축적성</text><text x="415.56" y="457.8" font-size="11" class="sm-d-item">전승 위에 새로 추가</text><text x="415.56" y="475.8" font-size="11" class="sm-d-item">세대를 넘어 쌓임</text><rect x="160.44" y="401.8" width="204" height="80" rx="16" class="sm-d-box"/><g class="sm-d-icon" transform="translate(180.44 417.8) scale(0.8333)"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></g><text x="210.44" y="433.8" font-size="15" class="sm-d-label">전체성</text><text x="180.44" y="457.8" font-size="11" class="sm-d-item">요소끼리 유기적 연결</text><text x="180.44" y="475.8" font-size="11" class="sm-d-item">한 곳이 바뀌면 파급</text><rect x="87.79" y="178.2" width="204" height="80" rx="16" class="sm-d-box"/><g class="sm-d-icon" transform="translate(107.79 194.2) scale(0.8333)"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></g><text x="137.79" y="210.2" font-size="15" class="sm-d-label">변동성</text><text x="107.79" y="234.2" font-size="11" class="sm-d-item">시간에 따라 달라짐</text><text x="107.79" y="252.2" font-size="11" class="sm-d-item">소멸과 대체도 포함</text></svg></div>
+        <ul class="sm-diagram-list"><li class="sm-diagram-node is-center"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><strong>문화의 속성</strong></p></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg><strong>공유성</strong></p><ul class="sm-diagram-node-items"><li>구성원이 함께 나눔</li><li>행동을 예측하게 함</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></svg><strong>학습성</strong></p><ul class="sm-diagram-node-items"><li>후천적으로 습득</li><li>본능과 구분됨</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg><strong>축적성</strong></p><ul class="sm-diagram-node-items"><li>전승 위에 새로 추가</li><li>세대를 넘어 쌓임</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><strong>전체성</strong></p><ul class="sm-diagram-node-items"><li>요소끼리 유기적 연결</li><li>한 곳이 바뀌면 파급</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg><strong>변동성</strong></p><ul class="sm-diagram-node-items"><li>시간에 따라 달라짐</li><li>소멸과 대체도 포함</li></ul></li></ul>
         <figcaption class="sm-diagram-note">문화의 다섯 속성 — 문화의 속성을 중심으로 5갈래가 대등하게 뻗는다. 다섯 속성이 서로 우열 없이 나란히 놓이므로 이 형식으로 그렸다.</figcaption>
       </figure>
       <figure class="sm-diagram sm-diagram--scale">
@@ -1574,8 +1572,8 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
           <strong>자문화 중심과 사대</strong>
           <span class="badge">대립 저울</span>
         </div>
-        <div class="sm-diagram-canvas"><svg class="sm-d-svg" viewBox="0 0 760 254" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><path d="M60 96H700" class="sm-d-beam"></path><path d="M380 92L412 142H348Z" class="sm-d-fulcrum"></path><path d="M187 96V132" class="sm-d-connector"></path><path d="M573 96V132" class="sm-d-connector"></path><text x="380" y="178" font-size="13" class="sm-d-mute" text-anchor="middle">vs</text><rect x="30" y="132" width="315" height="106" rx="18" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(52 152) scale(0.9167)"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"></path></g><text x="84" y="170" font-size="16" class="sm-d-label">자문화 중심</text><circle cx="58" cy="194" r="3" class="sm-d-dot"></circle><text x="70" y="198" font-size="12" class="sm-d-item">자기 문화가 우월</text><circle cx="58" cy="218" r="3" class="sm-d-dot"></circle><text x="70" y="222" font-size="12" class="sm-d-item">국수주의로 이어짐</text><rect x="415" y="132" width="315" height="106" rx="18" class="sm-d-box"></rect><g class="sm-d-icon" transform="translate(437 152) scale(0.9167)"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></g><text x="469" y="170" font-size="16" class="sm-d-label">문화 사대주의</text><circle cx="443" cy="194" r="3" class="sm-d-dot"></circle><text x="455" y="198" font-size="12" class="sm-d-item">다른 문화가 우월</text><circle cx="443" cy="218" r="3" class="sm-d-dot"></circle><text x="455" y="222" font-size="12" class="sm-d-item">고유 정체성 상실</text></svg></div>
-        <ul class="sm-diagram-list"><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"></path></svg><strong>자문화 중심</strong></p><ul class="sm-diagram-node-items"><li>자기 문화가 우월</li><li>국수주의로 이어짐</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><strong>문화 사대주의</strong></p><ul class="sm-diagram-node-items"><li>다른 문화가 우월</li><li>고유 정체성 상실</li></ul></li></ul>
+        <div class="sm-diagram-canvas"><svg class="sm-d-svg" viewBox="0 0 760 254" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><path d="M60 96H700" class="sm-d-beam"/><path d="M380 92L412 142H348Z" class="sm-d-fulcrum"/><path d="M187 96V132" class="sm-d-connector"/><path d="M573 96V132" class="sm-d-connector"/><text x="380" y="178" font-size="13" class="sm-d-mute" text-anchor="middle">vs</text><rect x="30" y="132" width="315" height="106" rx="18" class="sm-d-box"/><g class="sm-d-icon" transform="translate(52 152) scale(0.9167)"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></g><text x="84" y="170" font-size="16" class="sm-d-label">자문화 중심</text><circle cx="58" cy="194" r="3" class="sm-d-dot"/><text x="70" y="198" font-size="12" class="sm-d-item">자기 문화가 우월</text><circle cx="58" cy="218" r="3" class="sm-d-dot"/><text x="70" y="222" font-size="12" class="sm-d-item">국수주의로 이어짐</text><rect x="415" y="132" width="315" height="106" rx="18" class="sm-d-box"/><g class="sm-d-icon" transform="translate(437 152) scale(0.9167)"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></g><text x="469" y="170" font-size="16" class="sm-d-label">문화 사대주의</text><circle cx="443" cy="194" r="3" class="sm-d-dot"/><text x="455" y="198" font-size="12" class="sm-d-item">다른 문화가 우월</text><circle cx="443" cy="218" r="3" class="sm-d-dot"/><text x="455" y="222" font-size="12" class="sm-d-item">고유 정체성 상실</text></svg></div>
+        <ul class="sm-diagram-list"><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg><strong>자문화 중심</strong></p><ul class="sm-diagram-node-items"><li>자기 문화가 우월</li><li>국수주의로 이어짐</li></ul></li><li class="sm-diagram-node"><p class="sm-diagram-node-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><strong>문화 사대주의</strong></p><ul class="sm-diagram-node-items"><li>다른 문화가 우월</li><li>고유 정체성 상실</li></ul></li></ul>
         <figcaption class="sm-diagram-note">자문화 중심과 사대 — 자문화 중심과 문화 사대주의가 하나의 축에서 정반대에 놓인다. 두 절대주의가 반대 방향이고 상대주의가 그 사이라서 이 형식으로 그렸다.</figcaption>
       </figure></div>
       </section>
@@ -1621,8 +1619,8 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         <span class="sm-freq-count">2/6문항</span>
       </li></ol>
         <div class="sm-callouts">
-          <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"></path><path d="m22 7-8.5 8.5-5-5L2 17"></path></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
-          <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
+          <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
+          <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
         </div>
       </section>
 
@@ -1699,7 +1697,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
           <span class="kicker">헷갈리는 선지를 가르는 설명</span>
           <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
         </div>
-        <div class="sm-deep"><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg><span>공유성과 학습성</span></h4><ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path></svg><span>축적성과 변동성</span></h4><ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span>전체성</span></h4><ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg><span>문화 절대주의</span></h4><ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg><span>극단적 상대주의</span></h4><ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul></article></div>
+        <div class="sm-deep"><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg><span>공유성과 학습성</span></h4><ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg><span>축적성과 변동성</span></h4><ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span>전체성</span></h4><ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg><span>문화 절대주의</span></h4><ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>극단적 상대주의</span></h4><ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul></article></div>
       </section>
 
       <section id="recall-lab" class="sm-stack sm-section" aria-labelledby="recall-title">
