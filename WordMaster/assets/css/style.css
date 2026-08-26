@@ -22,44 +22,6 @@
      --red    #ff453a on --surface-2 #1d1d1f  4.94:1  (.wm-verdict 오답 — 인셋 그룹)
    ========================================================================== */
 
-.wm-page { padding: var(--space-5) 0 var(--space-8); }
-
-.app-main { min-width: 0; display: grid; gap: var(--space-5); }
-.app-main:focus { outline: none; }
-
-/* ---- 사이드바 보조 ---- */
-
-.wm-facts { display: grid; gap: var(--space-2); margin: 0; padding: 0 var(--space-3); }
-.wm-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); }
-.wm-facts dt { font-size: var(--fs-caption); color: var(--text-3); }
-.wm-facts dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; color: var(--text); }
-
-.wm-side-note {
-  padding: 0 var(--space-3);
-  font-size: var(--fs-micro);
-  line-height: 1.6;
-  color: var(--text-3);
-}
-
-/* ---- 뷰 헤더 ---- */
-
-.view-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.view-head h1 { font-size: var(--fs-title-1); line-height: var(--lh-title); letter-spacing: var(--ls-title); font-weight: 700; }
-.view-head p { color: var(--text-2); font-size: var(--fs-caption); margin-top: 2px; }
-/* 눈썹 라벨 바로 아래 제목이 오면 최소 여백을 준다 (smstudy와 같은 처리). */
-.app-main .kicker { margin-bottom: 2px; }
-
-/* 앱 이모지 + 제목 묶음. 이모지는 한 화면에 한 번, 헤더에만 크게 놓는다. */
-.wm-head-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.wm-head-main > div { min-width: 0; }
-
-/* ---- 2열 레이아웃 (설정·기록 공용) ---- */
 
 .wm-layout {
   display: grid;
@@ -204,31 +166,6 @@
   font-size: var(--fs-caption);
 }
 
-/* 파일 입력은 시각적으로만 숨긴다 — 라벨 클릭과 키보드 포커스는 그대로 동작해야 한다. */
-.wm-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* ---- 푸터 ---- */
-
-.wm-footer { border-top: 1px solid var(--line-faint); padding: var(--space-5) 0 var(--space-7); }
-.wm-footer-inner {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--fs-micro);
-  color: var(--text-3);
-}
-
 /* ---- 반응형 ---- */
 
 @media (max-width: 960px) {
@@ -237,7 +174,6 @@
 }
 
 @media (max-width: 560px) {
-  .wm-page { padding-top: var(--space-4); }
   .wm-answer-row { grid-template-columns: minmax(0, 1fr); }
   /* 좁은 폭에서는 뜻이 우측 열에 갇히지 않게 폭 제한을 푼다. */
   .wm-gloss { max-width: 100%; }

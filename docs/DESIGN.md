@@ -211,6 +211,11 @@ summary 행의 기하는 `.list-row`와 같은 토큰(`--row-min-h` / `--row-pad
 | `.sheet` / `.sheet-backdrop` | 모달 시트. 그림자 허용(오버레이). |
 | `.toast` | 일시 알림. 그림자 허용(오버레이). |
 | `.topbar` / `.app-shell` / `.sidebar` / `.sidebar-item` | 전역 셸. |
+| `.app-page` / `.app-main` / `.app-footer` / `.app-footer-inner` | 앱 3면(smstudy·WordMaster·admin)의 페이지 여백·본문 그리드·푸터. 화면마다 다시 만들지 않는다. |
+| `.view-head` / `.view-head-main` / `.view-head h1` / `.view-head p` | 뷰 제목 줄. `.view-head-main`이 앱 이모지(`.emoji.emoji-lg`)와 제목 묶음을 담는다. |
+| `.side-facts` / `.side-note` | 사이드바의 정의 목록과 각주. |
+| `.sr-only` | 시각적으로만 숨김. `position: absolute`이므로 스크롤 컨테이너 안에 둘 때는 그 컨테이너가 `position: relative`여야 한다(`.table-wrap`이 그렇다). |
+| `.field-input-sm` | 툴바에 들어가는 작은 입력·셀렉트(`.btn-sm`과 같은 높이). |
 | `.emoji` / `.emoji-box` / `.emoji-lg` | §5의 이모지 슬롯. |
 | `.stat` / `.stat-value` / `.stat-label` | 수치 타일. 뷰당 1묶음까지(§6 장식 상한). |
 | `.display-xl` / `.display` / `.title-1~3` / `.kicker` | 텍스트 위계. |

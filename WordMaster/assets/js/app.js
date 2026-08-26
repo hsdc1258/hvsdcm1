@@ -431,7 +431,7 @@
     const poolSize = getRangeWords(state.home.startDay, state.home.endDay).length;
     app.innerHTML = `
       <header class="view-head">
-        <div class="wm-head-main">
+        <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
             <h1>시험 설정</h1>
@@ -547,7 +547,7 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div class="wm-head-main">
+        <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
             <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
@@ -637,7 +637,7 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div class="wm-head-main">
+        <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
             <span class="kicker">${escapeHtml(sessionLabel(session))} 완료</span>
@@ -710,7 +710,7 @@
 
     app.innerHTML = `
       <header class="view-head">
-        <div class="wm-head-main">
+        <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
             <h1>학습 기록</h1>
@@ -782,7 +782,7 @@
             </button>
           </div>
           <!-- 파일 입력은 그룹 밖에 둔다 — 행 사이에 끼우면 .list-row + .list-row 구분선이 끊긴다. -->
-          <input id="importFile" class="wm-file" type="file" accept="application/json,.json">
+          <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
         </aside>
       </div>
     `;

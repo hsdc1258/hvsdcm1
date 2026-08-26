@@ -4,11 +4,6 @@
    인쇄용 라이트 팔레트는 @media print 안에서 html 요소에만 재정의한다.
    ========================================================================== */
 
-.sm-page { padding: var(--space-6) 0 var(--space-8); }
-
-.app-main { min-width: 0; display: grid; gap: var(--space-5); }
-.app-main:focus { outline: none; }
-
 /* ---- 공통 헬퍼 ---- */
 
 .sm-stack { display: grid; gap: var(--space-4); }
@@ -18,42 +13,9 @@
 .sm-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .sm-actions .btn { flex: 1 1 auto; }
 .sm-empty { padding: var(--space-7); text-align: center; color: var(--text-2); font-size: var(--fs-caption); }
-.sm-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
 ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
 .sm-bullets li { font-size: var(--fs-caption); color: var(--text); }
 .sm-bullets li::marker { color: var(--text-3); }
-
-.view-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.view-head h1 { font-size: var(--fs-title-1); line-height: var(--lh-title); letter-spacing: var(--ls-title); font-weight: 700; }
-.view-head p { font-size: var(--fs-caption); color: var(--text-2); margin-top: var(--space-1); }
-/* 눈썹 라벨(.kicker) 바로 아래 제목이 오면 최소 여백을 준다. 제목의 line-height가 1.16이라
-   폰트 상자가 줄 상자보다 커서, 붙여 두면 두 글자 상자가 실제로 1~2px 겹친다. */
-.app-main .kicker { margin-bottom: var(--space-1); }
-
-/* ---- 사이드바 ---- */
-
-.sm-facts { display: grid; gap: var(--space-2); margin: 0; padding: 0 var(--space-3); }
-.sm-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); }
-.sm-facts dt { font-size: var(--fs-caption); color: var(--text-3); }
-.sm-facts dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; }
-
-.sm-side-note { padding: 0 var(--space-3); font-size: var(--fs-micro); line-height: 1.6; color: var(--text-3); }
 
 /* ---- 홈 레이아웃 ---- */
 
@@ -444,18 +406,6 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-rate .sm-meter { flex: 0 1 110px; min-width: 60px; }
 .sm-rate .list-row-value { min-width: 3.2em; }
 
-/* ---- 푸터 ---- */
-
-.sm-footer { border-top: 1px solid var(--line-faint); padding: var(--space-5) 0 var(--space-7); }
-.sm-footer-inner {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--fs-micro);
-  color: var(--text-3);
-}
-
 /* ---- 개념 다이어그램 (diagram.js) ----
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
    조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
@@ -712,7 +662,6 @@ ul.sm-d-items {
 }
 
 @media (max-width: 640px) {
-  .sm-page { padding-top: var(--space-5); }
   .sm-swipe { display: inline; }
   .sm-choices { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); }
   .sm-choice { padding: var(--space-3) 0; font-size: var(--fs-title-3); }
@@ -770,7 +719,7 @@ ul.sm-d-items {
   .topbar,
   .topbar-spacer,
   .sidebar,
-  .sm-footer,
+  .app-footer,
   .sm-concept-nav,
   .sm-concept-finish,
   .list-row-accessory,
@@ -778,7 +727,7 @@ ul.sm-d-items {
   .toast { display: none !important; }
 
   .app-shell { grid-template-columns: minmax(0, 1fr); }
-  .sm-page { padding: 0; }
+  .app-page { padding: 0; }
 
   /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
      실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */

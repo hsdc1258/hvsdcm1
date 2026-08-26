@@ -174,13 +174,27 @@ function validateUiContracts() {
     check(/<div id="toast" class="toast" role="status" aria-live="polite">/u.test(source), `${name}: polite toast region is missing`);
   }
 
-  check(wordMasterCss.includes('.app-main:focus { outline: none; }'), 'WordMaster: programmatic main focus must not paint an outline');
+  // 3c에서 앱 셸 보조 규칙(.app-main / .view-head / .side-* / .app-footer / .app-page)을
+  // system.css로 승격했다. 화면마다 같은 규칙을 다시 두지 않으므로 단일 원본에서 확인한다.
+  check(systemCss.includes('.app-main:focus { outline: none; }'), 'system.css: programmatic main focus must not paint an outline');
+  for (const primitive of ['.app-page', '.app-main', '.view-head', '.view-head-main', '.side-facts', '.side-note', '.app-footer', '.sr-only', '.list-row-stretch', '.list-row-accessory', '.disclosure', '.disclosure-head', '.disclosure-body', '.list-group-head-row']) {
+    check(systemCss.includes(primitive + ' {') || systemCss.includes(primitive + ','),
+      `system.css: primitive ${primitive} is missing`);
+  }
+  // 승격된 규칙이 화면 CSS에 되살아나면(같은 모양의 재구현) 톤이 다시 갈라진다.
+  // 인쇄 블록은 제외한다 — 거기서 프리미티브를 숨기는 것은 재구현이 아니라 소비다.
+  const withoutPrint = (css) => css.replace(/@media\s+print\s*\{[\s\S]*$/u, '');
+  for (const [name, css] of [['WordMaster', wordMasterCss], ['smstudy', withoutPrint(smstudyCss)], ['admin', adminCss]]) {
+    for (const primitive of ['.app-main', '.view-head', '.side-facts', '.side-note', '.app-footer']) {
+      check(!new RegExp(`(^|[\\s,}])\\${primitive}\\s*(\\{|,)`, 'mu').test(css),
+        `${name}: ${primitive} is promoted to system.css — do not redefine it in a screen stylesheet (DESIGN.md §7)`);
+    }
+  }
   check(wordMasterCss.includes('grid-template-columns: minmax(0, 1fr) auto'), 'WordMaster: answer row must use a shrink-safe column');
   check(wordMasterJs.includes('function setNav('), 'WordMaster: sidebar state must follow the rendered view');
   check(wordMasterJs.includes("toast.classList.add('open')"), 'WordMaster: toast must use the shared .toast.open contract');
   check(wordMasterJs.includes('wrongCount: cumulativeWrongCount'), 'WordMaster: wrong-rate ties must use cumulative mistakes');
 
-  check(smstudyCss.includes('.app-main:focus { outline: none; }'), 'smstudy: programmatic main focus must not paint an outline');
   check(smstudyCss.includes('@media print'), 'smstudy: printable concept-note stylesheet is missing');
   check(smstudyCss.includes('.sm-media-fallback'), 'smstudy: KICE image fallback styling is missing');
   check(smstudyJs.includes('function setNav('), 'smstudy: sidebar state must follow the rendered view');

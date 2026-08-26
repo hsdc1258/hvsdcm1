@@ -258,6 +258,81 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .skip-link:focus { top: var(--space-4); }
 
 /* ==========================================================================
+   앱 셸 보조 (3c 승격) — 랜딩 밖 3면(smstudy·WordMaster·admin)이 글자 하나까지 같은
+   값으로 각자 갖고 있던 지역 규칙들이다. 같은 모양을 화면마다 다시 만들지 않는다
+   (DESIGN.md §7). 페이지 여백·뷰 헤더·사이드바 보조·푸터가 세 화면에서 어긋나면
+   "한 벌로 보이지 않는다"는 인상이 바로 여기서 생긴다.
+   ========================================================================== */
+
+/* 시각적으로만 숨긴다 — 스크린리더와 라벨 연결(for/id)은 그대로 동작한다.
+   position: absolute이므로, 스크롤 컨테이너 안에 둘 때는 그 컨테이너가
+   position: relative여야 새어 나가지 않는다(.table-wrap이 그렇게 되어 있다). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-page { padding: var(--space-5) 0 var(--space-8); }
+
+.app-main {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+}
+/* 화면 전환 때 프로그램적으로 focus()를 부르므로 포커스 링을 그리지 않는다. */
+.app-main:focus { outline: none; }
+
+.view-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+/* 앱 이모지 + 제목 묶음. 이모지는 뷰마다 한 번, 헤더에만 크게 놓는다 (§5). */
+.view-head-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.view-head-main > div { min-width: 0; }
+.view-head h1 {
+  font-size: var(--fs-title-1);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+  font-weight: 700;
+}
+.view-head p { margin-top: 2px; font-size: var(--fs-caption); color: var(--text-2); }
+/* 눈썹 라벨 바로 아래 제목이 오면 최소 여백을 준다 — 제목의 폰트 상자가 줄 상자보다
+   커서, 붙여 두면 두 글자 상자가 실제로 1~2px 겹친다. */
+.app-main .kicker { margin-bottom: 2px; }
+
+.side-facts { display: grid; gap: var(--space-2); margin: 0; padding: 0 var(--space-3); }
+.side-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); }
+.side-facts dt { font-size: var(--fs-caption); color: var(--text-3); }
+.side-facts dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; color: var(--text); }
+
+.side-note { padding: 0 var(--space-3); font-size: var(--fs-micro); line-height: 1.6; color: var(--text-3); }
+
+.app-footer { border-top: 1px solid var(--line-faint); padding: var(--space-5) 0 var(--space-7); }
+.app-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+@media (max-width: 640px) {
+  .app-page { padding-top: var(--space-4); }
+}
+
+/* ==========================================================================
    텍스트 프리미티브
    ========================================================================== */
 
@@ -1018,11 +1093,6 @@ label.list-row { cursor: pointer; }
    인쇄용 라이트 팔레트는 @media print 안에서 html 요소에만 재정의한다.
    ========================================================================== */
 
-.sm-page { padding: var(--space-6) 0 var(--space-8); }
-
-.app-main { min-width: 0; display: grid; gap: var(--space-5); }
-.app-main:focus { outline: none; }
-
 /* ---- 공통 헬퍼 ---- */
 
 .sm-stack { display: grid; gap: var(--space-4); }
@@ -1032,42 +1102,9 @@ label.list-row { cursor: pointer; }
 .sm-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .sm-actions .btn { flex: 1 1 auto; }
 .sm-empty { padding: var(--space-7); text-align: center; color: var(--text-2); font-size: var(--fs-caption); }
-.sm-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
 ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
 .sm-bullets li { font-size: var(--fs-caption); color: var(--text); }
 .sm-bullets li::marker { color: var(--text-3); }
-
-.view-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.view-head h1 { font-size: var(--fs-title-1); line-height: var(--lh-title); letter-spacing: var(--ls-title); font-weight: 700; }
-.view-head p { font-size: var(--fs-caption); color: var(--text-2); margin-top: var(--space-1); }
-/* 눈썹 라벨(.kicker) 바로 아래 제목이 오면 최소 여백을 준다. 제목의 line-height가 1.16이라
-   폰트 상자가 줄 상자보다 커서, 붙여 두면 두 글자 상자가 실제로 1~2px 겹친다. */
-.app-main .kicker { margin-bottom: var(--space-1); }
-
-/* ---- 사이드바 ---- */
-
-.sm-facts { display: grid; gap: var(--space-2); margin: 0; padding: 0 var(--space-3); }
-.sm-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); }
-.sm-facts dt { font-size: var(--fs-caption); color: var(--text-3); }
-.sm-facts dd { margin: 0; font-size: var(--fs-caption); font-weight: 600; }
-
-.sm-side-note { padding: 0 var(--space-3); font-size: var(--fs-micro); line-height: 1.6; color: var(--text-3); }
 
 /* ---- 홈 레이아웃 ---- */
 
@@ -1458,18 +1495,6 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-rate .sm-meter { flex: 0 1 110px; min-width: 60px; }
 .sm-rate .list-row-value { min-width: 3.2em; }
 
-/* ---- 푸터 ---- */
-
-.sm-footer { border-top: 1px solid var(--line-faint); padding: var(--space-5) 0 var(--space-7); }
-.sm-footer-inner {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--fs-micro);
-  color: var(--text-3);
-}
-
 /* ---- 개념 다이어그램 (diagram.js) ----
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
    조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
@@ -1726,7 +1751,6 @@ ul.sm-d-items {
 }
 
 @media (max-width: 640px) {
-  .sm-page { padding-top: var(--space-5); }
   .sm-swipe { display: inline; }
   .sm-choices { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); }
   .sm-choice { padding: var(--space-3) 0; font-size: var(--fs-title-3); }
@@ -1784,7 +1808,7 @@ ul.sm-d-items {
   .topbar,
   .topbar-spacer,
   .sidebar,
-  .sm-footer,
+  .app-footer,
   .sm-concept-nav,
   .sm-concept-finish,
   .list-row-accessory,
@@ -1792,7 +1816,7 @@ ul.sm-d-items {
   .toast { display: none !important; }
 
   .app-shell { grid-template-columns: minmax(0, 1fr); }
-  .sm-page { padding: 0; }
+  .app-page { padding: 0; }
 
   /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
      실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */

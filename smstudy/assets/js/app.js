@@ -355,9 +355,12 @@
     setNav('home');
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <h1>단원 목록</h1>
-          <p>범위를 고르면 평가원 원문 그대로 출제됩니다. 13개 중단원 · 78문항.</p>
+        <div class="view-head-main">
+          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          <div>
+            <h1>단원 목록</h1>
+            <p>범위를 고르면 평가원 원문 그대로 출제됩니다. 13개 중단원 · 78문항.</p>
+          </div>
         </div>
         <span class="badge badge-accent">출제 범위 ${state.selected.size}/${SUBUNITS.length}</span>
       </header>
@@ -844,9 +847,12 @@
     const sourceLabel = `${question.year}학년도 ${question.session} 기출 · 평가원`;
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">${esc(session.label)} · ${question.sub}</span>
-          <h1>기출 풀이</h1>
+        <div class="view-head-main">
+          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          <div>
+            <span class="kicker">${esc(session.label)} · ${question.sub}</span>
+            <h1>기출 풀이</h1>
+          </div>
         </div>
         <span class="badge ${session.wrong ? 'badge-red' : 'badge-green'}">정답 ${session.correct} · 오답 ${session.wrong}</span>
       </header>
@@ -1000,9 +1006,12 @@
     }).join('');
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <span class="kicker">${esc(session.label)} 완료</span>
-          <h1>풀이 결과</h1>
+        <div class="view-head-main">
+          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          <div>
+            <span class="kicker">${esc(session.label)} 완료</span>
+            <h1>풀이 결과</h1>
+          </div>
         </div>
       </header>
 
@@ -1141,9 +1150,12 @@
     const wrongEntries = getWrongEntries();
     app.innerHTML = `
       <header class="view-head">
-        <div>
-          <h1>학습 기록</h1>
-          <p>정답 번호가 아니라 원문·오답 원인·단원별 정확도를 함께 봅니다.</p>
+        <div class="view-head-main">
+          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          <div>
+            <h1>학습 기록</h1>
+            <p>정답 번호가 아니라 원문·오답 원인·단원별 정확도를 함께 봅니다.</p>
+          </div>
         </div>
         <button id="statsHome" class="btn btn-secondary btn-sm" type="button">단원 목록</button>
       </header>
@@ -1160,7 +1172,7 @@
         <div class="toolbar-group">
           <button id="exportData" class="btn btn-secondary btn-sm" type="button">기록 백업</button>
           <label class="btn btn-secondary btn-sm" for="importData">기록 복원</label>
-          <input id="importData" class="sm-file" type="file" accept="application/json,.json">
+          <input id="importData" class="sr-only" type="file" accept="application/json,.json">
         </div>
         <div class="toolbar-spacer"></div>
         <button id="resetData" class="btn btn-danger btn-sm" type="button">기록 초기화</button>

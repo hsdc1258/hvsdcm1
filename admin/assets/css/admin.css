@@ -16,35 +16,14 @@
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
      --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-stat-note / .ad-ip)
      --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
-     --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-side-note / .ad-filter-label)
+     --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
    ========================================================================== */
 
-.ad-page { padding: var(--space-5) 0 var(--space-8); }
-
-.app-main { min-width: 0; }
-.app-main:focus { outline: none; }
-
 .hidden { display: none !important; }
-
-.ad-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 
 /* ---- 사이드바 ---- */
 
 .sidebar-item[href] { scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
-
-.ad-side-note {
-  padding: 0 var(--space-3);
-  font-size: var(--fs-micro);
-  line-height: 1.6;
-  color: var(--text-3);
-}
 
 /* ---- 로그인 ---- */
 
@@ -65,15 +44,6 @@
    가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
    여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
 .ad-panel > *, .ad-section > * { min-width: 0; }
-
-.view-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.view-head p { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
 .ad-filter-label {
   font-size: var(--fs-micro);
@@ -142,6 +112,5 @@
 /* ---- 반응형 ---- */
 
 @media (max-width: 860px) {
-  .ad-page { padding-top: var(--space-4); }
   .ad-panel { gap: var(--space-5); }
 }
