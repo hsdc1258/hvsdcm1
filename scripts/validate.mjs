@@ -1230,6 +1230,110 @@ function validateDesignTokens() {
   }
 }
 
+// ==========================================================================
+// 이모지 체계 (DESIGN.md §5 / plan.md §2.4·§4)
+//
+// 검사 대상 이모지 목록을 하드코딩하지 않는다 (LESSONS 규칙 5). 유니코드 속성으로
+// 소스에서 자동 도출하므로 새 이모지를 도입해도 검사가 뒤처지지 않는다.
+//
+// 이 검사가 **못 보는 것** (LESSONS 규칙 6 — 사각지대를 먼저 적는다):
+//  - 이모지의 *의미 적절성*. 📘가 사회·문화에 어울리는지는 사람만 판단한다.
+//  - 이미지·SVG 안에 그려진 그림 문자. 텍스트 스캔의 범위 밖이다.
+//  - 데이터 파일의 이모지 값 자체(매핑 원본). 값이 슬롯을 거쳐 렌더되는지만 본다.
+//  - 런타임에 문자열을 조립해 만든 이모지(String.fromCodePoint 등).
+// ==========================================================================
+
+// 그림문자 = 이모지 표현이 기본인 문자 + VS16으로 이모지 표현을 강제한 문자 + 키캡.
+const EMOJI_PATTERN = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️|⃣/u;
+// system.css가 제공하는 이모지 슬롯 클래스 (DESIGN.md §5·§7.2).
+const EMOJI_SLOT_CLASS = /\bemoji(?:-box|-lg)?\b/u;
+
+// 마크업 문자열에서 "여는 태그 직후에 등장하는 그림문자"를 모은다.
+// HTML 파일과 JS 렌더러(템플릿 문자열)에 같은 판정을 적용할 수 있다.
+function emojiInMarkup(source) {
+  const found = [];
+  const pattern = new RegExp(EMOJI_PATTERN.source, 'gu');
+  const withoutComments = source.replace(/<!--[^]*?-->/gu, (match) => ' '.repeat(match.length));
+  for (const hit of withoutComments.matchAll(pattern)) {
+    const index = hit.index;
+    const before = withoutComments.slice(0, index);
+    const tagEnd = before.lastIndexOf('>');
+    // 여는 태그와 그림문자 사이에 공백 말고 다른 것이 있으면 슬롯 밖이다.
+    const gap = tagEnd === -1 ? before : before.slice(tagEnd + 1);
+    const tagStart = before.lastIndexOf('<', tagEnd);
+    const tag = tagStart === -1 || tagEnd === -1 ? '' : before.slice(tagStart, tagEnd + 1);
+    const classAttribute = /\sclass="([^"]*)"/u.exec(tag);
+    found.push({
+      index,
+      glyph: hit[0],
+      inMarkupTextPosition: tagEnd !== -1 && gap.trim() === '',
+      slotted: Boolean(classAttribute) && EMOJI_SLOT_CLASS.test(classAttribute[1]),
+      line: withoutComments.slice(0, index).split('\n').length,
+      after: withoutComments.slice(index + hit[0].length, index + hit[0].length + 700),
+    });
+  }
+  return found;
+}
+
+function validateEmojiSystem() {
+  const labelPattern = /class="[^"]*\b(?:list-row-title|title-1|title-2|title-3|sidebar-item|list-group-head)\b[^"]*"[^>]*>\s*([^<]+?)\s*</u;
+  // 대상 ↔ 이모지는 사이트 전체에서 일대일이어야 한다 (같은 대상엔 같은 이모지).
+  const labelToGlyph = new Map();
+  const glyphToLabel = new Map();
+  let sloted = 0;
+
+  const surfaces = [
+    ...walk(ROOT, (item) => item.endsWith('.html')).map(relative),
+    ...['assets/js/home.js', 'account.js', 'WordMaster/assets/js/app.js',
+      'smstudy/assets/js/app.js', 'admin/assets/js/admin.js'],
+  ];
+
+  for (const file of surfaces) {
+    const source = readFileSync(path.join(ROOT, file), 'utf8');
+    const occurrences = emojiInMarkup(source);
+    const isHtml = file.endsWith('.html');
+
+    for (const occurrence of occurrences) {
+      // JS는 데이터 위치의 이모지(매핑 단일 원본)를 허용한다 — 마크업에 박힌 것만 본다.
+      if (!isHtml && !occurrence.inMarkupTextPosition) continue;
+      check(occurrence.inMarkupTextPosition && occurrence.slotted,
+        `${file}:${occurrence.line}: emoji "${occurrence.glyph}" must sit directly inside an .emoji / .emoji-box / .emoji-lg slot (DESIGN.md §5)`);
+      if (!occurrence.slotted) continue;
+      sloted += 1;
+
+      // 한 슬롯에 이모지 하나 (같은 슬롯 안에서 닫는 태그 전까지).
+      const slotBody = occurrence.after.slice(0, Math.max(occurrence.after.indexOf('<'), 0));
+      check(!new RegExp(EMOJI_PATTERN.source, 'u').test(slotBody),
+        `${file}:${occurrence.line}: an emoji slot must hold exactly one emoji (DESIGN.md §5)`);
+
+      const label = labelPattern.exec(occurrence.after);
+      if (!label) continue;
+      const text = label[1].replace(/\s+/gu, ' ');
+      const knownGlyph = labelToGlyph.get(text);
+      const knownLabel = glyphToLabel.get(occurrence.glyph);
+      check(knownGlyph === undefined || knownGlyph === occurrence.glyph,
+        `${file}:${occurrence.line}: "${text}" is marked with "${occurrence.glyph}" here but with "${knownGlyph}" elsewhere — one target, one emoji (DESIGN.md §5)`);
+      check(knownLabel === undefined || knownLabel === text,
+        `${file}:${occurrence.line}: emoji "${occurrence.glyph}" marks both "${knownLabel}" and "${text}" — one emoji, one target (DESIGN.md §5)`);
+      labelToGlyph.set(text, occurrence.glyph);
+      glyphToLabel.set(occurrence.glyph, text);
+    }
+
+    // "한 행에 이모지 1개" — .list-row 하나가 그림문자를 둘 이상 담으면 안 된다.
+    // \blist-row\b는 "list-row-title"에도 걸린다 — 클래스 토큰 경계까지 맞춘다.
+    for (const row of source.match(/<(\w+)[^>]*class="[^"]*\blist-row(?:\s[^"]*)?"[^>]*>[^]*?<\/\1>/gu) || []) {
+      const glyphs = row.match(new RegExp(EMOJI_PATTERN.source, 'gu')) || [];
+      check(glyphs.length <= 1,
+        `${file}: a .list-row carries ${glyphs.length} emoji (${glyphs.join('')}) — one emoji per row (DESIGN.md §5)`);
+    }
+  }
+
+  // 검사가 죽은 채 통과하지 않도록, 이모지 슬롯이 실제로 존재하는지 확인한다.
+  // 사이클4에서 이모지 체계를 도입했으므로 0이면 회귀다 (LESSONS 규칙 6·7).
+  check(sloted > 0, 'emoji system: no emoji slot found on any surface — the DESIGN.md §5 system has regressed');
+  check(labelToGlyph.size > 0, 'emoji system: no emoji↔label pair could be derived — the consistency check is inert');
+}
+
 function validateBrandName() {
   // C-5: 브랜드는 소문자 "hvsdcm" 한 덩어리 (plan.md R-5). 분리 표기 전면 금지.
   const separated = /HVS[\s\-_]?DCM|hvs[\s\-_]dcm/u;
@@ -1357,6 +1461,7 @@ validateUiContracts();
 validateLandingGating();
 validateDesignTokens();
 validateBrandName();
+validateEmojiSystem();
 validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
