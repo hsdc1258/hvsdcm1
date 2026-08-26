@@ -19,3 +19,4 @@
 - [요청] R2-B-1·M-1 → [수정] render-sandbox(Proxy 런타임 필드 수집)·snapshot 생성기 신설, 스냅샷 2종 재생성 (3418451)
 - [요청] R2-B-1~B-3 → [수정] 런타임 필드 대조+출력 undefined/빈슬롯 검사, kind 7종×두 렌더 경로 아이콘 대조, figure 검사를 함수 본문으로 한정 (103ba14)
 - [요청] R2-M-2·중단선 → [수정] plan.md §4·§5 확정값 동기화 + §13 D-12·D-13, 음성 테스트 N45~N50 추가 (docs 커밋)
+- [요청] 사이클3 R3-M-1 (CRLF 체크아웃에서 정상 HEAD가 npm test 7건 실패) → [수정] validate.mjs·render-sandbox.mjs가 텍스트를 읽는 즉시 CRLF를 LF로 정규화 + .gitattributes로 eol=lf 고정 + gate-negative-tests.md에 검증 항목 N51 추가 (202bf89)
