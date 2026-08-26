@@ -1,9 +1,25 @@
 /* ==========================================================================
-   admin — 운영 대시보드 (plan.md D4: HIG 어법, 표·툴바 중심)
+   admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
+
+   사이클4 재조판 요지
+   - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
+     행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
+   - 섹션 머리를 다른 3면과 같은 어법으로 맞췄다: 뷰 제목은 h1(title-1),
+     섹션 라벨은 .list-group-head(마이크로 캡스). title-2 두 줄 헤더를 걷어냈다.
+   - 접기 카드(.ad-fold)는 system.css의 .disclosure 프리미티브로 대체했다.
+   - 로그인 카드의 box-shadow를 제거했다. 카드는 떠 있지 않다 — 그림자는 시트·토스트·
+     세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
+   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js)로 줄여
+     표가 가로로 밀리지 않게 했다.
+
+   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
+     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-stat-note / .ad-ip)
+     --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
+     --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-side-note / .ad-filter-label)
    ========================================================================== */
 
-.ad-page { padding: var(--space-6) 0 var(--space-9); }
+.ad-page { padding: var(--space-5) 0 var(--space-8); }
 
 .app-main { min-width: 0; }
 .app-main:focus { outline: none; }
@@ -36,17 +52,19 @@
 
 .ad-login-card {
   display: grid;
-  gap: var(--space-5);
-  width: min(400px, 100%);
-  box-shadow: var(--shadow-2);
+  gap: var(--space-4);
+  width: min(360px, 100%);
 }
-.ad-login-sub { font-size: var(--fs-caption); margin-top: var(--space-1); }
+.ad-login-sub { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
 /* ---- 패널 ---- */
 
-.ad-panel { display: grid; gap: var(--space-7); }
-
-.ad-section { display: grid; gap: var(--space-4); scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
+.ad-panel { display: grid; gap: var(--space-6); }
+.ad-section { display: grid; gap: var(--space-3); scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
+/* 그리드 자식의 기본 min-width는 auto다. 그래서 넓은 표를 감싼 .table-wrap이 자기
+   가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
+   여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
+.ad-panel > *, .ad-section > * { min-width: 0; }
 
 .view-head {
   display: flex;
@@ -55,47 +73,59 @@
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-.view-head p { font-size: var(--fs-caption); margin-top: var(--space-1); }
+.view-head p { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
 
-/* ---- 통계 카드 ---- */
+.ad-filter-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-3);   /* on --bg 5.80:1 */
+}
+
+/* ---- 요약 타일 ---- */
 
 .ad-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: var(--space-2);
 }
 
 .ad-stat {
   display: grid;
-  gap: var(--space-1);
-  padding: var(--space-4);
+  gap: 1px;
+  padding: var(--space-3) var(--space-4);
   background: var(--surface);
   border: 1px solid var(--line-faint);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-m);
 }
 .ad-stat .stat-value { font-size: var(--fs-title-2); }
-.ad-stat-note { font-size: var(--fs-micro); line-height: 1.5; color: var(--text-3); }
+.ad-stat-note { font-size: var(--fs-micro); line-height: 1.4; color: var(--text-2); }  /* on --surface 7.03:1 */
 
-/* ---- 사용자 추가 툴바 ---- */
+/* ---- 툴바 ---- */
 
 .ad-add-fields { flex: 1 1 320px; gap: var(--space-2); }
-.ad-add-fields .field-input { flex: 1 1 150px; min-width: 0; padding: 8px 12px; font-size: var(--fs-caption); }
+.ad-add-fields .field-input { flex: 1 1 150px; min-width: 0; }
 
 .ad-note { font-size: var(--fs-micro); color: var(--text-3); flex: 1 1 240px; }
 
 /* ---- 표 ---- */
 
 .ad-caption {
-  padding: 12px 16px;
+  padding: 9px 14px;
   text-align: left;
   font-size: var(--fs-micro);
-  color: var(--text-3);
+  color: var(--text-3);   /* on --surface 4.99:1 */
   border-bottom: 1px solid var(--line-faint);
 }
 
+/* 수치 열 — 자릿수가 흔들리지 않게 우측 정렬 + 고정폭 숫자 (HIG의 표 정렬). */
+.ad-n { text-align: right; font-variant-numeric: tabular-nums; }
+.table th.ad-n { text-align: right; }
+
 .ad-ip { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-2); }
 
-.ad-device { display: grid; gap: 2px; max-width: 280px; }
+.ad-device { display: grid; gap: 1px; max-width: 260px; }
 .ad-device strong { font-weight: 600; }
 .ad-device small {
   font-size: var(--fs-micro);
@@ -109,39 +139,9 @@
 
 .ad-empty { padding: var(--space-6); text-align: center; color: var(--text-2); }
 
-/* ---- 접기 카드 ---- */
-
-.ad-fold { padding: 0; }
-.ad-fold > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-5);
-  cursor: pointer;
-  list-style: none;
-}
-.ad-fold > summary::-webkit-details-marker { display: none; }
-.ad-fold > summary::after {
-  content: "⌄";
-  margin-left: auto;
-  color: var(--text-3);
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-.ad-fold[open] > summary::after { transform: rotate(180deg); }
-.ad-fold-title { font-size: var(--fs-title-3); font-weight: 600; }
-.ad-fold-body {
-  display: grid;
-  gap: var(--space-4);
-  padding: 0 var(--space-5) var(--space-5);
-  border-top: 1px solid var(--line-faint);
-  padding-top: var(--space-4);
-}
-
 /* ---- 반응형 ---- */
 
 @media (max-width: 860px) {
-  .ad-page { padding-top: var(--space-5); }
-  .ad-panel { gap: var(--space-6); }
+  .ad-page { padding-top: var(--space-4); }
+  .ad-panel { gap: var(--space-5); }
 }

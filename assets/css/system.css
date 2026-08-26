@@ -503,8 +503,17 @@ select.field-input {
   cursor: pointer;
 }
 
+/* 툴바 안에 들어가는 작은 입력. .btn-sm과 같은 36→30px 기하로 맞춘다. */
+.field-input-sm { padding: 6px 11px; font-size: var(--fs-caption); }
+select.field-input-sm {
+  padding-right: 30px;
+  background-position: calc(100% - 17px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
+}
+
 .field-hint { font-size: var(--fs-caption); color: var(--text-3); }
 .field-error { font-size: var(--fs-caption); color: var(--red); min-height: 1.2em; }
+/* 비어 있는 알림 줄이 자리를 먹지 않게 한다 — role="alert"는 내용이 생길 때만 읽힌다. */
+.field-error:empty { display: none; min-height: 0; }
 
 /* ==========================================================================
    카드 — 그림자 없음. 깊이는 표면 단차와 헤어라인 (DESIGN.md §4)
@@ -771,6 +780,10 @@ label.list-row { cursor: pointer; }
    ========================================================================== */
 
 .table-wrap {
+  /* 스크롤 컨테이너를 절대 배치의 컨테이닝 블록으로도 만든다. 이게 없으면 표 안의
+     position: absolute 자식(스크린리더 전용 라벨 등)이 초기 컨테이닝 블록에 붙어
+     스크롤 밖으로 새어 나가고, 문서 전체에 가로 스크롤 폭을 만든다(admin 768px에서 실측). */
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-l);

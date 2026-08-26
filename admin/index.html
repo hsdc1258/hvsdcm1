@@ -45,11 +45,10 @@
 
       <main id="adminMain" class="app-main" tabindex="-1">
         <section id="login" class="ad-login">
-          <form id="adminLogin" class="card card-xl ad-login-card">
+          <form id="adminLogin" class="card ad-login-card">
             <div>
-              <span class="kicker">restricted</span>
-              <h1 class="title-2">관리자 인증</h1>
-              <p class="text-secondary ad-login-sub">계정 → 활동 → 공유 정답</p>
+              <h1 class="title-3">관리자 인증</h1>
+              <p class="ad-login-sub">계정 · 접속 기기 · 공용 정답</p>
             </div>
             <div class="field">
               <label class="field-label" for="adminPassword">관리자 비밀번호</label>
@@ -63,28 +62,24 @@
         <section id="panel" class="ad-panel hidden">
           <header class="view-head">
             <div>
-              <span class="kicker">operations</span>
               <h1 class="title-1">운영 대시보드</h1>
-              <p class="text-secondary">계정, 접속 기기, 공용 정답을 한 화면에서 관리합니다.</p>
+              <p>계정 · 접속 기기 · 공용 정답</p>
             </div>
           </header>
 
-          <section id="statsSection" aria-label="전체 통계">
+          <section id="statsSection" class="ad-section" aria-label="전체 통계">
             <div id="stats" class="ad-stats"></div>
           </section>
 
           <section id="userSection" class="ad-section" aria-labelledby="userSectionTitle">
-            <div class="view-head">
-              <div>
-                <h2 class="title-2" id="userSectionTitle">사용자</h2>
-                <p class="text-secondary">계정 생성과 활동 집계입니다.</p>
-              </div>
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="userSectionTitle">사용자</h2>
             </div>
 
             <form id="addUser" class="toolbar" aria-label="사용자 추가">
               <div class="toolbar-group ad-add-fields">
-                <input id="newUsername" class="field-input" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
-                <input id="newPassword" class="field-input" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
+                <input id="newUsername" class="field-input field-input-sm" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
+                <input id="newPassword" class="field-input field-input-sm" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
               </div>
               <div class="toolbar-spacer"></div>
               <button class="btn btn-primary btn-sm" type="submit">사용자 추가</button>
@@ -95,7 +90,7 @@
               <table class="table">
                 <caption class="ad-caption">등록된 계정과 앱별 학습 이벤트</caption>
                 <thead>
-                  <tr><th scope="col">아이디</th><th scope="col">생성</th><th scope="col">최근 로그인</th><th scope="col">마지막 활동</th><th scope="col">활성 기기</th><th scope="col">최근 IP</th><th scope="col">로그인</th><th scope="col">영단어</th><th scope="col">사문</th><th scope="col"><span class="ad-sr">관리</span></th></tr>
+                  <tr><th scope="col">아이디</th><th scope="col">생성</th><th scope="col">최근 로그인</th><th scope="col">마지막 활동</th><th scope="col" class="ad-n">기기</th><th scope="col">최근 IP</th><th scope="col" class="ad-n">로그인</th><th scope="col" class="ad-n">영단어</th><th scope="col" class="ad-n">사문</th><th scope="col"><span class="ad-sr">관리</span></th></tr>
                 </thead>
                 <tbody id="users"></tbody>
               </table>
@@ -103,14 +98,11 @@
           </section>
 
           <section id="sessionCard" class="ad-section" aria-labelledby="sessionSectionTitle">
-            <div class="view-head">
-              <div>
-                <h2 class="title-2" id="sessionSectionTitle">접속 기기 및 IP</h2>
-                <p class="text-secondary">최근 90일 세션의 로그인 IP, 기기·운영체제·브라우저와 마지막 활동 시각입니다.</p>
-              </div>
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="sessionSectionTitle">접속 기기 및 IP</h2>
               <div class="toolbar-group">
-                <label class="field-label" for="sessionUserFilter">사용자</label>
-                <select id="sessionUserFilter" class="field-input">
+                <label class="ad-filter-label" for="sessionUserFilter">사용자</label>
+                <select id="sessionUserFilter" class="field-input field-input-sm">
                   <option value="all">전체 사용자</option>
                 </select>
               </div>
@@ -118,12 +110,12 @@
 
             <div class="toolbar">
               <span id="sessionCount" class="badge badge-accent">0개 세션</span>
-              <p class="ad-note">기존 로그인은 IP 해시만 남아 있을 수 있으며, 정확한 IP는 이번 배포 이후 요청부터 기록됩니다.</p>
+              <p class="ad-note">최근 90일. 이전 로그인은 IP 해시만 남아 있을 수 있습니다.</p>
             </div>
 
             <div class="table-wrap">
               <table class="table">
-                <caption class="ad-caption">로그인 세션 상세</caption>
+                <caption class="ad-caption">로그인 세션 상세 — 기기·브라우저·IP와 마지막 활동 시각</caption>
                 <thead>
                   <tr><th scope="col">상태</th><th scope="col">아이디</th><th scope="col">기기</th><th scope="col">브라우저</th><th scope="col">IP</th><th scope="col">로그인</th><th scope="col">마지막 활동</th><th scope="col">만료</th></tr>
                 </thead>
@@ -133,16 +125,15 @@
           </section>
 
           <section id="answerSection" class="ad-section" aria-labelledby="answerSectionTitle">
-            <details class="card ad-fold">
-              <summary>
-                <span class="ad-fold-title" id="answerSectionTitle">공용으로 인정된 답안</span>
-                <span class="text-tertiary">펼쳐서 전체 보기</span>
+            <details class="disclosure">
+              <summary class="disclosure-head">
+                <span class="disclosure-title" id="answerSectionTitle">공용으로 인정된 답안</span>
+                <span class="disclosure-hint">모든 계정의 채점에 적용됩니다</span>
               </summary>
-              <div class="ad-fold-body">
-                <p class="text-secondary">사용자가 직접 정답으로 추가한 표현입니다. 이후 모든 계정의 채점에 적용됩니다.</p>
+              <div class="disclosure-body">
                 <div class="table-wrap">
                   <table class="table">
-                    <caption class="ad-caption">공용 정답 승인 이력</caption>
+                    <caption class="ad-caption">사용자가 직접 정답으로 추가한 표현</caption>
                     <thead>
                       <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
                     </thead>

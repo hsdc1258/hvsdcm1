@@ -36,9 +36,15 @@
     })[character],
   );
 
-  const formatDate = (timestamp) => (
-    timestamp ? new Date(timestamp).toLocaleString('ko-KR') : '-'
-  );
+  // 표는 시각 열이 6개다. ko-KR 로케일 문자열("2026. 8. 26. 오후 3:24:15")은 열마다
+  // 20자를 넘겨 표 전체를 가로로 밀어냈다. 정렬 가능한 고정폭 표기로 줄인다.
+  const pad2 = (value) => String(value).padStart(2, '0');
+  const formatDate = (timestamp) => {
+    if (!timestamp) return '-';
+    const at = new Date(timestamp);
+    if (Number.isNaN(at.getTime())) return '-';
+    return `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+  };
 
   function describeUserAgent(userAgent) {
     const value = String(userAgent || '');
@@ -78,12 +84,13 @@
   }
 
   function renderStats(totals) {
+    // 설명은 한 줄로 줄인다 — 타일 5장에 두 줄짜리 설명이 붙어 요약 줄이 본문만큼 컸다.
     const cards = [
-      ['사용자', totals.users, 'DB에 등록된 전체 일반 계정 수'],
-      ['활성 세션', totals.active_sessions, '만료되지 않은 로그인 토큰 수 · 한 사람이 여러 기기에서 로그인하면 여러 개'],
-      ['24시간 이벤트', totals.events_24h, '최근 24시간의 로그인·학습 동기화·공용 정답 등록 횟수'],
-      ['30일 IP', totals.known_ips_30d, '최근 30일 동안 확인된 서로 다른 사용자 IP 수'],
-      ['공용 정답', totals.shared_answers, '모든 사용자에게 정답으로 적용되는 추가 답안 수'],
+      ['사용자', totals.users, '등록된 일반 계정'],
+      ['활성 세션', totals.active_sessions, '만료 전 로그인 토큰'],
+      ['24시간 이벤트', totals.events_24h, '로그인·동기화·정답 등록'],
+      ['30일 IP', totals.known_ips_30d, '확인된 고유 IP'],
+      ['공용 정답', totals.shared_answers, '전 계정에 적용된 답안'],
     ];
 
     elements.stats.innerHTML = cards.map(([label, value, description]) => `
@@ -102,11 +109,11 @@
         <td>${formatDate(user.created_at)}</td>
         <td>${formatDate(user.last_login_at)}</td>
         <td>${formatDate(user.last_activity_at)}</td>
-        <td>${Number(user.active_devices).toLocaleString()}</td>
+        <td class="ad-n">${Number(user.active_devices).toLocaleString()}</td>
         <td class="ad-ip">${escapeHtml(user.recent_ip || '-')}</td>
-        <td>${Number(user.logins).toLocaleString()}</td>
-        <td>${Number(user.word_events).toLocaleString()}</td>
-        <td>${Number(user.sm_events).toLocaleString()}</td>
+        <td class="ad-n">${Number(user.logins).toLocaleString()}</td>
+        <td class="ad-n">${Number(user.word_events).toLocaleString()}</td>
+        <td class="ad-n">${Number(user.sm_events).toLocaleString()}</td>
         <td>
           <div class="ad-row-actions">
             <button type="button" class="btn btn-secondary btn-sm view-sessions" data-id="${Number(user.id)}">접속</button>
