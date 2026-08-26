@@ -17,6 +17,10 @@ function walk(directory, predicate) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.wrangler') continue;
+    // docs/snapshots는 배포 표면이 아니라 렌더 결과를 얼려 둔 문서 산출물이다 (M-6).
+    // 파일 단독으로 열려야 하므로 CSS를 인라인하며, 그 때문에 표면 계약(인라인 style 금지 등)과
+    // 충돌한다. 대신 아래 validateDocSnapshots()가 이 파일들에 별도 계약을 건다.
+    if (relative(path.join(directory, entry.name)) === 'docs/snapshots') continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...walk(absolute, predicate));
     else if (predicate(absolute)) files.push(absolute);
@@ -1231,8 +1235,41 @@ validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
 validateWordMasterData();
+// M-6 — 스크린샷 대신 남긴 정적 스냅샷. 존재와 "파일 단독으로 열림"을 계약으로 건다.
+// 스냅샷이 조용히 사라지거나 외부 자산에 의존하게 되면 시각 확인 근거가 없어진다.
+function validateDocSnapshots() {
+  const expected = {
+    'docs/snapshots/diagrams.html': 21,
+    'docs/snapshots/concept-sample.html': 2,
+  };
+  for (const [file, figures] of Object.entries(expected)) {
+    const absolute = path.join(ROOT, file);
+    check(existsSync(absolute), `${file}: visual snapshot is missing — regenerate it (docs/plan.md D-11)`);
+    if (!existsSync(absolute)) continue;
+    const source = readFileSync(absolute, 'utf8');
+    check(!/<link\b[^>]*rel=["']stylesheet/iu.test(source) && !/<script\b[^>]*\bsrc=/iu.test(source),
+      `${file}: snapshot must inline every stylesheet and carry no scripts so the file opens standalone`);
+    check(source.includes('assets/css/system.css (inlined)') && source.includes('smstudy/assets/css/style.css (inlined)'),
+      `${file}: snapshot must inline both /assets/css/system.css and /smstudy/assets/css/style.css`);
+    const figureCount = (source.match(/<figure class="sm-diagram\b/gu) || []).length;
+    check(figureCount === figures, `${file}: expected ${figures} rendered diagrams, found ${figureCount}`);
+    // 한 figure에 figcaption은 하나뿐이어야 한다 (M-3 회귀 잠금 — 얼린 DOM에서도 확인한다).
+    const captions = (source.match(/<figcaption\b/gu) || []).length;
+    check(captions === figures, `${file}: expected one <figcaption> per <figure>, found ${captions} for ${figures} figures`);
+  }
+  const diagrams = readFileSync(path.join(ROOT, 'docs/snapshots/diagrams.html'), 'utf8');
+  const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
+  for (const [id, notebook] of Object.entries(notebookData?.NOTEBOOKS || {})) {
+    for (const diagram of notebook.diagrams || []) {
+      check(diagrams.includes(`${id} — ${diagram.title} (${diagram.kind}`),
+        `docs/snapshots/diagrams.html: missing heading for ${id} — ${diagram.title} (${diagram.kind}) — regenerate the snapshot`);
+    }
+  }
+}
+
 validateSmStudyData();
 validateRenderedCopy();
+validateDocSnapshots();
 
 if (failures.length > 0) {
   console.error(`Validation failed (${failures.length}/${checks})`);
