@@ -2,7 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
+import {
+  APP_SOURCE, DIAGRAM_SOURCE, ICON_SOURCE,
+  createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer, functionBody, readSource, trackReads,
+} from './render-sandbox.mjs';
+import { buildSnapshots } from './snapshot.mjs';
 
 const ROOT = process.cwd();
 const failures = [];
@@ -182,9 +186,17 @@ function validateUiContracts() {
   check(Boolean(imageHook && figureClass && fallbackClass),
     `smstudy: could not derive the image-fallback selectors from bindQuestionImages() (hook=${imageHook}, figure=${figureClass}, fallback=${fallbackClass})`);
   if (imageHook && figureClass && fallbackClass) {
-    // 마크업 쪽 대상은 renderQuestionMedia()가 내는 <figure> 한 덩어리로 고정한다.
-    const mediaFigure = new RegExp(`<figure class="${figureClass}[^"]*"[\\s\\S]*?</figure>`, 'u').exec(smstudyJs)?.[0] ?? '';
+    // 마크업 쪽 대상은 **renderQuestionMedia() 함수 본문 안**으로 한정한다.
+    // 소스 전체 정규식은 함수 앞에 놓인 같은 모양의 미사용 문자열을 먼저 잡아, 실제로 깨진
+    // 이미지 바인딩을 가린다 (review R2-B-3에서 이 우회가 13204 checks로 통과했다).
+    const mediaBody = functionBody(smstudyJs, 'renderQuestionMedia') ?? '';
+    check(mediaBody.length > 0, 'smstudy: renderQuestionMedia() body could not be located in app.js — the media contract cannot be checked');
+    const mediaFigure = new RegExp(`<figure class="${figureClass}[^"]*"[\\s\\S]*?</figure>`, 'u').exec(mediaBody)?.[0] ?? '';
     check(mediaFigure.length > 0, `smstudy: renderQuestionMedia() must emit a <figure class="${figureClass}"> that the binder can find with closest()`);
+    // 같은 모양의 <figure>가 함수 밖에 또 있으면 검사 대상이 흔들린다 — 하나뿐이어야 한다.
+    const figureOpen = new RegExp(`<figure class="${figureClass}[^"]*"`, 'gu');
+    check((smstudyJs.match(figureOpen) || []).length === (mediaBody.match(figureOpen) || []).length,
+      `smstudy: app.js emits <figure class="${figureClass}"> outside renderQuestionMedia() — the image-fallback contract must have exactly one target`);
     check(new RegExp(`<img\\b[^>]*\\s${imageHook}(?=[\\s>])`, 'u').test(mediaFigure),
       `smstudy: the question <img> inside <figure class="${figureClass}"> must carry the ${imageHook} attribute the binder selects on`);
     check(new RegExp(`<div\\b[^>]*class="${fallbackClass}"[^>]*\\shidden(?=[\\s>])`, 'u').test(mediaFigure),
@@ -232,14 +244,6 @@ function validateMigrations() {
   });
   const latestMigration = readFileSync(path.join(migrationDirectory, migrations.at(-1)), 'utf8');
   check(latestMigration.includes('ip_address'), 'worker: latest migration must add session IP storage');
-}
-
-function evaluateBrowserData(file, exportedName) {
-  const context = {};
-  context.window = context;
-  vm.createContext(context);
-  vm.runInContext(readFileSync(path.join(ROOT, file), 'utf8'), context, { filename: file });
-  return context[exportedName];
 }
 
 function readWebpDimensions(file) {
@@ -333,15 +337,23 @@ const DIAGRAM_TEXT_LIMITS = {
 // kind 목록 자체는 여기서 정하지 않는다 — 아래 derivedDiagramKinds()가 렌더러에서 뽑고,
 // 뽑힌 kind에 여기 항목이 없으면 실패시킨다. 즉 레이아웃을 새로 만들면 상·하한을 함께
 // 적는 일이 강제된다. items 상한은 각 레이아웃이 실제로 그릴 수 있는 줄 수에서 나온다.
+// canvasIcons: 넓은 화면 SVG 캔버스가 node.icon을 그리는가. 좁은 화면 폴백 목록은 kind와
+// 무관하게 항상 그리므로 따로 적지 않는다. venn·timeline은 도형 안에 아이콘 자리가 없어
+// 의도적으로 false다 — 이 값이 있어야 "flow의 svgIcon 한 줄만 지운" 변형이 잡힌다 (R2-B-2).
 const DIAGRAM_SHAPE_BOUNDS = {
-  flow: { nodes: [3, 5], items: [0, 2] },        // 박스 92px / 칩 28+4px
-  scale: { nodes: [2, 2], items: [0, 4] },       // 접시 높이가 item 수에 따라 늘어난다
-  matrix2x2: { nodes: [4, 4], items: [0, 4] },   // 셀 190px / 줄 간격 26px
-  venn: { nodes: [2, 3], items: [0, 3] },        // 범례 칸 너비 245px / 줄 간격 22px
-  timeline: { nodes: [3, 5], items: [0, 2] },    // 교대 배치의 위쪽 블록이 축 위에 들어가야 한다
-  pyramid: { nodes: [3, 4], items: [0, 2] },     // 층 96px / 줄 간격 20px
-  radial: { nodes: [5, 5], items: [0, 2] },      // 카드 80px / 줄 간격 18px
+  flow: { nodes: [3, 5], items: [0, 2], canvasIcons: true },        // 박스 92px / 칩 28+4px
+  scale: { nodes: [2, 2], items: [0, 4], canvasIcons: true },       // 접시 높이가 item 수에 따라 늘어난다
+  matrix2x2: { nodes: [4, 4], items: [0, 4], canvasIcons: true },   // 셀 190px / 줄 간격 26px
+  venn: { nodes: [2, 3], items: [0, 3], canvasIcons: false },       // 원 안은 이름만, 범례 칸 245px / 줄 간격 22px
+  timeline: { nodes: [3, 5], items: [0, 2], canvasIcons: false },   // 축 위 블록에 아이콘 자리가 없다
+  pyramid: { nodes: [3, 4], items: [0, 2], canvasIcons: true },     // 층 96px / 줄 간격 20px
+  radial: { nodes: [5, 5], items: [0, 2], canvasIcons: true },      // 카드 80px / 줄 간격 18px
 };
+
+// 마크업에서 아이콘을 세는 선택자. 넓은 화면은 SVG 캔버스의 <g>, 좁은 화면은 폴백 목록의 <svg>다.
+const CANVAS_ICON_PATTERN = /<g class="sm-d-icon"/gu;
+const LIST_ICON_PATTERN = /<svg class="sm-icon"/gu;
+const countMatches = (markup, pattern) => (markup.match(pattern) || []).length;
 
 // 렌더러가 실제로 읽는 필드의 구조 계약 (B-2). 배열 길이만 세던 검사를 대체한다.
 // **이 표는 하드코딩된 "검사 대상 목록"이 아니다** — 아래 derivedRenderedFields()가
@@ -384,10 +396,6 @@ const DIAGRAM_FIELD_CONTRACT = {
   'nodes[].icon': { type: 'icon', optional: true },
   'nodes[].items': { type: 'array', cell: 'string', optional: true },
 };
-
-const DIAGRAM_SOURCE = 'smstudy/assets/js/diagram.js';
-const APP_SOURCE = 'smstudy/assets/js/app.js';
-const ICON_SOURCE = 'assets/vendor/lucide/icons.js';
 
 // 프로퍼티 경로 도출에서 잘라 낼 JS 내장 멤버. 여기서 끊어야 note.matrix.headers.length가
 // 'matrix.headers.length'가 아니라 'matrix.headers'로 잡힌다.
@@ -532,7 +540,7 @@ function visibleTextRuns(chunk) {
 // 허용 kind는 렌더러의 레이아웃 함수 이름에서 뽑는다. LAYOUTS 등록부와 교차 대조해
 // "함수는 있는데 등록이 안 된" 또는 그 반대의 상태를 잡는다.
 function derivedDiagramKinds() {
-  const source = readFileSync(path.join(ROOT, DIAGRAM_SOURCE), 'utf8');
+  const source = readSource(DIAGRAM_SOURCE);
   const kinds = new Set(
     [...source.matchAll(/function layout([A-Z][\w$]*)\s*\(/gu)]
       .map(([, name]) => name[0].toLowerCase() + name.slice(1)),
@@ -624,18 +632,6 @@ function enforceContract(contract, root, location, iconKeys) {
   }
 }
 
-// 아이콘 집합이 렌더러에 **실제로 연결돼 있는지**는 소스에 전역명이 있는지로 알 수 없다.
-// ICON_SET = {} 로 바꾸고 `void window.SM_ICONS` 만 남긴 변형이 통과했다 (review B-3).
-// 그래서 렌더러를 격리 VM에서 평가해 주입한 아이콘 본문이 마크업으로 나오는지 본다.
-function evaluateDiagramRenderer(iconSet) {
-  const context = {};
-  context.window = context;
-  context.SM_ICONS = { ICONS: iconSet };
-  vm.createContext(context);
-  vm.runInContext(readFileSync(path.join(ROOT, DIAGRAM_SOURCE), 'utf8'), context, { filename: DIAGRAM_SOURCE });
-  return context.SMSTUDY_DIAGRAM;
-}
-
 // 화면에 그대로 나가는 렌더러 고정 문구도 R1(한 문장 60자)을 지켜야 한다.
 // 데이터 순회만으로는 app.js·diagram.js의 문구가 검사 밖에 남는다 (review B-1).
 function validateRenderedCopy() {
@@ -700,6 +696,8 @@ function validateSmStudyData() {
     check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
     check(Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.nodes) && Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.items),
       `smstudy: diagram kind ${kind} has no node/item bound — add it to DIAGRAM_SHAPE_BOUNDS in scripts/validate.mjs`);
+    check(typeof DIAGRAM_SHAPE_BOUNDS[kind]?.canvasIcons === 'boolean',
+      `smstudy: diagram kind ${kind} does not declare canvasIcons — say whether its SVG canvas paints node.icon in DIAGRAM_SHAPE_BOUNDS`);
   }
   for (const kind of registeredKinds) {
     check(diagramKinds.has(kind), `smstudy: LAYOUTS registers ${kind} but ${DIAGRAM_SOURCE} has no layout${kind[0].toUpperCase()}${kind.slice(1)} function`);
@@ -717,31 +715,81 @@ function validateSmStudyData() {
     check(probeRenderer.renderIcon('gate-missing-icon') === '',
       `smstudy: ${DIAGRAM_SOURCE} renderIcon() must emit nothing for an unknown key (no broken markup)`);
   }
+  // kind 하나(radial)만 보면 다른 레이아웃의 아이콘이 통째로 사라져도 초록이다
+  // (R2-B-2: layoutFlow()의 svgIcon 한 줄을 지운 변형이 통과했다).
+  // 그래서 **도출된 kind 전부**를 넓은 화면(SVG 캔버스)과 좁은 화면(폴백 목록) 양쪽으로 렌더해
+  // 데이터의 icon 개수와 출력 개수를 맞춰 본다. kind 목록은 여기서 정하지 않는다.
   if (typeof probeRenderer?.renderDiagram === 'function') {
-    const probeDiagram = {
-      kind: 'radial', title: '게이트 탐침', why: '연결 확인용', center: '탐침',
-      nodes: Array.from({ length: 5 }, (item, index) => ({ label: `갈래${index + 1}`, icon: PROBE_KEY, items: [] })),
-    };
-    const emitted = probeRenderer.renderDiagram(probeDiagram).split(PROBE_BODY).length - 1;
-    check(emitted >= 10,
-      `smstudy: ${DIAGRAM_SOURCE} renderDiagram() emitted ${emitted} injected icon bodies for 5 icon keys (expected >= 10: SVG + fallback list)`);
+    for (const kind of diagramKinds) {
+      const bounds = DIAGRAM_SHAPE_BOUNDS[kind];
+      if (!bounds) continue;
+      const nodeCount = bounds.nodes[1];
+      const probeDiagram = {
+        kind, title: '게이트 탐침', why: '연결 확인용', center: '탐침',
+        nodes: Array.from({ length: nodeCount }, (item, index) => ({ label: `갈래${index + 1}`, icon: PROBE_KEY, items: [] })),
+      };
+      const markup = probeRenderer.renderDiagram(probeDiagram);
+      const canvasIcons = countMatches(markup, CANVAS_ICON_PATTERN);
+      const listIcons = countMatches(markup, LIST_ICON_PATTERN);
+      const expectedCanvas = bounds.canvasIcons ? nodeCount : 0;
+      check(canvasIcons === expectedCanvas,
+        `smstudy: ${DIAGRAM_SOURCE} layout${kind[0].toUpperCase()}${kind.slice(1)}() painted ${canvasIcons} canvas icons for ${nodeCount} icon keys (expected ${expectedCanvas}) — the wide-screen SVG lost its icons`);
+      // 폴백 목록은 kind와 무관하게 node마다 하나, center가 있으면 하나 더(target 아이콘)를 낸다.
+      // center는 radial만 쓰지만 데이터가 아니라 렌더러가 정하므로 여기서는 하한만 본다.
+      check(listIcons >= nodeCount,
+        `smstudy: ${DIAGRAM_SOURCE} fallback list emitted ${listIcons} icons for ${nodeCount} icon keys in ${kind} — the narrow-screen path lost its icons`);
+      check(markup.split(PROBE_BODY).length - 1 === canvasIcons + listIcons,
+        `smstudy: ${DIAGRAM_SOURCE} ${kind} emitted icon elements that do not carry the body injected through window.SM_ICONS`);
+    }
   }
   // 실제 벤더 집합으로 21개 다이어그램을 렌더해, 데이터의 icon 키가 마크업까지 도달하는지 본다.
   const liveRenderer = evaluateDiagramRenderer(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS')?.ICONS || {});
 
-  // ---- B-2. 계약표가 렌더러보다 뒤처지지 않게 양방향으로 대조한다 (LESSONS 규칙 5) ----
-  // 계약표를 손으로 유지하면 반드시 뒤처진다. 그래서 렌더러 소스에서 "실제로 읽는 필드"를
-  // 도출해 표와 맞춘다. 렌더러가 새 필드를 읽기 시작하면 표를 고치기 전까지 게이트가 실패하고,
-  // 반대로 렌더러가 읽지 않게 된 필드(D-3의 keyPoints[].icon)를 표에 남겨 둬도 실패한다.
-  const smstudyJsSource = readFileSync(path.join(ROOT, APP_SOURCE), 'utf8');
+  // ---- B-2 / R2-B-1. 계약표가 렌더러보다 뒤처지지 않게 양방향으로 대조한다 (LESSONS 규칙 5) ----
+  // 라운드 1은 필드 이름을 **소스 정규식**으로 긁었다. 그 방식은 표현에 취약해서
+  // `const alias = note` 뒤 `alias.gateGhost`를 화면에 추가한 변형이 그대로 통과했다 (R2-B-1).
+  // 그래서 접근을 뒤집는다 — 렌더러를 **실제 데이터로 실행**하고, 데이터를 Proxy로 감싸
+  // 렌더 중 읽힌 키를 런타임에 모은다. 어떤 별칭·구조분해를 거치든 get 트랩은 반드시 지난다.
+  // 정규식 도출은 버리지 않고 **보조**로 합집합에 넣는다 (여기서 실행되지 않는 경로를 덮는다).
+  const smstudyJsSource = readSource(APP_SOURCE);
   const notebookCoverage = contractCoverage(NOTEBOOK_FIELD_CONTRACT);
   const diagramCoverage = contractCoverage(DIAGRAM_FIELD_CONTRACT);
-  const renderedNotebookFields = derivedRenderedFields(smstudyJsSource, 'note');
+
+  const runtimeNotebookFields = new Set();
+  // diagrams 아래는 diagram.js의 계약이 따로 보므로 여기서는 더 내려가지 않는다.
+  const sandbox = createAppSandbox({ trackNoteFields: runtimeNotebookFields, stopAt: new Set(['diagrams']) });
+  let conceptMarkup = '';
+  for (const id of sandbox.notebookIds) {
+    const markup = sandbox.renderConcept(id);
+    check(markup.length > 5000, `smstudy: renderConcept('${id}') produced ${markup.length} characters — the concept screen did not render`);
+    conceptMarkup += markup;
+  }
+  // 이름을 몰라도 누락이 잡히는 출력 검사. 계약에 없는 필드를 화면에 새로 끼우면
+  // 값이 없어 undefined·null이 그대로 텍스트로 나가거나 빈 슬롯이 남는다.
+  const undefinedSlot = /\bundefined\b|\bnull\b|\bNaN\b/u.exec(conceptMarkup);
+  check(!undefinedSlot, `smstudy: rendered concept markup contains "${undefinedSlot?.[0]}" — a template reads a field the data does not carry`);
+  const emptySlot = /<(strong|p|li|h1|h2|h3|h4|td|th|dd|dt|summary|figcaption)\b[^>]*>\s*<\/\1>/u.exec(conceptMarkup);
+  check(!emptySlot, `smstudy: rendered concept markup holds an empty <${emptySlot?.[1]}> slot — a template renders a field with no value`);
+
+  const runtimeDiagramFields = new Set();
+  for (const notebook of Object.values(notebookData.NOTEBOOKS || {})) {
+    for (const diagram of notebook.diagrams || []) liveRenderer.renderDiagram(trackReads(diagram, runtimeDiagramFields));
+  }
+
+  const renderedNotebookFields = new Set([
+    ...runtimeNotebookFields,
+    ...derivedRenderedFields(smstudyJsSource, 'note'),
+  ]);
   const renderedDiagramFields = new Set([
+    ...runtimeDiagramFields,
     ...derivedRenderedFields(diagramSource, 'diagram'),
     ...[...diagramSource.matchAll(/\bnode\??\.([A-Za-z_$][\w$]*)/gu)]
       .map(([, member]) => member).filter((member) => !JS_MEMBERS.has(member)).map((member) => `nodes[].${member}`),
   ]);
+  check(runtimeNotebookFields.size >= 15,
+    `smstudy: runtime notebook field collection looks broken (observed ${runtimeNotebookFields.size} reads while rendering ${sandbox.notebookIds.length} concept screens)`);
+  check(runtimeDiagramFields.size >= 6,
+    `smstudy: runtime diagram field collection looks broken (observed ${runtimeDiagramFields.size} reads)`);
   check(renderedNotebookFields.size >= 15,
     `smstudy: notebook field derivation looks broken (parsed ${renderedNotebookFields.size} fields from ${APP_SOURCE})`);
   check(renderedDiagramFields.size >= 6,
@@ -867,9 +915,14 @@ function validateSmStudyData() {
       // 렌더러를 실제로 돌려 마크업까지 확인한다 (아이콘 도달 + figure 콘텐츠 모델).
       if (typeof liveRenderer?.renderDiagram === 'function') {
         const markup = liveRenderer.renderDiagram(diagram);
-        const expectedIcons = (diagram.nodes || []).filter((node) => node.icon).length + (diagram.center ? 1 : 0);
-        check((markup.match(/<svg class="sm-icon"/gu) || []).length === expectedIcons,
-          `smstudy: ${where} renders ${(markup.match(/<svg class="sm-icon"/gu) || []).length} fallback icons for ${expectedIcons} icon keys`);
+        const iconNodes = (diagram.nodes || []).filter((node) => node.icon).length;
+        const expectedIcons = iconNodes + (diagram.center ? 1 : 0);
+        check(countMatches(markup, LIST_ICON_PATTERN) === expectedIcons,
+          `smstudy: ${where} renders ${countMatches(markup, LIST_ICON_PATTERN)} fallback icons for ${expectedIcons} icon keys`);
+        // 넓은 화면 캔버스도 같은 데이터에서 같은 수의 아이콘을 내야 한다 (R2-B-2).
+        const expectedCanvasIcons = DIAGRAM_SHAPE_BOUNDS[diagram.kind]?.canvasIcons ? iconNodes : 0;
+        check(countMatches(markup, CANVAS_ICON_PATTERN) === expectedCanvasIcons,
+          `smstudy: ${where} paints ${countMatches(markup, CANVAS_ICON_PATTERN)} canvas icons for ${iconNodes} icon-bearing nodes (expected ${expectedCanvasIcons})`);
         check((markup.match(/<figcaption\b/gu) || []).length === 1,
           `smstudy: ${where} must render exactly one <figcaption> — a <figure> may hold only one caption (HTML content model)`);
       }
@@ -1238,10 +1291,35 @@ validateWordMasterData();
 // M-6 — 스크린샷 대신 남긴 정적 스냅샷. 존재와 "파일 단독으로 열림"을 계약으로 건다.
 // 스냅샷이 조용히 사라지거나 외부 자산에 의존하게 되면 시각 확인 근거가 없어진다.
 function validateDocSnapshots() {
+  // ---- R2-M-1. 스냅샷이 낡으면 실패해야 한다 ----
+  // 이전 검사는 파일 존재·인라인 표식·figure 수·다이어그램 제목만 봤다. 그래서 스냅샷 본문의
+  // 키워드를 '낡은공유성'으로 바꾼 변형이 13204 checks로 통과했다. 이제 scripts/snapshot.mjs가
+  // **현재 커밋의 소스로 스냅샷을 다시 만들어** 커밋된 파일과 그대로 대조한다.
+  // 데이터·렌더러·CSS 중 무엇이 바뀌든 `node scripts/snapshot.mjs`를 다시 돌리기 전에는 실패한다.
+  const regenerated = buildSnapshots();
+  for (const [file, html] of Object.entries(regenerated)) {
+    const absolute = path.join(ROOT, file);
+    if (!existsSync(absolute)) continue;
+    const committed = readFileSync(absolute, 'utf8');
+    if (committed === html) {
+      check(true, `${file}: snapshot matches the current sources`);
+      continue;
+    }
+    const at = [...html].findIndex((character, index) => committed[index] !== character);
+    check(false, `${file}: snapshot is stale — it does not match what scripts/snapshot.mjs produces from the current sources`
+      + ` (first difference at offset ${at}: expected "${html.slice(at, at + 60).replace(/\n/gu, '\n')}",`
+      + ` found "${committed.slice(at, at + 60).replace(/\n/gu, '\n')}") — run: node scripts/snapshot.mjs`);
+  }
+
+  // 아래는 재생성 대조가 깨졌을 때에도 남는 구조 계약이다 (생성기 자체가 잘못될 수 있다).
   const expected = {
     'docs/snapshots/diagrams.html': 21,
     'docs/snapshots/concept-sample.html': 2,
   };
+  for (const file of Object.keys(expected)) {
+    check(Object.prototype.hasOwnProperty.call(regenerated, file),
+      `${file}: scripts/snapshot.mjs no longer produces this snapshot — the generator and the committed files disagree`);
+  }
   for (const [file, figures] of Object.entries(expected)) {
     const absolute = path.join(ROOT, file);
     check(existsSync(absolute), `${file}: visual snapshot is missing — regenerate it (docs/plan.md D-11)`);
