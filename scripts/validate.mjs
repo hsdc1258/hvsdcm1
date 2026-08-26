@@ -332,37 +332,49 @@ const NOTEBOOK_STRING_LIMITS = {
   rows: 24,
 };
 
-// 다이어그램 *안쪽* 문자열은 SVG 좌표가 직접 걸려 있어 위 표보다 좁다.
-// 이 값은 smstudy/assets/js/diagram.js 머리 주석의 좌표 전제와 **같은 숫자여야 한다**
-// (review 3c M-2: 주석은 7/14/6, 게이트는 12/20/14를 써서 스키마상 유효한 데이터가 겹쳤다).
+// 다이어그램 *안쪽* 문자열 상한. 이 값은 smstudy/assets/js/diagram.js 머리 주석과
+// **같은 숫자여야 한다** (review 3c M-2).
+// 사이클3 후속에서 완화했다: 조판이 SVG 좌표에서 CSS 그리드로 바뀌어 줄바꿈을 브라우저가
+// 하므로, 상한을 정하는 것은 더 이상 "도형 안에 들어가는가"가 아니라 가독성이다.
+// label 8 -> 14 (한국어 명사구 한 어절 + 수식어), items 16 -> 28 (한 줄에 담기는 짧은 문장),
+// center 8 -> 14 (label과 같은 성격). 예전 값은 SVG 좌표 계산의 부산물이었다.
 const DIAGRAM_TEXT_LIMITS = {
-  label: 8,
-  items: 16,
-  center: 8,
+  label: 14,
+  items: 28,
+  center: 14,
   title: 20,
   why: 40,
 };
 
-// kind별 nodes 개수와 node.items 개수 상·하한 (docs/kice-analysis.md 부록 D + M-2 좌표 재계산).
+// kind별 nodes 개수와 node.items 개수 상·하한 (docs/kice-analysis.md 부록 D).
 // kind 목록 자체는 여기서 정하지 않는다 — 아래 derivedDiagramKinds()가 렌더러에서 뽑고,
 // 뽑힌 kind에 여기 항목이 없으면 실패시킨다. 즉 레이아웃을 새로 만들면 상·하한을 함께
-// 적는 일이 강제된다. items 상한은 각 레이아웃이 실제로 그릴 수 있는 줄 수에서 나온다.
-// canvasIcons: 넓은 화면 SVG 캔버스가 node.icon을 그리는가. 좁은 화면 폴백 목록은 kind와
-// 무관하게 항상 그리므로 따로 적지 않는다. venn·timeline은 도형 안에 아이콘 자리가 없어
-// 의도적으로 false다 — 이 값이 있어야 "flow의 svgIcon 한 줄만 지운" 변형이 잡힌다 (R2-B-2).
+// 적는 일이 강제된다.
+// nodes 개수는 형식의 의미가 정한다(2×2는 넷, 저울은 둘). items 상한은 사이클3 후속에서
+// 완화했다 — CSS 조판은 줄이 늘면 컨테이너가 같이 늘어나므로 "그릴 수 있는 줄 수" 제약이
+// 사라졌고, 남은 것은 한 칸에 담아 읽을 만한 양이다.
+// art: 이 kind가 장식 SVG(.sm-d-art)를 내는가. 관계가 곧 기하학인 venn·scale만 true다.
+// 이 값이 있어야 "layoutVenn의 원 그리기를 통째로 지운" 변형이 잡힌다 (R2-B-2의 후신).
 const DIAGRAM_SHAPE_BOUNDS = {
-  flow: { nodes: [3, 5], items: [0, 2], canvasIcons: true },        // 박스 92px / 칩 28+4px
-  scale: { nodes: [2, 2], items: [0, 4], canvasIcons: true },       // 접시 높이가 item 수에 따라 늘어난다
-  matrix2x2: { nodes: [4, 4], items: [0, 4], canvasIcons: true },   // 셀 190px / 줄 간격 26px
-  venn: { nodes: [2, 3], items: [0, 3], canvasIcons: false },       // 원 안은 이름만, 범례 칸 245px / 줄 간격 22px
-  timeline: { nodes: [3, 5], items: [0, 2], canvasIcons: false },   // 축 위 블록에 아이콘 자리가 없다
-  pyramid: { nodes: [3, 4], items: [0, 2], canvasIcons: true },     // 층 96px / 줄 간격 20px
-  radial: { nodes: [5, 5], items: [0, 2], canvasIcons: true },      // 카드 80px / 줄 간격 18px
+  flow: { nodes: [3, 5], items: [0, 4], art: false },        // 세로 단계 조판 (좌: 기준 / 우: 결과)
+  scale: { nodes: [2, 2], items: [0, 6], art: true },        // 저울 SVG + 접시 두 열
+  matrix2x2: { nodes: [4, 4], items: [0, 6], art: false },   // 2×2 그리드
+  venn: { nodes: [2, 3], items: [0, 5], art: true },         // 원 SVG(번호만) + 범례
+  timeline: { nodes: [3, 5], items: [0, 4], art: false },    // 그리드 열
+  pyramid: { nodes: [3, 5], items: [0, 4], art: false },     // 폭이 줄어드는 가로 막대
+  radial: { nodes: [3, 5], items: [0, 4], art: false },      // 중심 제목 + 카드 그리드
 };
 
-// 마크업에서 아이콘을 세는 선택자. 넓은 화면은 SVG 캔버스의 <g>, 좁은 화면은 폴백 목록의 <svg>다.
-const CANVAS_ICON_PATTERN = /<g class="sm-d-icon"/gu;
+// 마크업 구조를 세는 선택자.
+// - 노드는 kind와 무관하게 data-node를 단 <li> 하나다 (조판이 SVG에서 CSS로 바뀌며 통일됐다).
+// - 아이콘은 kind와 무관하게 <svg class="sm-icon"> 하나다. SVG 캔버스 안 아이콘(<g>)은 사라졌다.
+const NODE_PATTERN = /<li class="sm-d-node[^"]*" data-node>/gu;
+const ITEM_PATTERN = /<ul class="sm-d-items">/gu;
 const LIST_ICON_PATTERN = /<svg class="sm-icon"/gu;
+const ART_PATTERN = /<div class="sm-d-art">/gu;
+// 조판을 CSS에 넘긴 뒤로 SVG 안에 남는 글자는 벤의 한 글자짜리 번호뿐이다.
+// 문장이 다시 SVG로 들어가면(= 좌표 조판이 부활하면) 여기서 잡힌다.
+const SVG_TEXT_PATTERN = /<text\b[^>]*>([^<]*)<\/text>/gu;
 const countMatches = (markup, pattern) => (markup.match(pattern) || []).length;
 
 // 렌더러가 실제로 읽는 필드의 구조 계약 (B-2). 배열 길이만 세던 검사를 대체한다.
@@ -706,8 +718,8 @@ function validateSmStudyData() {
     check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
     check(Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.nodes) && Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.items),
       `smstudy: diagram kind ${kind} has no node/item bound — add it to DIAGRAM_SHAPE_BOUNDS in scripts/validate.mjs`);
-    check(typeof DIAGRAM_SHAPE_BOUNDS[kind]?.canvasIcons === 'boolean',
-      `smstudy: diagram kind ${kind} does not declare canvasIcons — say whether its SVG canvas paints node.icon in DIAGRAM_SHAPE_BOUNDS`);
+    check(typeof DIAGRAM_SHAPE_BOUNDS[kind]?.art === 'boolean',
+      `smstudy: diagram kind ${kind} does not declare art — say whether it draws a decorative SVG in DIAGRAM_SHAPE_BOUNDS`);
   }
   for (const kind of registeredKinds) {
     check(diagramKinds.has(kind), `smstudy: LAYOUTS registers ${kind} but ${DIAGRAM_SOURCE} has no layout${kind[0].toUpperCase()}${kind.slice(1)} function`);
@@ -725,31 +737,52 @@ function validateSmStudyData() {
     check(probeRenderer.renderIcon('gate-missing-icon') === '',
       `smstudy: ${DIAGRAM_SOURCE} renderIcon() must emit nothing for an unknown key (no broken markup)`);
   }
-  // kind 하나(radial)만 보면 다른 레이아웃의 아이콘이 통째로 사라져도 초록이다
-  // (R2-B-2: layoutFlow()의 svgIcon 한 줄을 지운 변형이 통과했다).
-  // 그래서 **도출된 kind 전부**를 넓은 화면(SVG 캔버스)과 좁은 화면(폴백 목록) 양쪽으로 렌더해
-  // 데이터의 icon 개수와 출력 개수를 맞춰 본다. kind 목록은 여기서 정하지 않는다.
+  // kind 하나(radial)만 보면 다른 레이아웃이 통째로 비어도 초록이다
+  // (R2-B-2: layoutFlow()의 아이콘 한 줄을 지운 변형이 통과했다).
+  // 그래서 **도출된 kind 전부**를 렌더해 데이터의 노드·항목·아이콘 개수와 출력 개수를 맞춰 본다.
+  // 조판이 SVG 좌표에서 CSS 그리드로 바뀌었으므로 "캔버스가 무엇을 그렸는가" 대신
+  // **"출력 요소 수 = 데이터 노드 수"** 라는 구조 검사를 쓴다. kind 목록은 여기서 정하지 않는다.
   if (typeof probeRenderer?.renderDiagram === 'function') {
     for (const kind of diagramKinds) {
       const bounds = DIAGRAM_SHAPE_BOUNDS[kind];
       if (!bounds) continue;
       const nodeCount = bounds.nodes[1];
+      const itemCount = bounds.items[1];
       const probeDiagram = {
         kind, title: '게이트 탐침', why: '연결 확인용', center: '탐침',
-        nodes: Array.from({ length: nodeCount }, (item, index) => ({ label: `갈래${index + 1}`, icon: PROBE_KEY, items: [] })),
+        nodes: Array.from({ length: nodeCount }, (item, index) => ({
+          label: `갈래${index + 1}`,
+          icon: PROBE_KEY,
+          items: Array.from({ length: itemCount }, (cell, cellIndex) => `항목${cellIndex + 1}`),
+        })),
       };
       const markup = probeRenderer.renderDiagram(probeDiagram);
-      const canvasIcons = countMatches(markup, CANVAS_ICON_PATTERN);
+      const kindLabel = `layout${kind[0].toUpperCase()}${kind.slice(1)}()`;
+      const nodes = countMatches(markup, NODE_PATTERN);
+      const itemLists = countMatches(markup, ITEM_PATTERN);
       const listIcons = countMatches(markup, LIST_ICON_PATTERN);
-      const expectedCanvas = bounds.canvasIcons ? nodeCount : 0;
-      check(canvasIcons === expectedCanvas,
-        `smstudy: ${DIAGRAM_SOURCE} layout${kind[0].toUpperCase()}${kind.slice(1)}() painted ${canvasIcons} canvas icons for ${nodeCount} icon keys (expected ${expectedCanvas}) — the wide-screen SVG lost its icons`);
-      // 폴백 목록은 kind와 무관하게 node마다 하나, center가 있으면 하나 더(target 아이콘)를 낸다.
-      // center는 radial만 쓰지만 데이터가 아니라 렌더러가 정하므로 여기서는 하한만 본다.
+      const arts = countMatches(markup, ART_PATTERN);
+      check(nodes === nodeCount,
+        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${nodes} node cells for ${nodeCount} data nodes — the layout dropped nodes`);
+      check(itemLists === nodeCount,
+        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${itemLists} item lists for ${nodeCount} nodes carrying items — the layout dropped node.items`);
+      // 항목 텍스트가 실제로 마크업에 도달하는지도 본다 (<ul>만 남기고 <li>를 비운 변형 차단).
+      for (let index = 1; index <= itemCount; index += 1) {
+        check(markup.split(`<li>항목${index}</li>`).length - 1 === nodeCount,
+          `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} did not render item ${index} of every node`);
+      }
+      // 아이콘은 node마다 하나, center를 쓰는 kind는 하나 더(target 아이콘)를 낸다.
       check(listIcons >= nodeCount,
-        `smstudy: ${DIAGRAM_SOURCE} fallback list emitted ${listIcons} icons for ${nodeCount} icon keys in ${kind} — the narrow-screen path lost its icons`);
-      check(markup.split(PROBE_BODY).length - 1 === canvasIcons + listIcons,
+        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${listIcons} icons for ${nodeCount} icon keys — the layout lost its icons`);
+      check(markup.split(PROBE_BODY).length - 1 === listIcons,
         `smstudy: ${DIAGRAM_SOURCE} ${kind} emitted icon elements that do not carry the body injected through window.SM_ICONS`);
+      check(arts === (bounds.art ? 1 : 0),
+        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${arts} decorative SVG blocks but DIAGRAM_SHAPE_BOUNDS declares art: ${bounds.art}`);
+      // 겹침의 근원이던 "SVG 안 문장"이 되살아나지 않는지 본다 — 한 글자짜리 표지만 허용한다.
+      for (const [, text] of markup.matchAll(SVG_TEXT_PATTERN)) {
+        check([...text].length <= 1,
+          `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} put "${text}" inside the SVG — labels belong in the CSS layout, not in hand-placed <text>`);
+      }
     }
   }
   // 실제 벤더 집합으로 21개 다이어그램을 렌더해, 데이터의 icon 키가 마크업까지 도달하는지 본다.
@@ -926,13 +959,21 @@ function validateSmStudyData() {
       if (typeof liveRenderer?.renderDiagram === 'function') {
         const markup = liveRenderer.renderDiagram(diagram);
         const iconNodes = (diagram.nodes || []).filter((node) => node.icon).length;
-        const expectedIcons = iconNodes + (diagram.center ? 1 : 0);
+        // radial만 center를 화면에 내지만, 그 판단은 데이터가 아니라 렌더러가 한다.
+        // 그래서 기대치를 kind로 하드코딩하지 않고 "노드 아이콘 + 마크업이 실제로 낸 center 줄"로 센다.
+        const centerLines = (markup.match(/<p class="sm-d-center">/gu) || []).length;
+        const expectedIcons = iconNodes + centerLines;
         check(countMatches(markup, LIST_ICON_PATTERN) === expectedIcons,
-          `smstudy: ${where} renders ${countMatches(markup, LIST_ICON_PATTERN)} fallback icons for ${expectedIcons} icon keys`);
-        // 넓은 화면 캔버스도 같은 데이터에서 같은 수의 아이콘을 내야 한다 (R2-B-2).
-        const expectedCanvasIcons = DIAGRAM_SHAPE_BOUNDS[diagram.kind]?.canvasIcons ? iconNodes : 0;
-        check(countMatches(markup, CANVAS_ICON_PATTERN) === expectedCanvasIcons,
-          `smstudy: ${where} paints ${countMatches(markup, CANVAS_ICON_PATTERN)} canvas icons for ${iconNodes} icon-bearing nodes (expected ${expectedCanvasIcons})`);
+          `smstudy: ${where} renders ${countMatches(markup, LIST_ICON_PATTERN)} icons for ${expectedIcons} icon keys`);
+        // 출력 노드 수 = 데이터 노드 수. matrix2x2·venn·scale은 렌더러가 앞에서 잘라 쓰므로
+        // 데이터 개수 상한(DIAGRAM_SHAPE_BOUNDS.nodes[1])까지만 기대한다.
+        const drawnNodes = Math.min(nodeCount, DIAGRAM_SHAPE_BOUNDS[diagram.kind]?.nodes[1] ?? nodeCount);
+        check(countMatches(markup, NODE_PATTERN) === drawnNodes,
+          `smstudy: ${where} emits ${countMatches(markup, NODE_PATTERN)} node cells for ${drawnNodes} nodes`);
+        for (const [, text] of markup.matchAll(SVG_TEXT_PATTERN)) {
+          check([...text].length <= 1,
+            `smstudy: ${where} put "${text}" inside the SVG — labels belong in the CSS layout, not in hand-placed <text>`);
+        }
         check((markup.match(/<figcaption\b/gu) || []).length === 1,
           `smstudy: ${where} must render exactly one <figcaption> — a <figure> may hold only one caption (HTML content model)`);
       }
