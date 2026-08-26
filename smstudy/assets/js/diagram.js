@@ -7,7 +7,12 @@
   // - kind 하나당 layout* 함수 하나. 게이트(scripts/validate.mjs)가 이 파일의 함수 이름에서
   //   허용 kind 집합을 정규식으로 자동 도출하므로, 이름 규칙(layout + PascalCase kind)을 지킨다.
   // - SVG 속성에 색 리터럴을 쓰지 않는다. 색은 style.css의 클래스와 currentColor만 정한다.
-  // - 좌표는 라벨 길이 상한(label 7자, items 14자, center 6자 — 부록 D 실측)을 전제로 계산한다.
+  // - 좌표는 **게이트가 허용하는 계약 상한**을 전제로 계산한다. 실측 최댓값이 아니다
+  //   (review 3c M-2: 주석은 실측 7/14/6을, 게이트는 12/20/14를 쓰고 있어 스키마상 유효한
+  //   데이터가 겹칠 수 있었다). 아래 숫자는 scripts/validate.mjs의 DIAGRAM_TEXT_LIMITS·
+  //   DIAGRAM_SHAPE_BOUNDS와 **같은 값이어야 하며**, 한쪽만 고치면 안 된다.
+  //     label 8자 / items 16자 / center 8자 / title 20자 / why 40자
+  //     node.items 개수 상한: flow 2 · scale 4 · matrix2x2 4 · venn 3 · timeline 2 · pyramid 2 · radial 2
   //   글자 폭은 textWidth()로 근사하고, 상자 폭은 항상 그 근사값보다 넉넉하게 잡는다.
   // - 좁은 화면 전환은 hidden 속성이 아니라 CSS 미디어쿼리가 한다(.sm-diagram-list).
 
@@ -195,15 +200,22 @@
   }
 
   // 시간 축 위의 단계. 4단계 이상이면 위·아래로 번갈아 놓아 라벨이 서로 닿지 않게 한다.
+  // 좌표는 계약 상한(label 8자 / item 16자 / items 2개)에서도 성립해야 한다.
+  // - 라벨·항목이 가운데 정렬이라 양 끝 노드의 x를 캔버스 안쪽으로 들여 놓는다.
+  //   16자 항목의 근사 폭은 11.5px 기준 184px이므로 좌우로 92px씩 필요하다 (100 ~ 660).
+  // - 위쪽 블록은 '라벨 → 항목' 순서로 내려오므로 커넥터는 마지막 항목 아래에서 시작한다.
+  //   이전 구현은 라벨 바로 아래(y=100)에서 축까지 선을 그어 항목 글자가 선과 축 위에 겹쳤다.
   function layoutTimeline(diagram) {
     const nodes = diagram.nodes;
     const count = nodes.length;
-    const span = 620;
+    const startX = 100;
+    const span = 560;
     const stepX = count > 1 ? span / (count - 1) : 0;
     const alternate = count >= 4;
     const maxItems = Math.max(...nodes.map((node) => (node.items || []).length), 1);
-    const axisY = alternate ? 158 : 70;
-    const height = alternate ? 300 : 118 + maxItems * 22 + 24;
+    // 위쪽 블록 전체가 축 위에 들어가는 최소 높이를 축 위치로 삼는다 (고정 158은 상한에서 넘쳤다).
+    const axisY = alternate ? Math.max(158, 60 + maxItems * 20 + 52) : 70;
+    const height = alternate ? axisY + 62 + maxItems * 20 : 118 + maxItems * 22 + 24;
 
     const parts = [
       `<path d="M34 ${axisY}H716" class="sm-d-axis"/>`,
@@ -211,22 +223,31 @@
     ];
 
     nodes.forEach((node, index) => {
-      const x = 70 + index * stepX;
+      const x = startX + index * stepX;
       const above = alternate && index % 2 === 0;
+      const items = node.items || [];
       parts.push(`<circle cx="${round(x)}" cy="${axisY}" r="15" class="sm-d-badge"/>`);
       parts.push(svgText(x, axisY + 5, String(index + 1), 13, 'sm-d-num', 'middle'));
 
       if (alternate) {
-        const labelY = above ? 92 : axisY + 44;
-        parts.push(`<path d="M${round(x)} ${above ? 100 : axisY + 16}V${above ? axisY - 16 : 190}" class="sm-d-connector"/>`);
+        // 위: 마지막 항목 기준선이 axisY-40, 라벨은 그보다 항목 개수만큼 위.
+        // 아래: 라벨이 axisY+44, 항목이 그 아래로 20px씩.
+        const lastAbove = axisY - 40;
+        const labelY = above ? lastAbove - items.length * 20 : axisY + 44;
+        const connectorFrom = above ? lastAbove + 8 : axisY + 16;
+        const connectorTo = above ? axisY - 16 : axisY + 32;
+        parts.push(`<path d="M${round(x)} ${round(connectorFrom)}V${round(connectorTo)}" class="sm-d-connector"/>`);
         parts.push(svgText(x, labelY, node.label, 14, 'sm-d-label', 'middle'));
-        (node.items || []).forEach((item, itemIndex) => {
-          parts.push(svgText(x, labelY + 22 + itemIndex * 20, item, 11.5, 'sm-d-item', 'middle'));
+        items.forEach((item, itemIndex) => {
+          const itemY = above
+            ? lastAbove - (items.length - 1 - itemIndex) * 20
+            : labelY + 22 + itemIndex * 20;
+          parts.push(svgText(x, itemY, item, 11.5, 'sm-d-item', 'middle'));
         });
       } else {
         parts.push(`<path d="M${round(x)} ${axisY + 16}V96" class="sm-d-connector"/>`);
         parts.push(svgText(x, 118, node.label, 15, 'sm-d-label', 'middle'));
-        (node.items || []).forEach((item, itemIndex) => {
+        items.forEach((item, itemIndex) => {
           parts.push(svgText(x, 144 + itemIndex * 22, item, 12, 'sm-d-item', 'middle'));
         });
       }
@@ -301,7 +322,8 @@
       });
     });
 
-    // 중심 라벨은 최대 14자까지 올 수 있으므로 원 지름(132)에 맞춰 두 줄로 접는다.
+    // 중심 라벨은 최대 8자(계약 상한)까지 오므로 원 지름(132)에 맞춰 두 줄로 접는다.
+    // 8자 * 15px = 120px이라 한 줄로도 들어가지만, 접어야 원 안에서 상하 여백이 균형을 이룬다.
     const centerLines = wrapCenter(diagram.center || diagram.title, 7);
     const centerParts = [`<circle cx="${centerX}" cy="${centerY}" r="${centerR}" class="sm-d-center-circle"/>`];
     centerLines.forEach((line, index) => {
@@ -312,19 +334,29 @@
     return canvas(height, lines.join('') + centerParts.join('') + cards.join(''));
   }
 
+  // 중심 라벨을 원 안에 들어가는 두 줄로 접는다.
+  // 한국어 명사구는 공백 없이 8자가 올 수 있으므로(예: '사회복지제도확대') 공백만으로 접으면
+  // 한 줄이 그대로 남아 원을 넘친다 (review 3c M-2). 공백으로 못 접으면 글자 수로 접는다.
   function wrapCenter(value, perLine) {
-    const words = String(value).split(' ').filter(Boolean);
+    const text = String(value);
+    const words = text.split(' ').filter(Boolean);
     const lines = [];
     let current = '';
     for (const word of words) {
       if (!current) current = word;
-      else if (current.length + 1 + word.length <= perLine) current += ` ${word}`;
+      else if ([...current].length + 1 + [...word].length <= perLine) current += ` ${word}`;
       else { lines.push(current); current = word; }
     }
     if (current) lines.push(current);
-    if (lines.length === 0) return [String(value)];
-    if (lines.length <= 2) return lines;
-    return [lines[0], lines.slice(1).join(' ')];
+    if (lines.length === 0) return [text];
+    const folded = lines.length <= 2 ? lines : [lines[0], lines.slice(1).join(' ')];
+    // 여전히 상한을 넘는 줄이 있으면(공백이 없거나 한 어절이 긴 경우) 글자 수로 반씩 나눈다.
+    if (folded.some((line) => [...line].length > perLine)) {
+      const characters = [...text];
+      const half = Math.ceil(characters.length / 2);
+      return [characters.slice(0, half).join('').trim(), characters.slice(half).join('').trim()];
+    }
+    return folded;
   }
 
   const LAYOUTS = {
@@ -429,15 +461,18 @@
   function renderDiagram(diagram) {
     const layout = LAYOUTS[diagram.kind];
     if (!layout || !Array.isArray(diagram.nodes) || diagram.nodes.length === 0) return '';
+    // figure 하나에 figcaption은 하나만 올 수 있고 첫째 또는 마지막 자식이어야 한다
+    // (HTML 콘텐츠 모델, review 3c M-3). 제목 줄은 일반 div로 내리고, 요구된 서술형 설명을
+    // 유일한 figcaption으로 남겨 figure의 접근 가능한 이름이 그 문장이 되게 한다.
     return `
       <figure class="sm-diagram sm-diagram--${esc(diagram.kind)}">
-        <figcaption class="sm-diagram-head">
+        <div class="sm-diagram-head">
           <strong>${esc(diagram.title)}</strong>
           <span class="badge">${esc(KIND_LABELS[diagram.kind] || diagram.kind)}</span>
-        </figcaption>
+        </div>
         ${layout(diagram)}
         ${fallbackList(diagram)}
-        <figcaption class="sm-diagram-note">${esc(narrative(diagram))} ${esc(reason(diagram.why))}</figcaption>
+        <figcaption class="sm-diagram-note">${esc(diagram.title)} — ${esc(narrative(diagram))} ${esc(reason(diagram.why))}</figcaption>
       </figure>`;
   }
 
