@@ -36,24 +36,35 @@
    --orange      10.22    9.57    8.80    8.19      6.78      5.52
 
    -soft 뱃지(알파 .14를 부모 배경과 합성한 실효 배경 위 전경):
-   --accent-soft + --accent      bg 6.11 / bg-alt 5.54 / surface 4.97 / surface-2 4.59
+   --accent-soft + --accent      bg 6.11 / bg-alt 5.56 / surface 4.97 / surface-2 4.58
                                  / surface-3 3.80 ✗ / surface-4 3.16 ✗
-   --green-soft  + --green       bg 8.73 / bg-alt 7.84 / surface 6.98 / surface-2 6.42
-                                 / surface-3 5.29 / surface-4 4.39 (캡션 한정)
-   --red-soft    + --red-bright  bg 6.64 / bg-alt 6.13 / surface 5.49 / surface-2 5.09
-                                 / surface-3 4.24 ✗ / surface-4 3.53 ✗
-   --orange-soft + --orange      bg 8.58 / bg-alt 7.72 / surface 6.85 / surface-2 6.30
-                                 / surface-3 5.19 / surface-4 4.30 (캡션 한정)
+   --green-soft  + --green       bg 8.71 / bg-alt 7.86 / surface 6.97 / surface-2 6.41
+                                 / surface-3 5.29 / surface-4 4.39 ✗
+   --red-soft    + --red-bright  bg 6.65 / bg-alt 6.12 / surface 5.52 / surface-2 5.11
+                                 / surface-3 4.27 ✗ / surface-4 3.56 ✗
+   --orange-soft + --orange      bg 8.58 / bg-alt 7.73 / surface 6.85 / surface-2 6.30
+                                 / surface-3 5.19 / surface-4 4.30 ✗
    → 뱃지는 --surface-2까지의 배경 위에만 놓는다. .badge 기본형(중립)은 --surface-3
      배경에 --text-2(5.42:1)라 캡션 하한을 넘는다.
+
+   위험 버튼(.btn-danger — 14px semibold라 본문 하한 4.5 적용). 면이 불투명이라
+   부모 표면과 무관하게 값이 고정된다:
+   --red-bright on --red-fill       = 5.49  (normal)
+   --red-bright on --red-fill-hover = 4.93  (hover)
+   → 이전 구현(--red 전경 + 알파 면)은 surface 위 hover 3.94, 표 행 hover 위 4.23이었다.
+     :disabled는 opacity .45라 실효 대비가 더 내려가지만 WCAG 1.4.3의 비활성 컨트롤
+     예외 대상이다(대비 하한을 적용하지 않는다).
 
    채움 버튼: #fff on --accent-strong #0071e3 = 4.70 (사용)
               --text on --accent-strong      = 4.31 ✗ (금지 — 흰색만)
               #fff on --accent #2997ff       = 3.02 ✗ (--accent를 채움색으로 쓰지 않는다)
-   선택 영역: --text on (accent .35 over bg) = 11.53 / over surface = 9.39
+   선택 영역: --text on (accent .35 over bg) = 11.54 / over surface = 9.37
    헤어라인(장식 구획선, 그래픽 3:1 요건 대상 아님 — 컨트롤 경계로 쓰지 않는다):
-     --line 1.27~1.46 / --line-strong 1.79~2.06 / --line-faint 1.10~1.21
+     --line 1.27~1.46 / --line-strong 1.79~2.05 / --line-faint 1.10~1.20
      → 컨트롤의 유일한 시각 경계로 쓰지 말 것. 컨트롤은 표면 단차로 구분한다.
+
+   이 표는 손으로 적지 않는다 — scripts/validate.mjs의 validateContrastTable()이 위
+   숫자를 파싱해 :root 토큰에서 다시 계산한 값과 소수 둘째 자리까지 대조한다(R4-M-9).
    ========================================================================== */
 
 :root {
@@ -86,9 +97,20 @@
   --green-soft: rgba(48,209,88,.14);
   --red: #ff453a;
   --red-soft: rgba(255,69,58,.14);
+  /* 위험 버튼 면. 알파가 아니라 불투명값이다 — 알파면 부모 표면(행 hover 등)에 따라
+     대비가 흔들린다(실측: 표 행 hover 위에서 4.23까지 내려갔다). 전경 --red-bright 고정. */
+  --red-fill: #371d1c;         /* --red .14 over --surface를 구운 값. 5.49:1 */
+  --red-fill-hover: #49201f;   /* 같은 방식 .22. 4.93:1 */
   --red-bright: #ff6961;     /* -soft 배경 위 전경 전용 */
   --orange: #ff9f0a;
   --orange-soft: rgba(255,159,10,.14);
+
+  /* ---- 그래픽: 셀렉트 셰브런 ----
+     그라디언트로 삼각형을 그리는 것은 DESIGN.md §3의 금지 대상이고, 외부 아이콘 파일은
+     정적 사이트의 자산 계약을 늘린다. 인라인 SVG data URI 하나를 단일 원본으로 둔다.
+     data: 문서는 currentColor를 상속하지 못하므로 --text-2(#a1a1a6)를 구워 넣는다 —
+     이 글리프를 쓰는 컨트롤의 글자색이 바뀌면 여기 색도 함께 바꾼다. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.6 1.9 6 6.1 10.4 1.9' fill='none' stroke='%23a1a1a6' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* ---- 타이포 ----
      시스템 폰트가 먼저다. Pretendard는 비-애플 환경의 한글 폴백이며 새 웹폰트를
@@ -499,8 +521,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .btn-ghost { background: transparent; color: var(--accent); border-color: var(--line-strong); }
 .btn-ghost:hover { border-color: var(--text-3); }
 
-.btn-danger { background: var(--red-soft); color: var(--red); }
-.btn-danger:hover { background: rgba(255,69,58,.24); }
+/* 면은 불투명 --red-fill, 전경은 --red-bright다. 알파 면 + --red 전경은 표 행 hover
+   위에서 4.23까지 내려갔다 (상단 대비표 "위험 버튼" 참조). */
+.btn-danger { background: var(--red-fill); color: var(--red-bright); }
+.btn-danger:hover { background: var(--red-fill-hover); }
 
 .btn-sm { min-height: 30px; padding: 5px 12px; font-size: var(--fs-micro); }
 .btn-lg { min-height: 44px; padding: 11px 24px; font-size: var(--fs-body); }
@@ -570,10 +594,9 @@ select.field-input {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 36px;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
-    linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
-  background-position: calc(100% - 19px) calc(50% + 1px), calc(100% - 13px) calc(50% + 1px);
-  background-size: 6px 6px, 6px 6px;
+  background-image: var(--select-arrow);
+  background-position: right 13px center;
+  background-size: 12px 8px;
   background-repeat: no-repeat;
   cursor: pointer;
 }
@@ -582,7 +605,31 @@ select.field-input {
 .field-input-sm { padding: 6px 11px; font-size: var(--fs-caption); }
 select.field-input-sm {
   padding-right: 30px;
-  background-position: calc(100% - 17px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
+  background-position: right 11px center;
+}
+
+/* 행 안의 값 컨트롤 — .list-row-value 자리에 들어가는 입력·셀렉트.
+   .field-input을 그대로 쓰면 행 높이가 두 배가 되므로, 테두리 대신 --surface-3 면으로
+   구분하는 컴팩트 변형을 시스템 레벨에 둔다. 화면별 CSS에서 다시 만들지 않는다. */
+.field-input-inline {
+  width: auto;
+  padding: 4px 9px;
+  background: var(--surface-3);
+  border: 0;
+  border-radius: var(--radius-s);
+  color: var(--text);          /* on --surface-3 12.80:1 */
+  font-size: var(--fs-body-sm);
+}
+select.field-input-inline {
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 100%;
+  padding-right: 24px;
+  background-image: var(--select-arrow);
+  background-position: right 8px center;
+  background-size: 10px 7px;
+  background-repeat: no-repeat;
+  cursor: pointer;
 }
 
 .field-hint { font-size: var(--fs-caption); color: var(--text-3); }
