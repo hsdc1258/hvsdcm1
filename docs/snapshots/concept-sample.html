@@ -735,8 +735,9 @@ select.field-input {
   white-space: nowrap;
   border: 0;
 }
-.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
+ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
 .sm-bullets li { font-size: var(--fs-caption); color: var(--text); }
+.sm-bullets li::marker { color: var(--text-3); }
 
 .view-head {
   display: flex;
@@ -854,25 +855,33 @@ select.field-input {
   border-top: 1px solid var(--line-faint);
 }
 
-/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조). */
-.sm-note-hero { display: grid; gap: var(--space-4); }
+/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조).
+   눈썹 라벨과 디스플레이급 헤드라인은 걷어냈다: 바로 위 <h1>이 이미 단원을 말하므로
+   같은 자리에 큰 제목이 두 번 쌓였다. 참고서 단원 도입부의 조판을 따른다. */
+.sm-note-hero { display: grid; gap: var(--space-3); }
 
-/* 헤드라인은 30자 이하 명사구 전용이다 (DESIGN.md §2). 문장은 아래 .sm-summary가 본문 크기로 받는다. */
+/* 헤드라인은 30자 이하 명사구 전용이고, 섹션 제목(.title-2)보다 한 단 아래에 놓는다.
+   도입부는 절(section)이 아니라 들어가는 말이므로 본문보다 조금 큰 정도면 충분하다
+   (DESIGN.md §2 — 글 양과 글자 크기는 반비례). */
 .sm-headline {
-  font-size: var(--fs-title-2);
+  font-size: var(--fs-body-lg);
   line-height: var(--lh-title);
-  letter-spacing: var(--ls-title);
-  font-weight: 700;
-  margin-top: var(--space-2);
+  letter-spacing: normal;
+  font-weight: 600;
 }
-.sm-hero-head { display: grid; justify-items: start; }
 
-.sm-summary {
+/* 요약은 문장이므로 본문 크기 목록으로 낸다. 강조용 세로 규칙선을 두지 않는다 —
+   그 들여쓰기 때문에 이 블록만 형제 섹션보다 안쪽으로 밀려 보였다. */
+/* system.css의 `ul[class], ol[class] { padding: 0; list-style: none }` 리셋은 특이도가
+   클래스 하나보다 높다. 마커를 되살리려면 **요소 이름을 붙여** 특이도를 맞춰야 한다
+   (같은 특이도면 나중에 로드되는 이 파일이 이긴다). 아래 목록들이 전부 그렇다. */
+ul.sm-summary {
   display: grid;
   gap: var(--space-2);
-  padding-left: var(--space-4);
-  border-left: 2px solid var(--accent);
+  padding-left: 1.1em;
+  list-style: disc;
 }
+ul.sm-summary li::marker { color: var(--text-3); }
 .sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
 
 /* 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩 리스트를 쓰지 않는다 — 일반 리스트가
@@ -929,20 +938,22 @@ select.field-input {
 .sm-callout.is-trap { border-left-color: var(--line-strong); }
 .sm-callout .kicker { display: flex; align-items: center; gap: var(--space-2); }
 
-/* 출제 빈도는 정적 콘텐츠의 비중이라 막대를 쓰지 않는다 (DESIGN.md §4).
-   참고서 조판대로 라벨-숫자 행 나열로 낸다. */
-.sm-freq { display: grid; gap: 0; }
+/* 출제 빈도는 순위만 낸다 — '3/6문항' 같은 집계 수치는 화면에서 걷어냈다.
+   선별 수록 표본의 분수는 학습자에게 판단 근거가 아니라 잡음이었다 (사용자 피드백).
+   남은 정보는 순서뿐이므로 참고서의 번호 목록 조판을 그대로 쓴다. */
+ol.sm-freq {
+  display: grid;
+  gap: 0;
+  padding-left: 1.7em;
+  list-style: decimal;
+}
 .sm-freq-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
   padding: var(--space-2) 0;
   border-top: 1px solid var(--line-faint);
   font-size: var(--fs-caption);
 }
+.sm-freq-item::marker { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .sm-freq-item:first-child { border-top: 0; }
-.sm-freq-count { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* 사용자의 정답률(실제 진행 데이터)에만 쓰는 막대다 — §4가 허용한 용도. */
 .sm-meter { height: 6px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
@@ -954,16 +965,15 @@ select.field-input {
 .sm-swipe { display: none; }
 
 .sm-steps { display: grid; gap: var(--space-3); counter-reset: step; }
-.sm-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.sm-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+/* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한) — 다이어그램의 .sm-d-n과 같은 처리. */
 .sm-steps li > span {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--surface-3);
+  min-width: 1.2em;
+  color: var(--accent);
   font-size: var(--fs-micro);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-body);
 }
 .sm-steps p { font-size: var(--fs-caption); }
 
@@ -971,7 +981,8 @@ select.field-input {
 .sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
 .sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
 .sm-deep h4 span { color: var(--text); }
-.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
+ul.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
+ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-recall { display: grid; gap: var(--space-2); }
@@ -1235,11 +1246,12 @@ select.field-input {
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
    조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
    레퍼런스는 DESIGN.md §1의 문제집·참고서 조판이다: 얇은 구분선, 들여쓰기 위계, 여백.
-   SVG는 관계가 곧 기하학인 venn·scale의 장식(.sm-d-art)에만 남았고, 좁은 화면에서는
-   그 장식만 숨긴다. 나머지 형식은 CSS 조판이 이미 반응형이라 폴백 분기가 없다.
+   SVG는 **원의 겹침이 곧 정보인 venn 하나**에만 남았다(.sm-d-art). 저울(scale) 그림은
+   지웠다 — 두 열 대비 조판이 이미 말하는 대립을 그림으로 반복할 뿐이었다.
+   아이콘도 다이어그램에서 전부 뺐다: 노드마다 하나씩 붙는 아이콘은 노드를 구별해 주지 않는다.
 
    이 블록이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
-     --accent #2997ff on --surface  #161617  6.00:1   (.sm-d-n 숫자, .sm-icon 스트로크)
+     --accent #2997ff on --surface  #161617  6.00:1   (.sm-d-n 숫자)
      --accent #2997ff on --surface-2 #1d1d1f 5.58:1   (같은 요소가 카드 밖에 놓일 때)
      --text-2 #a1a1a6 on --surface  #161617  7.03:1   (.sm-d-items 항목)
      --text-2 #a1a1a6 on --surface-2 #1d1d1f 6.54:1   (캡션 하한 4.5:1 충족)
@@ -1262,9 +1274,21 @@ select.field-input {
   word-break: keep-all;
   overflow-wrap: break-word;
 }
-.sm-diagram-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .sm-diagram-head strong { font-size: var(--fs-body); font-weight: 600; }
-.sm-diagram-note { font-size: var(--fs-caption); color: var(--text-2); line-height: 1.55; }
+/* 형식 이름표 칩('대립 저울' 등)은 제거했다 — 학습자에게 필요 없는 메타 정보였다.
+   설명 캡션도 제목과 조판이 이미 말하는 내용이라 **화면에서는 감추고** 보조 기술에만 남긴다
+   (figure의 접근 가능한 이름은 여전히 이 문장이다). display:none이면 읽히지 않으므로 쓰지 않는다. */
+.sm-diagram-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ---- 노드 공통 (모든 형식이 같은 제목 줄·항목 목록을 쓴다) ---- */
 
@@ -1276,13 +1300,6 @@ select.field-input {
   line-height: 1.4;
 }
 .sm-d-head strong { color: var(--text); font-weight: 600; }
-.sm-d-head .sm-icon {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  color: var(--accent);
-  align-self: center;
-}
 /* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한). */
 .sm-d-n {
   flex: none;
@@ -1292,29 +1309,21 @@ select.field-input {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.sm-d-items {
+/* 항목 앞의 표지는 그려 넣은 하이픈 막대가 아니라 진짜 리스트 마커다 —
+   글머리표는 브라우저가 정렬하고, 마커 색·간격이 조판과 함께 따라간다. */
+ul.sm-d-items {
   display: grid;
   gap: 2px;
   margin-top: var(--space-2);
-  padding: 0;
-  list-style: none;
+  padding-left: 1.1em;
+  list-style: disc;
 }
 .sm-d-items li {
-  position: relative;
-  padding-left: var(--space-3);
   font-size: var(--fs-micro);
   line-height: 1.5;
   color: var(--text-2);
 }
-.sm-d-items li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: .62em;
-  width: 4px;
-  height: 1px;
-  background: var(--line-strong);
-}
+.sm-d-items li::marker { color: var(--line-strong); }
 
 /* ---- flow — 세로 단계 조판 (왼쪽 판정 기준 / 오른쪽 결과) ---- */
 
@@ -1326,9 +1335,12 @@ select.field-input {
   border-left: 1px solid var(--line-strong);
   list-style: none;
 }
+/* 좌우 두 열의 **첫 줄 baseline을 맞춘다.** 왼쪽 라벨(.sm-d-head, caption)과 오른쪽 항목
+   (.sm-d-items li, micro)은 글자 크기가 달라, 위 정렬(start)로는 첫 줄이 서로 어긋났다. */
 .sm-d-flow > .sm-d-node {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  align-items: baseline;
   gap: var(--space-3) var(--space-4);
   padding: var(--space-3) 0;
   border-top: 1px solid var(--line-faint);
@@ -1380,8 +1392,8 @@ select.field-input {
 .sm-d-pyramid > .sm-d-node:nth-last-child(4) { width: 54%; }
 .sm-d-pyramid > .sm-d-node:nth-last-child(5) { width: 42%; }
 .sm-d-pyramid .sm-d-head { justify-content: center; }
-.sm-d-pyramid .sm-d-items li { padding-left: 0; text-align: center; }
-.sm-d-pyramid .sm-d-items li::before { content: none; }
+.sm-d-pyramid ul.sm-d-items { padding-left: 0; list-style: none; }
+.sm-d-pyramid .sm-d-items li { text-align: center; }
 
 /* ---- matrix2x2 — 2×2 그리드. 칸 사이 실선이 교차하는 두 기준을 말한다. ---- */
 
@@ -1409,7 +1421,6 @@ select.field-input {
   border-bottom: 1px solid var(--line);
   font-size: var(--fs-caption);
 }
-.sm-d-center .sm-icon { flex: none; width: 16px; height: 16px; color: var(--accent); }
 .sm-d-center strong { font-weight: 600; }
 .sm-d-cards {
   display: grid;
@@ -1437,9 +1448,9 @@ select.field-input {
   list-style: none;
 }
 
-/* ---- scale — 저울은 SVG, 접시 위 항목은 두 열 ---- */
+/* ---- scale — 대립 2열. 저울 그림 없이 두 극을 나란히 놓는다 ---- */
 
-.sm-d-pans {
+.sm-d-poles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: var(--space-3) var(--space-5);
@@ -1447,20 +1458,14 @@ select.field-input {
   padding: 0;
   list-style: none;
 }
-.sm-d-pans > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
-/* 저울 그림은 두 열과 같은 폭을 써야 접시가 열의 중심 위에 온다. */
-.sm-diagram--scale .sm-d-art { width: 100%; }
+.sm-d-poles > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
 
-/* ---- 장식 SVG (venn·scale 전용) ---- */
+/* ---- 장식 SVG (venn 전용) ---- */
 
 .sm-d-art { display: block; margin-inline: auto; width: min(100%, 460px); }
 .sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
 .sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
 .sm-d-mark { fill: var(--text); font-size: 22px; font-weight: 700; }
-.sm-d-beam { fill: none; stroke: var(--text-3); stroke-width: 4; stroke-linecap: round; }
-.sm-d-rule { fill: none; stroke: var(--line-strong); stroke-width: 2; }
-.sm-d-pan { fill: none; stroke: var(--text-3); stroke-width: 3; stroke-linecap: round; }
-.sm-d-fulcrum { fill: var(--surface-3); stroke: var(--line-strong); stroke-width: 1; }
 
 /* 좁은 컨테이너·좁은 뷰포트에서 같은 조판으로 접는다. 장식 SVG는 숨기고, 열은 행으로 편다. */
 @container smdiagram (max-width: 420px) {
@@ -1671,10 +1676,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
       <div class="sm-note-body">
 
       <section class="sm-note-hero sm-section" aria-labelledby="noteHeroTitle">
-        <div class="sm-hero-head">
-          <span class="kicker">이 단원에서 먼저 잡을 생각</span>
-          <h3 class="sm-headline" id="noteHeroTitle">속성은 소거법 태도는 기준으로</h3>
-        </div>
+        <h3 class="sm-headline" id="noteHeroTitle">속성은 소거법 태도는 기준으로</h3>
         <ul class="sm-summary"><li>속성 3문항과 태도 3문항으로 반씩 나뉘어 나왔다.</li><li>사례 하나에 두 속성이 겹쳐 나와 소거법이 필요하다.</li><li>2024학년도 수능 문항은 정답률 37%로 최저권이었다.</li></ul>
         <ul class="sm-keypoints" aria-label="핵심 개념 세 가지">
       <li class="sm-keypoint"><strong>축적과 변동</strong><p>더해지면 축적성이고 모습이 달라지면 변동성이다.</p></li>
@@ -1692,63 +1694,26 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         </div>
         <div class="sm-diagrams">
       <figure class="sm-diagram sm-diagram--radial">
-        <div class="sm-diagram-head">
-          <strong>문화의 다섯 속성</strong>
-          <span class="badge">갈래 지도</span>
-        </div>
-        <p class="sm-d-center"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><strong>문화의 속성</strong></p><ul class="sm-d-cards"><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg><strong>공유성</strong></p><ul class="sm-d-items"><li>구성원이 함께 나눔</li><li>행동을 예측하게 함</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></svg><strong>학습성</strong></p><ul class="sm-d-items"><li>후천적으로 습득</li><li>본능과 구분됨</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg><strong>축적성</strong></p><ul class="sm-d-items"><li>전승 위에 새로 추가</li><li>세대를 넘어 쌓임</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><strong>전체성</strong></p><ul class="sm-d-items"><li>요소끼리 유기적 연결</li><li>한 곳이 바뀌면 파급</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg><strong>변동성</strong></p><ul class="sm-d-items"><li>시간에 따라 달라짐</li><li>소멸과 대체도 포함</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">문화의 다섯 속성 — 문화의 속성을 5갈래로 나눠 우열 없이 나란히 놓는다. 다섯 속성이 서로 우열 없이 나란히 놓이므로 이 형식으로 그렸다.</figcaption>
+        <div class="sm-diagram-head"><strong>문화의 다섯 속성</strong></div>
+        <p class="sm-d-center"><strong>문화의 속성</strong></p><ul class="sm-d-cards"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>공유성</strong></p><ul class="sm-d-items"><li>구성원이 함께 나눔</li><li>행동을 예측하게 함</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>학습성</strong></p><ul class="sm-d-items"><li>후천적으로 습득</li><li>본능과 구분됨</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>축적성</strong></p><ul class="sm-d-items"><li>전승 위에 새로 추가</li><li>세대를 넘어 쌓임</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>전체성</strong></p><ul class="sm-d-items"><li>요소끼리 유기적 연결</li><li>한 곳이 바뀌면 파급</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>변동성</strong></p><ul class="sm-d-items"><li>시간에 따라 달라짐</li><li>소멸과 대체도 포함</li></ul></li></ul>
+        <figcaption class="sm-diagram-note">문화의 다섯 속성 — 문화의 속성을 5갈래로 나눠 우열 없이 나란히 놓는다.</figcaption>
       </figure>
       <figure class="sm-diagram sm-diagram--scale">
-        <div class="sm-diagram-head">
-          <strong>자문화 중심과 사대</strong>
-          <span class="badge">대립 저울</span>
-        </div>
-        <div class="sm-d-art"><svg class="sm-d-svg" viewBox="0 0 960 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><path d="M160 44H800" class="sm-d-beam"/><path d="M480 44L532 112H428Z" class="sm-d-fulcrum"/><path d="M392 116H568" class="sm-d-beam"/><path d="M240 44V80" class="sm-d-rule"/><path d="M720 44V80" class="sm-d-rule"/><path d="M160 80Q240 124 320 80" class="sm-d-pan"/><path d="M640 80Q720 124 800 80" class="sm-d-pan"/></svg></div><ul class="sm-d-pans"><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg><strong>자문화 중심</strong></p><ul class="sm-d-items"><li>자기 문화가 우월</li><li>국수주의로 이어짐</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><strong>문화 사대주의</strong></p><ul class="sm-d-items"><li>다른 문화가 우월</li><li>고유 정체성 상실</li></ul></li></ul>
-        <figcaption class="sm-diagram-note">자문화 중심과 사대 — 자문화 중심과 문화 사대주의가 하나의 축에서 정반대에 놓인다. 두 절대주의가 반대 방향이고 상대주의가 그 사이라서 이 형식으로 그렸다.</figcaption>
+        <div class="sm-diagram-head"><strong>자문화 중심과 사대</strong></div>
+        <ul class="sm-d-poles"><li class="sm-d-node" data-node><p class="sm-d-head"><strong>자문화 중심</strong></p><ul class="sm-d-items"><li>자기 문화가 우월</li><li>국수주의로 이어짐</li></ul></li><li class="sm-d-node" data-node><p class="sm-d-head"><strong>문화 사대주의</strong></p><ul class="sm-d-items"><li>다른 문화가 우월</li><li>고유 정체성 상실</li></ul></li></ul>
+        <figcaption class="sm-diagram-note">자문화 중심과 사대 — 자문화 중심과 문화 사대주의가 하나의 축에서 정반대에 놓인다.</figcaption>
       </figure></div>
       </section>
 
       <section id="exam-analysis" class="sm-stack sm-section" aria-labelledby="exam-analysis-title">
         <div class="view-head">
           <div>
-            <span class="kicker">수록 기출 6문항 자동 집계</span>
+            <span class="kicker">이 단원 수록 기출 자동 집계</span>
             <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
           </div>
           <span class="badge">선별 수록 표본 · 전수 통계 아님</span>
         </div>
-        <dl class="sm-facts-inline">
-          <div><dt>수록 문항</dt><dd>6문항</dd></div>
-          <div><dt>평균 정답률</dt><dd>74%</dd></div>
-          <div><dt>고난도 문항</dt><dd>1문항</dd></div>
-          <div><dt>최저 정답률</dt><dd>37% · 2024학년도 수능 6번</dd></div>
-        </dl>
-        <p class="sm-hint">이 단원 평균 74% · 수록 78문항 전체 평균 73%</p>
-        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도">
-      <li class="sm-freq-item">
-        <strong>공유성과 학습성</strong>
-        <span class="sm-freq-count">3/6문항</span>
-      </li>
-      <li class="sm-freq-item">
-        <strong>문화 사대주의</strong>
-        <span class="sm-freq-count">3/6문항</span>
-      </li>
-      <li class="sm-freq-item">
-        <strong>문화 상대주의</strong>
-        <span class="sm-freq-count">3/6문항</span>
-      </li>
-      <li class="sm-freq-item">
-        <strong>자문화 중심주의</strong>
-        <span class="sm-freq-count">3/6문항</span>
-      </li>
-      <li class="sm-freq-item">
-        <strong>축적성과 변동성</strong>
-        <span class="sm-freq-count">3/6문항</span>
-      </li>
-      <li class="sm-freq-item">
-        <strong>전체성</strong>
-        <span class="sm-freq-count">2/6문항</span>
-      </li></ol>
+        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위"><li class="sm-freq-item">공유성과 학습성</li><li class="sm-freq-item">문화 사대주의</li><li class="sm-freq-item">문화 상대주의</li><li class="sm-freq-item">자문화 중심주의</li><li class="sm-freq-item">축적성과 변동성</li><li class="sm-freq-item">전체성</li></ol>
         <div class="sm-callouts">
           <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
           <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
@@ -1828,7 +1793,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
           <span class="kicker">헷갈리는 선지를 가르는 설명</span>
           <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
         </div>
-        <div class="sm-deep"><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg><span>공유성과 학습성</span></h4><ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg><span>축적성과 변동성</span></h4><ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span>전체성</span></h4><ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg><span>문화 절대주의</span></h4><ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul></article><article><h4 class="title-3"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>극단적 상대주의</span></h4><ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul></article></div>
+        <div class="sm-deep"><article><h4 class="title-3">공유성과 학습성</h4><ul class="sm-deep-points"><li>공유성은 결과의 공동성을 가리킨다.</li><li>학습성은 습득 과정을 가리킨다.</li></ul></article><article><h4 class="title-3">축적성과 변동성</h4><ul class="sm-deep-points"><li>축적성은 전승된 것 위에 새로 더해지는 것이다.</li><li>변동성은 시간이 지나 모습이 달라지는 것이다.</li><li>축적 없이 사라지기만 해도 변동성이다.</li></ul></article><article><h4 class="title-3">전체성</h4><ul class="sm-deep-points"><li>문화 요소들이 서로 얽혀 하나의 체계를 이룬다.</li><li>요소가 많다는 뜻이 아니라 연결됐다는 뜻이다.</li></ul></article><article><h4 class="title-3">문화 절대주의</h4><ul class="sm-deep-points"><li>자문화 중심주의와 문화 사대주의를 묶는 말이다.</li><li>기준의 방향만 다를 뿐 우열을 매기는 점은 같다.</li></ul></article><article><h4 class="title-3">극단적 상대주의</h4><ul class="sm-deep-points"><li>맥락 존중을 이유로 인권 침해를 정당화할 수 없다.</li><li>보편 윤리에 근거한 비판은 상대주의 밖의 판단이다.</li></ul></article></div>
       </section>
 
       <section id="recall-lab" class="sm-stack sm-section" aria-labelledby="recall-title">

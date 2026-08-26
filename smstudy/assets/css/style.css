@@ -29,8 +29,9 @@
   white-space: nowrap;
   border: 0;
 }
-.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
+ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
 .sm-bullets li { font-size: var(--fs-caption); color: var(--text); }
+.sm-bullets li::marker { color: var(--text-3); }
 
 .view-head {
   display: flex;
@@ -148,25 +149,33 @@
   border-top: 1px solid var(--line-faint);
 }
 
-/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조). */
-.sm-note-hero { display: grid; gap: var(--space-4); }
+/* 노트 도입부 — 카드 없이 여백과 규칙선만으로 위계를 준다 (§2: 크기가 아니라 배치로 강조).
+   눈썹 라벨과 디스플레이급 헤드라인은 걷어냈다: 바로 위 <h1>이 이미 단원을 말하므로
+   같은 자리에 큰 제목이 두 번 쌓였다. 참고서 단원 도입부의 조판을 따른다. */
+.sm-note-hero { display: grid; gap: var(--space-3); }
 
-/* 헤드라인은 30자 이하 명사구 전용이다 (DESIGN.md §2). 문장은 아래 .sm-summary가 본문 크기로 받는다. */
+/* 헤드라인은 30자 이하 명사구 전용이고, 섹션 제목(.title-2)보다 한 단 아래에 놓는다.
+   도입부는 절(section)이 아니라 들어가는 말이므로 본문보다 조금 큰 정도면 충분하다
+   (DESIGN.md §2 — 글 양과 글자 크기는 반비례). */
 .sm-headline {
-  font-size: var(--fs-title-2);
+  font-size: var(--fs-body-lg);
   line-height: var(--lh-title);
-  letter-spacing: var(--ls-title);
-  font-weight: 700;
-  margin-top: var(--space-2);
+  letter-spacing: normal;
+  font-weight: 600;
 }
-.sm-hero-head { display: grid; justify-items: start; }
 
-.sm-summary {
+/* 요약은 문장이므로 본문 크기 목록으로 낸다. 강조용 세로 규칙선을 두지 않는다 —
+   그 들여쓰기 때문에 이 블록만 형제 섹션보다 안쪽으로 밀려 보였다. */
+/* system.css의 `ul[class], ol[class] { padding: 0; list-style: none }` 리셋은 특이도가
+   클래스 하나보다 높다. 마커를 되살리려면 **요소 이름을 붙여** 특이도를 맞춰야 한다
+   (같은 특이도면 나중에 로드되는 이 파일이 이긴다). 아래 목록들이 전부 그렇다. */
+ul.sm-summary {
   display: grid;
   gap: var(--space-2);
-  padding-left: var(--space-4);
-  border-left: 2px solid var(--accent);
+  padding-left: 1.1em;
+  list-style: disc;
 }
+ul.sm-summary li::marker { color: var(--text-3); }
 .sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
 
 /* 순서가 학습 내용이 아니므로 번호 뱃지·아이콘 칩 리스트를 쓰지 않는다 — 일반 리스트가
@@ -223,20 +232,22 @@
 .sm-callout.is-trap { border-left-color: var(--line-strong); }
 .sm-callout .kicker { display: flex; align-items: center; gap: var(--space-2); }
 
-/* 출제 빈도는 정적 콘텐츠의 비중이라 막대를 쓰지 않는다 (DESIGN.md §4).
-   참고서 조판대로 라벨-숫자 행 나열로 낸다. */
-.sm-freq { display: grid; gap: 0; }
+/* 출제 빈도는 순위만 낸다 — '3/6문항' 같은 집계 수치는 화면에서 걷어냈다.
+   선별 수록 표본의 분수는 학습자에게 판단 근거가 아니라 잡음이었다 (사용자 피드백).
+   남은 정보는 순서뿐이므로 참고서의 번호 목록 조판을 그대로 쓴다. */
+ol.sm-freq {
+  display: grid;
+  gap: 0;
+  padding-left: 1.7em;
+  list-style: decimal;
+}
 .sm-freq-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
   padding: var(--space-2) 0;
   border-top: 1px solid var(--line-faint);
   font-size: var(--fs-caption);
 }
+.sm-freq-item::marker { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .sm-freq-item:first-child { border-top: 0; }
-.sm-freq-count { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* 사용자의 정답률(실제 진행 데이터)에만 쓰는 막대다 — §4가 허용한 용도. */
 .sm-meter { height: 6px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
@@ -248,16 +259,15 @@
 .sm-swipe { display: none; }
 
 .sm-steps { display: grid; gap: var(--space-3); counter-reset: step; }
-.sm-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.sm-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+/* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한) — 다이어그램의 .sm-d-n과 같은 처리. */
 .sm-steps li > span {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--surface-3);
+  min-width: 1.2em;
+  color: var(--accent);
   font-size: var(--fs-micro);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-body);
 }
 .sm-steps p { font-size: var(--fs-caption); }
 
@@ -265,7 +275,8 @@
 .sm-deep article { padding: var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
 .sm-deep h4 { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
 .sm-deep h4 span { color: var(--text); }
-.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
+ul.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
+ul.sm-deep-points li::marker { color: var(--text-3); }
 .sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
 
 .sm-recall { display: grid; gap: var(--space-2); }
@@ -529,11 +540,12 @@
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
    조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
    레퍼런스는 DESIGN.md §1의 문제집·참고서 조판이다: 얇은 구분선, 들여쓰기 위계, 여백.
-   SVG는 관계가 곧 기하학인 venn·scale의 장식(.sm-d-art)에만 남았고, 좁은 화면에서는
-   그 장식만 숨긴다. 나머지 형식은 CSS 조판이 이미 반응형이라 폴백 분기가 없다.
+   SVG는 **원의 겹침이 곧 정보인 venn 하나**에만 남았다(.sm-d-art). 저울(scale) 그림은
+   지웠다 — 두 열 대비 조판이 이미 말하는 대립을 그림으로 반복할 뿐이었다.
+   아이콘도 다이어그램에서 전부 뺐다: 노드마다 하나씩 붙는 아이콘은 노드를 구별해 주지 않는다.
 
    이 블록이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
-     --accent #2997ff on --surface  #161617  6.00:1   (.sm-d-n 숫자, .sm-icon 스트로크)
+     --accent #2997ff on --surface  #161617  6.00:1   (.sm-d-n 숫자)
      --accent #2997ff on --surface-2 #1d1d1f 5.58:1   (같은 요소가 카드 밖에 놓일 때)
      --text-2 #a1a1a6 on --surface  #161617  7.03:1   (.sm-d-items 항목)
      --text-2 #a1a1a6 on --surface-2 #1d1d1f 6.54:1   (캡션 하한 4.5:1 충족)
@@ -556,9 +568,21 @@
   word-break: keep-all;
   overflow-wrap: break-word;
 }
-.sm-diagram-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .sm-diagram-head strong { font-size: var(--fs-body); font-weight: 600; }
-.sm-diagram-note { font-size: var(--fs-caption); color: var(--text-2); line-height: 1.55; }
+/* 형식 이름표 칩('대립 저울' 등)은 제거했다 — 학습자에게 필요 없는 메타 정보였다.
+   설명 캡션도 제목과 조판이 이미 말하는 내용이라 **화면에서는 감추고** 보조 기술에만 남긴다
+   (figure의 접근 가능한 이름은 여전히 이 문장이다). display:none이면 읽히지 않으므로 쓰지 않는다. */
+.sm-diagram-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ---- 노드 공통 (모든 형식이 같은 제목 줄·항목 목록을 쓴다) ---- */
 
@@ -570,13 +594,6 @@
   line-height: 1.4;
 }
 .sm-d-head strong { color: var(--text); font-weight: 600; }
-.sm-d-head .sm-icon {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  color: var(--accent);
-  align-self: center;
-}
 /* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한). */
 .sm-d-n {
   flex: none;
@@ -586,29 +603,21 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.sm-d-items {
+/* 항목 앞의 표지는 그려 넣은 하이픈 막대가 아니라 진짜 리스트 마커다 —
+   글머리표는 브라우저가 정렬하고, 마커 색·간격이 조판과 함께 따라간다. */
+ul.sm-d-items {
   display: grid;
   gap: 2px;
   margin-top: var(--space-2);
-  padding: 0;
-  list-style: none;
+  padding-left: 1.1em;
+  list-style: disc;
 }
 .sm-d-items li {
-  position: relative;
-  padding-left: var(--space-3);
   font-size: var(--fs-micro);
   line-height: 1.5;
   color: var(--text-2);
 }
-.sm-d-items li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: .62em;
-  width: 4px;
-  height: 1px;
-  background: var(--line-strong);
-}
+.sm-d-items li::marker { color: var(--line-strong); }
 
 /* ---- flow — 세로 단계 조판 (왼쪽 판정 기준 / 오른쪽 결과) ---- */
 
@@ -620,9 +629,12 @@
   border-left: 1px solid var(--line-strong);
   list-style: none;
 }
+/* 좌우 두 열의 **첫 줄 baseline을 맞춘다.** 왼쪽 라벨(.sm-d-head, caption)과 오른쪽 항목
+   (.sm-d-items li, micro)은 글자 크기가 달라, 위 정렬(start)로는 첫 줄이 서로 어긋났다. */
 .sm-d-flow > .sm-d-node {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  align-items: baseline;
   gap: var(--space-3) var(--space-4);
   padding: var(--space-3) 0;
   border-top: 1px solid var(--line-faint);
@@ -674,8 +686,8 @@
 .sm-d-pyramid > .sm-d-node:nth-last-child(4) { width: 54%; }
 .sm-d-pyramid > .sm-d-node:nth-last-child(5) { width: 42%; }
 .sm-d-pyramid .sm-d-head { justify-content: center; }
-.sm-d-pyramid .sm-d-items li { padding-left: 0; text-align: center; }
-.sm-d-pyramid .sm-d-items li::before { content: none; }
+.sm-d-pyramid ul.sm-d-items { padding-left: 0; list-style: none; }
+.sm-d-pyramid .sm-d-items li { text-align: center; }
 
 /* ---- matrix2x2 — 2×2 그리드. 칸 사이 실선이 교차하는 두 기준을 말한다. ---- */
 
@@ -703,7 +715,6 @@
   border-bottom: 1px solid var(--line);
   font-size: var(--fs-caption);
 }
-.sm-d-center .sm-icon { flex: none; width: 16px; height: 16px; color: var(--accent); }
 .sm-d-center strong { font-weight: 600; }
 .sm-d-cards {
   display: grid;
@@ -731,9 +742,9 @@
   list-style: none;
 }
 
-/* ---- scale — 저울은 SVG, 접시 위 항목은 두 열 ---- */
+/* ---- scale — 대립 2열. 저울 그림 없이 두 극을 나란히 놓는다 ---- */
 
-.sm-d-pans {
+.sm-d-poles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: var(--space-3) var(--space-5);
@@ -741,20 +752,14 @@
   padding: 0;
   list-style: none;
 }
-.sm-d-pans > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
-/* 저울 그림은 두 열과 같은 폭을 써야 접시가 열의 중심 위에 온다. */
-.sm-diagram--scale .sm-d-art { width: 100%; }
+.sm-d-poles > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
 
-/* ---- 장식 SVG (venn·scale 전용) ---- */
+/* ---- 장식 SVG (venn 전용) ---- */
 
 .sm-d-art { display: block; margin-inline: auto; width: min(100%, 460px); }
 .sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
 .sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
 .sm-d-mark { fill: var(--text); font-size: 22px; font-weight: 700; }
-.sm-d-beam { fill: none; stroke: var(--text-3); stroke-width: 4; stroke-linecap: round; }
-.sm-d-rule { fill: none; stroke: var(--line-strong); stroke-width: 2; }
-.sm-d-pan { fill: none; stroke: var(--text-3); stroke-width: 3; stroke-linecap: round; }
-.sm-d-fulcrum { fill: var(--surface-3); stroke: var(--line-strong); stroke-width: 1; }
 
 /* 좁은 컨테이너·좁은 뷰포트에서 같은 조판으로 접는다. 장식 SVG는 숨기고, 열은 행으로 편다. */
 @container smdiagram (max-width: 420px) {

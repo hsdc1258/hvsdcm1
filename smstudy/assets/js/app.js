@@ -515,12 +515,12 @@
     const keyPoints = note.keyPoints.map((item) => `
       <li class="sm-keypoint"><strong>${esc(item.label)}</strong><p>${esc(item.text)}</p></li>
     `).join('');
+    // 눈썹 라벨을 두지 않는다 — 바로 위 <h1>이 이미 단원을 말하므로 정보가 없었다.
+    // 헤드라인도 디스플레이급을 쓰지 않는다: 참고서 단원 도입부는 본문 위에 한 단만 올라간다
+    // (DESIGN.md §2, 크기가 아니라 배치로 강조).
     return `
       <section class="sm-note-hero sm-section" aria-labelledby="noteHeroTitle">
-        <div class="sm-hero-head">
-          <span class="kicker">이 단원에서 먼저 잡을 생각</span>
-          <h3 class="sm-headline" id="noteHeroTitle">${esc(note.headline)}</h3>
-        </div>
+        <h3 class="sm-headline" id="noteHeroTitle">${esc(note.headline)}</h3>
         <ul class="sm-summary">${summary}</ul>
         <ul class="sm-keypoints" aria-label="핵심 개념 세 가지">${keyPoints}</ul>
       </section>`;
@@ -539,46 +539,30 @@
       </section>`;
   }
 
-  function averageCorrectRate(rows) {
-    return Math.round(rows.reduce((sum, row) => sum + row.correctRate, 0) / rows.length);
-  }
-
-  // 이 화면의 숫자는 전부 QUESTIONS에서 즉석 집계한다 (plan.md §4.2, R5).
-  // 데이터에 수기 count를 두지 않으므로 문항이 늘거나 태그가 바뀌면 화면이 저절로 따라간다.
-  // 집계값이라도 사용자의 진행 데이터가 아니므로 막대(게이지·미터)로 그리지 않는다 —
-  // DESIGN.md §4는 프로그레스 바를 진행률·정답률에만 허용한다. 숫자와 문장으로 낸다.
+  // 이 화면은 빈출 개념을 **순서**로만 낸다 (plan.md §4.2, R5).
+  // 집계 수치(N/M문항·평균 정답률·고난도 문항 수)는 전부 화면에서 걷어냈다 — 학습자가
+  // 그 숫자로 내릴 결정이 없고, 표본이 선별 수록이라 오히려 오해를 만든다는 사용자 피드백을
+  // 따랐다. 순서는 여전히 QUESTIONS에서 즉석 집계하므로 문항·태그가 바뀌면 저절로 따라간다.
+  // 아이콘 사용 기준 — 나란히 놓인 블록의 **성격이 서로 다를 때**(설명 vs 경고) 그 구분에만 쓴다.
+  // 아래 두 콜아웃이 사이트에서 아이콘이 남은 유일한 자리다. 항목마다 하나씩 붙는 아이콘은
+  // 아무것도 구별해 주지 않으므로 다이어그램 노드·세부 개념에서 전부 걷어냈다 (DESIGN.md §4).
   function renderExamAnalysis(id, note) {
     const questions = QUESTIONS.filter((question) => question.sub === id);
     if (questions.length === 0) return '';
-    const unitRate = averageCorrectRate(questions);
-    const overallRate = averageCorrectRate(QUESTIONS);
-    const hardest = questions.reduce((current, question) => question.correctRate < current.correctRate ? question : current);
-    const hardCount = questions.filter((question) => question.wrongRate >= 35).length;
     const tagRows = note.exam.tags
       .map((tag) => ({ tag, hits: questions.filter((question) => (question.tags || []).includes(tag)).length }))
       .sort((left, right) => right.hits - left.hits || left.tag.localeCompare(right.tag, 'ko'));
-    const freq = tagRows.map(({ tag, hits }) => `
-      <li class="sm-freq-item">
-        <strong>${esc(tag)}</strong>
-        <span class="sm-freq-count">${hits}/${questions.length}문항</span>
-      </li>`).join('');
+    const freq = tagRows.map(({ tag }) => `<li class="sm-freq-item">${esc(tag)}</li>`).join('');
     return `
       <section id="exam-analysis" class="sm-stack sm-section" aria-labelledby="exam-analysis-title">
         <div class="view-head">
           <div>
-            <span class="kicker">수록 기출 ${questions.length}문항 자동 집계</span>
+            <span class="kicker">이 단원 수록 기출 자동 집계</span>
             <h3 class="title-2" id="exam-analysis-title">무엇이 반복 출제됐나</h3>
           </div>
           <span class="badge">선별 수록 표본 · 전수 통계 아님</span>
         </div>
-        <dl class="sm-facts-inline">
-          <div><dt>수록 문항</dt><dd>${questions.length}문항</dd></div>
-          <div><dt>평균 정답률</dt><dd>${unitRate}%</dd></div>
-          <div><dt>고난도 문항</dt><dd>${hardCount}문항</dd></div>
-          <div><dt>최저 정답률</dt><dd>${hardest.correctRate}% · ${hardest.year}학년도 ${esc(hardest.session)} ${hardest.number}번</dd></div>
-        </dl>
-        <p class="sm-hint">이 단원 평균 ${unitRate}% · 수록 ${QUESTIONS.length}문항 전체 평균 ${overallRate}%${unitRate < overallRate ? ' · 평균보다 어려운 단원' : ''}</p>
-        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도">${freq}</ol>
+        <ol class="sm-freq" aria-label="개념 태그별 출제 빈도 순위">${freq}</ol>
         <div class="sm-callouts">
           <p class="sm-callout"><span class="kicker">${icon('trending-up')}출제 방식</span>${esc(note.exam.trend)}</p>
           <p class="sm-callout is-trap"><span class="kicker">${icon('alert-triangle')}자주 걸리는 함정</span>${esc(note.exam.trap)}</p>
@@ -625,7 +609,7 @@
           <span class="kicker">헷갈리는 선지를 가르는 설명</span>
           <h3 class="title-2" id="deep-dive-title">꼭 알아둘 세부 개념</h3>
         </div>
-        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${icon(item.icon)}<span>${esc(item.term)}</span></h4><ul class="sm-deep-points">${item.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul></article>`).join('')}</div>
+        <div class="sm-deep">${note.deepDive.map((item) => `<article><h4 class="title-3">${esc(item.term)}</h4><ul class="sm-deep-points">${item.points.map((point) => `<li>${esc(point)}</li>`).join('')}</ul></article>`).join('')}</div>
       </section>`;
   }
 

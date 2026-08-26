@@ -73,11 +73,6 @@ function section(heading, body) {
   return `<section class="snap-item"><h2 class="snap-head">${heading}</h2>${body}</section>`;
 }
 
-// 형식 이름(‘판별 순서도’ 등)은 렌더러가 낸 badge에서 뽑는다 — 게이트가 목록을 따로 갖지 않는다.
-function kindLabelOf(markup) {
-  return /<span class="badge">([^<]*)<\/span>/u.exec(markup)?.[1] || '';
-}
-
 export function buildSnapshots() {
   const notebooks = evaluateBrowserData(NOTEBOOK_SOURCE, 'SMSTUDY_NOTEBOOK').NOTEBOOKS;
   const renderer = evaluateDiagramRenderer(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS').ICONS);
@@ -89,7 +84,7 @@ export function buildSnapshots() {
       const markup = renderer.renderDiagram(diagram);
       diagramCount += 1;
       diagramItems.push(section(
-        `${id} — ${diagram.title} (${diagram.kind} · ${kindLabelOf(markup)})`,
+        `${id} — ${diagram.title} (${diagram.kind})`,
         `<div class="sm-diagrams">${markup}</div>`,
       ));
     }

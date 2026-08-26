@@ -324,7 +324,6 @@ const NOTEBOOK_STRING_LIMITS = {
   headline: 30,
   label: 12,
   items: 20,
-  why: 40,
   title: 20,
   term: 20,
   tags: 24,
@@ -343,7 +342,6 @@ const DIAGRAM_TEXT_LIMITS = {
   items: 28,
   center: 14,
   title: 20,
-  why: 40,
 };
 
 // kind별 nodes 개수와 node.items 개수 상·하한 (docs/kice-analysis.md 부록 D).
@@ -353,13 +351,16 @@ const DIAGRAM_TEXT_LIMITS = {
 // nodes 개수는 형식의 의미가 정한다(2×2는 넷, 저울은 둘). items 상한은 사이클3 후속에서
 // 완화했다 — CSS 조판은 줄이 늘면 컨테이너가 같이 늘어나므로 "그릴 수 있는 줄 수" 제약이
 // 사라졌고, 남은 것은 한 칸에 담아 읽을 만한 양이다.
-// art: 이 kind가 장식 SVG(.sm-d-art)를 내는가. 관계가 곧 기하학인 venn·scale만 true다.
-// 이 값이 있어야 "layoutVenn의 원 그리기를 통째로 지운" 변형이 잡힌다 (R2-B-2의 후신).
+// art: 이 kind가 장식 SVG(.sm-d-art)를 내는가. **venn 하나만 true다** — 원의 겹침은
+// 목록으로 옮길 수 없는 정보다. scale의 저울 그림은 두 열 조판이 이미 말하는 대립을
+// 반복할 뿐이라 제거했다(사이클3 후속 사용자 피드백).
+// 이 값이 있어야 "layoutVenn의 원 그리기를 통째로 지운" 변형이 잡히고, 반대로
+// 존재 이유 없는 그림이 슬그머니 되살아나는 것도 잡힌다 (R2-B-2의 후신).
 const DIAGRAM_SHAPE_BOUNDS = {
   flow: { nodes: [3, 5], items: [0, 4], art: false },        // 세로 단계 조판 (좌: 기준 / 우: 결과)
-  scale: { nodes: [2, 2], items: [0, 6], art: true },        // 저울 SVG + 접시 두 열
+  scale: { nodes: [2, 2], items: [0, 6], art: false },       // 대립 2열 (저울 그림 없음)
   matrix2x2: { nodes: [4, 4], items: [0, 6], art: false },   // 2×2 그리드
-  venn: { nodes: [2, 3], items: [0, 5], art: true },         // 원 SVG(번호만) + 범례
+  venn: { nodes: [2, 3], items: [0, 5], art: true },         // 원 SVG(번호만) + 범례 — 유일한 그림
   timeline: { nodes: [3, 5], items: [0, 4], art: false },    // 그리드 열
   pyramid: { nodes: [3, 5], items: [0, 4], art: false },     // 폭이 줄어드는 가로 막대
   radial: { nodes: [3, 5], items: [0, 4], art: false },      // 중심 제목 + 카드 그리드
@@ -367,7 +368,9 @@ const DIAGRAM_SHAPE_BOUNDS = {
 
 // 마크업 구조를 세는 선택자.
 // - 노드는 kind와 무관하게 data-node를 단 <li> 하나다 (조판이 SVG에서 CSS로 바뀌며 통일됐다).
-// - 아이콘은 kind와 무관하게 <svg class="sm-icon"> 하나다. SVG 캔버스 안 아이콘(<g>)은 사라졌다.
+// - 아이콘은 **다이어그램에 하나도 없어야 한다.** 노드마다 하나씩 붙는 아이콘은 노드를
+//   구별해 주지 않아 전부 걷어냈다 (DESIGN.md §4). LIST_ICON_PATTERN은 이제 "0이어야 한다"를
+//   재는 잠금이다 — 아이콘이 되살아나면 실패한다.
 const NODE_PATTERN = /<li class="sm-d-node[^"]*" data-node>/gu;
 const ITEM_PATTERN = /<ul class="sm-d-items">/gu;
 const LIST_ICON_PATTERN = /<svg class="sm-icon"/gu;
@@ -388,8 +391,8 @@ const NOTEBOOK_FIELD_CONTRACT = {
   keyPoints: { type: 'array', cell: 'object', min: 3, max: 3 },
   'keyPoints[].label': { type: 'string' },
   'keyPoints[].text': { type: 'string' },
-  // keyPoints[].icon은 계약에 없다 — 감사가 히어로의 아이콘 칩을 제거해 렌더되지 않는다
-  // (plan.md D-3, review M-1). 아래 양방향 대조가 "렌더러가 다시 읽으면 계약을 적어라"를 강제한다.
+  // keyPoints[].icon / deepDive[].icon은 계약에 없다 — 아이콘을 화면에서 걷어내 렌더되지 않는다.
+  // 아래 양방향 대조가 "렌더러가 다시 읽으면 계약을 적어라"를 강제한다.
   'exam.trend': { type: 'string' },
   'exam.trap': { type: 'string' },
   'exam.tags': { type: 'array', cell: 'string', min: 1 },
@@ -400,7 +403,6 @@ const NOTEBOOK_FIELD_CONTRACT = {
   decision: { type: 'array', cell: 'string', min: 4, max: 5 },
   deepDive: { type: 'array', cell: 'object', min: 4, max: 5 },
   'deepDive[].term': { type: 'string' },
-  'deepDive[].icon': { type: 'icon' },
   'deepDive[].points': { type: 'array', cell: 'string', min: 2, max: 4 },
   recall: { type: 'array', cell: 'object', min: 3, max: 4 },
   'recall[].question': { type: 'string' },
@@ -408,14 +410,14 @@ const NOTEBOOK_FIELD_CONTRACT = {
 };
 
 // diagram.js가 읽는 필드. 개수 상·하한은 DIAGRAM_SHAPE_BOUNDS가 kind별로 따로 본다.
+// why는 계약에서 뺐다 — 화면에 낼 정보가 아니어서 데이터에서도 제거했다.
+// 단원별 형식 선택 근거는 docs/kice-analysis.md 부록 D가 소유한다.
 const DIAGRAM_FIELD_CONTRACT = {
   kind: { type: 'string' },
   title: { type: 'string' },
-  why: { type: 'string' },
   center: { type: 'string', optional: true },
   nodes: { type: 'array', cell: 'object', min: 2, max: 5 },
   'nodes[].label': { type: 'string' },
-  'nodes[].icon': { type: 'icon', optional: true },
   'nodes[].items': { type: 'array', cell: 'string', optional: true },
 };
 
@@ -710,7 +712,25 @@ function validateSmStudyData() {
 
   // 도출이 조용히 깨지면 아래 계약이 통째로 무력해지므로 도출 결과 자체를 먼저 검사한다.
   check(diagramKinds.size >= 4, `smstudy: diagram kind derivation looks broken (parsed ${diagramKinds.size} layout functions in ${DIAGRAM_SOURCE})`);
-  check(iconKeys.size >= 20, `smstudy: icon key derivation looks broken (parsed ${iconKeys.size} keys in ${ICON_SOURCE})`);
+  check(iconKeys.size >= 1, `smstudy: icon key derivation looks broken (parsed ${iconKeys.size} keys in ${ICON_SOURCE})`);
+  // 벤더 세트에 죽은 아이콘을 쌓아 두지 않는다. 화면이 실제로 부르는 키는 app.js의
+  // icon('…') 호출뿐이므로 그 집합과 벤더 집합이 **정확히 같아야** 한다.
+  // 아이콘을 새로 쓰려면 벤더링이 강제되고, 안 쓰게 되면 정리가 강제된다.
+  const calledIconKeys = new Set(
+    [...readSource(APP_SOURCE).matchAll(/\bicon\('([^']+)'\)/gu)].map(([, key]) => key),
+  );
+  check(calledIconKeys.size >= 1, `smstudy: icon call derivation looks broken (parsed ${calledIconKeys.size} icon() calls in ${APP_SOURCE})`);
+  for (const key of calledIconKeys) {
+    check(iconKeys.has(key), `smstudy: ${APP_SOURCE} calls icon('${key}') but that key is not vendored in ${ICON_SOURCE}`);
+  }
+  for (const key of iconKeys) {
+    check(calledIconKeys.has(key), `smstudy: ${ICON_SOURCE} vendors "${key}" but nothing renders it — drop it (dead icon)`);
+  }
+  // 다이어그램 렌더러는 아이콘을 내지 않는다 (DESIGN.md §4). 주석을 걷어낸 소스에서 직접 잠근다
+  // (renderIcon(key, …) 선언 한 줄만 허용한다 — 그 함수는 app.js가 쓰는 공용 유틸이다).
+  const diagramCode = diagramSource.replace(/^[ \t]*\/\/.*$/gmu, '');
+  check(!/renderIcon\((?!key\b)/u.test(diagramCode),
+    `smstudy: ${DIAGRAM_SOURCE} must not call renderIcon() inside a layout — diagram nodes carry no icons`);
   // 게이트가 검사하는 아이콘 집합과 렌더러가 실제로 쓰는 집합이 같은 물건이어야 한다.
   // includes()로 보면 window.SM_ICONS_RENAMED 같은 이름 변경이 부분 문자열로 통과한다 (음성 테스트로 확인).
   check(/window\.SM_ICONS(?![\w$])/u.test(diagramSource), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
@@ -749,7 +769,7 @@ function validateSmStudyData() {
       const nodeCount = bounds.nodes[1];
       const itemCount = bounds.items[1];
       const probeDiagram = {
-        kind, title: '게이트 탐침', why: '연결 확인용', center: '탐침',
+        kind, title: '게이트 탐침', center: '탐침',
         nodes: Array.from({ length: nodeCount }, (item, index) => ({
           label: `갈래${index + 1}`,
           icon: PROBE_KEY,
@@ -771,11 +791,12 @@ function validateSmStudyData() {
         check(markup.split(`<li>항목${index}</li>`).length - 1 === nodeCount,
           `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} did not render item ${index} of every node`);
       }
-      // 아이콘은 node마다 하나, center를 쓰는 kind는 하나 더(target 아이콘)를 낸다.
-      check(listIcons >= nodeCount,
-        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${listIcons} icons for ${nodeCount} icon keys — the layout lost its icons`);
-      check(markup.split(PROBE_BODY).length - 1 === listIcons,
-        `smstudy: ${DIAGRAM_SOURCE} ${kind} emitted icon elements that do not carry the body injected through window.SM_ICONS`);
+      // 아이콘은 하나도 나오면 안 된다 — 데이터가 icon 키를 들고 있어도 무시해야 한다.
+      // (탐침 노드에는 일부러 icon을 넣어 두었다. 렌더러가 다시 읽기 시작하면 여기서 잡힌다.)
+      check(listIcons === 0,
+        `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${listIcons} icons — diagram layouts must render no icons (DESIGN.md §4)`);
+      check(!markup.includes(PROBE_BODY),
+        `smstudy: ${DIAGRAM_SOURCE} ${kind} put an icon body into the markup — diagram layouts must render no icons`);
       check(arts === (bounds.art ? 1 : 0),
         `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${arts} decorative SVG blocks but DIAGRAM_SHAPE_BOUNDS declares art: ${bounds.art}`);
       // 겹침의 근원이던 "SVG 안 문장"이 되살아나지 않는지 본다 — 한 글자짜리 표지만 허용한다.
@@ -870,8 +891,10 @@ function validateSmStudyData() {
       return;
     }
     if (key === 'icon') {
+      // 아이콘은 이제 데이터가 아니라 렌더러가 고정한다 (app.js의 두 콜아웃뿐).
+      // 콘텐츠 데이터에 icon 키가 되살아나면 실패시킨다.
       visitedIcons += 1;
-      check(iconKeys.has(value), `smstudy: ${location} uses icon key "${value}" that is not vendored in ${ICON_SOURCE}`);
+      check(false, `smstudy: ${location} carries an icon key "${value}" — icons are chosen by the renderer, not by content data`);
       return;
     }
     visitedStrings += 1;
@@ -893,7 +916,7 @@ function validateSmStudyData() {
   // explanationData.GUIDES는 이 순회에 넣지 않는다 — 오답 해설은 개념 파트가 아니라
   // 퀴즈 피드백이고, R1의 "한 문장 60자"는 개념 파트 본문에 건 계약이다 (plan.md §1).
   check(visitedStrings >= 800, `smstudy: notebook string walk looks truncated (visited ${visitedStrings} strings)`);
-  check(visitedIcons >= 50, `smstudy: notebook icon walk looks truncated (visited ${visitedIcons} icon keys)`);
+  check(visitedIcons === 0, `smstudy: notebook data still carries ${visitedIcons} icon keys — icons belong to the renderer, not the content`);
   check(visitedHrefs >= 3, `smstudy: href walk looks truncated (visited ${visitedHrefs} URLs)`);
   // 속성 보간 지점 — URL을 이스케이프 없이 속성에 넣으면 값이 깨질 때 뒤 마크업까지 깨진다.
   for (const [attribute, expression] of smstudyJsSource.matchAll(/\s(?:href|src)="\$\{([^}]+)\}/gu)) {
@@ -901,11 +924,10 @@ function validateSmStudyData() {
       `smstudy: URL attribute interpolation must be escaped — found ${attribute.trim()} in ${APP_SOURCE}`);
   }
 
-  // 형식 다양성 — 13단원이 같은 형식으로 수렴하면 R3(내용에 맞는 형식 선택)가 무너진다.
-  const usedKinds = new Set(
-    Object.values(notebookData.NOTEBOOKS || {}).flatMap((notebook) => (notebook.diagrams || []).map((diagram) => diagram.kind)),
-  );
-  check(usedKinds.size >= 4, `smstudy: diagrams must use at least 4 different kinds, found ${usedKinds.size} (${[...usedKinds].join(', ')})`);
+  // 형식 다양성 하한(최소 4종)은 **제거했다.** 그 게이트는 "형식을 채우기 위해 형식을 쓰는"
+  // 압력을 만들었고, 존재 이유 없는 장식(저울 그림)이 그렇게 들어왔다. 형식은 내용이 고르며,
+  // 그 근거는 docs/kice-analysis.md 부록 D가 단원별로 기록한다. 게이트가 재는 것은
+  // "쓴 형식이 렌더러에 존재하는가"뿐이다 (아래 단원별 kind 검사).
 
   for (const subunit of subunits) {
     const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
@@ -958,13 +980,13 @@ function validateSmStudyData() {
       // 렌더러를 실제로 돌려 마크업까지 확인한다 (아이콘 도달 + figure 콘텐츠 모델).
       if (typeof liveRenderer?.renderDiagram === 'function') {
         const markup = liveRenderer.renderDiagram(diagram);
-        const iconNodes = (diagram.nodes || []).filter((node) => node.icon).length;
-        // radial만 center를 화면에 내지만, 그 판단은 데이터가 아니라 렌더러가 한다.
-        // 그래서 기대치를 kind로 하드코딩하지 않고 "노드 아이콘 + 마크업이 실제로 낸 center 줄"로 센다.
-        const centerLines = (markup.match(/<p class="sm-d-center">/gu) || []).length;
-        const expectedIcons = iconNodes + centerLines;
-        check(countMatches(markup, LIST_ICON_PATTERN) === expectedIcons,
-          `smstudy: ${where} renders ${countMatches(markup, LIST_ICON_PATTERN)} icons for ${expectedIcons} icon keys`);
+        check(countMatches(markup, LIST_ICON_PATTERN) === 0,
+          `smstudy: ${where} renders ${countMatches(markup, LIST_ICON_PATTERN)} icons — diagrams carry no icons (DESIGN.md §4)`);
+        // 형식 이름표 칩과 '왜 이 형식인가' 문장은 화면에서 걷어냈다. 되살아나면 실패시킨다.
+        check(!/<span class="badge">/u.test(markup),
+          `smstudy: ${where} renders a kind-label chip — the format name is not learner-facing`);
+        check(!/이 형식으로 그렸다/u.test(markup),
+          `smstudy: ${where} renders the planning note "why" — that belongs in docs/kice-analysis.md 부록 D`);
         // 출력 노드 수 = 데이터 노드 수. matrix2x2·venn·scale은 렌더러가 앞에서 잘라 쓰므로
         // 데이터 개수 상한(DIAGRAM_SHAPE_BOUNDS.nodes[1])까지만 기대한다.
         const drawnNodes = Math.min(nodeCount, DIAGRAM_SHAPE_BOUNDS[diagram.kind]?.nodes[1] ?? nodeCount);

@@ -9,15 +9,21 @@
   //   그래서 관계가 곧 기하학인 두 형식(venn·scale)만 SVG를 남기고, 나머지 다섯 형식은
   //   HTML+CSS 조판(그리드·플렉스·일반 흐름)으로 낸다. 줄바꿈을 브라우저가 하므로
   //   겹침이 원리적으로 발생하지 않는다.
-  // - 남긴 SVG에도 **문장을 넣지 않는다.** venn은 원 안에 한 글자짜리 번호만 두고,
-  //   scale은 빔·받침·접시만 그린다. 라벨과 항목은 SVG 밖 CSS 조판으로 뺀다.
+  // - **그림은 도형이 데이터에 없는 관계를 보일 때만 남긴다.** 남은 것은 venn 하나다 —
+  //   원의 겹침은 목록으로 옮길 수 없는 정보다. scale의 저울 그림은 지웠다: 두 열 대비
+  //   조판이 이미 대립을 말하므로 저울은 같은 말을 그림으로 반복할 뿐이었다.
+  // - 남긴 SVG에도 **문장을 넣지 않는다.** venn은 원 안에 한 글자짜리 번호만 둔다.
   // - 레퍼런스는 docs/DESIGN.md §1의 **문제집·참고서 조판**이다. 상자와 화살표 범벅이 아니라
   //   표, 들여쓰기 위계, 얇은 구분선, 여백으로 관계를 말한다.
   // - 색 리터럴을 쓰지 않는다. 색은 style.css의 클래스와 currentColor만 정한다.
+  // - **화면에 기획 메모를 내지 않는다.** 형식 이름표 칩과 '왜 이 형식인가'(why)는 제거했다.
+  //   학습자에게 필요한 정보가 아니다. 형식 선택 근거는 docs/kice-analysis.md 부록 D에 있다.
+  // - **아이콘을 쓰지 않는다.** 노드마다 하나씩 붙는 아이콘은 항목을 구별해 주지 못하고
+  //   번호와 겹쳐 장식만 늘린다 (DESIGN.md §4). renderIcon()은 app.js가 쓰는 공용 유틸로만 남는다.
   // - 글자 수 상한은 더 이상 좌표가 아니라 **가독성**이 정한다 (아래 게이트 주석 참고).
   //   scripts/validate.mjs의 DIAGRAM_TEXT_LIMITS와 같은 값이어야 한다:
-  //     label 14자 / items 28자 / center 14자 / title 20자 / why 40자
-  // - 좁은 화면 분기는 venn·scale의 장식 SVG를 숨기는 컨테이너 쿼리 하나뿐이다.
+  //     label 14자 / items 28자 / center 14자 / title 20자
+  // - 좁은 화면 분기는 venn의 장식 SVG를 숨기는 컨테이너 쿼리 하나뿐이다.
   //   나머지 형식은 CSS 조판이 이미 반응형이라 폴백 목록이 필요 없다.
 
   const ICON_SET = (window.SM_ICONS && window.SM_ICONS.ICONS) || {};
@@ -34,10 +40,11 @@
     return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
   }
 
-  // 노드 하나의 제목 줄. 번호는 동그라미 뱃지가 아니라 그냥 숫자다 (DESIGN.md §4 장식 상한).
+  // 노드 하나의 제목 줄. 번호는 동그라미 뱃지가 아니라 그냥 숫자이고, 아이콘은 붙이지 않는다
+  // (DESIGN.md §4 장식 상한 — 번호와 아이콘을 함께 다는 조판이 이번 피드백의 지적 대상이었다).
   function nodeHead(node, index, numbered) {
     const number = numbered ? `<span class="sm-d-n">${index + 1}</span>` : '';
-    return `<p class="sm-d-head">${number}${renderIcon(node.icon)}<strong>${esc(node.label)}</strong></p>`;
+    return `<p class="sm-d-head">${number}<strong>${esc(node.label)}</strong></p>`;
   }
 
   function nodeItems(node) {
@@ -74,21 +81,11 @@
     return nodeList('flow', diagram.nodes, 'sm-d-flow');
   }
 
-  // 대립하는 두 극. 저울의 기울기가 곧 의미라서 SVG를 남기되, 빔·받침·접시만 그린다.
-  // 접시 위 항목은 SVG 밖 두 열로 빼서 접시 아래에 나란히 놓는다.
-  // 두 접시의 중심을 viewBox의 25%·75%에 두어, 폭이 얼마든 아래 두 열의 중심과 맞는다.
+  // 대립하는 두 극 — **대립 2열**. 예전에는 여기에 저울 SVG를 얹었지만, 두 열을 나란히 놓은
+  // 조판이 이미 "같은 축의 정반대"를 말한다. 저울 그림은 같은 말을 반복하는 장식이라 지웠다.
+  // kind 이름 'scale'은 데이터 계약이라 유지하고, 조판만 두 열 대비로 바꿨다.
   function layoutScale(diagram) {
-    const beam = [
-      `<path d="M160 44H800" class="sm-d-beam"/>`,
-      `<path d="M480 44L532 112H428Z" class="sm-d-fulcrum"/>`,
-      `<path d="M392 116H568" class="sm-d-beam"/>`,
-      `<path d="M240 44V80" class="sm-d-rule"/>`,
-      `<path d="M720 44V80" class="sm-d-rule"/>`,
-      `<path d="M160 80Q240 124 320 80" class="sm-d-pan"/>`,
-      `<path d="M640 80Q720 124 800 80" class="sm-d-pan"/>`,
-    ].join('');
-    return art('0 0 960 130', beam)
-      + nodeList('scale', diagram.nodes.slice(0, 2), 'sm-d-pans');
+    return nodeList('scale', diagram.nodes.slice(0, 2), 'sm-d-poles');
   }
 
   // 두 기준이 교차해 만드는 네 칸. nodes 순서는 좌상·우상·좌하·우하다(부록 D).
@@ -136,7 +133,7 @@
   // 중심을 제목 줄로 올리고 갈래는 카드 그리드로 편다.
   function layoutRadial(diagram) {
     const center = diagram.center || diagram.title;
-    return `<p class="sm-d-center">${renderIcon('target')}<strong>${esc(center)}</strong></p>`
+    return `<p class="sm-d-center"><strong>${esc(center)}</strong></p>`
       + nodeList('radial', diagram.nodes, 'sm-d-cards');
   }
 
@@ -200,39 +197,21 @@
     }
   }
 
-  // why는 '…때문' 또는 '…하므로/…라서' 두 어형으로 들어온다. 앞의 것만 조사를 붙여
-  // 뒤 문장과 이어지게 만든다 (데이터를 고치지 않고 렌더러에서 흡수한다).
-  function reason(why) {
-    const clause = /때문$/u.test(why) ? `${why}에` : why;
-    return `${clause} 이 형식으로 그렸다.`;
-  }
-
   // ---- 공개 API -------------------------------------------------------------
-
-  const KIND_LABELS = {
-    flow: '판별 순서도',
-    scale: '대립 저울',
-    matrix2x2: '2×2 교차표',
-    venn: '벤 다이어그램',
-    timeline: '단계 타임라인',
-    pyramid: '포함 위계',
-    radial: '갈래 지도',
-  };
 
   function renderDiagram(diagram) {
     const layout = LAYOUTS[diagram.kind];
     if (!layout || !Array.isArray(diagram.nodes) || diagram.nodes.length === 0) return '';
     // figure 하나에 figcaption은 하나만 올 수 있고 첫째 또는 마지막 자식이어야 한다
-    // (HTML 콘텐츠 모델, review 3c M-3). 제목 줄은 일반 div로 내리고, 요구된 서술형 설명을
+    // (HTML 콘텐츠 모델, review 3c M-3). 제목 줄은 일반 div로 내리고, 서술형 설명을
     // 유일한 figcaption으로 남겨 figure의 접근 가능한 이름이 그 문장이 되게 한다.
+    // figcaption은 **화면에서 감춘다**(.sm-diagram-note가 시각적으로 숨긴다) — 제목과 조판이
+    // 이미 같은 내용을 말하므로 눈으로 읽을 사람에게는 중복이고, 스크린리더에는 필요하다.
     return `
       <figure class="sm-diagram sm-diagram--${esc(diagram.kind)}">
-        <div class="sm-diagram-head">
-          <strong>${esc(diagram.title)}</strong>
-          <span class="badge">${esc(KIND_LABELS[diagram.kind] || diagram.kind)}</span>
-        </div>
+        <div class="sm-diagram-head"><strong>${esc(diagram.title)}</strong></div>
         ${layout(diagram)}
-        <figcaption class="sm-diagram-note">${esc(diagram.title)} — ${esc(narrative(diagram))} ${esc(reason(diagram.why))}</figcaption>
+        <figcaption class="sm-diagram-note">${esc(diagram.title)} — ${esc(narrative(diagram))}</figcaption>
       </figure>`;
   }
 
