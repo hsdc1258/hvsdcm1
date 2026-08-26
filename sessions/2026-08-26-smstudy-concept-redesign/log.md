@@ -20,3 +20,4 @@
 - [요청] R2-B-1~B-3 → [수정] 런타임 필드 대조+출력 undefined/빈슬롯 검사, kind 7종×두 렌더 경로 아이콘 대조, figure 검사를 함수 본문으로 한정 (103ba14)
 - [요청] R2-M-2·중단선 → [수정] plan.md §4·§5 확정값 동기화 + §13 D-12·D-13, 음성 테스트 N45~N50 추가 (docs 커밋)
 - [요청] 사이클3 R3-M-1 (CRLF 체크아웃에서 정상 HEAD가 npm test 7건 실패) → [수정] validate.mjs·render-sandbox.mjs가 텍스트를 읽는 즉시 CRLF를 LF로 정규화 + .gitattributes로 eol=lf 고정 + gate-negative-tests.md에 검증 항목 N51 추가 (202bf89)
+- [요청] 리뷰·수정 3라운드 → [수정] blocker 4+3·major 10+3+1 전건 해소, 게이트 5265→13279 checks (9a5480c)
