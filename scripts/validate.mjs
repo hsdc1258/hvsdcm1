@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync as readFileRaw, statSync } from 'node:fs';
 import path from 'node:path';
 import {
   APP_SOURCE, DIAGRAM_SOURCE, ICON_SOURCE,
@@ -11,6 +11,16 @@ import { buildSnapshots } from './snapshot.mjs';
 const ROOT = process.cwd();
 const failures = [];
 let checks = 0;
+
+// ---- R3-M-1. 줄바꿈 정규화 ----
+// 윈도우 기본값 `core.autocrlf=true`로 체크아웃하면 소스가 CRLF로 내려온다. 함수 경계
+// 정규식과 스냅샷 바이트 대조는 LF를 전제하므로, 정상 커밋이 머신에 따라 거짓 실패했다.
+// 텍스트로 읽는 순간 CRLF를 LF로 접어 판정이 체크아웃 설정에 좌우되지 않게 한다.
+// 인코딩 인자가 없는 호출(Buffer)은 손대지 않는다 — 해시 잠금과 WebP 파싱은 원본 바이트를 봐야 한다.
+function readFileSync(file, encoding) {
+  if (!encoding) return readFileRaw(file);
+  return readFileRaw(file, encoding).replace(/\r\n/gu, '\n');
+}
 
 function check(condition, message) {
   checks += 1;

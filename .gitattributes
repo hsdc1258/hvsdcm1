@@ -1,0 +1,31 @@
+# 줄바꿈 고정 (docs/review.md R3-M-1)
+#
+# 왜: `core.autocrlf=true`(윈도우 Git 기본값)로 클론하면 소스가 CRLF로 내려온다.
+# 게이트의 함수 경계 검사와 스냅샷 바이트 대조는 LF 산출물과 대조하므로, 아무것도
+# 고치지 않은 정상 HEAD가 머신에 따라 거짓 실패했다. 검사 쪽은 읽는 즉시 CRLF를 LF로
+# 접도록 고쳤고(scripts/validate.mjs, scripts/render-sandbox.mjs), 여기서는 애초에
+# 체크아웃 줄바꿈을 LF로 못 박아 재발을 막는다.
+#
+# 저장소의 인덱스는 이미 전부 LF이므로 이 파일을 추가해도 재정규화 diff는 생기지 않는다.
+
+# 소스와 문서 — 어떤 OS에서 클론해도 LF로 체크아웃한다.
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.svg   text eol=lf
+
+# 바이너리 — 어떤 변환도 하지 않는다 (assets/og.png는 SHA-256으로 잠겨 있다).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary

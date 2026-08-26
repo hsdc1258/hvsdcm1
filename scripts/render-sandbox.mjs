@@ -25,8 +25,10 @@ export const NOTEBOOK_SOURCE = 'smstudy/assets/js/notebook-data.js';
 export const EXPLANATION_SOURCE = 'smstudy/assets/js/explanation-data.js';
 export const UTILS_SOURCE = 'assets/js/study-utils.js';
 
+// R3-M-1 — `core.autocrlf=true` 체크아웃에서 소스가 CRLF로 내려와도 판정이 같아야 한다.
+// 함수 경계 정규식·스냅샷 생성·문자열 매칭이 모두 이 함수를 지나므로 여기서 LF로 접는다.
 export function readSource(file) {
-  return readFileSync(path.join(ROOT, file), 'utf8');
+  return readFileSync(path.join(ROOT, file), 'utf8').replace(/\r\n/gu, '\n');
 }
 
 // 브라우저 전역에 얹히는 데이터 파일을 격리 VM에서 평가해 export 객체를 돌려준다.
@@ -244,10 +246,12 @@ export function createAppSandbox(options = {}) {
 // 함수 **본문 경계**를 잡는다. 소스 전체 정규식으로 마크업을 찾으면 함수 밖의 같은 모양
 // 문자열을 잡을 수 있다 (review R2-B-3: 앞선 미사용 <figure> 문자열이 진짜 검사를 가렸다).
 export function functionBody(source, name) {
-  const header = new RegExp(`^(\\s*)(?:async )?function ${name}\\s*\\(`, 'mu').exec(source);
+  // 호출자가 정규화하지 않은 문자열을 넘겨도 안전하도록 여기서도 CRLF를 접는다 (R3-M-1).
+  const text = source.replace(/\r\n/gu, '\n');
+  const header = new RegExp(`^(\\s*)(?:async )?function ${name}\\s*\\(`, 'mu').exec(text);
   if (!header) return null;
   const indent = header[1];
-  const tail = new RegExp(`\\n${indent}\\}`, 'u').exec(source.slice(header.index));
+  const tail = new RegExp(`\\n${indent}\\}`, 'u').exec(text.slice(header.index));
   if (!tail) return null;
-  return source.slice(header.index, header.index + tail.index + tail[0].length);
+  return text.slice(header.index, header.index + tail.index + tail[0].length);
 }
