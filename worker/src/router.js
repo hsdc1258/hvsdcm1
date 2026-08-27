@@ -16,6 +16,8 @@ import {
 const MAX_PROGRESS_BYTES = 800_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
+const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
+const usageTokenEncoder = new TextEncoder();
 
 async function login(request, env) {
   const input = await readJson(request);
@@ -45,6 +47,76 @@ async function adminLogin(request, env) {
     return json({ error: '비밀번호가 올바르지 않습니다.' }, 401);
   }
   return json({ token: await issueSession(env, null, 'admin', request) });
+}
+
+function fixedTimeEqual(left, right) {
+  if (typeof crypto.subtle.timingSafeEqual === 'function') {
+    return crypto.subtle.timingSafeEqual(left, right);
+  }
+
+  // Node's Web Crypto test runtime does not expose the Workers extension.
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
+}
+
+async function usageTokenMatches(request, env) {
+  const authorization = request.headers.get('authorization') || '';
+  const supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || '';
+  const expected = String(env.USAGE_INGEST_TOKEN || '');
+  const [suppliedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(supplied)),
+    crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(expected)),
+  ]);
+  const matches = fixedTimeEqual(new Uint8Array(suppliedHash), new Uint8Array(expectedHash));
+  return Boolean(supplied && expected && matches);
+}
+
+async function reportUsage(request, env) {
+  if (!(await usageTokenMatches(request, env))) {
+    return json({ error: '인증이 필요합니다.' }, 401);
+  }
+
+  const input = await readJson(request);
+  const source = String(input.source || '');
+  const capturedAt = typeof input.captured_at === 'string' ? input.captured_at : '';
+  const payloadIsObject = input.payload !== null
+    && typeof input.payload === 'object'
+    && !Array.isArray(input.payload);
+  if (!VALID_USAGE_SOURCES.has(source)
+    || !capturedAt
+    || !Number.isFinite(Date.parse(capturedAt))
+    || !payloadIsObject) {
+    return json({ error: '잘못된 사용량 보고입니다.' }, 400);
+  }
+
+  await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source)
+    DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
+  `).bind(source, capturedAt, JSON.stringify(input.payload)).run();
+  return json({ ok: true });
+}
+
+async function usage(request, env) {
+  const session = await authenticate(request, env);
+  if (!session) return json({ error: '로그인이 필요합니다.' }, 401);
+
+  const rows = await env.DB.prepare(`
+    SELECT source, captured_at, payload
+    FROM usage_snapshots
+    ORDER BY source
+  `).all();
+  return json({
+    snapshots: rows.results.map((row) => ({
+      source: row.source,
+      captured_at: row.captured_at,
+      payload: JSON.parse(row.payload),
+    })),
+  });
 }
 
 async function logout(request, env) {
@@ -349,6 +421,8 @@ export async function route(request, env) {
   }
 
   if (method === 'POST' && path === '/api/logout') return logout(request, env);
+  if (method === 'POST' && path === '/api/usage/report') return reportUsage(request, env);
+  if (method === 'GET' && path === '/api/usage') return usage(request, env);
 
   const progressMatch = path.match(/^\/api\/progress\/(wordmaster|smstudy)$/);
   if (progressMatch) {

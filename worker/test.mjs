@@ -257,6 +257,124 @@ test('logout expires the session but preserves its audit record', async () => {
   assert.equal(updateCall.values[4], 'Logout Browser');
 });
 
+test('usage report rejects missing and incorrect ingest tokens', async () => {
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare() {
+        throw new Error('database must not be reached');
+      },
+    },
+  };
+
+  for (const authorization of [null, 'Bearer wrong-token']) {
+    const headers = { 'content-type': 'application/json' };
+    if (authorization) headers.authorization = authorization;
+    const response = await worker.fetch(new Request('https://api.test/api/usage/report', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ source: 'codex', captured_at: new Date().toISOString(), payload: {} }),
+    }), env);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: '인증이 필요합니다.' });
+  }
+});
+
+test('usage report upserts the latest source snapshot', async () => {
+  let upsert;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...values) {
+            upsert = { sql, values };
+            return { async run() { return { success: true }; } };
+          },
+        };
+      },
+    },
+  };
+  const capturedAt = '2026-08-27T01:02:03.000Z';
+  const payload = {
+    model: 'gpt-5.6-sol',
+    rate_limits: { primary: { used_percent: 12, window_minutes: 300 } },
+  };
+  const response = await worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer correct-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ source: 'codex', captured_at: capturedAt, payload }),
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.match(upsert.sql, /ON CONFLICT\(source\)/u);
+  assert.match(upsert.sql, /DO UPDATE SET captured_at = excluded\.captured_at/u);
+  assert.deepEqual(upsert.values, ['codex', capturedAt, JSON.stringify(payload)]);
+});
+
+test('usage lookup requires a session and returns parsed snapshots', async () => {
+  const unauthenticated = await worker.fetch(new Request('https://api.test/api/usage'), {
+    ALLOWED_ORIGIN: 'https://example.test',
+  });
+  assert.equal(unauthenticated.status, 401);
+  assert.deepEqual(await unauthenticated.json(), { error: '로그인이 필요합니다.' });
+
+  const storedPayload = { models: { fable: { rate_limits: { five_hour: { used_percentage: 8 } } } } };
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0 }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return {
+            async all() {
+              return {
+                results: [{
+                  source: 'claude',
+                  captured_at: '2026-08-27T01:02:03.000Z',
+                  payload: JSON.stringify(storedPayload),
+                }],
+              };
+            },
+          };
+        }
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    },
+  };
+  const response = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: {
+      authorization: 'Bearer user-token',
+      'cf-connecting-ip': '198.51.100.1',
+      'user-agent': 'Usage Browser',
+    },
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    snapshots: [{
+      source: 'claude',
+      captured_at: '2026-08-27T01:02:03.000Z',
+      payload: storedPayload,
+    }],
+  });
+});
+
 test('unexpected server errors do not expose internal details', async () => {
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',

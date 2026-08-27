@@ -7,5 +7,6 @@ binding = "DB"
 database_name = "hvsdcm"
 database_id = "0a6320b7-e7b7-4c9d-b13e-cab8ef423dea"
 
+# Required runtime secret: npx wrangler secret put USAGE_INGEST_TOKEN
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"

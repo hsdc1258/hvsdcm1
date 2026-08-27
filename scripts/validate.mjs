@@ -300,8 +300,14 @@ function validateMigrations() {
     const expectedPrefix = String(index + 1).padStart(4, '0');
     check(file.startsWith(expectedPrefix), `worker: migration sequence gap at ${file}`);
   });
-  const latestMigration = readFileSync(path.join(migrationDirectory, migrations.at(-1)), 'utf8');
-  check(latestMigration.includes('ip_address'), 'worker: latest migration must add session IP storage');
+  const sessionIpMigration = readFileSync(path.join(migrationDirectory, '0004_session_ip_address.sql'), 'utf8');
+  check(sessionIpMigration.includes('ip_address'), 'worker: migration 0004 must add session IP storage');
+  const usageMigration = readFileSync(path.join(migrationDirectory, '0005_usage_snapshots.sql'), 'utf8');
+  check(
+    /CREATE TABLE usage_snapshots[\s\S]*source TEXT PRIMARY KEY[\s\S]*captured_at TEXT NOT NULL[\s\S]*payload TEXT NOT NULL/u
+      .test(usageMigration),
+    'worker: migration 0005 must define the usage snapshot contract',
+  );
 }
 
 function readWebpDimensions(file) {
