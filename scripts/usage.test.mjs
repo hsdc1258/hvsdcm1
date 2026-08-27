@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { renderUsageDashboard } from './render-sandbox.mjs';
+import { createUsageRenderers, renderUsageDashboard } from './render-sandbox.mjs';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -161,7 +161,7 @@ test('the summary strip joins Codex usage with active task, actor, and gate coun
   assert.match(markup, /현재 gate<\/span><span class="stat-value">검토<\/span>/u);
 });
 
-test('the hierarchy renders model reasoning, subagent, WebGPT, gates, and evidence as peers in one task', () => {
+test('the hierarchy renders Main Codex and actual child actors as a reporting tree', () => {
   const markup = dashboard({
     snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
     tasks: [harnessTask()],
@@ -170,12 +170,14 @@ test('the hierarchy renders model reasoning, subagent, WebGPT, gates, and eviden
     assert.match(markup, new RegExp(expected, 'u'));
   }
   assert.equal((markup.match(/class="h-phase(?: |")/gu) || []).length, 4);
-  assert.match(markup, /h-org-level is-command/u);
-  assert.match(markup, /h-org-level is-agents/u);
+  assert.match(markup, /class="h-org-tree"/u);
+  assert.match(markup, /class="h-org-node is-root"/u);
+  assert.equal((markup.match(/class="h-org-node(?: |")/gu) || []).length, 3);
   assert.match(markup, /h-actor is-webgpt/u);
+  assert.doesNotMatch(markup, /h-org-level is-gate/u);
 });
 
-test('project, protocol, and visualization reports render as three separate categories', () => {
+test('parallel project, protocol, and visualization reports render as session tabs with one visible panel', () => {
   const markup = dashboard({
     snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
     tasks: [
@@ -195,10 +197,58 @@ test('project, protocol, and visualization reports render as three separate cate
     ],
   });
   for (const category of ['지문한장 프로젝트', '자체 pipeline 개선 프로토콜', '파이프라인 시각화']) {
-    assert.match(markup, new RegExp(`<h3 id="hCategory\\d">${category}</h3>`, 'u'));
+    assert.match(markup, new RegExp(category, 'u'));
   }
-  assert.equal((markup.match(/class="h-category"/gu) || []).length, 3);
+  assert.match(markup, /role="tablist" aria-label="병렬 Codex 세션"/u);
+  assert.equal((markup.match(/role="tab"/gu) || []).length, 3);
+  assert.equal((markup.match(/role="tabpanel"/gu) || []).length, 3);
+  assert.equal((markup.match(/aria-selected="true"/gu) || []).length, 1);
+  assert.equal((markup.match(/data-task-panel="\d+" hidden/gu) || []).length, 2);
   assert.match(markup, /작업 카테고리<\/span><span class="stat-value">3<\/span>/u);
+});
+
+test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {
+  const { activateTaskTab, wireTaskTabs } = createUsageRenderers();
+  const listeners = {};
+  const makeTab = (index) => ({
+    dataset: { taskTab: String(index), taskId: `task-${index}` },
+    tabIndex: index === 0 ? 0 : -1,
+    attributes: { 'aria-selected': index === 0 ? 'true' : 'false' },
+    classList: { selected: index === 0, toggle(_name, value) { this.selected = value; } },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    focus() { this.focused = true; },
+    closest() { return this; },
+  });
+  const tabs = [makeTab(0), makeTab(1), makeTab(2)];
+  const panels = tabs.map((tab, index) => ({
+    dataset: { taskPanel: String(index) },
+    hidden: index !== 0,
+  }));
+  const tablist = {
+    addEventListener(type, handler) { listeners[type] = handler; },
+    querySelectorAll() { return tabs; },
+    contains(tab) { return tabs.includes(tab); },
+  };
+  const root = {
+    querySelector() { return tablist; },
+    querySelectorAll(selector) { return selector === '[data-task-tab]' ? tabs : panels; },
+  };
+
+  activateTaskTab(root, tabs[1], true);
+  assert.deepEqual(panels.map((panel) => panel.hidden), [true, false, true]);
+  assert.deepEqual(tabs.map((tab) => tab.attributes['aria-selected']), ['false', 'true', 'false']);
+  assert.equal(tabs[1].focused, true);
+
+  wireTaskTabs(root);
+  let prevented = false;
+  listeners.keydown({
+    key: 'ArrowRight',
+    target: tabs[1],
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
+  assert.equal(tabs[2].focused, true);
 });
 
 test('Claude snapshots are ignored and actor text is escaped', () => {
