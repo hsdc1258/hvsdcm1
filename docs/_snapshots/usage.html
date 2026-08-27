@@ -1685,17 +1685,36 @@ label.list-row {
   gap: 3px;
   min-width: 0;
 }
-.h-session-tab-copy strong, .h-session-tab-copy span {
+.h-session-tab-copy > strong, .h-session-tab-meta > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.h-session-tab-copy strong {
+.h-session-tab-copy > strong {
   font-size: var(--fs-body-small);
 }
-.h-session-tab-copy span {
+.h-session-tab-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--text-3);
   font-size: 11px;
+  font-weight: 400;
+}
+.h-session-tab-meta > span {
+  min-width: 0;
+}
+.h-task-date {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-full);
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
 }
 .h-session-panel[hidden] {
   display: none;
@@ -2029,7 +2048,7 @@ label.list-row {
   font-variant-numeric: tabular-nums;
 }
 .h-portfolio-task {
-  width: 240px;
+  width: 100%;
   padding: var(--space-3);
 }
 .h-portfolio-task.is-complete {
@@ -2048,6 +2067,15 @@ label.list-row {
   font-size: 11px;
   line-height: 1.5;
 }
+.h-portfolio-task > .h-portfolio-task-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.h-portfolio-task-meta > span {
+  min-width: 0;
+}
 .h-portfolio-task > span {
   color: var(--text-3);
 }
@@ -2062,8 +2090,256 @@ label.list-row {
   margin-top: var(--space-1);
   font-size: var(--fs-title-2);
 }
-.h-portfolio-org .h-org-scroll {
-  padding-top: var(--space-6);
+.h-portfolio-org {
+  overflow: hidden;
+}
+.h-pipeline-org {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-5);
+}
+.h-pipeline-origin {
+  display: grid;
+  justify-items: center;
+  gap: 28px;
+  padding-bottom: 28px;
+}
+.h-input-node {
+  position: relative;
+  width: min(100%, 280px);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  text-align: center;
+}
+.h-input-node::after, .h-pipeline-origin .h-harness-root::after {
+  content: '';
+  position: absolute;
+  bottom: -29px;
+  left: 50%;
+  width: 1px;
+  height: 28px;
+  background: var(--line-strong);
+}
+.h-input-node h4 {
+  margin-top: var(--space-1);
+  font-size: var(--fs-title-3);
+}
+.h-input-node > span {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-3);
+  font-size: 10px;
+}
+.h-pipeline-origin .h-harness-root {
+  position: relative;
+  width: min(100%, 360px);
+  text-align: center;
+}
+.h-pipeline-stages {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 28px 0 0;
+  list-style: none;
+}
+.h-pipeline-stages::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 12.5%;
+  left: 12.5%;
+  border-top: 1px solid var(--line-strong);
+}
+.h-pipeline-stage {
+  position: relative;
+  min-width: 0;
+}
+.h-pipeline-stage::before {
+  content: '';
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  height: 28px;
+  border-left: 1px solid var(--line-strong);
+}
+.h-pipeline-stage-head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 62px;
+  padding: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.h-pipeline-stage.is-active .h-pipeline-stage-head {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-3));
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.h-pipeline-stage-index {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--text-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.h-pipeline-stage.is-active .h-pipeline-stage-index {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.h-pipeline-stage-head > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.h-pipeline-stage-head strong {
+  font-size: var(--fs-body-small);
+}
+.h-pipeline-stage-head small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.h-pipeline-stage-head b {
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.h-pipeline-stage-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.h-pipeline-task {
+  min-width: 0;
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+}
+.h-pipeline-task.is-current {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.h-pipeline-empty {
+  display: grid;
+  min-height: 78px;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--line-faint);
+  border-radius: var(--radius-m);
+  color: var(--text-3);
+  font-size: 10px;
+  text-align: center;
+}
+.h-agent-mini-tree {
+  position: relative;
+  margin-top: var(--space-2);
+  padding-top: 14px;
+}
+.h-agent-mini-tree::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18px;
+  height: 14px;
+  border-left: 1px solid var(--line-strong);
+}
+.h-agent-mini-list, .h-agent-mini-list ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.h-agent-mini-node {
+  position: relative;
+  min-width: 0;
+}
+.h-agent-mini-node > ul {
+  margin-top: 6px;
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-strong);
+}
+.h-agent-mini-node > ul > .h-agent-mini-node::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: -14px;
+  width: 14px;
+  border-top: 1px solid var(--line-strong);
+}
+.h-agent-mini {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-s);
+  text-align: left;
+}
+.h-agent-mini.is-main {
+  border-color: var(--line-strong);
+}
+.h-agent-mini.is-webgpt {
+  border-style: dashed;
+}
+.h-agent-mini header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+.h-agent-mini header > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.h-agent-mini > strong, .h-agent-mini > span, .h-agent-mini > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.h-agent-mini > strong {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.h-agent-mini-model {
+  color: var(--text-2);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.h-agent-mini > small {
+  display: -webkit-box;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .h-actor.is-main {
   width: 280px;
@@ -2229,6 +2505,41 @@ label.list-row {
   .h-evidence {
     grid-template-columns: 1fr;
   }
+  .h-pipeline-origin {
+    justify-items: stretch;
+  }
+  .h-input-node, .h-pipeline-origin .h-harness-root {
+    width: 100%;
+  }
+  .h-pipeline-stages {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+    padding: 0 0 0 28px;
+  }
+  .h-pipeline-stages::before {
+    top: 0;
+    right: auto;
+    bottom: 0;
+    left: 12px;
+    border-top: 0;
+    border-left: 1px solid var(--line-strong);
+  }
+  .h-pipeline-stages::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 50%;
+    left: 12px;
+    border-top: 1px solid var(--line-strong);
+  }
+  .h-pipeline-stage::before {
+    top: 31px;
+    left: -16px;
+    width: 16px;
+    height: 0;
+    border-top: 1px solid var(--line-strong);
+    border-left: 0;
+  }
 }
 @media (max-width: 430px) {
   .h-task {
@@ -2327,8 +2638,8 @@ label.list-row {
               tabindex="0" data-task-tab="0" data-task-id="usage-harness-visualization" data-task-status="active">
               <span class="h-session-tab-state status-dot is-warn" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
-                <strong>사용량 하네스 시각화 (08-27)</strong>
-                <span>파이프라인 시각화 · 검토 86%</span>
+                <strong>사용량 하네스 시각화</strong>
+                <small class="h-session-tab-meta"><span>파이프라인 시각화 · 검토 86%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
               </span>
             </button>
             <button class="h-session-tab" type="button" role="tab"
@@ -2336,8 +2647,8 @@ label.list-row {
               tabindex="-1" data-task-tab="1" data-task-id="pipeline-hardening" data-task-status="active">
               <span class="h-session-tab-state status-dot is-warn" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
-                <strong>Pipeline 개선 프로토콜 (08-27)</strong>
-                <span>자체 pipeline 개선 프로토콜 · 검토 82%</span>
+                <strong>Pipeline 개선 프로토콜</strong>
+                <small class="h-session-tab-meta"><span>자체 pipeline 개선 프로토콜 · 검토 82%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
               </span>
             </button>
         </div>
@@ -2350,7 +2661,7 @@ label.list-row {
         <header class="h-task-head">
           <div>
             <p class="us-eyebrow">SELECTED SESSION</p>
-            <h3>사용량 하네스 시각화 (08-27)</h3>
+            <h3>사용량 하네스 시각화</h3>
             <p>6분 전 동기화 · 마감 20:10 KST</p>
           </div>
           <div class="h-task-badges">
@@ -2402,7 +2713,7 @@ label.list-row {
         </div>
       </section>
 
-      <section class="h-org-chart" aria-label="사용량 하네스 시각화 (08-27) 보고 조직도">
+      <section class="h-org-chart" aria-label="사용량 하네스 시각화 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
           <span>실제 보고 4명</span>
@@ -2487,7 +2798,7 @@ label.list-row {
         <header class="h-task-head">
           <div>
             <p class="us-eyebrow">SELECTED SESSION</p>
-            <h3>Pipeline 개선 프로토콜 (08-27)</h3>
+            <h3>Pipeline 개선 프로토콜</h3>
             <p>8분 전 동기화 · 마감 20:15 KST</p>
           </div>
           <div class="h-task-badges">
@@ -2518,7 +2829,7 @@ label.list-row {
       </section>
 
 
-      <section class="h-org-chart" aria-label="Pipeline 개선 프로토콜 (08-27) 보고 조직도">
+      <section class="h-org-chart" aria-label="Pipeline 개선 프로토콜 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
           <span>실제 보고 1명</span>
@@ -2565,8 +2876,8 @@ label.list-row {
               tabindex="0" data-task-tab="0" data-task-id="jimunhanjang-project" data-task-status="complete">
               <span class="h-session-tab-state status-dot" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
-                <strong>프로젝트 지문한장 (08-27)</strong>
-                <span>지문한장 프로젝트 · 완료 100%</span>
+                <strong>프로젝트 지문한장</strong>
+                <small class="h-session-tab-meta"><span>지문한장 프로젝트 · 완료 100%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
               </span>
             </button>
         </div>
@@ -2579,7 +2890,7 @@ label.list-row {
         <header class="h-task-head">
           <div>
             <p class="us-eyebrow">COMPLETED SESSION</p>
-            <h3>프로젝트 지문한장 (08-27)</h3>
+            <h3>프로젝트 지문한장</h3>
             <p>10분 전 동기화 · 마감 20:20 KST</p>
           </div>
           <div class="h-task-badges">
@@ -2610,7 +2921,7 @@ label.list-row {
       </section>
 
 
-      <section class="h-org-chart" aria-label="프로젝트 지문한장 (08-27) 보고 조직도">
+      <section class="h-org-chart" aria-label="프로젝트 지문한장 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
           <span>실제 보고 1명</span>
@@ -2651,149 +2962,142 @@ label.list-row {
 
       <section class="h-org-chart h-portfolio-org" aria-label="전체 세션과 실제 에이전트 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">ALL SESSIONS</p><h3>전체 실행 조직</h3></div>
+          <div><p class="us-eyebrow">FULL PIPELINE</p><h3>전체 파이프라인 조직도</h3></div>
           <span>세션 3개 · 실제 에이전트 6명</span>
         </header>
-        <div class="h-org-scroll">
-          <ul class="h-org-tree h-portfolio-tree">
-            <li class="h-org-node is-root">
-              <article class="h-harness-root">
-                <p class="h-kind">AI HARNESS</p>
-                <h4>전체 파이프라인</h4>
-                <dl><div><dt>진행 중</dt><dd>2</dd></div><div><dt>완료</dt><dd>1</dd></div><div><dt>실제 에이전트</dt><dd>6</dd></div></dl>
-              </article>
-              <ul>
-      <li class="h-org-node h-portfolio-task-node" data-portfolio-task="usage-harness-visualization">
+        <div class="h-pipeline-org">
+          <div class="h-pipeline-origin">
+            <article class="h-input-node"><p class="h-kind">REQUEST</p><h4>사용자 입력</h4><span>요청 · 목표 · 제약</span></article>
+            <article class="h-harness-root">
+              <p class="h-kind">AI HARNESS</p>
+              <h4>메인 오케스트레이션</h4>
+              <dl><div><dt>진행 중</dt><dd>2</dd></div><div><dt>완료</dt><dd>1</dd></div><div><dt>실제 에이전트</dt><dd>6</dd></div></dl>
+            </article>
+          </div>
+          <ol class="h-pipeline-stages">
+
+      <li class="h-pipeline-stage" data-pipeline-phase="plan" data-phase-active="false">
+        <header class="h-pipeline-stage-head">
+          <span class="h-pipeline-stage-index">1</span>
+          <span><strong>구상</strong><small>계약 · 증거 고정</small></span>
+          <b>0</b>
+        </header>
+        <div class="h-pipeline-stage-tasks">
+          <p class="h-pipeline-empty">해당 단계 작업 없음</p>
+        </div>
+      </li>
+      <li class="h-pipeline-stage" data-pipeline-phase="work" data-phase-active="false">
+        <header class="h-pipeline-stage-head">
+          <span class="h-pipeline-stage-index">2</span>
+          <span><strong>작업</strong><small>격리 구현 · 검증</small></span>
+          <b>0</b>
+        </header>
+        <div class="h-pipeline-stage-tasks">
+          <p class="h-pipeline-empty">해당 단계 작업 없음</p>
+        </div>
+      </li>
+      <li class="h-pipeline-stage is-active" data-pipeline-phase="review" data-phase-active="true">
+        <header class="h-pipeline-stage-head">
+          <span class="h-pipeline-stage-index">3</span>
+          <span><strong>검토</strong><small>독립 반증 · 수정</small></span>
+          <b>2</b>
+        </header>
+        <div class="h-pipeline-stage-tasks">
+
+      <article class="h-pipeline-task is-current" data-portfolio-task="usage-harness-visualization" data-current-work="true">
 
       <article class="h-portfolio-task">
         <header>
           <span class="h-kind">ACTIVE SESSION</span>
           <span class="h-task-state"><span class="status-dot is-warn" aria-hidden="true"></span>진행 중</span>
         </header>
-        <h4>사용량 하네스 시각화 (08-27)</h4>
-        <p>파이프라인 시각화 · 검토 86%</p>
+        <h4>사용량 하네스 시각화</h4>
+        <p class="h-portfolio-task-meta"><span>파이프라인 시각화 · 검토 86%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></p>
         <span>6분 전 동기화 · 실제 보고 4명</span>
       </article>
-        <ul>
-      <li class="h-org-node is-root">
-
-      <article class="h-actor is-main" data-actor-id="usage-harness:main">
-        <header class="h-actor-head">
-          <span class="h-kind">MAIN</span>
-          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
-        </header>
-        <h4>Main Codex</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>기획 · 통합 · 최종 판정</dd></div><div><dt>현재 작업</dt><dd>전체 계약과 최종 판정</dd></div>
-        </dl>
-        <div class="h-actor-progress"><span><span>진행도</span><strong>86%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span></div>
+        <div class="h-agent-mini-tree" aria-label="실제 에이전트 조직도"><ul class="h-agent-mini-list"><li class="h-agent-mini-node">
+      <article class="h-agent-mini is-main" data-actor-id="usage-harness:main">
+        <header><span>MAIN</span><span><i class="status-dot" aria-hidden="true"></i>검토 중</span></header>
+        <strong>Main Codex</strong>
+        <span class="h-agent-mini-model">gpt-5.6-sol · xhigh</span>
+        <small>기획 · 통합 · 최종 판정</small>
+        <small>전체 계약과 최종 판정</small>
+      </article><ul><li class="h-agent-mini-node">
+      <article class="h-agent-mini" data-actor-id="usage-harness:writer">
+        <header><span>CODEX</span><span><i class="status-dot" aria-hidden="true"></i>완료</span></header>
+        <strong>구현 컨텍스트</strong>
+        <span class="h-agent-mini-model">gpt-5.6-sol · xhigh</span>
+        <small>구현자</small>
+        <small>Worker와 사용량 화면 구현</small>
+      </article></li><li class="h-agent-mini-node">
+      <article class="h-agent-mini" data-actor-id="usage-harness:reviewer">
+        <header><span>CODEX</span><span><i class="status-dot" aria-hidden="true"></i>검토 중</span></header>
+        <strong>독립 검토</strong>
+        <span class="h-agent-mini-model">gpt-5.6-sol · xhigh</span>
+        <small>검토자</small>
+        <small>diff와 실제 artifact 반증</small>
+      </article></li><li class="h-agent-mini-node">
+      <article class="h-agent-mini is-webgpt" data-actor-id="usage-harness:webgpt">
+        <header><span>WEBGPT</span><span><i class="status-dot is-warn" aria-hidden="true"></i>대기</span></header>
+        <strong>WebGPT 실행자</strong>
+        <span class="h-agent-mini-model">WebGPT PRO</span>
+        <small>보조 실행</small>
+        <small>경계가 명확한 저위험 작업 대기</small>
+      </article></li></ul></li></ul></div>
       </article>
-        <ul>
-      <li class="h-org-node">
-
-      <article class="h-actor" data-actor-id="usage-harness:writer">
-        <header class="h-actor-head">
-          <span class="h-kind">CODEX</span>
-          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>완료</span>
-        </header>
-        <h4>구현 컨텍스트</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>구현자</dd></div><div><dt>현재 작업</dt><dd>Worker와 사용량 화면 구현</dd></div>
-        </dl>
-        <div class="h-actor-progress"><span><span>진행도</span><strong>100%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span></div>
-      </article>
-
-      </li>
-      <li class="h-org-node">
-
-      <article class="h-actor" data-actor-id="usage-harness:reviewer">
-        <header class="h-actor-head">
-          <span class="h-kind">CODEX</span>
-          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
-        </header>
-        <h4>독립 검토</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>검토자</dd></div><div><dt>현재 작업</dt><dd>diff와 실제 artifact 반증</dd></div>
-        </dl>
-        <div class="h-actor-progress"><span><span>진행도</span><strong>80%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 80.0%"></span></span></div>
-      </article>
-
-      </li>
-      <li class="h-org-node">
-
-      <article class="h-actor is-webgpt" data-actor-id="usage-harness:webgpt">
-        <header class="h-actor-head">
-          <span class="h-kind">WEBGPT</span>
-          <span class="h-actor-state"><span class="status-dot is-warn" aria-hidden="true"></span>대기</span>
-        </header>
-        <h4>WebGPT 실행자</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>현재 작업</dt><dd>경계가 명확한 저위험 작업 대기</dd></div>
-        </dl>
-        <div class="h-actor-progress"><span><span>진행도</span><strong>37%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span></div>
-      </article>
-
-      </li></ul>
-      </li></ul>
-      </li>
-      <li class="h-org-node h-portfolio-task-node" data-portfolio-task="pipeline-hardening">
+      <article class="h-pipeline-task is-current" data-portfolio-task="pipeline-hardening" data-current-work="true">
 
       <article class="h-portfolio-task">
         <header>
           <span class="h-kind">ACTIVE SESSION</span>
           <span class="h-task-state"><span class="status-dot is-warn" aria-hidden="true"></span>진행 중</span>
         </header>
-        <h4>Pipeline 개선 프로토콜 (08-27)</h4>
-        <p>자체 pipeline 개선 프로토콜 · 검토 82%</p>
+        <h4>Pipeline 개선 프로토콜</h4>
+        <p class="h-portfolio-task-meta"><span>자체 pipeline 개선 프로토콜 · 검토 82%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></p>
         <span>8분 전 동기화 · 실제 보고 1명</span>
       </article>
-        <ul>
-      <li class="h-org-node is-root">
-
-      <article class="h-actor is-main" data-actor-id="pipeline-hardening:main">
-        <header class="h-actor-head">
-          <span class="h-kind">MAIN</span>
-          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
-        </header>
-        <h4>Main Codex</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>프로토콜 소유자</dd></div><div><dt>현재 작업</dt><dd>결정적 gate와 최종 판정</dd></div>
-        </dl>
-
+        <div class="h-agent-mini-tree" aria-label="실제 에이전트 조직도"><ul class="h-agent-mini-list"><li class="h-agent-mini-node">
+      <article class="h-agent-mini is-main" data-actor-id="pipeline-hardening:main">
+        <header><span>MAIN</span><span><i class="status-dot" aria-hidden="true"></i>검토 중</span></header>
+        <strong>Main Codex</strong>
+        <span class="h-agent-mini-model">gpt-5.6-sol · xhigh</span>
+        <small>프로토콜 소유자</small>
+        <small>결정적 gate와 최종 판정</small>
+      </article></li></ul></div>
       </article>
-
-      </li></ul>
+        </div>
       </li>
-      <li class="h-org-node h-portfolio-task-node" data-portfolio-task="jimunhanjang-project">
+      <li class="h-pipeline-stage" data-pipeline-phase="done" data-phase-active="false">
+        <header class="h-pipeline-stage-head">
+          <span class="h-pipeline-stage-index">4</span>
+          <span><strong>완료</strong><small>배포 · 기록</small></span>
+          <b>1</b>
+        </header>
+        <div class="h-pipeline-stage-tasks">
+
+      <article class="h-pipeline-task" data-portfolio-task="jimunhanjang-project" data-current-work="false">
 
       <article class="h-portfolio-task is-complete">
         <header>
           <span class="h-kind">COMPLETED SESSION</span>
           <span class="h-task-state"><span class="status-dot" aria-hidden="true"></span>완료</span>
         </header>
-        <h4>프로젝트 지문한장 (08-27)</h4>
-        <p>지문한장 프로젝트 · 완료 100%</p>
+        <h4>프로젝트 지문한장</h4>
+        <p class="h-portfolio-task-meta"><span>지문한장 프로젝트 · 완료 100%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></p>
         <span>10분 전 동기화 · 실제 보고 1명</span>
       </article>
-        <ul>
-      <li class="h-org-node is-root">
-
-      <article class="h-actor is-main" data-actor-id="jimunhanjang:main">
-        <header class="h-actor-head">
-          <span class="h-kind">MAIN</span>
-          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>완료</span>
-        </header>
-        <h4>Main Codex</h4>
-        <dl class="h-actor-details">
-          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>제품 개선 총괄</dd></div><div><dt>현재 작업</dt><dd>배포와 최종 판정 완료</dd></div>
-        </dl>
-
+        <div class="h-agent-mini-tree" aria-label="실제 에이전트 조직도"><ul class="h-agent-mini-list"><li class="h-agent-mini-node">
+      <article class="h-agent-mini is-main" data-actor-id="jimunhanjang:main">
+        <header><span>MAIN</span><span><i class="status-dot" aria-hidden="true"></i>완료</span></header>
+        <strong>Main Codex</strong>
+        <span class="h-agent-mini-model">gpt-5.6-sol · xhigh</span>
+        <small>제품 개선 총괄</small>
+        <small>배포와 최종 판정 완료</small>
+      </article></li></ul></div>
       </article>
-
-      </li></ul>
-      </li></ul>
-            </li>
-          </ul>
+        </div>
+      </li>
+          </ol>
         </div>
       </section>
             </section>

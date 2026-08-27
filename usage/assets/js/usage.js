@@ -212,6 +212,28 @@
     return reasoning ? `${modelLabel} · ${reasoning}` : modelLabel;
   }
 
+  function taskPresentation(task) {
+    const rawName = String(task?.name || '').trim();
+    const suffix = rawName.match(/\s*\((\d{2})-(\d{2})\)\s*$/u);
+    const name = (suffix ? rawName.slice(0, suffix.index).trim() : rawName) || '이름 없는 작업';
+    const time = parseTime(task?.updated_at);
+    const dateTime = time === null ? '' : new Date(time).toISOString().slice(0, 10);
+    const dateLabel = suffix
+      ? `${suffix[1]}.${suffix[2]}`
+      : dateTime
+        ? `${dateTime.slice(5, 7)}.${dateTime.slice(8, 10)}`
+        : '';
+    return { name, dateTime, dateLabel };
+  }
+
+  function renderTaskDate(task) {
+    const { dateTime, dateLabel } = taskPresentation(task);
+    if (!dateLabel) return '';
+    return dateTime
+      ? `<time class="h-task-date" datetime="${escapeHtml(dateTime)}">${escapeHtml(dateLabel)}</time>`
+      : `<span class="h-task-date">${escapeHtml(dateLabel)}</span>`;
+  }
+
   function renderActor(actor, isMain = false) {
     const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
     const details = [
@@ -359,7 +381,7 @@
       ? `<ul class="h-org-tree">${renderActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul>`
       : '<p class="h-org-empty">에이전트 보고 없음</p>';
     return `
-      <section class="h-org-chart" aria-label="${escapeHtml(task.name || '작업')} 보고 조직도">
+      <section class="h-org-chart" aria-label="${escapeHtml(taskPresentation(task).name)} 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
           <span>실제 보고 ${actorCount}명</span>
@@ -385,27 +407,73 @@
     const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const updated = relativeTime(task.updated_at, now);
+    const presentation = taskPresentation(task);
     return `
       <article class="h-portfolio-task${complete ? ' is-complete' : ''}">
         <header>
           <span class="h-kind">${complete ? 'COMPLETED SESSION' : 'ACTIVE SESSION'}</span>
           <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
         </header>
-        <h4>${escapeHtml(task.name || '이름 없는 작업')}</h4>
-        <p>${escapeHtml(taskCategory(task).label)} · ${escapeHtml(phase)} ${progress}%</p>
+        <h4>${escapeHtml(presentation.name)}</h4>
+        <p class="h-portfolio-task-meta"><span>${escapeHtml(taskCategory(task).label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</p>
         <span>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'} · 실제 보고 ${taskActors(task).length}명</span>
       </article>`;
   }
 
-  function renderPortfolioTaskBranch(task, now) {
-    const mainActor = mainActorOf(task);
-    const actorTree = mainActor
-      ? `<ul>${renderActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul>`
-      : '<ul><li class="h-org-node"><p class="h-portfolio-empty">에이전트 보고 없음</p></li></ul>';
+  function renderMiniActor(actor, isMain = false) {
+    const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
     return `
-      <li class="h-org-node h-portfolio-task-node" data-portfolio-task="${escapeHtml(task.id || '')}">
+      <article class="h-agent-mini${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
+        <header><span>${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span><span><i class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></i>${escapeHtml(actorStatus(actor))}</span></header>
+        <strong>${escapeHtml(actor.name || '이름 미기록')}</strong>
+        <span class="h-agent-mini-model">${escapeHtml(modelAndReasoning(actor.model, actor.reasoning))}</span>
+        ${actor.role ? `<small>${escapeHtml(actor.role)}</small>` : ''}
+        ${actor.assignment ? `<small>${escapeHtml(actor.assignment)}</small>` : ''}
+      </article>`;
+  }
+
+  function renderMiniActorBranch(actor, children, isMain = false, visited = new Set()) {
+    if (visited.has(actor.id)) return '';
+    const nextVisited = new Set(visited).add(actor.id);
+    const descendants = (children.get(actor.id) || [])
+      .map((child) => renderMiniActorBranch(child, children, false, nextVisited))
+      .filter(Boolean);
+    return `<li class="h-agent-mini-node">${renderMiniActor(actor, isMain)}${descendants.length ? `<ul>${descendants.join('')}</ul>` : ''}</li>`;
+  }
+
+  function renderMiniActorTree(task) {
+    const mainActor = mainActorOf(task);
+    if (!mainActor) return '<p class="h-portfolio-empty">에이전트 보고 없음</p>';
+    return `<div class="h-agent-mini-tree" aria-label="실제 에이전트 조직도"><ul class="h-agent-mini-list">${renderMiniActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul></div>`;
+  }
+
+  function normalizedTaskPhase(task) {
+    if (task.status === 'complete') return 'done';
+    return PHASES.some((phase) => phase.key === task.phase) ? task.phase : 'plan';
+  }
+
+  function renderPortfolioTaskBranch(task, now) {
+    const current = task.status !== 'complete';
+    return `
+      <article class="h-pipeline-task${current ? ' is-current' : ''}" data-portfolio-task="${escapeHtml(task.id || '')}" data-current-work="${current}">
         ${renderPortfolioTaskCard(task, now)}
-        ${actorTree}
+        ${renderMiniActorTree(task)}
+      </article>`;
+  }
+
+  function renderPipelineStage(phase, index, tasks, now) {
+    const phaseTasks = tasks.filter((task) => normalizedTaskPhase(task) === phase.key);
+    const active = phaseTasks.some((task) => task.status !== 'complete');
+    return `
+      <li class="h-pipeline-stage${active ? ' is-active' : ''}" data-pipeline-phase="${phase.key}" data-phase-active="${active}">
+        <header class="h-pipeline-stage-head">
+          <span class="h-pipeline-stage-index">${index + 1}</span>
+          <span><strong>${phase.label}</strong><small>${phase.detail}</small></span>
+          <b>${phaseTasks.length}</b>
+        </header>
+        <div class="h-pipeline-stage-tasks">
+          ${phaseTasks.length ? phaseTasks.map((task) => renderPortfolioTaskBranch(task, now)).join('') : '<p class="h-pipeline-empty">해당 단계 작업 없음</p>'}
+        </div>
       </li>`;
   }
 
@@ -418,20 +486,21 @@
     return `
       <section class="h-org-chart h-portfolio-org" aria-label="전체 세션과 실제 에이전트 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">ALL SESSIONS</p><h3>전체 실행 조직</h3></div>
+          <div><p class="us-eyebrow">FULL PIPELINE</p><h3>전체 파이프라인 조직도</h3></div>
           <span>세션 ${tasks.length}개 · 실제 에이전트 ${actorCount}명</span>
         </header>
-        <div class="h-org-scroll">
-          <ul class="h-org-tree h-portfolio-tree">
-            <li class="h-org-node is-root">
-              <article class="h-harness-root">
-                <p class="h-kind">AI HARNESS</p>
-                <h4>전체 파이프라인</h4>
-                <dl><div><dt>진행 중</dt><dd>${activeCount}</dd></div><div><dt>완료</dt><dd>${completeCount}</dd></div><div><dt>실제 에이전트</dt><dd>${actorCount}</dd></div></dl>
-              </article>
-              <ul>${tasks.map((task) => renderPortfolioTaskBranch(task, now)).join('')}</ul>
-            </li>
-          </ul>
+        <div class="h-pipeline-org">
+          <div class="h-pipeline-origin">
+            <article class="h-input-node"><p class="h-kind">REQUEST</p><h4>사용자 입력</h4><span>요청 · 목표 · 제약</span></article>
+            <article class="h-harness-root">
+              <p class="h-kind">AI HARNESS</p>
+              <h4>메인 오케스트레이션</h4>
+              <dl><div><dt>진행 중</dt><dd>${activeCount}</dd></div><div><dt>완료</dt><dd>${completeCount}</dd></div><div><dt>실제 에이전트</dt><dd>${actorCount}</dd></div></dl>
+            </article>
+          </div>
+          <ol class="h-pipeline-stages">
+            ${PHASES.map((phase, index) => renderPipelineStage(phase, index, tasks, now)).join('')}
+          </ol>
         </div>
       </section>`;
   }
@@ -440,12 +509,13 @@
     const mainActor = mainActorOf(task);
     const updated = relativeTime(task.updated_at, now);
     const complete = task.status === 'complete';
+    const presentation = taskPresentation(task);
     return `
       <article class="h-task${complete ? ' is-complete' : ''}">
         <header class="h-task-head">
           <div>
             <p class="us-eyebrow">${complete ? 'COMPLETED SESSION' : 'SELECTED SESSION'}</p>
-            <h3>${escapeHtml(task.name || '이름 없는 작업')}</h3>
+            <h3>${escapeHtml(presentation.name)}</h3>
             <p>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'}${task.deadline ? ` · 마감 ${escapeHtml(task.deadline)}` : ''}</p>
           </div>
           <div class="h-task-badges">
@@ -477,14 +547,15 @@
     const category = taskCategory(task);
     const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
+    const presentation = taskPresentation(task);
     return `
             <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
               id="hSessionTab-${status}-${index}" aria-controls="hSessionPanel-${status}-${index}" aria-selected="${selected}"
               tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
               <span class="h-session-tab-state status-dot${task.status === 'complete' ? '' : ' is-warn'}" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
-                <strong>${escapeHtml(task.name || '이름 없는 세션')}</strong>
-                <span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>
+                <strong>${escapeHtml(presentation.name)}</strong>
+                <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</small>
               </span>
             </button>`;
   }).join('')}
