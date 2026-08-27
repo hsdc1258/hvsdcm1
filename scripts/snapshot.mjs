@@ -338,7 +338,7 @@ export function buildSnapshots() {
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 병렬 task 3개가 세션 탭으로 분리되고 선택된 한 panel만 보이는지,'
-        + ' Main Codex에서 실행자/검토자/WebGPT로 실제 가지가 갈라지는 조직도, 요약 스트립, 게이지의 세 색 구간,'
+        + ' Main Codex에서 실행자/검토자/WebGPT로 실제 가지가 갈라지는 조직도, 실제 4단계 흐름, 오른쪽 Codex 한도 rail, 게이지의 세 색 구간,'
         + ' 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
         + `\n  ${GENERATED_NOTE}`,
