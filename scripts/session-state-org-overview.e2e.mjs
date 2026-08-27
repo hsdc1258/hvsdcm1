@@ -106,7 +106,7 @@ const apiEnv = {
         return { bind() { return { async run() { return { success: true }; } }; } };
       }
       if (sql.includes('FROM usage_snapshots')) {
-        return { async all() { return { results: [] }; } };
+        return { bind() { return { async all() { return { results: [] }; } }; } };
       }
       if (sql.includes('FROM harness_tasks')) {
         assert.doesNotMatch(sql, /LIMIT\s+12/iu, 'owner API가 전체 조직을 12개로 잘라서는 안 됩니다.');

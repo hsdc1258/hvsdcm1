@@ -20,10 +20,12 @@ const MAX_USAGE_BYTES = 64_000;
 const MAX_HARNESS_BYTES = 64_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
-const VALID_USAGE_SOURCES = new Set(['codex']);
+// 수집 원본. 이 집합이 ingest 허용 목록이자 조회 필터의 단일 원본이다 — 한쪽만 고치면
+// 받아 놓고 못 읽는(또는 그 반대의) 상태가 생긴다.
+const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
 const VALID_HARNESS_PHASES = new Set(['plan', 'work', 'review', 'done']);
 const VALID_HARNESS_TASK_STATES = new Set(['active', 'complete']);
-const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt']);
+const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt', 'claude']);
 const VALID_HARNESS_ACTOR_STATES = new Set([
   'working', 'reviewing', 'waiting', 'done', 'blocked', 'unavailable',
 ]);
@@ -330,19 +332,21 @@ async function usage(request, env) {
   // 403이면 "여기 뭔가 있다"는 사실이 새어 나간다 (review WP1 M-5).
   if (!isOwnerSession(session, env)) return json({ error: 'Not found' }, 404);
 
+  // 필터 목록을 손으로 적지 않는다 — ingest 허용 집합에서 그대로 도출한다.
+  const sources = [...VALID_USAGE_SOURCES];
   const rows = await env.DB.prepare(`
     SELECT source, captured_at, payload
     FROM usage_snapshots
-    WHERE source = 'codex'
+    WHERE source IN (${sources.map(() => '?').join(', ')})
     ORDER BY source
-  `).all();
+  `).bind(...sources).all();
   const taskRows = await env.DB.prepare(`
     SELECT task_id, status, updated_at, payload
     FROM harness_tasks
     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at DESC
   `).all();
   return json({
-    snapshots: rows.results.filter((row) => row.source === 'codex').map((row) => {
+    snapshots: rows.results.filter((row) => VALID_USAGE_SOURCES.has(row.source)).map((row) => {
       // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
       let payload = null;
       try { payload = JSON.parse(row.payload); } catch { payload = null; }

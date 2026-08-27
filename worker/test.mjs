@@ -355,16 +355,57 @@ test('usage report rejects oversized payloads and non-object bodies', async () =
     assert.deepEqual(await response.json(), { error: '잘못된 사용량 보고입니다.' });
   }
 
-  const claude = await worker.fetch(new Request('https://api.test/api/usage/report', {
+  const unknownSource = await worker.fetch(new Request('https://api.test/api/usage/report', {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      source: 'claude',
+      source: 'gemini',
       captured_at: '2026-08-27T01:02:03.000Z',
       payload: {},
     }),
   }), env);
-  assert.equal(claude.status, 400);
+  assert.equal(unknownSource.status, 400);
+});
+
+// 2026-08-27 사용자 지시 — Claude 한도를 다시 수집·조회한다. 이전 계약("Claude는
+// 수집·조회·UI에서 제외")은 무효다. 그때의 회귀 테스트를 수용 케이스로 뒤집어 둔다.
+test('usage report accepts the claude source and stores it beside codex', async () => {
+  const upserts = [];
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...values) {
+            upserts.push({ sql, values });
+            return { async run() { return { success: true }; } };
+          },
+        };
+      },
+    },
+  };
+  const capturedAt = '2026-08-27T01:02:03.000Z';
+  const payload = {
+    models: {
+      'claude-opus-5': {
+        captured_at: capturedAt,
+        rate_limits: { five_hour: { used_percentage: 31.4, resets_at: '2026-08-27T05:00:00.000Z' } },
+      },
+    },
+  };
+  const response = await worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer correct-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ source: 'claude', captured_at: capturedAt, payload }),
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(upserts.at(-1).values, ['claude', capturedAt, JSON.stringify(payload)]);
 });
 
 function harnessInput(overrides = {}) {
@@ -471,6 +512,27 @@ test('harness report requires its own token and merges actors into one task', as
   assert.deepEqual(merged.modules.map((module) => [module.name, module.progress]), [['CSS 구현', 88]]);
   assert.deepEqual(merged.artifacts, ['npm test', 'HARNESS E2E: PASS']);
 
+  // 2026-08-27 사용자 지시 — Claude 파이프라인도 같은 조직도에 보고한다.
+  const claudeActor = await post(harnessInput({
+    actors: [{
+      id: 'usage-harness:claude',
+      parent_id: 'usage-harness:main',
+      name: 'Fable 5 오케스트레이터',
+      kind: 'claude',
+      model: 'claude-fable-5',
+      reasoning: 'high',
+      role: '기획 · 총괄',
+      status: 'working',
+      assignment: 'Claude 한도 복원',
+    }],
+    artifacts: [],
+  }));
+  assert.equal(claudeActor.status, 200);
+  assert.deepEqual(
+    JSON.parse(storedPayload).actors.map((actor) => actor.kind),
+    ['codex', 'webgpt', 'claude'],
+  );
+
   const invalidReasoning = await post(harnessInput({
     task: { ...harnessInput().task, reasoning: 'made-up-effort' },
   }));
@@ -564,7 +626,7 @@ test('harness report rejects every bounded or non-allowlisted shape before datab
   const invalidCases = [
     ['phase allowlist', (input) => { input.task.phase = 'ship'; }],
     ['task status allowlist', (input) => { input.task.status = 'paused'; }],
-    ['actor kind allowlist', (input) => { input.actors[0].kind = 'claude'; }],
+    ['actor kind allowlist', (input) => { input.actors[0].kind = 'gemini'; }],
     ['actor status allowlist', (input) => { input.actors[0].status = 'idle'; }],
     ['actor progress range', (input) => { input.actors[0].progress = 101; }],
     ['module status allowlist', (input) => { input.modules[0].status = 'idle'; }],
@@ -624,14 +686,20 @@ test('usage lookup survives a corrupted snapshot row', async () => {
           return { bind() { return { async run() { return { success: true }; } }; } };
         }
         if (sql.includes('FROM usage_snapshots')) {
-          assert.match(sql, /WHERE source = 'codex'/u);
+          assert.match(sql, /WHERE source IN \(\?, \?\)/u);
           return {
-            async all() {
+            bind(...sources) {
+              assert.deepEqual([...sources].sort(), ['claude', 'codex']);
               return {
-                results: [
-                  { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"model":"claude"}' },
-                  { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
-                ],
+                async all() {
+                  return {
+                    results: [
+                      { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"models":{}}' },
+                      { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
+                      { source: 'gemini', captured_at: '2026-08-27T01:02:03.000Z', payload: '{}' },
+                    ],
+                  };
+                },
               };
             },
           };
@@ -649,8 +717,10 @@ test('usage lookup survives a corrupted snapshot row', async () => {
   }), env);
   assert.equal(response.status, 200);
   const { snapshots } = await response.json();
-  assert.deepEqual(snapshots.map((snapshot) => snapshot.source), ['codex']);
-  assert.equal(snapshots[0].payload, null);
+  // 허용 목록 밖의 source(gemini)는 걸러지고, 손상된 codex 행만 payload가 null로 낮아진다.
+  assert.deepEqual(snapshots.map((snapshot) => snapshot.source), ['claude', 'codex']);
+  assert.deepEqual(snapshots[0].payload, { models: {} });
+  assert.equal(snapshots[1].payload, null);
 });
 
 // review WP1 M-5 — 사용량은 소유자 개인 데이터다. 로그인만으로는 부족하고,
@@ -701,6 +771,14 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
   assert.deepEqual(await unauthenticated.json(), { error: '로그인이 필요합니다.' });
 
   const storedPayload = { model: 'gpt-5.6-sol', rate_limits: { primary: { used_percent: 8 } } };
+  const storedClaudePayload = {
+    models: {
+      'claude-opus-5': {
+        captured_at: '2026-08-27T01:04:05.000Z',
+        rate_limits: { five_hour: { used_percentage: 24 } },
+      },
+    },
+  };
   const storedTask = {
     version: 1,
     id: 'usage-harness',
@@ -733,13 +811,24 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
         }
         if (sql.includes('FROM usage_snapshots')) {
           return {
-            async all() {
+            bind() {
               return {
-                results: [{
-                  source: 'codex',
-                  captured_at: '2026-08-27T01:02:03.000Z',
-                  payload: JSON.stringify(storedPayload),
-                }],
+                async all() {
+                  return {
+                    results: [
+                      {
+                        source: 'claude',
+                        captured_at: '2026-08-27T01:04:05.000Z',
+                        payload: JSON.stringify(storedClaudePayload),
+                      },
+                      {
+                        source: 'codex',
+                        captured_at: '2026-08-27T01:02:03.000Z',
+                        payload: JSON.stringify(storedPayload),
+                      },
+                    ],
+                  };
+                },
               };
             },
           };
@@ -772,11 +861,18 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    snapshots: [{
-      source: 'codex',
-      captured_at: '2026-08-27T01:02:03.000Z',
-      payload: storedPayload,
-    }],
+    snapshots: [
+      {
+        source: 'claude',
+        captured_at: '2026-08-27T01:04:05.000Z',
+        payload: storedClaudePayload,
+      },
+      {
+        source: 'codex',
+        captured_at: '2026-08-27T01:02:03.000Z',
+        payload: storedPayload,
+      },
+    ],
     tasks: [storedTask],
   });
 });
