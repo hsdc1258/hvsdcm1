@@ -1427,6 +1427,8 @@ label.list-row {
 /* 퍼센트 게이지 — 실제 진행/소진 데이터에만 쓴다 (DESIGN.md §6).
    .list-row-body 안에 넣으면 제목과 부제 사이 한 줄을 차지한다. */
 .gauge-track {
+  /* span 마크업이라 명시적 블록화 필요 — 인라인이면 height가 무시된다 */
+  display: block;
   height: 6px;
   margin: 5px 0 4px;
   border-radius: var(--radius-full);
@@ -1434,6 +1436,8 @@ label.list-row {
   overflow: hidden;
 }
 .gauge-fill {
+  /* 인라인 span에는 width %가 적용되지 않아 채움이 0으로 보인다 */
+  display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--accent);
