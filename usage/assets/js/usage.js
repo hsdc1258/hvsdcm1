@@ -3,24 +3,21 @@
 
   const DEFAULT_API_URL = 'https://hvsdcm-api.hvsdcm1.workers.dev';
   const API_URL = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
-
-  // captured_at이 이보다 오래되면 "오래된 데이터"로 표시한다 (plan.md §3.2).
   const STALE_MS = 24 * 60 * 60 * 1000;
-  // 게이지 색 전환점. 색은 상태를 말하는 데만 쓴다 (DESIGN.md §3).
   const WARN_PERCENT = 75;
   const OVER_PERCENT = 95;
-
-  // 알려진 키의 한국어 라벨. **이것은 "렌더할 목록"이 아니라 사전이다** — 렌더 대상은
-  // payload에 실제로 들어 있는 키 전부이고, 여기 없는 키는 키 문자열 그대로 나간다
-  // (plan.md §3.2 / LESSONS "파생 가능한 것을 손으로 적지 않는다").
-  const BUCKET_LABELS = {
-    primary: '5시간',
-    secondary: '주간',
-    five_hour: '5시간',
-    seven_day: '주간',
-    seven_day_opus: '주간 (Opus)',
+  const PHASES = [
+    { key: 'plan', label: '구상' },
+    { key: 'work', label: '작업' },
+    { key: 'review', label: '검토' },
+    { key: 'done', label: '완료' },
+  ];
+  const BUCKET_LABELS = { primary: '5시간', secondary: '주간' };
+  const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT' };
+  const ACTOR_STATUS_LABELS = {
+    working: '작업 중', reviewing: '검토 중', waiting: '대기',
+    done: '완료', blocked: '막힘', unavailable: '사용 불가',
   };
-  const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
 
   const elements = {
     body: document.getElementById('usageBody'),
@@ -33,7 +30,6 @@
     return `/?login=1&next=${next}`;
   }
 
-  // 토큰이 없으면 문서를 그리기 전에 랜딩으로 되돌린다 (account.js와 같은 계약).
   if (!localStorage.getItem('hvsdcm.token')) {
     location.replace(loginPath());
     return;
@@ -42,11 +38,7 @@
   const escapeHtml = (value) => String(value ?? '').replace(
     /[&<>"']/g,
     (character) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[character],
   );
 
@@ -59,8 +51,6 @@
       location.replace(loginPath());
       throw new Error('unauthorized');
     }
-    // 소유자가 아니면 Worker가 404(존재 은닉)를 준다. 로그인은 유효하므로 로그인
-    // 모달로 되돌리지 않고 랜딩으로 보낸다 — 재로그인해도 결과는 같다 (review WP1 M-5).
     if (response.status === 404 || response.status === 403) {
       location.replace('/');
       throw new Error('unauthorized');
@@ -70,10 +60,6 @@
     return data;
   }
 
-  // ---- 값 읽기 -------------------------------------------------------------
-  // 수집기 두 곳이 필드 이름을 달리 쓴다: codex는 used_percent, claude는 used_percentage
-  // (plan.md §3.2). 둘 중 하나를 고르는 대신 "used_percent로 시작하는 수치 필드"를
-  // 버킷 객체에서 찾는다 — 세 번째 이름이 생겨도 UI가 먼저 깨지지 않는다.
   function readPercent(bucket) {
     if (!bucket || typeof bucket !== 'object') return null;
     for (const [key, value] of Object.entries(bucket)) {
@@ -111,23 +97,10 @@
     return time <= now ? `${formatDuration(now - time)} 전` : `${formatDuration(time - now)} 후`;
   }
 
-  // ---- payload → 렌더 모델 --------------------------------------------------
-  // 두 수집 원본의 payload 모양이 다르다: codex는 rate_limits 하나, claude는 모델별
-  // models[<id>].rate_limits다. 어느 쪽인지는 **모양으로** 판정한다 — source 이름으로
-  // 분기하면 세 번째 원본이 생길 때 UI가 조용히 빈 화면을 낸다.
   function groupsOf(payload) {
     if (!payload || typeof payload !== 'object') return [];
-    if (payload.models && typeof payload.models === 'object') {
-      return Object.entries(payload.models).map(([id, model]) => ({
-        label: id,
-        buckets: model?.rate_limits,
-        capturedAt: model?.captured_at,
-      }));
-    }
-    if (payload.rate_limits && typeof payload.rate_limits === 'object') {
-      return [{ label: payload.model || null, buckets: payload.rate_limits, capturedAt: null }];
-    }
-    return [];
+    if (!payload.rate_limits || typeof payload.rate_limits !== 'object') return [];
+    return [{ label: payload.model || null, buckets: payload.rate_limits }];
   }
 
   function bucketsOf(group) {
@@ -143,9 +116,7 @@
       }));
   }
 
-  // ---- 렌더 ----------------------------------------------------------------
-
-  function renderRow(bucket, now) {
+  function renderQuotaRow(bucket, now) {
     const hasPercent = bucket.percent !== null;
     const percent = hasPercent ? clampPercent(bucket.percent) : 0;
     const tone = percent >= OVER_PERCENT ? ' is-over' : percent >= WARN_PERCENT ? ' is-warn' : '';
@@ -155,7 +126,6 @@
       : bucket.windowMinutes
         ? `${formatDuration(bucket.windowMinutes * 60_000)} 창`
         : '';
-
     return `
       <div class="list-row">
         <span class="list-row-body">
@@ -166,76 +136,236 @@
           ${sub ? `<span class="list-row-sub">${escapeHtml(sub)}</span>` : ''}
         </span>
         <span class="list-row-value">${hasPercent ? `${Math.round(percent)}%` : '기록 없음'}</span>
-      </div>
-    `;
+      </div>`;
   }
 
-  function renderGroup(group, now) {
-    const buckets = bucketsOf(group);
-    if (buckets.length === 0) return '';
-    const head = group.label
-      ? `<p class="list-group-head">${escapeHtml(group.label)}</p>`
-      : '';
-    return `
-      <div class="us-group">
-        ${head}
-        <div class="list-group is-inset">${buckets.map((bucket) => renderRow(bucket, now)).join('')}</div>
-      </div>
-    `;
-  }
-
-  function renderCard(snapshot, now) {
-    const label = SOURCE_LABELS[snapshot.source] || snapshot.source;
+  function renderQuota(snapshot, now) {
     const capturedTime = parseTime(snapshot.captured_at);
     const captured = relativeTime(snapshot.captured_at, now);
     const stale = capturedTime !== null && now - capturedTime > STALE_MS;
-    const groups = groupsOf(snapshot.payload).map((group) => renderGroup(group, now)).join('');
-
+    const groups = groupsOf(snapshot.payload).map((group) => {
+      const buckets = bucketsOf(group);
+      if (buckets.length === 0) return '';
+      return `
+        <div class="us-group">
+          ${group.label ? `<p class="list-group-head">${escapeHtml(group.label)}</p>` : ''}
+          <div class="list-group is-inset">${buckets.map((bucket) => renderQuotaRow(bucket, now)).join('')}</div>
+        </div>`;
+    }).join('');
     return `
-      <article class="card us-card">
+      <article class="card us-quota-card">
         <header class="us-card-head">
-          <h2 class="title-3">${escapeHtml(label)}</h2>
+          <div><p class="us-eyebrow">CODEX LIMIT</p><h3 class="title-3">Codex</h3></div>
           <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 오래된 데이터' : ''}</span>
         </header>
-        ${groups || '<p class="us-empty">이 원본에는 읽을 수 있는 한도 정보가 없습니다.</p>'}
-      </article>
-    `;
+        ${groups || '<p class="us-empty">읽을 수 있는 Codex 한도 정보가 없습니다.</p>'}
+      </article>`;
   }
 
-  function renderStrip(snapshots, now) {
-    const buckets = snapshots
-      .flatMap((snapshot) => groupsOf(snapshot.payload))
-      .flatMap((group) => bucketsOf(group));
-    const percents = buckets.map((bucket) => bucket.percent).filter((percent) => percent !== null);
-    const times = snapshots.map((snapshot) => parseTime(snapshot.captured_at)).filter((time) => time !== null);
-    const latest = times.length > 0 ? Math.max(...times) : null;
-    const oldest = times.length > 0 ? Math.min(...times) : null;
-    const stale = oldest !== null && now - oldest > STALE_MS;
-
-    const cells = [
-      ['데이터 상태', `<span class="stat-state"><span class="status-dot${stale ? ' is-warn' : ''}" aria-hidden="true"></span>${stale ? '오래됨' : '최신'}</span>`],
-      ['최근 수집', `<span class="stat-value">${latest === null ? '—' : escapeHtml(relativeTime(new Date(latest).toISOString(), now))}</span>`],
-      ['최고 사용률', `<span class="stat-value">${percents.length === 0 ? '—' : `${Math.round(clampPercent(Math.max(...percents)))}%`}</span>`],
-      ['한도 버킷', `<span class="stat-value">${buckets.length}</span>`],
-    ];
-
-    return `<div class="summary-strip">${cells.map(([label, value]) => `
-      <div class="summary-cell">
-        <span class="stat-label">${escapeHtml(label)}</span>
-        ${value}
-      </div>
-    `).join('')}</div>`;
+  function taskActors(task) {
+    return Array.isArray(task?.actors)
+      ? task.actors.filter((actor) => actor && typeof actor === 'object')
+      : [];
   }
 
-  // 화면 전체를 문자열 하나로 만든다. 부수효과가 없으므로 스냅샷 생성기가 같은 함수를
-  // 고정 fixture로 불러 정적 사본을 만든다 (scripts/snapshot.mjs).
-  function buildDashboard(snapshots, now) {
-    if (!Array.isArray(snapshots) || snapshots.length === 0) {
-      return '<p class="us-empty">아직 수집된 사용량 기록이 없습니다.</p>';
+  function mainActorOf(task) {
+    const actors = taskActors(task);
+    return actors.find((actor) => !actor.parent_id) || actors[0] || {
+      id: `${task.id || 'task'}:main`,
+      name: 'Main Codex',
+      kind: 'codex',
+      model: task.model || '모델 미기록',
+      reasoning: task.reasoning || '',
+      role: '기획 · 통합 · 최종 판정',
+      status: task.status === 'complete' ? 'done' : 'working',
+      assignment: task.current || '',
+    };
+  }
+
+  function actorStatus(actor) {
+    return ACTOR_STATUS_LABELS[actor.status] || actor.status || '상태 미기록';
+  }
+
+  function modelAndReasoning(model, reasoning) {
+    const modelLabel = model || '모델 미기록';
+    return reasoning ? `${modelLabel} · ${reasoning}` : modelLabel;
+  }
+
+  function renderActor(actor, isMain = false) {
+    const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
+    return `
+      <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}">
+        <header class="h-actor-head">
+          <span class="h-kind">${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span>
+          <span class="h-actor-state"><span class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
+        </header>
+        <h4>${escapeHtml(actor.name || '이름 미기록')}</h4>
+        <p class="h-model">${escapeHtml(modelAndReasoning(actor.model, actor.reasoning))}</p>
+        ${actor.role ? `<p class="h-role">${escapeHtml(actor.role)}</p>` : ''}
+        ${actor.assignment ? `<p class="h-assignment">${escapeHtml(actor.assignment)}</p>` : ''}
+      </article>`;
+  }
+
+  function renderPhaseRail(task) {
+    const foundIndex = PHASES.findIndex((phase) => phase.key === task.phase);
+    const currentIndex = foundIndex < 0 ? 0 : foundIndex;
+    return `
+      <ol class="h-phase-rail" aria-label="파이프라인 gate">
+        ${PHASES.map((phase, index) => {
+    const state = index < currentIndex || task.status === 'complete'
+      ? ' is-complete'
+      : index === currentIndex
+        ? ' is-current'
+        : '';
+    return `<li class="h-phase${state}"><span class="h-phase-index">${index + 1}</span><span>${phase.label}</span></li>`;
+  }).join('')}
+      </ol>`;
+  }
+
+  function renderGate(task) {
+    const progress = clampPercent(Number(task.progress) || 0);
+    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
+    return `
+      <section class="h-gate" aria-label="현재 gate">
+        <header class="h-gate-head">
+          <div><p class="us-eyebrow">CURRENT GATE</p><h4>${escapeHtml(phase)}</h4></div>
+          <strong>${Math.round(progress)}%</strong>
+        </header>
+        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
+        <div class="h-gate-grid">
+          <p><span>현재</span>${escapeHtml(task.current || '상태 보고 대기')}</p>
+          <p><span>완료</span>${escapeHtml(task.done || '아직 없음')}</p>
+          <p><span>다음</span>${escapeHtml(task.next || '아직 없음')}</p>
+        </div>
+      </section>`;
+  }
+
+  function renderArtifacts(task) {
+    const artifacts = Array.isArray(task.artifacts) ? task.artifacts.filter(Boolean) : [];
+    return `
+      <footer class="h-evidence">
+        <span class="h-evidence-label">검증 ARTIFACT</span>
+        <div class="h-evidence-list">
+          ${artifacts.length > 0
+    ? artifacts.map((artifact) => `<span>${escapeHtml(artifact)}</span>`).join('')
+    : '<span class="is-empty">아직 보고된 artifact가 없습니다.</span>'}
+        </div>
+      </footer>`;
+  }
+
+  function renderTask(task, now) {
+    const mainActor = mainActorOf(task);
+    const agents = taskActors(task).filter((actor) => actor.id !== mainActor.id);
+    const updated = relativeTime(task.updated_at, now);
+    const complete = task.status === 'complete';
+    const category = task.category || '기타 Codex 작업';
+    return `
+      <article class="card h-task${complete ? ' is-complete' : ''}">
+        <header class="h-task-head">
+          <div>
+            <p class="us-eyebrow">${complete ? 'COMPLETED PIPELINE' : 'LIVE PIPELINE'}</p>
+            <h3>${escapeHtml(task.name || '이름 없는 작업')}</h3>
+            <p>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'}${task.deadline ? ` · 마감 ${escapeHtml(task.deadline)}` : ''}</p>
+          </div>
+          <div class="h-task-badges">
+            <span class="h-category-chip">${escapeHtml(category)}</span>
+            <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
+          </div>
+        </header>
+        ${renderPhaseRail(task)}
+        <div class="h-org" aria-label="${escapeHtml(task.name || '작업')} 실행 조직도">
+          <div class="h-org-level is-command">${renderActor(mainActor, true)}</div>
+          <div class="h-org-link" aria-hidden="true"></div>
+          <div class="h-org-level is-gate">${renderGate(task)}</div>
+          ${agents.length > 0 ? `
+            <div class="h-org-link is-branch" aria-hidden="true"></div>
+            <div class="h-org-level is-agents">${agents.map((actor) => renderActor(actor)).join('')}</div>` : ''}
+        </div>
+        ${renderArtifacts(task)}
+      </article>`;
+  }
+
+  function taskCategory(task) {
+    return {
+      key: task.category_key || 'general',
+      label: task.category || '기타 Codex 작업',
+    };
+  }
+
+  function renderTaskCategories(tasks, now) {
+    const groups = new Map();
+    for (const task of tasks) {
+      const category = taskCategory(task);
+      if (!groups.has(category.key)) groups.set(category.key, { ...category, tasks: [] });
+      groups.get(category.key).tasks.push(task);
     }
+    return [...groups.values()].map((group, index) => `
+      <section class="h-category" aria-labelledby="hCategory${index}">
+        <header class="h-category-head">
+          <div><p class="us-eyebrow">WORK CATEGORY</p><h3 id="hCategory${index}">${escapeHtml(group.label)}</h3></div>
+          <span>${group.tasks.length}개 파이프라인</span>
+        </header>
+        <div class="h-task-list">${group.tasks.map((task) => renderTask(task, now)).join('')}</div>
+      </section>`).join('');
+  }
+
+  function renderSummary(snapshots, tasks, now) {
+    const codexBuckets = snapshots.flatMap((snapshot) => groupsOf(snapshot.payload))
+      .flatMap((group) => bucketsOf(group));
+    const percents = codexBuckets.map((bucket) => bucket.percent).filter((value) => value !== null);
+    const activeTasks = tasks.filter((task) => task.status !== 'complete');
+    const categoryCount = new Set(tasks.map((task) => taskCategory(task).key)).size;
+    const activeActors = activeTasks.flatMap((task) => taskActors(task))
+      .filter((actor) => !['done', 'unavailable'].includes(actor.status));
+    const currentTask = activeTasks[0] || tasks[0];
+    const currentPhase = PHASES.find((phase) => phase.key === currentTask?.phase)?.label || '—';
+    const latestTimes = [
+      ...snapshots.map((snapshot) => parseTime(snapshot.captured_at)),
+      ...tasks.map((task) => parseTime(task.updated_at)),
+    ].filter((time) => time !== null);
+    const latest = latestTimes.length > 0 ? Math.max(...latestTimes) : null;
+    const cells = [
+      ['동기화', `<span class="stat-state"><span class="status-dot" aria-hidden="true"></span>${latest === null ? '대기' : escapeHtml(relativeTime(new Date(latest).toISOString(), now))}</span>`],
+      ['활성 작업', `<span class="stat-value">${activeTasks.length}</span>`],
+      ['작업 카테고리', `<span class="stat-value">${categoryCount}</span>`],
+      ['작업 중 AI', `<span class="stat-value">${activeActors.length}</span>`],
+      ['현재 gate', `<span class="stat-value">${escapeHtml(currentPhase)}</span>`],
+      ['Codex 최고 사용률', `<span class="stat-value">${percents.length === 0 ? '—' : `${Math.round(clampPercent(Math.max(...percents)))}%`}</span>`],
+    ];
+    return `<div class="summary-strip">${cells.map(([label, value]) => `
+      <div class="summary-cell"><span class="stat-label">${escapeHtml(label)}</span>${value}</div>`).join('')}</div>`;
+  }
+
+  function buildDashboard(input, now) {
+    const rawSnapshots = Array.isArray(input) ? input : input?.snapshots;
+    const rawTasks = Array.isArray(input?.tasks) ? input.tasks : [];
+    const snapshots = (Array.isArray(rawSnapshots) ? rawSnapshots : [])
+      .filter((snapshot) => snapshot?.source === 'codex');
+    const tasks = rawTasks.filter((task) => task && typeof task === 'object')
+      .sort((left, right) => {
+        if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
+        return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
+      });
     return [
-      renderStrip(snapshots, now),
-      `<div class="us-cards">${snapshots.map((snapshot) => renderCard(snapshot, now)).join('')}</div>`,
+      renderSummary(snapshots, tasks, now),
+      `<section class="us-section" aria-labelledby="harnessTitle">
+        <header class="us-section-head">
+          <div><p class="us-eyebrow">AI BUREAU</p><h2 id="harnessTitle" class="title-2">실행 조직도</h2></div>
+          <p>Discord와 같은 보고 이벤트로 갱신됩니다.</p>
+        </header>
+        <div class="h-category-list">${tasks.length > 0
+    ? renderTaskCategories(tasks, now)
+    : '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>'}</div>
+      </section>`,
+      `<section class="us-section" aria-labelledby="quotaTitle">
+        <header class="us-section-head">
+          <div><p class="us-eyebrow">ACCOUNT LIMIT</p><h2 id="quotaTitle" class="title-2">Codex 사용량</h2></div>
+          <p>계정에서 수집된 실제 한도만 표시합니다.</p>
+        </header>
+        <div class="us-quota-list">${snapshots.length > 0
+    ? snapshots.map((snapshot) => renderQuota(snapshot, now)).join('')
+    : '<p class="us-empty card">아직 수집된 Codex 사용량 기록이 없습니다.</p>'}</div>
+      </section>`,
     ].join('');
   }
 
@@ -244,7 +374,7 @@
     elements.reload.disabled = true;
     try {
       const data = await api('/api/usage');
-      elements.body.innerHTML = buildDashboard(data.snapshots, Date.now());
+      elements.body.innerHTML = buildDashboard(data, Date.now());
     } catch (error) {
       if (error.message === 'unauthorized') return;
       elements.body.innerHTML = '';
@@ -256,7 +386,5 @@
 
   elements.reload.addEventListener('click', load);
   load();
-
-  // 스냅샷 생성기가 쓰는 순수 렌더 진입점. 브라우저에서는 아무도 읽지 않는다.
   window.USAGE_RENDER = { buildDashboard };
 })();

@@ -19,8 +19,8 @@ const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString();
 
 // renderUsageDashboard()는 요약 스트립·게이지가 없으면 throw한다(샌드박스의 계약 검사).
 // 게이지가 필요 없는 표본은 이 함수 대신 아래 buildOnly()로 부른다.
-function dashboard(snapshots, now = NOW) {
-  return renderUsageDashboard(snapshots, now);
+function dashboard(input, now = NOW) {
+  return renderUsageDashboard(input, now);
 }
 
 const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
@@ -29,10 +29,39 @@ const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
   payload: { model: 'gpt-5.6-codex', rate_limits: buckets },
 });
 
-const claudeSnapshot = (models, capturedAt = iso(HOUR)) => ({
-  source: 'claude',
-  captured_at: capturedAt,
-  payload: { models },
+const harnessTask = (overrides = {}) => ({
+  version: 1,
+  id: 'usage-harness',
+  name: '사용량 하네스 시각화 (08-27)',
+  phase: 'review',
+  progress: 86,
+  status: 'active',
+  model: 'gpt-5.6-sol',
+  reasoning: 'xhigh',
+  category_key: 'pipeline-visualization',
+  category: '파이프라인 시각화',
+  current: '독립 검토',
+  done: '구현과 결정적 gate',
+  next: '라이브 배포',
+  deadline: '20:10 KST',
+  updated_at: iso(HOUR),
+  actors: [
+    {
+      id: 'usage-harness:main', parent_id: '', name: 'Main Codex', kind: 'codex',
+      model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '기획 · 통합 · 최종 판정', status: 'reviewing',
+      assignment: '독립 검토 통합',
+    },
+    {
+      id: 'usage-harness:reviewer', parent_id: 'usage-harness:main', name: '독립 검토', kind: 'codex',
+      model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '검토자', status: 'reviewing', assignment: 'diff 반증',
+    },
+    {
+      id: 'usage-harness:webgpt', parent_id: 'usage-harness:main', name: 'WebGPT 실행자', kind: 'webgpt',
+      model: 'WebGPT PRO', role: '위임 실행', status: 'done', assignment: 'fixture 정리',
+    },
+  ],
+  artifacts: ['npm test', 'HARNESS E2E: PASS'],
+  ...overrides,
 });
 
 test('unknown bucket keys render with the key itself and known keys with their label', () => {
@@ -45,11 +74,11 @@ test('unknown bucket keys render with the key itself and known keys with their l
   assert.doesNotMatch(markup, />primary</u);
 });
 
-test('both used_percent and used_percentage field names are recognized', () => {
-  const markup = dashboard([
-    codexSnapshot({ primary: { used_percent: 41 } }),
-    claudeSnapshot({ 'claude-opus-5': { rate_limits: { five_hour: { used_percentage: 62 } } } }),
-  ]);
+test('both used_percent and used_percentage field names are recognized for Codex', () => {
+  const markup = dashboard([codexSnapshot({
+    primary: { used_percent: 41 },
+    secondary: { used_percentage: 62 },
+  })]);
   assert.match(markup, /41%/u);
   assert.match(markup, /62%/u);
 });
@@ -114,26 +143,75 @@ test('an unparsable resets_at falls back to the window length, never to NaN', ()
 
 test('a captured_at older than 24h flips the stale state, 23h59m does not', () => {
   const fresh = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((24 * HOUR) - 60_000))]);
-  assert.match(fresh, /최신/u);
   assert.doesNotMatch(fresh, /오래된 데이터/u);
-  assert.doesNotMatch(fresh, /status-dot is-warn/u);
 
   const stale = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((24 * HOUR) + 60_000))]);
   assert.match(stale, /오래된 데이터/u);
-  assert.match(stale, /status-dot is-warn/u);
-  assert.match(stale, /오래됨/u);
 });
 
-test('the summary strip aggregates the highest percentage and the bucket count', () => {
-  const markup = dashboard([
-    codexSnapshot({ primary: { used_percent: 12 }, secondary: { used_percent: 88 } }),
-    claudeSnapshot({
-      'claude-opus-5': { rate_limits: { five_hour: { used_percentage: 44 } } },
-      'claude-fable-5': { rate_limits: { seven_day: { used_percentage: 5 } } },
-    }),
-  ]);
+test('the summary strip joins Codex usage with active task, actor, and gate counts', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 }, secondary: { used_percent: 88 } })],
+    tasks: [harnessTask()],
+  });
   assert.match(markup, /88%/u);
-  assert.match(markup, /<span class="stat-value">4<\/span>/u);
+  assert.match(markup, /활성 작업<\/span><span class="stat-value">1<\/span>/u);
+  assert.match(markup, /작업 중 AI<\/span><span class="stat-value">2<\/span>/u);
+  assert.match(markup, /작업 카테고리<\/span><span class="stat-value">1<\/span>/u);
+  assert.match(markup, /현재 gate<\/span><span class="stat-value">검토<\/span>/u);
+});
+
+test('the hierarchy renders model reasoning, subagent, WebGPT, gates, and evidence as peers in one task', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
+    tasks: [harnessTask()],
+  });
+  for (const expected of ['Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
+    assert.match(markup, new RegExp(expected, 'u'));
+  }
+  assert.equal((markup.match(/class="h-phase(?: |")/gu) || []).length, 4);
+  assert.match(markup, /h-org-level is-command/u);
+  assert.match(markup, /h-org-level is-agents/u);
+  assert.match(markup, /h-actor is-webgpt/u);
+});
+
+test('project, protocol, and visualization reports render as three separate categories', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
+    tasks: [
+      harnessTask({
+        id: 'jimunhanjang',
+        name: '프로젝트 지문한장',
+        category_key: 'jimunhanjang-project',
+        category: '지문한장 프로젝트',
+      }),
+      harnessTask({
+        id: 'pipeline-hardening',
+        name: 'Pipeline 개선',
+        category_key: 'pipeline-protocol',
+        category: '자체 pipeline 개선 프로토콜',
+      }),
+      harnessTask(),
+    ],
+  });
+  for (const category of ['지문한장 프로젝트', '자체 pipeline 개선 프로토콜', '파이프라인 시각화']) {
+    assert.match(markup, new RegExp(`<h3 id="hCategory\\d">${category}</h3>`, 'u'));
+  }
+  assert.equal((markup.match(/class="h-category"/gu) || []).length, 3);
+  assert.match(markup, /작업 카테고리<\/span><span class="stat-value">3<\/span>/u);
+});
+
+test('Claude snapshots are ignored and actor text is escaped', () => {
+  const markup = dashboard({
+    snapshots: [
+      codexSnapshot({ primary: { used_percent: 12 } }),
+      { source: 'claude', captured_at: iso(HOUR), payload: { model: 'Claude' } },
+    ],
+    tasks: [harnessTask({ name: '<img src=x onerror=alert(1)>' })],
+  });
+  assert.doesNotMatch(markup, /Claude/u);
+  assert.doesNotMatch(markup, /<img/u);
+  assert.match(markup, /&lt;img/u);
 });
 
 test('an empty snapshot list and a payload without buckets render an empty state', async () => {
@@ -153,10 +231,10 @@ test('an empty snapshot list and a payload without buckets render an empty state
   vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
   const { buildDashboard } = context.USAGE_RENDER;
 
-  assert.match(buildDashboard([], NOW), /아직 수집된 사용량 기록이 없습니다/u);
-  assert.match(buildDashboard(null, NOW), /아직 수집된 사용량 기록이 없습니다/u);
+  assert.match(buildDashboard([], NOW), /아직 수집된 Codex 사용량 기록이 없습니다/u);
+  assert.match(buildDashboard(null, NOW), /아직 수집된 Codex 사용량 기록이 없습니다/u);
   assert.match(
     buildDashboard([{ source: 'codex', captured_at: iso(HOUR), payload: { model: 'x' } }], NOW),
-    /읽을 수 있는 한도 정보가 없습니다/u,
+    /읽을 수 있는 Codex 한도 정보가 없습니다/u,
   );
 });

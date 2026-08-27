@@ -10,6 +10,7 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | `/WordMaster/` | 2,000-word meaning quiz with personal error-rate/recent sorting | `WordMaster/assets/js/app.js` | `wordmaster2000.quiz.v1` |
 | `/smstudy/` | Social studies concepts and 78 sortable KICE questions | `smstudy/assets/js/app.js` | `samun2027.study.v1` |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
+| `/usage/` | Owner-only Codex limits and live AI harness hierarchy | `usage/assets/js/usage.js` | account token |
 | Worker | JSON API and D1 access | `worker/src/index.js` | D1 tables |
 
 There is no front-end build step. HTML loads checked-in CSS, JavaScript, WebP and data files directly, so filenames and script order are deployment contracts.
@@ -39,6 +40,6 @@ npm run db:init
 npm run dev
 ```
 
-Apply D1 migrations before deploying Worker code. Migration `0004_session_ip_address.sql` enables exact IP display for requests made after deployment; older sessions may only have a one-way IP fingerprint.
+Apply D1 migrations before deploying Worker code. Migration `0004_session_ip_address.sql` enables exact IP display for requests made after deployment; `0006_harness_tasks.sql` stores the latest owner-only pipeline state mirrored from Discord reporting. Older sessions may only have a one-way IP fingerprint.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for request and synchronization flows, and [`CONTRIBUTING.md`](CONTRIBUTING.md) before modifying data or D1 migrations.

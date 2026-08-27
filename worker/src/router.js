@@ -17,9 +17,19 @@ const MAX_PROGRESS_BYTES = 800_000;
 // 사용량 스냅샷은 rate_limits 몇 개짜리 객체다. 상한이 없으면 ingest 토큰이 새거나
 // 수집기 버그 하나로 D1 행이 무제한으로 부푼다.
 const MAX_USAGE_BYTES = 64_000;
+const MAX_HARNESS_BYTES = 64_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
-const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
+const VALID_USAGE_SOURCES = new Set(['codex']);
+const VALID_HARNESS_PHASES = new Set(['plan', 'work', 'review', 'done']);
+const VALID_HARNESS_TASK_STATES = new Set(['active', 'complete']);
+const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt']);
+const VALID_HARNESS_ACTOR_STATES = new Set([
+  'working', 'reviewing', 'waiting', 'done', 'blocked', 'unavailable',
+]);
+const VALID_HARNESS_REASONING = new Set([
+  '', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra',
+]);
 const usageTokenEncoder = new TextEncoder();
 
 async function login(request, env) {
@@ -65,10 +75,10 @@ function fixedTimeEqual(left, right) {
   return difference === 0;
 }
 
-async function usageTokenMatches(request, env) {
+async function ingestTokenMatches(request, expectedValue) {
   const authorization = request.headers.get('authorization') || '';
   const supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || '';
-  const expected = String(env.USAGE_INGEST_TOKEN || '');
+  const expected = String(expectedValue || '');
   const [suppliedHash, expectedHash] = await Promise.all([
     crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(supplied)),
     crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(expected)),
@@ -78,7 +88,7 @@ async function usageTokenMatches(request, env) {
 }
 
 async function reportUsage(request, env) {
-  if (!(await usageTokenMatches(request, env))) {
+  if (!(await ingestTokenMatches(request, env.USAGE_INGEST_TOKEN))) {
     return json({ error: '인증이 필요합니다.' }, 401);
   }
 
@@ -110,6 +120,157 @@ async function reportUsage(request, env) {
   return json({ ok: true });
 }
 
+function harnessText(value, maxLength, required = false) {
+  if (typeof value !== 'string') return required ? null : '';
+  const normalized = value.replace(/\s+/gu, ' ').trim();
+  if ((required && !normalized) || normalized.length > maxLength) return null;
+  return normalized;
+}
+
+function normalizeHarnessReport(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || input.version !== 1) return null;
+  const taskId = harnessText(input.task_id, 120, true);
+  const occurredAt = harnessText(input.occurred_at, 40, true);
+  const task = input.task;
+  const actors = input.actors;
+  const artifacts = input.artifacts;
+  if (!taskId || !occurredAt || !Number.isFinite(Date.parse(occurredAt))) return null;
+  if (!task || typeof task !== 'object' || Array.isArray(task)) return null;
+  if (!Array.isArray(actors) || actors.length < 1 || actors.length > 20) return null;
+  if (!Array.isArray(artifacts) || artifacts.length > 10) return null;
+
+  const phase = harnessText(task.phase, 16, true);
+  const status = harnessText(task.status, 16, true);
+  const reasoning = harnessText(task.reasoning, 20);
+  const categoryKey = task.category_key === undefined
+    ? 'general'
+    : harnessText(task.category_key, 60, true);
+  const category = task.category === undefined
+    ? '기타 Codex 작업'
+    : harnessText(task.category, 80, true);
+  const progress = Number(task.progress);
+  const normalizedTask = {
+    name: harnessText(task.name, 120, true),
+    phase,
+    progress,
+    status,
+    model: harnessText(task.model, 120, true),
+    reasoning,
+    category_key: categoryKey,
+    category,
+    current: harnessText(task.current, 240),
+    done: harnessText(task.done, 240),
+    next: harnessText(task.next, 240),
+    deadline: harnessText(task.deadline, 80),
+  };
+  if (Object.values(normalizedTask).some((value) => value === null)
+    || !VALID_HARNESS_PHASES.has(phase)
+    || !VALID_HARNESS_TASK_STATES.has(status)
+    || !VALID_HARNESS_REASONING.has(reasoning)
+    || !/^[\p{L}\p{N}][\p{L}\p{N}-]*$/u.test(normalizedTask.category_key)
+    || !Number.isFinite(progress)
+    || progress < 0
+    || progress > 100) return null;
+
+  const normalizedActors = [];
+  const ids = new Set();
+  for (const actor of actors) {
+    if (!actor || typeof actor !== 'object' || Array.isArray(actor)) return null;
+    const normalized = {
+      id: harnessText(actor.id, 120, true),
+      parent_id: harnessText(actor.parent_id, 120),
+      name: harnessText(actor.name, 80, true),
+      kind: harnessText(actor.kind, 16, true),
+      model: harnessText(actor.model, 120, true),
+      reasoning: harnessText(actor.reasoning, 20),
+      role: harnessText(actor.role, 120),
+      status: harnessText(actor.status, 20, true),
+      assignment: harnessText(actor.assignment, 240),
+    };
+    if (Object.values(normalized).some((value) => value === null)
+      || ids.has(normalized.id)
+      || !VALID_HARNESS_ACTOR_KINDS.has(normalized.kind)
+      || !VALID_HARNESS_REASONING.has(normalized.reasoning)
+      || !VALID_HARNESS_ACTOR_STATES.has(normalized.status)) return null;
+    ids.add(normalized.id);
+    normalizedActors.push(normalized);
+  }
+
+  const normalizedArtifacts = artifacts.map((artifact) => harnessText(artifact, 180, true));
+  if (normalizedArtifacts.some((artifact) => artifact === null)) return null;
+  return {
+    version: 1,
+    task_id: taskId,
+    occurred_at: occurredAt,
+    task: normalizedTask,
+    actors: normalizedActors,
+    artifacts: normalizedArtifacts,
+  };
+}
+
+export function mergeHarnessReport(previous, incoming) {
+  const current = previous && typeof previous === 'object' ? previous : {};
+  const actorMap = new Map(
+    Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
+  );
+  for (const actor of incoming.actors) {
+    actorMap.set(actor.id, { ...actorMap.get(actor.id), ...actor, updated_at: incoming.occurred_at });
+  }
+  let actors = [...actorMap.values()];
+  if (incoming.task.status === 'complete') {
+    actors = actors.map((actor) => ({
+      ...actor,
+      status: actor.status === 'unavailable' ? actor.status : 'done',
+    }));
+  }
+  return {
+    version: 1,
+    id: incoming.task_id,
+    ...current,
+    ...incoming.task,
+    id: incoming.task_id,
+    created_at: current.created_at || incoming.occurred_at,
+    updated_at: incoming.occurred_at,
+    actors,
+    artifacts: [...new Set([...(current.artifacts || []), ...incoming.artifacts])].slice(-10),
+  };
+}
+
+async function reportHarness(request, env) {
+  if (!(await ingestTokenMatches(request, env.HARNESS_INGEST_TOKEN))) {
+    return json({ error: '인증이 필요합니다.' }, 401);
+  }
+  const rawBody = await request.text();
+  if (usageTokenEncoder.encode(rawBody).byteLength > MAX_HARNESS_BYTES) {
+    return json({ error: '하네스 보고가 너무 큽니다.' }, 413);
+  }
+  let body = {};
+  try { body = JSON.parse(rawBody); } catch { body = {}; }
+  const incoming = normalizeHarnessReport(body);
+  if (!incoming) return json({ error: '잘못된 하네스 보고입니다.' }, 400);
+
+  const row = await env.DB.prepare('SELECT payload FROM harness_tasks WHERE task_id = ?1')
+    .bind(incoming.task_id)
+    .first();
+  let previous = null;
+  try { previous = row?.payload ? JSON.parse(row.payload) : null; } catch { previous = null; }
+  const mergedActorIds = new Set([
+    ...(Array.isArray(previous?.actors) ? previous.actors : []),
+    ...incoming.actors,
+  ].map((actor) => actor?.id).filter(Boolean));
+  if (mergedActorIds.size > 20) {
+    return json({ error: '하네스 실행자가 너무 많습니다.' }, 400);
+  }
+  const merged = mergeHarnessReport(previous, incoming);
+  await env.DB.prepare(`
+    INSERT INTO harness_tasks(task_id, status, updated_at, payload)
+    VALUES (?1, ?2, ?3, ?4)
+    ON CONFLICT(task_id)
+    DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload
+  `).bind(incoming.task_id, merged.status, merged.updated_at, JSON.stringify(merged)).run();
+  return json({ ok: true, task_id: incoming.task_id });
+}
+
 // 사용량은 소유자 한 사람의 운영 데이터다. 소유자 이름은 wrangler.toml의
 // vars.OWNER_USERNAME 하나가 원본이고 코드에 적지 않는다 — 값이 없으면 아무도 통과하지
 // 못한다(fail-closed). 세션의 username은 users 테이블에서 조인된 값이다(lib.js).
@@ -129,14 +290,29 @@ async function usage(request, env) {
   const rows = await env.DB.prepare(`
     SELECT source, captured_at, payload
     FROM usage_snapshots
+    WHERE source = 'codex'
     ORDER BY source
   `).all();
+  const taskRows = await env.DB.prepare(`
+    SELECT task_id, status, updated_at, payload
+    FROM harness_tasks
+    ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at DESC
+    LIMIT 12
+  `).all();
   return json({
-    snapshots: rows.results.map((row) => {
+    snapshots: rows.results.filter((row) => row.source === 'codex').map((row) => {
       // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
       let payload = null;
       try { payload = JSON.parse(row.payload); } catch { payload = null; }
       return { source: row.source, captured_at: row.captured_at, payload };
+    }),
+    tasks: taskRows.results.flatMap((row) => {
+      try {
+        const payload = JSON.parse(row.payload);
+        return payload && typeof payload === 'object' ? [payload] : [];
+      } catch {
+        return [];
+      }
     }),
   });
 }
@@ -444,6 +620,7 @@ export async function route(request, env) {
 
   if (method === 'POST' && path === '/api/logout') return logout(request, env);
   if (method === 'POST' && path === '/api/usage/report') return reportUsage(request, env);
+  if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
 
   const progressMatch = path.match(/^\/api\/progress\/(wordmaster|smstudy)$/);
