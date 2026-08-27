@@ -2,7 +2,7 @@
    usage — 실제 하네스 흐름 + 보고 actor + 오른쪽 Codex 한도
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다.
    ========================================================================== */
-.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-flow, .h-session-progress, .h-modules, .h-module-list, .h-module, .h-actor-progress {
+.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-views, .h-session-view-panels, .h-session-view-panel, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-flow, .h-session-progress, .h-modules, .h-module-list, .h-module, .h-actor-progress {
   display: grid;
   min-width: 0;
 }
@@ -90,7 +90,67 @@
   font-size: var(--fs-title-3);
   font-weight: 700;
 }
-/* 병렬 task는 탭 하나가 panel 하나만 제어한다. */
+/* 1차 탭은 작업 상태를, 2차 탭은 그 상태 안의 병렬 세션 하나를 선택한다. */
+.h-session-views, .h-session-view-panels {
+  gap: var(--space-4);
+}
+.h-session-view-tabs {
+  display: inline-flex;
+  justify-self: start;
+  max-width: 100%;
+  padding: 3px;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  scrollbar-width: none;
+}
+.h-session-view-tabs::-webkit-scrollbar {
+  display: none;
+}
+.h-session-view-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-body-small);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.h-session-view-tab:hover {
+  color: var(--text);
+}
+.h-session-view-tab.is-selected {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-faint);
+}
+.h-session-view-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.h-session-view-tab strong {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--surface-4);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-full);
+  color: var(--text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.h-session-view-panel[hidden] {
+  display: none;
+}
 .h-session-switcher {
   gap: var(--space-4);
 }
@@ -451,6 +511,89 @@
 .h-org-node > .h-actor {
   margin-inline: auto;
 }
+.h-harness-root, .h-portfolio-task, .h-portfolio-empty, .h-org-empty {
+  margin-inline: auto;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  text-align: left;
+}
+.h-harness-root {
+  width: 280px;
+  padding: var(--space-4);
+  background: var(--surface-4);
+  border-color: var(--line-strong);
+}
+.h-harness-root h4, .h-portfolio-task h4 {
+  margin-top: var(--space-2);
+  font-size: var(--fs-title-3);
+}
+.h-harness-root dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: var(--space-3) 0 0;
+  overflow: hidden;
+  background: var(--line-faint);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-s);
+}
+.h-harness-root dl div {
+  display: grid;
+  gap: 3px;
+  padding: var(--space-2);
+  background: var(--surface-3);
+  text-align: center;
+}
+.h-harness-root dt, .h-harness-root dd {
+  margin: 0;
+}
+.h-harness-root dt {
+  color: var(--text-3);
+  font-size: 10px;
+}
+.h-harness-root dd {
+  font-size: var(--fs-body-small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.h-portfolio-task {
+  width: 240px;
+  padding: var(--space-3);
+}
+.h-portfolio-task.is-complete {
+  border-color: var(--line-faint);
+}
+.h-portfolio-task header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.h-portfolio-task > p, .h-portfolio-task > span {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.h-portfolio-task > span {
+  color: var(--text-3);
+}
+.h-portfolio-empty, .h-org-empty {
+  width: 218px;
+  padding: var(--space-4) var(--space-3);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  text-align: center;
+}
+.h-portfolio-org .h-org-chart-head h3 {
+  margin-top: var(--space-1);
+  font-size: var(--fs-title-2);
+}
+.h-portfolio-org .h-org-scroll {
+  padding-top: var(--space-6);
+}
 .h-actor.is-main {
   width: 280px;
   background: var(--surface-4);
@@ -577,7 +720,7 @@
     border: 0;
     border-top: 1px solid var(--line-strong);
   }
-  .h-actor, .h-actor.is-main {
+  .h-actor, .h-actor.is-main, .h-harness-root, .h-portfolio-task, .h-portfolio-empty, .h-org-empty {
     width: 100%;
   }
 }
@@ -592,6 +735,9 @@
   }
   .h-session-tab {
     flex-basis: min(78vw, 280px);
+  }
+  .h-session-view-tabs {
+    justify-self: stretch;
   }
   .h-task-badges {
     justify-content: flex-start;
