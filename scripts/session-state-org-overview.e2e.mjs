@@ -80,7 +80,8 @@ for (const expected of [
 assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 4);
 assert.equal((org.match(/data-actor-id=/gu) || []).length, 6);
 assert.match(org, /완료 Delta[\s\S]*?에이전트 보고 없음/u);
-assert.match(org, /세션 4개[\s\S]*?실제 에이전트 6명/u);
+// 하네스 노드는 보고된 것만 센다 — 세션 수·진행 수·실제 액터 수.
+assert.match(org, /세션 4개 · 진행 2개 · 에이전트 6명/u);
 
 // 실제 owner API가 12개에서 자르지 않고 보존된 전체 task를 renderer까지 넘기는지 확인한다.
 const retainedTasks = Array.from({ length: 13 }, (_, index) => {
@@ -107,6 +108,11 @@ const apiEnv = {
       }
       if (sql.includes('FROM usage_snapshots')) {
         return { bind() { return { async all() { return { results: [] }; } }; } };
+      }
+      // WP-A1이 붙인 이벤트 로그. 이 fixture의 task들은 구세션(이벤트 이전 payload)을
+      // 흉내 내므로 빈 결과를 준다 — 프런트가 이벤트 없이도 트리를 그리는지 함께 본다.
+      if (sql.includes('FROM harness_events')) {
+        return { async all() { return { results: [] }; } };
       }
       if (sql.includes('FROM harness_tasks')) {
         assert.doesNotMatch(sql, /LIMIT\s+12/iu, 'owner API가 전체 조직을 12개로 잘라서는 안 됩니다.');

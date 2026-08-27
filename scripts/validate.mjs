@@ -1867,7 +1867,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/usage.js?v=20260828-usage-front-refit'],
+    'usage/index.html': ['/usage/assets/js/usage.js?v=20260828-usage-orgchart'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -1890,7 +1890,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
     'smstudy/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260828-usage-front-refit', '/usage/assets/css/usage.css?v=20260828-usage-front-refit'],
+    'usage/index.html': ['/assets/css/system.css?v=20260828-usage-orgchart', '/usage/assets/css/usage.css?v=20260828-usage-orgchart'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);

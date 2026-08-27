@@ -1,21 +1,54 @@
 (() => {
   'use strict';
 
+  // ==========================================================================
+  // usage — AI 실행 현황 (WP-A2 전면 재작성)
+  //
+  // 화면 계약: sessions/2026-08-28-야간자율개편/plan.md §4
+  //   1. 세션마다 "사용자 입력 → 총괄 → 단계 → 에이전트"의 **전체 트리를 항상** 그린다.
+  //      현재 단계만 강조하는 것이 아니라 대기 중인 단계까지 노드로 세운다.
+  //   2. 조직도 영역은 휠 = 확대(커서 중심), 끌기 = 이동. 조직도 밖 페이지 스크롤은 그대로다.
+  //   3. 세션 한도 소모는 events의 첫·끝 usage 스냅샷 차로 계산한다.
+  //   4. 활성 세션이 있고 탭이 보이면 5초, 아니면 60초 주기로 다시 읽는다.
+  //
+  // events는 WP-A1이 추가하는 필드다. **없어도 트리는 그대로 그리고** 단계 소요시간과
+  // 한도 소모만 감춘다 — 구세션(이벤트 이전 payload) 하위호환이 계약이다.
+  //
+  // 조판 규칙(DESIGN.md §9): 노드 안 텍스트는 HTML+CSS 그리드다. 커넥터는 CSS 헤어라인
+  // 의사요소가 그린다. 손계산 SVG 좌표는 쓰지 않는다.
+  // ==========================================================================
+
   const DEFAULT_API_URL = 'https://hvsdcm-api.hvsdcm1.workers.dev';
   const API_URL = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
   const STALE_MS = 15 * 60 * 1000;
   const WARN_PERCENT = 75;
   const OVER_PERCENT = 95;
+  // 자동 갱신 주기 — 활성 세션이 있을 때만 빠르게 본다.
+  const POLL_ACTIVE_MS = 5_000;
+  const POLL_IDLE_MS = 60_000;
+  const FRESHNESS_TICK_MS = 1_000;
+  // 조직도 확대 범위 (계약 §4-3).
+  const ZOOM_MIN = 0.3;
+  const ZOOM_MAX = 2.5;
+  const ZOOM_STEP = 1.2;
+  const PAN_STEP = 48;
+
+  // 단계는 제어면과 report schema가 함께 보장하는 네 개뿐이다 (DESIGN.md §1.1).
+  // 이 배열이 화면의 단일 원본이다 — 트리·상태·소요시간 계산이 모두 여기서 도출된다.
   const PHASES = [
     { key: 'plan', label: '구상', detail: '계약 · 증거 고정' },
     { key: 'work', label: '작업', detail: '격리 구현 · 검증' },
     { key: 'review', label: '검토', detail: '독립 반증 · 수정' },
     { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
+  const PHASE_KEYS = new Set(PHASES.map((phase) => phase.key));
+  const PHASE_STATE_LABELS = { done: '완료', current: '진행 중', pending: '대기' };
   const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT', claude: 'CLAUDE' };
   // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
   // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
   const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
+  // 세션 한도 소모가 읽는 이벤트 필드 ↔ 표시 라벨. 위 SOURCE_LABELS와 짝을 이룬다.
+  const USAGE_DELTA_FIELDS = [['usage_codex', 'Codex'], ['usage_claude', 'Claude']];
   // 알려진 버킷 키의 한국어 라벨. 렌더 대상 목록이 아니라 사전이다 — payload에 실제로
   // 들어 있는 키를 전부 그리고, 여기 없는 키는 키 문자열 그대로 나간다.
   const BUCKET_LABELS = {
@@ -35,6 +68,7 @@
     error: document.getElementById('usageError'),
     reload: document.getElementById('reload'),
     refreshStatus: document.getElementById('usageRefreshStatus'),
+    freshness: document.getElementById('usageFreshness'),
   };
   let selectedSessionView = 'active';
   const selectedTaskIds = { active: '', complete: '' };
@@ -76,13 +110,7 @@
     return data;
   }
 
-  function readPercent(bucket) {
-    if (!bucket || typeof bucket !== 'object') return null;
-    for (const [key, value] of Object.entries(bucket)) {
-      if (/^used_percent/u.test(key) && Number.isFinite(value)) return value;
-    }
-    return null;
-  }
+  // ---- 공용 계산 -----------------------------------------------------------
 
   function clampPercent(value) {
     return Math.min(100, Math.max(0, value));
@@ -119,6 +147,16 @@
     if (time === null) return null;
     return time <= now ? `${formatDuration(now - time)} 전` : `${formatDuration(time - now)} 후`;
   }
+
+  function readPercent(bucket) {
+    if (!bucket || typeof bucket !== 'object') return null;
+    for (const [key, value] of Object.entries(bucket)) {
+      if (/^used_percent/u.test(key) && Number.isFinite(value)) return value;
+    }
+    return null;
+  }
+
+  // ---- 한도 rail -----------------------------------------------------------
 
   // 수집 원본마다 payload 모양이 다르다: codex는 rate_limits 하나, claude는 모델별
   // models[<id>].rate_limits다. 어느 쪽인지는 **모양으로** 판정한다 — source 이름으로
@@ -225,9 +263,17 @@
       </article>`;
   }
 
+  // ---- task / event 판독 ---------------------------------------------------
+
   function taskActors(task) {
     return Array.isArray(task?.actors)
       ? task.actors.filter((actor) => actor && typeof actor === 'object')
+      : [];
+  }
+
+  function taskModules(task) {
+    return Array.isArray(task?.modules)
+      ? task.modules.filter((module) => module && typeof module === 'object')
       : [];
   }
 
@@ -241,7 +287,6 @@
   }
 
   // 상태색은 상태에만 쓴다 — 진행(작업·검토)=강조, 끝났거나 쉬는 것=중립, 막힘=경고.
-  // (WP-D 계약. 이전에는 "진행 중"이 경고색 점으로 나가 orange가 장식이 됐다.)
   function statusDotClass(status) {
     if (status === 'blocked' || status === 'unavailable') return ' is-warn';
     if (status === 'working' || status === 'reviewing') return ' is-accent';
@@ -249,8 +294,100 @@
   }
 
   function modelAndReasoning(model, reasoning) {
+    if (!model && !reasoning) return '';
     const modelLabel = model || '모델 미기록';
     return reasoning ? `${modelLabel} · ${reasoning}` : modelLabel;
+  }
+
+  // WP-A1이 붙이는 이벤트 로그. 없으면 빈 배열이고, 그때는 소요시간·한도 소모가 숨는다.
+  function taskEvents(task) {
+    const raw = Array.isArray(task?.events) ? task.events : [];
+    return raw
+      .filter((event) => event && typeof event === 'object')
+      .map((event) => ({ ...event, time: parseTime(event.ts) }))
+      .filter((event) => event.time !== null)
+      .sort((left, right) => left.time - right.time);
+  }
+
+  // 단계별 누적 소요시간·모델을 이벤트 구간의 합으로 계산한다. 되돌아간 단계
+  // (검토 → 작업 → 검토)도 각 구간을 더하므로 "그 단계에 쓴 시간"이 맞는다.
+  function phaseTimeline(task, now) {
+    const events = taskEvents(task);
+    const phased = events.filter((event) => PHASE_KEYS.has(event.phase));
+    const stats = new Map();
+    if (phased.length === 0) return { stats, currentKey: '', hasEvents: events.length > 0 };
+    const lastTime = phased[phased.length - 1].time;
+    // 끝난 세션은 마지막 보고에서 시계를 멈춘다 — 살아 있는 세션만 지금까지 센다.
+    const endTime = task.status === 'complete' ? lastTime : Math.max(now, lastTime);
+    for (let index = 0; index < phased.length; index += 1) {
+      const event = phased[index];
+      const until = index + 1 < phased.length ? phased[index + 1].time : endTime;
+      const entry = stats.get(event.phase) || { duration: 0, model: '', reasoning: '' };
+      entry.duration += Math.max(0, until - event.time);
+      if (event.model) entry.model = String(event.model);
+      if (event.reasoning) entry.reasoning = String(event.reasoning);
+      stats.set(event.phase, entry);
+    }
+    return { stats, currentKey: phased[phased.length - 1].phase, hasEvents: true };
+  }
+
+  function normalizedTaskPhase(task) {
+    if (task.status === 'complete') return 'done';
+    return PHASE_KEYS.has(task.phase) ? task.phase : 'plan';
+  }
+
+  // 탭 한 줄에 쓰는 현재 단계. 이벤트가 있으면 그 마지막 단계가 payload보다 우선한다.
+  function currentPhaseLabel(task, now) {
+    const key = phaseTimeline(task, now).currentKey || normalizedTaskPhase(task);
+    return PHASES.find((phase) => phase.key === key)?.label || '미기록';
+  }
+
+  // 이벤트가 있으면 그 마지막 단계가 현재 단계다. 없으면 payload의 phase를 쓴다.
+  function phaseStates(task, timeline) {
+    const currentKey = timeline.currentKey || normalizedTaskPhase(task);
+    const currentIndex = Math.max(0, PHASES.findIndex((phase) => phase.key === currentKey));
+    return new Map(PHASES.map((phase, index) => {
+      if (task.status === 'complete') return [phase.key, 'done'];
+      if (index < currentIndex) return [phase.key, 'done'];
+      if (index === currentIndex) return [phase.key, 'current'];
+      return [phase.key, 'pending'];
+    }));
+  }
+
+  // actor가 어느 단계에서 갈라져 나왔는지 — 그 actor를 마지막으로 언급한 이벤트의 단계.
+  function actorPhaseMap(task) {
+    const map = new Map();
+    for (const event of taskEvents(task)) {
+      if (event.actor_id && PHASE_KEYS.has(event.phase)) map.set(String(event.actor_id), event.phase);
+    }
+    return map;
+  }
+
+  // 서브에이전트 진행도는 이벤트의 최신 percent가 우선이고, 없으면 payload의 progress다.
+  function actorProgressMap(task) {
+    const map = new Map();
+    for (const event of taskEvents(task)) {
+      const percent = Number(event.percent);
+      if (event.actor_id && Number.isFinite(percent)) map.set(String(event.actor_id), percent);
+    }
+    return map;
+  }
+
+  // 세션 한도 소모 — 이벤트 첫 스냅샷과 끝 스냅샷의 차(%p).
+  // 창이 초기화되면 값이 되감기므로 음수 차는 의미가 없다 — 그 원본은 표시하지 않는다.
+  function sessionUsageDeltas(task) {
+    const events = taskEvents(task);
+    const deltas = [];
+    for (const [field, label] of USAGE_DELTA_FIELDS) {
+      const values = events
+        .map((event) => Number(event[field]))
+        .filter((value) => Number.isFinite(value));
+      if (values.length < 2) continue;
+      const delta = values[values.length - 1] - values[0];
+      if (!(delta >= 0.1)) continue;
+      deltas.push(`${label} ${delta.toFixed(1)}%p`);
+    }
+    return deltas;
   }
 
   function taskPresentation(task) {
@@ -275,56 +412,406 @@
       : `<span class="h-task-date">${escapeHtml(dateLabel)}</span>`;
   }
 
-  function renderActor(actor, isMain = false) {
-    const details = [
-      ['모델', modelAndReasoning(actor.model, actor.reasoning)],
-      actor.role ? ['역할', actor.role] : null,
-      actor.assignment ? ['현재 작업', actor.assignment] : null,
-    ].filter(Boolean);
-    const progress = actor.progress;
-    const hasProgress = Number.isFinite(progress);
-    const safeProgress = clampPercent(hasProgress ? progress : 0);
+  function taskCategory(task) {
+    return {
+      key: task.category_key || 'general',
+      label: task.category || '기타 Codex 작업',
+    };
+  }
+
+  function sortTasks(tasks) {
+    return tasks.filter((task) => task && typeof task === 'object')
+      .sort((left, right) => {
+        const leftComplete = left.status === 'complete';
+        const rightComplete = right.status === 'complete';
+        if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
+        return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
+      });
+  }
+
+  // ---- 조직도 노드 ---------------------------------------------------------
+  //
+  // 노드 하나의 표시 계약은 아래 한 형태뿐이고, 세션 트리와 전체 조직도가 같은
+  // 렌더러를 공유한다. 종류마다 다른 마크업을 만들면 두 화면의 톤이 갈라진다.
+  //   { kind, kindLabel, name, detail, model, note, status, tone, time, progress, attributes, children }
+  // model은 한 줄 고정(모노·말줄임)이고, note는 길어지면 줄바꿈하는 자유 문장이다.
+
+  function renderNodeAttributes(attributes) {
+    return Object.entries(attributes || {})
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+      .join('');
+  }
+
+  function renderNode(node) {
+    const progress = Number.isFinite(node.progress) ? clampPercent(node.progress) : null;
     return `
-      <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
-        <h4>${escapeHtml(actor.name || '이름 미기록')}</h4>
-        <header class="h-actor-head">
-          <span class="h-kind">${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span>
-          <span class="h-actor-state"><span class="status-dot${statusDotClass(actor.status)}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
-        </header>
-        <dl class="h-actor-details">
-          ${details.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
-        </dl>
-        ${hasProgress ? `<div class="h-actor-progress"><span><span>진행도</span><strong>${Math.round(safeProgress)}%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${safeProgress.toFixed(1)}%"></span></span></div>` : ''}
+      <article class="h-node is-${escapeHtml(node.kind)}${node.current ? ' is-current' : ''}"${renderNodeAttributes(node.attributes)}>
+        <p class="h-node-kind">${escapeHtml(node.kindLabel || 'NODE')}</p>
+        <h5 class="h-node-name">${escapeHtml(node.name || '이름 미기록')}</h5>
+        ${node.detail ? `<p class="h-node-detail">${escapeHtml(node.detail)}</p>` : ''}
+        ${node.model ? `<p class="h-node-model">${escapeHtml(node.model)}</p>` : ''}
+        ${node.note ? `<p class="h-node-note">${escapeHtml(node.note)}</p>` : ''}
+        ${node.status
+    ? `<p class="h-node-state"><span class="status-dot${node.tone || ' is-idle'}" aria-hidden="true"></span>${escapeHtml(node.status)}${node.time ? `<span class="h-node-time">${escapeHtml(node.time)}</span>` : ''}</p>`
+    : ''}
+        ${progress === null
+    ? ''
+    : `<p class="h-node-progress"><span>진행도</span><strong>${Math.round(progress)}%</strong></p>
+        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>`}
       </article>`;
   }
 
-  function renderPhaseRail(task) {
-    const foundIndex = PHASES.findIndex((phase) => phase.key === task.phase);
-    const currentIndex = foundIndex < 0 ? 0 : foundIndex;
-    return `
-      <section class="h-flow" aria-label="실제 하네스 작업 흐름">
-        <header class="h-flow-head">
-          <div><p class="us-eyebrow">OVERALL</p><h4>전체 진행률</h4></div>
-          <strong>${Math.round(clampPercent(Number(task.progress) || 0))}%</strong>
-        </header>
-        <ol class="h-phase-rail">
-        ${PHASES.map((phase, index) => {
-    const state = index < currentIndex || task.status === 'complete'
-      ? ' is-complete'
-      : index === currentIndex
-        ? ' is-current'
+  function renderBranch(node) {
+    const children = (node.children || []).filter(Boolean);
+    return `<li class="h-node-slot">${renderNode(node)}${children.length ? `<ul>${children.map(renderBranch).join('')}</ul>` : ''}</li>`;
+  }
+
+  function renderTree(nodes) {
+    return `<ul class="h-tree">${nodes.map(renderBranch).join('')}</ul>`;
+  }
+
+  // ---- 트리 구성 -----------------------------------------------------------
+
+  // 서브에이전트 숲: 부모가 다른 actor면 그 아래에, 아니면 자기 단계 노드 아래에 붙는다.
+  // 순환 parent_id가 들어와도 visited로 끊는다 (보고자가 잘못 보내도 화면이 멈추지 않게).
+  function actorNodes(task) {
+    const actors = taskActors(task);
+    const main = mainActorOf(task);
+    const byId = new Map(actors.map((actor) => [actor.id, actor]));
+    const phaseOf = actorPhaseMap(task);
+    const progressOf = actorProgressMap(task);
+    const fallbackPhase = normalizedTaskPhase(task);
+    const childrenOf = new Map();
+    const byPhase = new Map(PHASES.map((phase) => [phase.key, []]));
+
+    for (const actor of actors) {
+      if (main && actor.id === main.id) continue;
+      const parentId = actor.parent_id && actor.parent_id !== main?.id && byId.has(actor.parent_id)
+        ? actor.parent_id
         : '';
-    return `<li class="h-phase${state}"><span class="h-phase-copy"><strong>${phase.label}</strong><small>${phase.detail}</small></span></li>`;
-  }).join('')}
-        </ol>
+      if (parentId) {
+        if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+        childrenOf.get(parentId).push(actor);
+        continue;
+      }
+      const phaseKey = phaseOf.get(String(actor.id)) || fallbackPhase;
+      (byPhase.get(phaseKey) || byPhase.get(fallbackPhase)).push(actor);
+    }
+
+    const toNode = (actor, visited) => {
+      const nextVisited = new Set(visited).add(actor.id);
+      const progress = progressOf.has(String(actor.id))
+        ? progressOf.get(String(actor.id))
+        : Number(actor.progress);
+      return {
+        kind: 'agent',
+        kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT',
+        name: actor.name || '이름 미기록',
+        detail: actor.role || actor.assignment || '',
+        model: modelAndReasoning(actor.model, actor.reasoning),
+        status: actorStatus(actor),
+        tone: statusDotClass(actor.status),
+        progress: Number.isFinite(progress) ? progress : null,
+        current: actor.status === 'working' || actor.status === 'reviewing',
+        attributes: { 'data-actor-id': actor.id || '' },
+        children: (childrenOf.get(actor.id) || [])
+          .filter((child) => !nextVisited.has(child.id))
+          .map((child) => toNode(child, nextVisited)),
+      };
+    };
+
+    return {
+      main,
+      byPhase: new Map([...byPhase].map(([key, list]) => [key, list.map((actor) => toNode(actor, new Set()))])),
+    };
+  }
+
+  // 세션 하나의 단계 노드 4개. events가 없으면 소요시간·모델 줄이 빠진 채로 그려진다.
+  function phaseNodesOf(task, now) {
+    const timeline = phaseTimeline(task, now);
+    const states = phaseStates(task, timeline);
+    const { byPhase } = actorNodes(task);
+    return PHASES.map((phase) => {
+      const stat = timeline.stats.get(phase.key);
+      const state = states.get(phase.key);
+      const isCurrent = state === 'current';
+      const model = modelAndReasoning(
+        stat?.model || (isCurrent ? task.model : ''),
+        stat?.reasoning || (isCurrent ? task.reasoning : ''),
+      );
+      return {
+        kind: 'phase',
+        kindLabel: 'PHASE',
+        name: phase.label,
+        detail: phase.detail,
+        model,
+        status: PHASE_STATE_LABELS[state],
+        tone: isCurrent ? ' is-accent' : ' is-idle',
+        time: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
+        current: isCurrent,
+        attributes: { 'data-org-phase': phase.key, 'data-phase-state': state },
+        children: byPhase.get(phase.key) || [],
+      };
+    });
+  }
+
+  // 세션 하나의 아래쪽 절반 — 총괄 → 단계 4개 → 서브에이전트.
+  // 세션 탭과 전체 조직도가 **같은 함수**를 쓴다. 두 화면이 각자 트리를 조립하면
+  // 한쪽에서만 액터가 빠지는 일이 생긴다 (실제로 그렇게 총괄 노드가 빠졌다).
+  function sessionSubtreeNodes(task, now, { leadProgress = true } = {}) {
+    const phases = phaseNodesOf(task, now);
+    const main = mainActorOf(task);
+    // 액터를 하나도 보고하지 않은 세션도 자리를 비우지 않는다 — 트리 모양을 같게 두고
+    // "보고가 없다"를 말한다. 노드를 지우면 단계만 남아 원인이 보이지 않는다.
+    if (!main) {
+      return [{
+        kind: 'lead',
+        kindLabel: 'MAIN',
+        name: '에이전트 보고 없음',
+        detail: '이 세션은 실행자를 보고하지 않았습니다',
+        children: phases,
+      }];
+    }
+    const progress = Number(task.progress);
+    return [{
+      kind: 'lead',
+      kindLabel: 'MAIN',
+      name: main.name || '이름 미기록',
+      detail: main.role || '',
+      model: modelAndReasoning(main.model, main.reasoning),
+      status: actorStatus(main),
+      tone: statusDotClass(main.status),
+      // 전체 조직도에서는 바로 위 세션 노드가 같은 수치를 이미 들고 있다 — 두 번 그리지 않는다.
+      progress: leadProgress && Number.isFinite(progress) ? progress : null,
+      current: main.status === 'working' || main.status === 'reviewing',
+      attributes: { 'data-actor-id': main.id || '' },
+      children: phases,
+    }];
+  }
+
+  // 세션 트리 — 사용자 입력 → 총괄 → 단계 4개 → 서브에이전트.
+  function sessionTreeNodes(task, now) {
+    return [{
+      kind: 'request',
+      kindLabel: 'REQUEST',
+      name: '사용자 입력',
+      detail: taskPresentation(task).name,
+      children: sessionSubtreeNodes(task, now),
+    }];
+  }
+
+  // 전체 조직도 — 사용자 입력 → 하네스 → 세션들 → 각 세션의 단계·에이전트.
+  function portfolioTreeNodes(tasks, now) {
+    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
+    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
+    return [{
+      kind: 'request',
+      kindLabel: 'REQUEST',
+      name: '사용자 입력',
+      detail: '요청 · 목표 · 제약',
+      children: [{
+        kind: 'harness',
+        kindLabel: 'HARNESS',
+        name: '메인 오케스트레이션',
+        detail: `세션 ${tasks.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명`,
+        children: tasks.map((task) => {
+          const complete = task.status === 'complete';
+          const presentation = taskPresentation(task);
+          const deltas = sessionUsageDeltas(task);
+          return {
+            kind: 'session',
+            kindLabel: 'SESSION',
+            name: presentation.name,
+            detail: [taskCategory(task).label, presentation.dateLabel].filter(Boolean).join(' · '),
+            // 한 줄 모노 슬롯(model)에 넣으면 말줄임으로 잘린다 — 줄바꿈하는 note로 낸다.
+            note: deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
+            status: complete ? '완료' : '진행 중',
+            tone: complete ? ' is-idle' : ' is-accent',
+            progress: Number.isFinite(Number(task.progress)) ? Number(task.progress) : null,
+            current: !complete,
+            attributes: {
+              'data-portfolio-task': task.id || '',
+              'data-session-active': String(!complete),
+            },
+            children: sessionSubtreeNodes(task, now, { leadProgress: false }),
+          };
+        }),
+      }],
+    }];
+  }
+
+  // ---- 조직도 캔버스(확대·이동) --------------------------------------------
+
+  function renderOrgCanvas(key, label, treeMarkup) {
+    return `
+      <section class="h-org" aria-label="${escapeHtml(label)}">
+        <header class="h-org-head">
+          <div><p class="us-eyebrow">ORG CHART</p><h4>실행 조직도</h4></div>
+          <div class="h-org-tools">
+            <span class="h-org-hint">휠 확대 · 끌어 이동</span>
+            <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
+          </div>
+        </header>
+        <div class="h-org-viewport" data-org-view="${escapeHtml(key)}" tabindex="0" role="group"
+          aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
+          <div class="h-org-canvas" data-org-canvas>${treeMarkup}</div>
+        </div>
       </section>`;
   }
 
-  function taskModules(task) {
-    return Array.isArray(task?.modules)
-      ? task.modules.filter((module) => module && typeof module === 'object')
-      : [];
+  // 확대·이동 상태는 뷰 키마다 남긴다 — 자동 갱신으로 DOM을 다시 그려도 시점이 튀지 않는다.
+  const orgViewState = new Map();
+  let orgPanning = false;
+
+  function orgCanvasOf(viewport) {
+    return viewport?.querySelector?.('[data-org-canvas]') || null;
   }
+
+  function applyOrgTransform(viewport, state) {
+    const canvas = orgCanvasOf(viewport);
+    if (!canvas || !canvas.style) return;
+    canvas.style.transform = `translate(${Math.round(state.x)}px, ${Math.round(state.y)}px) scale(${state.scale.toFixed(3)})`;
+  }
+
+  function fitOrgView(viewport, state) {
+    const canvas = orgCanvasOf(viewport);
+    if (!canvas) return;
+    const contentWidth = canvas.scrollWidth || canvas.offsetWidth || 0;
+    const viewWidth = viewport.clientWidth || 0;
+    const scale = contentWidth > 0 && viewWidth > 0
+      ? Math.min(1, Math.max(ZOOM_MIN, viewWidth / contentWidth))
+      : 1;
+    state.scale = scale;
+    state.x = Math.max(0, (viewWidth - (contentWidth * scale)) / 2);
+    state.y = 0;
+    applyOrgTransform(viewport, state);
+  }
+
+  // 커서(또는 뷰포트 중앙)를 고정점으로 두고 확대한다 — 그래야 보고 있던 노드가 안 달아난다.
+  function zoomOrgView(viewport, state, factor, originX, originY) {
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.scale * factor));
+    if (next === state.scale) return;
+    const ratio = next / state.scale;
+    state.x = originX - ((originX - state.x) * ratio);
+    state.y = originY - ((originY - state.y) * ratio);
+    state.scale = next;
+    applyOrgTransform(viewport, state);
+  }
+
+  function orgStateFor(key) {
+    if (!orgViewState.has(key)) orgViewState.set(key, { scale: 1, x: 0, y: 0, fitted: false });
+    return orgViewState.get(key);
+  }
+
+  function wireOrgView(viewport) {
+    if (!viewport || typeof viewport.addEventListener !== 'function') return;
+    const key = viewport.dataset?.orgView || '';
+    const state = orgStateFor(key);
+    if (state.fitted) applyOrgTransform(viewport, state);
+    else {
+      fitOrgView(viewport, state);
+      state.fitted = true;
+    }
+
+    const centerOf = () => [(viewport.clientWidth || 0) / 2, (viewport.clientHeight || 0) / 2];
+
+    // 조직도 위의 휠은 확대에 쓴다. 컨테이너 밖 페이지 스크롤은 건드리지 않는다(계약 §4-3).
+    viewport.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect?.() || { left: 0, top: 0 };
+      const factor = Math.exp(-(event.deltaY || 0) * 0.0015);
+      zoomOrgView(viewport, state, factor, event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+
+    let pointerId = null;
+    let originX = 0;
+    let originY = 0;
+    viewport.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      if (event.target?.closest?.('button')) return;
+      pointerId = event.pointerId;
+      originX = event.clientX - state.x;
+      originY = event.clientY - state.y;
+      orgPanning = true;
+      viewport.classList?.add('is-panning');
+      viewport.setPointerCapture?.(event.pointerId);
+    });
+    viewport.addEventListener('pointermove', (event) => {
+      if (pointerId === null || event.pointerId !== pointerId) return;
+      state.x = event.clientX - originX;
+      state.y = event.clientY - originY;
+      applyOrgTransform(viewport, state);
+    });
+    const endPan = (event) => {
+      if (pointerId === null) return;
+      viewport.releasePointerCapture?.(event.pointerId);
+      pointerId = null;
+      orgPanning = false;
+      viewport.classList?.remove('is-panning');
+    };
+    viewport.addEventListener('pointerup', endPan);
+    viewport.addEventListener('pointercancel', endPan);
+
+    // 휠·드래그를 못 쓰는 입력(키보드)에도 같은 조작을 준다.
+    viewport.addEventListener('keydown', (event) => {
+      const [centerX, centerY] = centerOf();
+      const moves = {
+        ArrowLeft: [PAN_STEP, 0], ArrowRight: [-PAN_STEP, 0],
+        ArrowUp: [0, PAN_STEP], ArrowDown: [0, -PAN_STEP],
+      };
+      if (moves[event.key]) {
+        event.preventDefault();
+        state.x += moves[event.key][0];
+        state.y += moves[event.key][1];
+        applyOrgTransform(viewport, state);
+        return;
+      }
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        zoomOrgView(viewport, state, ZOOM_STEP, centerX, centerY);
+      } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        zoomOrgView(viewport, state, 1 / ZOOM_STEP, centerX, centerY);
+      } else if (event.key === '0') {
+        event.preventDefault();
+        fitOrgView(viewport, state);
+      }
+    });
+  }
+
+  function wireOrgViews(root) {
+    for (const viewport of [...(root?.querySelectorAll?.('[data-org-view]') || [])]) {
+      wireOrgView(viewport);
+    }
+    for (const button of [...(root?.querySelectorAll?.('[data-org-action]') || [])]) {
+      if (typeof button.addEventListener !== 'function') continue;
+      button.addEventListener('click', () => {
+        const viewport = button.closest?.('.h-org')?.querySelector?.('[data-org-view]');
+        if (!viewport) return;
+        const state = orgStateFor(viewport.dataset?.orgView || '');
+        const centerX = (viewport.clientWidth || 0) / 2;
+        const centerY = (viewport.clientHeight || 0) / 2;
+        if (button.dataset.orgAction === 'in') zoomOrgView(viewport, state, ZOOM_STEP, centerX, centerY);
+        else if (button.dataset.orgAction === 'out') zoomOrgView(viewport, state, 1 / ZOOM_STEP, centerX, centerY);
+        else fitOrgView(viewport, state);
+      });
+    }
+  }
+
+  // 탭을 바꾸면 그때 처음 보이는 조직도가 있다 — 아직 맞춰지지 않은 것만 화면에 맞춘다.
+  function fitPendingOrgViews(root) {
+    for (const viewport of [...(root?.querySelectorAll?.('[data-org-view]') || [])]) {
+      const state = orgStateFor(viewport.dataset?.orgView || '');
+      if (state.fitted && (viewport.clientWidth || 0) > 0 && state.scale > 0) continue;
+      fitOrgView(viewport, state);
+      state.fitted = true;
+    }
+  }
+
+  // ---- 세션 본문 -----------------------------------------------------------
 
   function renderModules(task) {
     const modules = taskModules(task);
@@ -348,21 +835,13 @@
       </section>`;
   }
 
-  function renderGate(task) {
-    const progress = clampPercent(Number(task.progress) || 0);
-    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
+  function renderTaskFacts(task) {
     return `
-      <section class="h-session-status" aria-label="선택한 세션의 현재 gate">
-        <div class="h-session-progress">
-          <div><p class="us-eyebrow">CURRENT GATE</p><strong>${escapeHtml(phase)}</strong></div>
-          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
-        </div>
-        <div class="h-session-facts">
-          <p><span>현재</span>${escapeHtml(task.current || '상태 보고 대기')}</p>
-          <p><span>완료</span>${escapeHtml(task.done || '아직 없음')}</p>
-          <p><span>다음</span>${escapeHtml(task.next || '아직 없음')}</p>
-        </div>
-      </section>`;
+      <dl class="h-task-facts">
+        <div><dt>현재</dt><dd>${escapeHtml(task.current || '상태 보고 대기')}</dd></div>
+        <div><dt>완료</dt><dd>${escapeHtml(task.done || '아직 없음')}</dd></div>
+        <div><dt>다음</dt><dd>${escapeHtml(task.next || '아직 없음')}</dd></div>
+      </dl>`;
   }
 
   function renderArtifacts(task) {
@@ -377,202 +856,44 @@
       </footer>`;
   }
 
-  function actorHierarchy(task, mainActor) {
-    const actors = taskActors(task).filter((actor) => actor.id !== mainActor.id);
-    const byId = new Map([[mainActor.id, mainActor], ...actors.map((actor) => [actor.id, actor])]);
-    const children = new Map();
-    for (const actor of actors) {
-      let parentId = actor.parent_id;
-      let cursor = parentId;
-      let connected = false;
-      const ancestry = new Set([actor.id]);
-      while (cursor) {
-        if (cursor === mainActor.id) {
-          connected = true;
-          break;
-        }
-        if (ancestry.has(cursor)) break;
-        ancestry.add(cursor);
-        cursor = byId.get(cursor)?.parent_id || '';
-      }
-      if (!connected) parentId = mainActor.id;
-      if (!children.has(parentId)) children.set(parentId, []);
-      children.get(parentId).push(actor);
-    }
-    return children;
-  }
-
-  function renderActorBranch(actor, children, isMain = false, visited = new Set()) {
-    if (visited.has(actor.id)) return '';
-    const nextVisited = new Set(visited).add(actor.id);
-    const descendants = (children.get(actor.id) || [])
-      .map((child) => renderActorBranch(child, children, false, nextVisited))
-      .filter(Boolean);
-    return `
-      <li class="h-org-node${isMain ? ' is-root' : ''}">
-        ${renderActor(actor, isMain)}
-        ${descendants.length > 0 ? `<ul>${descendants.join('')}</ul>` : ''}
-      </li>`;
-  }
-
-  function renderActorTree(task, mainActor) {
-    const actorCount = taskActors(task).length;
-    const tree = mainActor
-      ? `<ul class="h-org-tree">${renderActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul>`
-      : '<p class="h-org-empty">에이전트 보고 없음</p>';
-    return `
-      <section class="h-org-chart" aria-label="${escapeHtml(taskPresentation(task).name)} 보고 조직도">
-        <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
-          <span>실제 보고 ${actorCount}명</span>
-        </header>
-        <div class="h-org-scroll">
-          ${tree}
-        </div>
-      </section>`;
-  }
-
-  function sortTasks(tasks) {
-    return tasks.filter((task) => task && typeof task === 'object')
-      .sort((left, right) => {
-        const leftComplete = left.status === 'complete';
-        const rightComplete = right.status === 'complete';
-        if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
-        return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
-      });
-  }
-
-  function renderPortfolioTaskCard(task, now) {
-    const complete = task.status === 'complete';
-    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
-    const progress = Math.round(clampPercent(Number(task.progress) || 0));
-    const updated = relativeTime(task.updated_at, now);
-    const presentation = taskPresentation(task);
-    return `
-      <article class="h-portfolio-task${complete ? ' is-complete' : ''}">
-        <header>
-          <span class="h-kind">SESSION</span>
-          <span class="h-task-state"><span class="status-dot${complete ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
-        </header>
-        <h4>${escapeHtml(presentation.name)}</h4>
-        <p class="h-portfolio-task-meta"><span>${escapeHtml(taskCategory(task).label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</p>
-        <span>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'} · 실제 보고 ${taskActors(task).length}명</span>
-      </article>`;
-  }
-
-  function renderMiniActor(actor, isMain = false) {
-    return `
-      <article class="h-agent-mini${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
-        <strong>${escapeHtml(actor.name || '이름 미기록')}</strong>
-        <header><span>${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span><span><i class="status-dot${statusDotClass(actor.status)}" aria-hidden="true"></i>${escapeHtml(actorStatus(actor))}</span></header>
-        <span class="h-agent-mini-model">${escapeHtml(modelAndReasoning(actor.model, actor.reasoning))}</span>
-        ${actor.role ? `<small>${escapeHtml(actor.role)}</small>` : ''}
-        ${actor.assignment ? `<small>${escapeHtml(actor.assignment)}</small>` : ''}
-      </article>`;
-  }
-
-  function renderMiniActorBranch(actor, children, isMain = false, visited = new Set()) {
-    if (visited.has(actor.id)) return '';
-    const nextVisited = new Set(visited).add(actor.id);
-    const descendants = (children.get(actor.id) || [])
-      .map((child) => renderMiniActorBranch(child, children, false, nextVisited))
-      .filter(Boolean);
-    return `<li class="h-agent-mini-node">${renderMiniActor(actor, isMain)}${descendants.length ? `<ul>${descendants.join('')}</ul>` : ''}</li>`;
-  }
-
-  function renderMiniActorTree(task) {
-    const mainActor = mainActorOf(task);
-    if (!mainActor) return '<p class="h-portfolio-empty">에이전트 보고 없음</p>';
-    return `<div class="h-agent-mini-tree" aria-label="실제 에이전트 조직도"><ul class="h-agent-mini-list">${renderMiniActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul></div>`;
-  }
-
-  function normalizedTaskPhase(task) {
-    if (task.status === 'complete') return 'done';
-    return PHASES.some((phase) => phase.key === task.phase) ? task.phase : 'plan';
-  }
-
-  function renderPortfolioTaskBranch(task, now) {
-    const current = task.status !== 'complete';
-    return `
-      <article class="h-pipeline-task${current ? ' is-current' : ''}" data-portfolio-task="${escapeHtml(task.id || '')}" data-current-work="${current}">
-        ${renderPortfolioTaskCard(task, now)}
-        ${renderMiniActorTree(task)}
-      </article>`;
-  }
-
-  function renderPipelineStage(phase, tasks, now) {
-    const phaseTasks = tasks.filter((task) => normalizedTaskPhase(task) === phase.key);
-    const active = phaseTasks.some((task) => task.status !== 'complete');
-    return `
-      <li class="h-pipeline-stage${active ? ' is-active' : ''}" data-pipeline-phase="${phase.key}" data-phase-active="${active}">
-        <header class="h-pipeline-stage-head">
-          <span><strong>${phase.label}</strong><small>${phase.detail}</small></span>
-          <b>${phaseTasks.length}</b>
-        </header>
-        <div class="h-pipeline-stage-tasks">
-          ${phaseTasks.length ? phaseTasks.map((task) => renderPortfolioTaskBranch(task, now)).join('') : '<p class="h-pipeline-empty">해당 단계 작업 없음</p>'}
-        </div>
-      </li>`;
-  }
-
-  function renderPortfolioOrg(inputTasks, now) {
-    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const completeCount = tasks.length - activeCount;
-    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
-    if (tasks.length === 0) return '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>';
-    return `
-      <section class="h-org-chart h-portfolio-org" aria-label="전체 세션과 실제 에이전트 조직도">
-        <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">FULL PIPELINE</p><h3>전체 파이프라인 조직도</h3></div>
-          <span>세션 ${tasks.length}개 · 실제 에이전트 ${actorCount}명</span>
-        </header>
-        <div class="h-pipeline-org">
-          <div class="h-pipeline-origin">
-            <article class="h-input-node"><p class="h-kind">REQUEST</p><h4>사용자 입력</h4><span>요청 · 목표 · 제약</span></article>
-            <article class="h-harness-root">
-              <p class="h-kind">AI HARNESS</p>
-              <h4>메인 오케스트레이션</h4>
-              <dl><div><dt>진행 중</dt><dd>${activeCount}</dd></div><div><dt>완료</dt><dd>${completeCount}</dd></div><div><dt>실제 에이전트</dt><dd>${actorCount}</dd></div></dl>
-            </article>
-          </div>
-          <ol class="h-pipeline-stages">
-            ${PHASES.map((phase) => renderPipelineStage(phase, tasks, now)).join('')}
-          </ol>
-        </div>
-      </section>`;
-  }
-
   function renderTask(task, now) {
-    const mainActor = mainActorOf(task);
     const updated = relativeTime(task.updated_at, now);
     const complete = task.status === 'complete';
     const presentation = taskPresentation(task);
+    const progress = Math.round(clampPercent(Number(task.progress) || 0));
+    const deltas = sessionUsageDeltas(task);
+    const meta = [
+      updated ? `${updated} 동기화` : '동기화 시각 없음',
+      `${taskCategory(task).label} · 진행 ${progress}%`,
+      task.deadline ? `마감 ${task.deadline}` : '',
+    ].filter(Boolean).join(' · ');
     return `
       <article class="h-task${complete ? ' is-complete' : ''}">
         <header class="h-task-head">
           <div>
             <p class="us-eyebrow">${complete ? 'COMPLETED SESSION' : 'SELECTED SESSION'}</p>
             <h3>${escapeHtml(presentation.name)}</h3>
-            <p>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'}${task.deadline ? ` · 마감 ${escapeHtml(task.deadline)}` : ''}</p>
+            <p class="h-task-meta">${escapeHtml(meta)}</p>
+            ${deltas.length ? `<p class="h-task-usage">이 세션 소모 · ${escapeHtml(deltas.join(' · '))}</p>` : ''}
           </div>
           <div class="h-task-badges">
             <span class="h-task-state"><span class="status-dot${complete ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
           </div>
         </header>
-        ${renderPhaseRail(task)}
-        ${renderGate(task)}
+        ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${renderActorTree(task, mainActor)}
+        ${renderOrgCanvas(`session:${task.id || presentation.name}`, `${presentation.name} 실행 조직도`, renderTree(sessionTreeNodes(task, now)))}
         ${renderArtifacts(task)}
       </article>`;
   }
 
-  function taskCategory(task) {
-    return {
-      key: task.category_key || 'general',
-      label: task.category || '기타 Codex 작업',
-    };
+  function renderPortfolioOrg(inputTasks, now) {
+    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+    if (tasks.length === 0) return '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>';
+    return `
+      <div class="h-portfolio">
+        ${renderOrgCanvas('portfolio', '전체 세션과 실제 에이전트 조직도', renderTree(portfolioTreeNodes(tasks, now)))}
+      </div>`;
   }
 
   function renderTaskTabs(tasks, now, status) {
@@ -583,7 +904,6 @@
           ${tasks.map((task, index) => {
     const selected = index === selectedIndex;
     const category = taskCategory(task);
-    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const presentation = taskPresentation(task);
     return `
@@ -592,7 +912,7 @@
               tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
               <span class="h-session-tab-copy">
                 <strong>${escapeHtml(presentation.name)}</strong>
-                <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</small>
+                <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(currentPhaseLabel(task, now))} ${progress}%</span>${renderTaskDate(task)}</small>
               </span>
             </button>`;
   }).join('')}
@@ -683,6 +1003,8 @@
       </div>`;
   }
 
+  // ---- 탭 배선 -------------------------------------------------------------
+
   function activateTaskTab(root, tab, moveFocus = false) {
     if (!root || !tab) return;
     const switcher = tab.closest?.('[data-session-switcher]');
@@ -698,6 +1020,7 @@
     for (const panel of panels) panel.hidden = panel.dataset.taskPanel !== tab.dataset.taskTab;
     const status = tab.dataset.taskStatus === 'complete' ? 'complete' : 'active';
     selectedTaskIds[status] = tab.dataset.taskId || '';
+    fitPendingOrgViews(root);
     if (moveFocus) tab.focus();
   }
 
@@ -741,15 +1064,8 @@
     selectedSessionView = ['active', 'complete', 'org'].includes(tab.dataset.sessionView)
       ? tab.dataset.sessionView
       : 'active';
-    if (selectedSessionView === 'org') centerPortfolioOrg(root);
+    fitPendingOrgViews(root);
     if (moveFocus) tab.focus();
-  }
-
-  function centerPortfolioOrg(root) {
-    const panel = root?.querySelector?.('[data-session-view-panel="org"]');
-    const scroll = panel?.querySelector?.('.h-org-scroll');
-    if (!scroll) return;
-    scroll.scrollLeft = Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2);
   }
 
   function wireSessionViews(root) {
@@ -777,37 +1093,118 @@
   function wireDashboard(root) {
     wireSessionViews(root);
     wireTaskTabs(root);
-    if (selectedSessionView === 'org') centerPortfolioOrg(root);
+    wireOrgViews(root);
+  }
+
+  // ---- 자동 갱신 -----------------------------------------------------------
+
+  let pollTimer = null;
+  let freshnessTimer = null;
+  let lastSyncAt = 0;
+  let lastSignature = '';
+  let activeSessionCount = 0;
+  let inFlight = false;
+
+  function isHidden() {
+    return document.visibilityState === 'hidden' || document.hidden === true;
+  }
+
+  function pollDelay() {
+    return activeSessionCount > 0 ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+  }
+
+  function renderFreshness() {
+    if (!elements.freshness) return;
+    if (!lastSyncAt) {
+      elements.freshness.textContent = '';
+      return;
+    }
+    const seconds = Math.max(0, Math.round((Date.now() - lastSyncAt) / 1000));
+    const elapsed = seconds < 60 ? `${seconds}초 전` : `${formatDuration(seconds * 1000)} 전`;
+    const cadence = isHidden() ? '자동 갱신 멈춤' : `${Math.round(pollDelay() / 1000)}초 주기`;
+    elements.freshness.textContent = `마지막 갱신 ${elapsed} · ${cadence}`;
+  }
+
+  function scheduleFreshnessTick() {
+    clearTimeout(freshnessTimer);
+    freshnessTimer = null;
+    renderFreshness();
+    if (isHidden()) return;
+    freshnessTimer = setTimeout(scheduleFreshnessTick, FRESHNESS_TICK_MS);
+  }
+
+  function scheduleNextPoll() {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    // 탭이 숨으면 폴링을 멈춘다 — 보이지 않는 화면 때문에 한도를 쓰지 않는다(계약 §4-4).
+    if (isHidden()) return;
+    pollTimer = setTimeout(() => { void load(); }, pollDelay());
+  }
+
+  function renderDashboard(data, { announce }) {
+    const tasks = sortTasks(Array.isArray(data?.tasks) ? data.tasks : []);
+    activeSessionCount = tasks.filter((task) => task.status !== 'complete').length;
+    // 조직도를 끌고 있는 중이면 DOM을 갈아 끼우지 않는다 — 다음 주기에 반영된다.
+    if (orgPanning && !announce) return;
+    const signature = JSON.stringify(data ?? null);
+    // 바뀐 것이 없으면 다시 그리지 않는다: 초점·선택·확대 상태를 흔들지 않기 위해서다.
+    if (!announce && signature === lastSignature && elements.body.innerHTML) return;
+    lastSignature = signature;
+    elements.body.innerHTML = buildDashboard(data, Date.now());
+    wireDashboard(elements.body);
   }
 
   async function load({ announce = false } = {}) {
+    if (inFlight) return;
+    inFlight = true;
     elements.error.textContent = '';
-    elements.reload.disabled = true;
-    elements.reload.textContent = '불러오는 중…';
-    if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '최신 정보를 확인하고 있습니다.';
+    if (announce) {
+      elements.reload.disabled = true;
+      elements.reload.textContent = '불러오는 중…';
+      if (elements.refreshStatus) elements.refreshStatus.textContent = '최신 정보를 확인하고 있습니다.';
+    }
     try {
       const data = await api('/api/usage');
-      elements.body.innerHTML = buildDashboard(data, Date.now());
-      wireDashboard(elements.body);
-      if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
-      if (announce) elements.reload.textContent = '업데이트됨';
+      lastSyncAt = Date.now();
+      renderDashboard(data, { announce });
+      if (announce) {
+        elements.reload.textContent = '업데이트됨';
+        if (elements.refreshStatus) elements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
+      }
     } catch (error) {
       if (error.message === 'unauthorized') return;
-      if (!announce) elements.body.innerHTML = '';
+      if (!announce) elements.body.innerHTML = elements.body.innerHTML || '';
       elements.error.textContent = error.message || '사용량을 불러오지 못했습니다.';
-      if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '업데이트하지 못했습니다.';
-      if (announce) elements.reload.textContent = '새로고침';
+      if (announce) {
+        elements.reload.textContent = '새로고침';
+        if (elements.refreshStatus) elements.refreshStatus.textContent = '업데이트하지 못했습니다.';
+      }
     } finally {
-      elements.reload.disabled = false;
-      if (!announce) elements.reload.textContent = '새로고침';
+      inFlight = false;
+      if (announce) elements.reload.disabled = false;
+      scheduleNextPoll();
+      scheduleFreshnessTick();
     }
   }
 
   elements.reload.addEventListener('click', () => load({ announce: true }));
+  document.addEventListener('visibilitychange', () => {
+    if (isHidden()) {
+      clearTimeout(pollTimer);
+      clearTimeout(freshnessTimer);
+      pollTimer = null;
+      freshnessTimer = null;
+      renderFreshness();
+      return;
+    }
+    void load();
+  });
   load();
+
   window.USAGE_RENDER = {
-    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioOrg,
-    activateTaskTab, wireTaskTabs, activateSessionView, centerPortfolioOrg,
-    wireSessionViews, wireDashboard, load,
+    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioOrg, renderTask,
+    sessionTreeNodes, portfolioTreeNodes, phaseTimeline, sessionUsageDeltas,
+    activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
+    wireOrgViews, fitPendingOrgViews, fitOrgView, zoomOrgView, orgViewState, load,
   };
 })();

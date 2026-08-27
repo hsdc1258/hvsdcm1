@@ -182,17 +182,26 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
   assert.doesNotMatch(markup, /summary-strip|활성 작업|작업 카테고리|작업 중 AI|Codex 최고 사용률/u);
 });
 
-test('the hierarchy renders Main Codex and actual child actors as a reporting tree', () => {
+// 세션 트리는 "지금 어디"가 아니라 **전 단계 + 실제 액터**를 항상 그린다 (plan §4-1).
+test('the session tree always renders every phase plus the reported actors', () => {
   const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
-  for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 수정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', '역할', '현재 작업', 'HARNESS E2E: PASS']) {
+  for (const expected of ['사용자 입력', '계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 수정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
-  assert.equal((markup.match(/class="h-phase(?: |")/gu) || []).length, 4);
-  assert.match(markup, /class="h-org-tree"/u);
-  assert.match(markup, /class="h-org-node is-root"/u);
-  assert.equal((markup.match(/class="h-org-node(?: |")/gu) || []).length, 3);
-  assert.match(markup, /h-actor is-webgpt/u);
-  assert.doesNotMatch(markup, /h-org-level is-gate/u);
+  // 네 단계가 모두 노드로 서고, 진행 단계는 상태만 다르다.
+  assert.equal((markup.match(/data-org-phase="/gu) || []).length, 4);
+  assert.match(markup, /data-org-phase="review" data-phase-state="current"/u);
+  assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
+  // 뿌리 → 총괄 → 단계 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
+  assert.match(markup, /<ul class="h-tree">/u);
+  assert.match(markup, /class="h-node is-request"/u);
+  assert.match(markup, /class="h-node is-lead/u);
+  assert.doesNotMatch(markup, /<svg/u);
+  // 보고된 액터 3명이 전부 자기 노드를 갖는다.
+  assert.equal((markup.match(/data-actor-id=/gu) || []).length, 3);
+  assert.match(markup, /h-node-kind">WEBGPT</u);
+  // 조직도는 확대·이동 캔버스 안에 있다.
+  assert.match(markup, /class="h-org-viewport" data-org-view="session:usage-harness"/u);
 });
 
 test('overall, module, and actor progress render only from reported artifacts', () => {
@@ -208,8 +217,13 @@ test('overall, module, and actor progress render only from reported artifacts', 
     })),
   });
   const markup = dashboard({ snapshots: [], tasks: [task] });
-  assert.equal((markup.match(/전체 진행률/gu) || []).length, 1);
-  for (const expected of ['64%', '검증 단계', '80%', 'CSS 구현', '88%', '계산 작업', '37%']) {
+  // 진행도 바는 실제로 보고된 수치에만 붙는다: 총괄(64) + progress를 보고한 액터(37).
+  // 나머지 액터는 수치가 없으므로 0% 바를 그리지 않는다. 대시보드는 세션 탭과 전체
+  // 조직도 두 곳에 같은 세션을 그리므로 2 × 2 = 4가 계약값이다.
+  assert.equal((markup.match(/진행도<\/span>/gu) || []).length, 4);
+  assert.match(markup, /class="h-node is-lead[^"]*"[^>]*>[\s\S]*?<strong>64%<\/strong>/u);
+  assert.match(markup, /계산 작업[\s\S]*?<strong>37%<\/strong>/u);
+  for (const expected of ['검증 단계', '80%', 'CSS 구현', '88%']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
 });
@@ -305,8 +319,6 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   });
   const tabs = [makeTab('active', true), makeTab('complete'), makeTab('org')];
   const panels = tabs.map((tab, index) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: index !== 0 }));
-  const orgScroll = { scrollWidth: 1000, clientWidth: 400, scrollLeft: 0 };
-  panels[2].querySelector = () => orgScroll;
   const tablist = {
     addEventListener(type, handler) { listeners[type] = handler; },
     querySelectorAll() { return tabs; },
@@ -330,38 +342,90 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   assert.equal(prevented, true);
   assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
   assert.equal(tabs[2].focused, true);
-  assert.equal(orgScroll.scrollLeft, 300);
 });
 
-test('dashboard wiring re-centers a persisted org view after refresh', () => {
-  const { activateSessionView, wireDashboard } = createUsageRenderers();
-  const tabs = ['active', 'complete', 'org'].map((view) => ({
-    dataset: { sessionView: view }, tabIndex: view === 'active' ? 0 : -1,
-    classList: { toggle() {} }, setAttribute() {}, focus() {},
-  }));
-  const panels = tabs.map((tab) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: tab.dataset.sessionView !== 'active' }));
-  const activationScroll = { scrollWidth: 1000, clientWidth: 400, scrollLeft: 0 };
-  panels[2].querySelector = () => activationScroll;
-  const activationRoot = {
-    querySelector(selector) { return selector === '[data-session-view-panel="org"]' ? panels[2] : null; },
-    querySelectorAll(selector) { return selector === '[data-session-view]' ? tabs : panels; },
+// ---- 조직도 확대·이동 (plan §4-3) -----------------------------------------
+// 계약은 셋이다: 처음에는 트리 전체가 보이게 맞추고, 휠은 커서를 고정점으로 확대하며,
+// 배율은 0.3~2.5 밖으로 나가지 않는다. 그리고 그 휠 이벤트는 **조직도 안에서만** 잡는다.
+function fakeOrgViewport(key, { clientWidth = 400, contentWidth = 1000 } = {}) {
+  const canvas = { style: {}, scrollWidth: contentWidth, offsetWidth: contentWidth };
+  return {
+    canvas,
+    listeners: {},
+    dataset: { orgView: key },
+    clientWidth,
+    clientHeight: 300,
+    classList: { add() {}, remove() {} },
+    querySelector(selector) { return selector === '[data-org-canvas]' ? canvas : null; },
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    getBoundingClientRect() { return { left: 0, top: 0 }; },
+    setPointerCapture() {},
+    releasePointerCapture() {},
   };
-  activateSessionView(activationRoot, tabs[2]);
-  assert.equal(activationScroll.scrollLeft, 300);
+}
 
-  const refreshedScroll = { scrollWidth: 1200, clientWidth: 600, scrollLeft: 0 };
-  const viewTablist = { addEventListener() {} };
-  const refreshedOrgPanel = { querySelector() { return refreshedScroll; } };
-  const refreshedRoot = {
-    querySelector(selector) {
-      if (selector === '[data-session-view-tablist]') return viewTablist;
-      if (selector === '[data-session-view-panel="org"]') return refreshedOrgPanel;
-      return null;
-    },
-    querySelectorAll() { return []; },
-  };
-  wireDashboard(refreshedRoot);
-  assert.equal(refreshedScroll.scrollLeft, 300);
+const scaleOf = (viewport) => Number(/scale\(([\d.]+)\)/u.exec(viewport.canvas.style.transform)[1]);
+const offsetOf = (viewport) => /translate\((-?\d+)px, (-?\d+)px\)/u.exec(viewport.canvas.style.transform).slice(1).map(Number);
+
+test('an org view fits the whole tree on first paint and zooms around the cursor', () => {
+  const { wireOrgViews } = createUsageRenderers();
+  const viewport = fakeOrgViewport('portfolio');
+  wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
+
+  // 400px 창에 1000px 트리 → 0.4배로 줄여 전부 보인다. 남는 폭이 없으므로 x는 0.
+  assert.equal(scaleOf(viewport), 0.4);
+  assert.deepEqual(offsetOf(viewport), [0, 0]);
+
+  // 휠은 preventDefault로 잡는다 — 이 리스너는 뷰포트에만 달려 있어 바깥 페이지
+  // 스크롤은 그대로다.
+  let prevented = false;
+  viewport.listeners.wheel({
+    deltaY: -100, clientX: 200, clientY: 150, preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  const zoomed = scaleOf(viewport);
+  assert.ok(zoomed > 0.4, '휠 위로는 확대여야 합니다.');
+  // 커서(200,150)가 가리키던 내용이 제자리에 있어야 한다: x' = 200 - (200 - x) * r.
+  // r은 구현과 같은 식(exp(-deltaY * 0.0015))으로 다시 구한다 — 화면에 찍힌 3자리
+  // 반올림 배율로 되계산하면 검사 쪽 오차가 생긴다.
+  const ratio = Math.exp(100 * 0.0015);
+  assert.equal(offsetOf(viewport)[0], Math.round(200 - (200 - 0) * ratio));
+});
+
+test('zoom stops at the 0.3-2.5 band and dragging pans the canvas', () => {
+  const { wireOrgViews } = createUsageRenderers();
+  const viewport = fakeOrgViewport('session:zoom', { clientWidth: 1000, contentWidth: 1000 });
+  wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
+  assert.equal(scaleOf(viewport), 1);
+
+  const wheel = (deltaY) => viewport.listeners.wheel({ deltaY, clientX: 0, clientY: 0, preventDefault() {} });
+  for (let index = 0; index < 60; index += 1) wheel(-200);
+  assert.equal(scaleOf(viewport), 2.5);
+  for (let index = 0; index < 200; index += 1) wheel(200);
+  assert.equal(scaleOf(viewport), 0.3);
+
+  // 끌기 = 이동. 눌린 지점과 커서의 차이가 그대로 오프셋이 된다.
+  const before = offsetOf(viewport);
+  viewport.listeners.pointerdown({ button: 0, pointerId: 7, clientX: 100, clientY: 100, target: {} });
+  viewport.listeners.pointermove({ pointerId: 7, clientX: 160, clientY: 130 });
+  assert.deepEqual(offsetOf(viewport), [before[0] + 60, before[1] + 30]);
+  viewport.listeners.pointerup({ pointerId: 7 });
+  // 손을 뗀 뒤의 커서 이동은 무시한다.
+  viewport.listeners.pointermove({ pointerId: 7, clientX: 400, clientY: 400 });
+  assert.deepEqual(offsetOf(viewport), [before[0] + 60, before[1] + 30]);
+});
+
+test('an org view keeps its zoom and pan across a re-render of the same key', () => {
+  const renderers = createUsageRenderers();
+  const first = fakeOrgViewport('portfolio');
+  renderers.wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [first] : []) });
+  first.listeners.wheel({ deltaY: -300, clientX: 0, clientY: 0, preventDefault() {} });
+  const held = first.canvas.style.transform;
+
+  // 자동 갱신이 DOM을 갈아 끼운 상황: 같은 키의 새 뷰포트에 같은 시점이 복원된다.
+  const second = fakeOrgViewport('portfolio');
+  renderers.wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [second] : []) });
+  assert.equal(second.canvas.style.transform, held);
 });
 
 test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {
@@ -532,10 +596,17 @@ test('an empty snapshot list and a payload without buckets render an empty state
   const vm = await import('node:vm');
   const context = {
     window: null,
-    document: { getElementById: () => ({ addEventListener() {}, textContent: '', innerHTML: '' }) },
+    // 자동 갱신이 visibilitychange를 구독하므로 document에도 addEventListener가 있어야 한다.
+    document: {
+      addEventListener() {},
+      visibilityState: 'visible',
+      getElementById: () => ({ addEventListener() {}, textContent: '', innerHTML: '' }),
+    },
     location: { pathname: '/usage/', search: '', replace() { throw new Error('login gate fired'); } },
     localStorage: { getItem: () => 'gate-token', removeItem() {} },
     fetch: () => new Promise(() => {}),
+    setTimeout: () => 0,
+    clearTimeout() {},
     console: { log() {}, warn() {}, error() {} },
   };
   context.window = context;

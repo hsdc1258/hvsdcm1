@@ -178,6 +178,15 @@ const USAGE_FIXTURE = {
         assignment: 'Claude 한도 복원 통합', progress: 62,
       },
     ],
+    // WP-A1의 이벤트 로그. 셋 중 이 세션에만 넣는다 — 단계 소요시간과 세션 한도 소모가
+    // 붙은 화면과, 구세션처럼 그 두 줄이 없는 화면을 한 파일에서 나란히 보기 위해서다.
+    events: [
+      { ts: '2026-08-27T09:00:00Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 18.4, usage_claude: 21.0 },
+      { ts: '2026-08-27T09:35:00Z', kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 24.9, usage_claude: 25.6 },
+      { ts: '2026-08-27T10:20:00Z', kind: 'report', phase: 'work', actor_id: 'usage-harness:writer', percent: 100, usage_codex: 31.2, usage_claude: 28.1 },
+      { ts: '2026-08-27T11:05:00Z', kind: 'phase-change', phase: 'review', model: 'claude-opus-5', reasoning: 'high', usage_codex: 38.6, usage_claude: 30.4 },
+      { ts: '2026-08-27T11:40:00Z', kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: 80, usage_codex: 41.5, usage_claude: 33.4 },
+    ],
     artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],
     },
   ],
@@ -364,15 +373,22 @@ export function buildSnapshots() {
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 진행 중/완료/전체 조직도 탭의 수치가 각각 2/1/3이고, 진행 중 병렬 task 중 선택된 한 panel만 보이는지,'
-        + ' 전체 파이프라인 조직도에서 사용자 입력 → 메인 오케스트레이션 → 구상/작업/검토/완료 4단계가 이어지고 세 세션이 각 단계로 배치되는지,'
-        + ' 실제 Main Codex/실행자/검토자/WebGPT/Claude 오케스트레이터 가지가 모두 보존되는지, 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간,'
-        + ' 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
+        + ' 선택된 세션의 조직도가 사용자 입력 → 총괄 → 구상/작업/검토/완료 <strong>네 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지,'
+        + ' 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지,'
+        + ' 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
+        + ' 조직도는 실제 화면에서 <strong>휠 확대 · 끌어 이동</strong>하는 캔버스이고, 열리는 순간 트리 전체가 들어오도록 배율이 맞춰진다.'
+        + ' 이 정적 사본은 스크립트가 없어 그 맞춤이 돌지 않으므로, 스냅샷 전용 규칙으로 캔버스 높이를 풀고 가로 스크롤을 허용했다 —'
+        + ' 조직도 안을 옆으로 밀어 보면 실제 화면에서 끌어 이동했을 때와 같은 것이 보인다.'
         + `\n  ${GENERATED_NOTE}`,
-      mutate: (html) => html.replace(
-        '<div id="usageBody" class="us-body"></div>',
-        `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,
-      ),
+      mutate: (html) => html
+        // 확대·이동은 JS가 하는 일이다. 정적 사본에서 뷰포트를 그대로 두면 트리의
+        // 왼쪽 위 모서리만 보여 시각 확인(DESIGN.md §10)에 쓸 수 없다.
+        .replace('</head>', '<style>\n/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */\n.h-org-viewport { height: auto; overflow: auto; }\n</style>\n</head>')
+        .replace(
+          '<div id="usageBody" class="us-body"></div>',
+          `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,
+        ),
     }),
   };
 }

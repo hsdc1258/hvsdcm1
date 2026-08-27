@@ -8,9 +8,9 @@
   <meta name="robots" content="noindex, nofollow">
   <title>사용량 — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260828-usage-front-refit">
-  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260828-usage-front-refit">
-  <script src="/usage/assets/js/usage.js?v=20260828-usage-front-refit" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260828-usage-orgchart">
+  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260828-usage-orgchart">
+  <script src="/usage/assets/js/usage.js?v=20260828-usage-orgchart" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
@@ -36,6 +36,9 @@
           </div>
         </div>
         <div class="toolbar-group">
+          <!-- 자동 갱신 시계. 1초마다 바뀌므로 aria-live를 걸지 않는다 — 수동 새로고침
+               결과만 아래 #usageRefreshStatus가 polite로 알린다. -->
+          <span id="usageFreshness" class="us-freshness"></span>
           <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
         </div>
       </header>
