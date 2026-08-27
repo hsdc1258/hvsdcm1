@@ -8,22 +8,49 @@
   const elements = {
     addUserForm: document.getElementById('addUser'),
     adminLoginForm: document.getElementById('adminLogin'),
+    adminLogout: document.getElementById('adminLogout'),
     adminPassword: document.getElementById('adminPassword'),
     answers: document.getElementById('answers'),
     login: document.getElementById('login'),
     loginError: document.getElementById('loginError'),
+    main: document.getElementById('adminMain'),
     newPassword: document.getElementById('newPassword'),
     newUsername: document.getElementById('newUsername'),
+    overviewNav: document.getElementById('overviewNav'),
     panel: document.getElementById('panel'),
-    sessionCard: document.getElementById('sessionCard'),
+    refresh: document.getElementById('refresh'),
     sessionCount: document.getElementById('sessionCount'),
     sessions: document.getElementById('sessions'),
     sessionUserFilter: document.getElementById('sessionUserFilter'),
     stats: document.getElementById('stats'),
     userError: document.getElementById('userError'),
     users: document.getElementById('users'),
+    viewSub: document.getElementById('viewSub'),
+    viewTitle: document.getElementById('viewTitle'),
   };
   let sessionRows = [];
+
+  // ---- 카테고리 뷰 전환 ------------------------------------------------------
+  // 뷰 목록을 JS에 다시 적지 않는다 — 사이드바 버튼과 뷰 컨테이너의 data-view가 원본이고,
+  // 여기서는 그 둘을 이름으로 짝짓는다. 사이드바에 항목을 추가하면 뷰도 따라온다.
+  const navButtons = [...document.querySelectorAll('.sidebar-item[data-view]')];
+  const views = [...document.querySelectorAll('.ad-view[data-view]')];
+  const DEFAULT_VIEW = navButtons[0]?.dataset.view || '';
+  let currentView = DEFAULT_VIEW;
+
+  function setView(name) {
+    const target = navButtons.some((button) => button.dataset.view === name) ? name : DEFAULT_VIEW;
+    currentView = target;
+    for (const view of views) view.hidden = view.dataset.view !== target;
+    for (const button of navButtons) {
+      if (button.dataset.view === target) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+      // 뷰 제목은 사이드바 라벨에서 가져온다 — 같은 문구를 두 곳에 적지 않기 위해서다.
+      if (button.dataset.view !== target) continue;
+      elements.viewTitle.textContent = button.textContent.trim();
+      elements.viewSub.textContent = button.dataset.sub || '';
+    }
+  }
 
   const escapeHtml = (value) => String(value ?? '').replace(
     /[&<>"']/g,
@@ -83,23 +110,43 @@
     return data;
   }
 
+  // 상태 요약 스트립 — 가로 1카드 N칸 (plan.md §3.4). 칸마다 회색 소라벨 위, 큰 값 아래.
+  // 설명 줄은 없앴다: 다섯 칸에 한 줄씩 붙은 설명이 요약을 본문만큼 키웠다.
   function renderStats(totals) {
-    // 설명은 한 줄로 줄인다 — 타일 5장에 두 줄짜리 설명이 붙어 요약 줄이 본문만큼 컸다.
-    const cards = [
-      ['사용자', totals.users, '등록된 일반 계정'],
-      ['활성 세션', totals.active_sessions, '만료 전 로그인 토큰'],
-      ['24시간 이벤트', totals.events_24h, '로그인·동기화·정답 등록'],
-      ['30일 IP', totals.known_ips_30d, '확인된 고유 IP'],
-      ['공용 정답', totals.shared_answers, '전 계정에 적용된 답안'],
+    const cells = [
+      ['사용자', totals.users],
+      ['활성 세션', totals.active_sessions],
+      ['24시간 이벤트', totals.events_24h],
+      ['30일 IP', totals.known_ips_30d],
+      ['공용 답안', totals.shared_answers],
     ];
 
-    elements.stats.innerHTML = cards.map(([label, value, description]) => `
-      <article class="ad-stat">
+    elements.stats.innerHTML = cells.map(([label, value]) => `
+      <div class="summary-cell">
         <span class="stat-label">${escapeHtml(label)}</span>
         <span class="stat-value">${Number(value).toLocaleString()}</span>
-        <p class="ad-stat-note">${escapeHtml(description)}</p>
-      </article>
+      </div>
     `).join('');
+  }
+
+  // 개요에서 다른 뷰로 넘어가는 행. 라벨은 사이드바 버튼에서 그대로 읽는다.
+  function renderOverviewNav(counts) {
+    elements.overviewNav.innerHTML = navButtons
+      .filter((button) => button.dataset.view !== DEFAULT_VIEW)
+      .map((button) => {
+        const view = button.dataset.view;
+        const count = counts[view];
+        return `
+          <button type="button" class="list-row list-row-nav" data-goto="${escapeHtml(view)}">
+            <span class="list-row-body">
+              <span class="list-row-title">${escapeHtml(button.textContent.trim())}</span>
+              <span class="list-row-sub">${escapeHtml(button.dataset.sub || '')}</span>
+            </span>
+            <span class="list-row-value">${count === undefined ? '-' : Number(count).toLocaleString()}</span>
+          </button>
+        `;
+      })
+      .join('');
   }
 
   function renderUsers(users) {
@@ -177,7 +224,7 @@
 
   function renderAnswers(answers) {
     if (answers.length === 0) {
-      elements.answers.innerHTML = '<tr><td colspan="6" class="ad-empty">아직 추가된 공용 정답이 없습니다.</td></tr>';
+      elements.answers.innerHTML = '<tr><td colspan="6" class="ad-empty">아직 추가된 공용 답안이 없습니다.</td></tr>';
       return;
     }
 
@@ -209,6 +256,13 @@
     renderSessionFilter(userData.users);
     renderSessions();
     renderAnswers(answerData.answers);
+    renderOverviewNav({
+      users: userData.users.length,
+      sessions: sessionRows.length,
+      answers: answerData.answers.length,
+    });
+    // 새로고침이 보고 있던 뷰를 벗어나지 않게 현재 뷰를 그대로 다시 세운다.
+    setView(currentView);
   }
 
   elements.adminLoginForm.addEventListener('submit', async (event) => {
@@ -250,7 +304,7 @@
     if (sessionButton) {
       elements.sessionUserFilter.value = sessionButton.dataset.id;
       renderSessions();
-      elements.sessionCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setView('sessions');
       return;
     }
 
@@ -272,6 +326,39 @@
   });
 
   elements.sessionUserFilter.addEventListener('change', renderSessions);
+
+  for (const button of navButtons) {
+    button.addEventListener('click', () => {
+      setView(button.dataset.view);
+      elements.main.focus();
+    });
+  }
+
+  elements.overviewNav.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-goto]');
+    if (!row) return;
+    setView(row.dataset.goto);
+    elements.main.focus();
+  });
+
+  elements.refresh.addEventListener('click', async () => {
+    elements.refresh.disabled = true;
+    try {
+      await loadDashboard();
+    } catch (error) {
+      elements.userError.textContent = error.message || '새로고침 실패';
+    } finally {
+      elements.refresh.disabled = false;
+    }
+  });
+
+  elements.adminLogout.addEventListener('click', () => {
+    adminToken = '';
+    sessionStorage.removeItem('hvsdcm.admin');
+    location.reload();
+  });
+
+  setView(DEFAULT_VIEW);
 
   if (adminToken) {
     loadDashboard().catch(() => {

@@ -20,7 +20,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer,
-  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderWordMasterHome,
+  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderUsageDashboard, renderWordMasterHome,
 } from './render-sandbox.mjs';
 
 const ROOT = process.cwd();
@@ -34,6 +34,7 @@ export const SNAPSHOT_BY_SCREEN = {
   'WordMaster/index.html': `${SNAPSHOT_DIR}/wordmaster.html`,
   'smstudy/index.html': `${SNAPSHOT_DIR}/concept-sample.html`,
   'admin/index.html': `${SNAPSHOT_DIR}/admin.html`,
+  'usage/index.html': `${SNAPSHOT_DIR}/usage.html`,
 };
 
 export const SNAPSHOT_FILES = {
@@ -43,6 +44,52 @@ export const SNAPSHOT_FILES = {
 
 // 개념 화면 스냅샷이 담는 중단원. 바꾸면 파일도 함께 다시 만들어야 한다.
 const CONCEPT_SAMPLE_ID = 'III-01';
+
+// ---- 사용량 화면 fixture ----------------------------------------------------
+// 사용량 본문은 Worker가 돌려주는 수집 결과라 저장소에 원본이 없다. 그래서 계약
+// (docs/plan.md §3.2)이 정한 모양의 표본을 여기에 둔다. 기준 시각도 고정값이다 —
+// 상대 시간을 렌더하므로 now가 흐르면 스냅샷이 매번 달라져 대조가 무의미해진다.
+//
+// 표본은 계약의 갈래를 전부 한 번씩 지난다: codex의 primary/secondary, claude의
+// 모델별 버킷, 알려진 키(five_hour·seven_day·seven_day_opus)와 **모르는 키(monthly)**,
+// 그리고 게이지 색이 바뀌는 구간(정상/경고/초과).
+const USAGE_NOW = Date.parse('2026-08-27T12:00:00Z');
+const USAGE_FIXTURE = [
+  {
+    source: 'codex',
+    captured_at: '2026-08-27T11:48:00Z',
+    payload: {
+      model: 'gpt-5-codex',
+      rate_limits: {
+        primary: { used_percent: 41.5, resets_at: '2026-08-27T15:10:00Z', window_minutes: 300 },
+        secondary: { used_percent: 78.2, resets_at: '2026-08-31T09:00:00Z', window_minutes: 10_080 },
+      },
+    },
+  },
+  {
+    source: 'claude',
+    captured_at: '2026-08-27T11:52:00Z',
+    payload: {
+      models: {
+        'claude-fable-5': {
+          captured_at: '2026-08-27T11:52:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 22, resets_at: '2026-08-27T14:30:00Z' },
+            seven_day: { used_percentage: 63, resets_at: '2026-09-01T00:00:00Z' },
+          },
+        },
+        'claude-opus-5': {
+          captured_at: '2026-08-27T11:52:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 8.4, resets_at: '2026-08-27T14:30:00Z' },
+            seven_day_opus: { used_percentage: 96.1, resets_at: '2026-09-01T00:00:00Z' },
+            monthly: { used_percentage: 12 },
+          },
+        },
+      },
+    },
+  },
+];
 
 // 화면마다 얹히는 CSS가 다르다. 여기를 한 벌로 두면 WordMaster 스냅샷이 smstudy의
 // 스타일로 조판돼 실제와 다른 화면을 보여 준다(실측으로 확인: .wm-layout 규칙이 없어
@@ -192,10 +239,12 @@ export function buildSnapshots() {
     ),
     [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
-        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: <code>&lt;template data-study&gt;</code> 주입,'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: 드로어 안 <code>&lt;template data-study&gt;</code> 주입,'
         + ' <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기.'
         + ' 즉 <strong>로그인한 방문자가 보는 화면</strong>이다.'
-        + '\n  <br><strong>주의</strong> — 드로어는 닫힌 상태(화면 밖)다. 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 로그인 상태인데도 본문에 학습 요소가 하나도 없어야 한다(plan.md §1-1).'
+        + ' 학습·사용량 진입은 드로어에만 있고, 드로어는 닫힌 상태(화면 밖)라 이 사본에서는 보이지 않는다.'
+        + '\n  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => paintEmoji(html
         .replace(/<template data-study>([^]*?)<\/template>/gu, '$1')
@@ -205,12 +254,28 @@ export function buildSnapshots() {
     }),
     [SNAPSHOT_BY_SCREEN['admin/index.html']]: documentSnapshot('admin/index.html', {
       note: '<strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
-        + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었다.'
-        + '\n  <br><strong>주의</strong> — 표의 행은 Worker API가 채우므로 이 사본에서는 <code>&lt;tbody&gt;</code>가 비어 있다. 검증 대상은 셸·툴바·표 머리·접힘 그룹의 조판이다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며,'
+        + ' 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>). 사이드바가 대문자 소제목으로 묶여 있다.'
+        + '\n  <br><strong>주의</strong> — 요약 스트립과 표의 행은 Worker API가 채우므로 이 사본에서는 비어 있다. 검증 대상은 셸·사이드바·툴바·표 머리의 조판이다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => html
         .replace('<section id="login" class="ad-login">', '<section id="login" class="ad-login hidden">')
-        .replace('<section id="panel" class="ad-panel hidden">', '<section id="panel" class="ad-panel">'),
+        .replace('<section id="panel" class="ad-panel hidden">', '<section id="panel" class="ad-panel">')
+        .replace(/(<button class="sidebar-item" type="button" data-view="overview"[^>]*?)>/u, '$1 aria-current="page">'),
+    }),
+    [SNAPSHOT_BY_SCREEN['usage/index.html']]: documentSnapshot('usage/index.html', {
+      note: '<strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
+        + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 요약 스트립(1카드 N칸), 게이지의 세 색 구간(정상·경고·초과),'
+        + ' 그리고 <strong>모르는 버킷 키</strong>(<code>monthly</code>)가 키 문자열 그대로 나오는지.'
+        + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
+        + `\n  ${GENERATED_NOTE}`,
+      mutate: (html) => html.replace(
+        '<div id="usageBody" class="us-body"></div>',
+        `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,
+      ),
     }),
   };
 }

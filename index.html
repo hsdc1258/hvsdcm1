@@ -31,10 +31,6 @@
       </button>
       <a class="brand" href="/" aria-label="hvsdcm 홈">hvsdcm</a>
       <div class="topbar-nav">
-        <template data-study>
-          <a class="topbar-link" href="/WordMaster/">WordMaster</a>
-          <a class="topbar-link" href="/smstudy/">사회·문화</a>
-        </template>
         <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
       </div>
     </nav>
@@ -65,6 +61,16 @@
             </span>
           </a>
         </nav>
+        <p class="list-group-head">계정</p>
+        <nav class="list-group" aria-label="계정 도구">
+          <a class="list-row list-row-nav" href="/usage/">
+            <span class="list-row-lead"><span class="emoji-box" data-emoji="usage" aria-hidden="true"></span></span>
+            <span class="list-row-body">
+              <span class="list-row-title">사용량</span>
+              <span class="list-row-sub">Codex · Claude 한도</span>
+            </span>
+          </a>
+        </nav>
       </div>
     </template>
     <div class="drawer-bottom">
@@ -84,89 +90,13 @@
     <section class="hero" aria-labelledby="welcomeTitle">
       <div class="container hero-inner">
         <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
-        <p class="hero-sub text-body-lg text-secondary hero-sub-guest">개인 웹사이트입니다.</p>
-        <template data-study><p class="hero-sub text-body-lg text-secondary">범위를 고르고, 풀고, 틀린 것만 다시 봅니다.</p></template>
+        <p class="hero-sub text-body-lg text-secondary">개인 웹사이트입니다.</p>
         <div id="account" class="account hero-actions">
           <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
-          <a class="link-arrow hero-browse-guest" href="#contact"><span>프로필 보기</span></a>
-          <template data-study>
-            <a class="btn btn-secondary btn-lg account-app" href="/WordMaster/">WordMaster</a>
-            <a class="btn btn-secondary btn-lg account-app" href="/smstudy/">사회·문화</a>
-          </template>
+          <a class="link-arrow" href="#contact"><span>프로필 보기</span></a>
         </div>
       </div>
     </section>
-
-    <template data-study>
-    <section id="apps" class="section reveal" aria-labelledby="appsTitle">
-      <div class="container">
-        <header class="section-head">
-          <h2 id="appsTitle" class="display">두 개의 앱. 하나의 계정.</h2>
-          <p class="section-sub text-body-lg text-secondary">범위는 직접 고르고, 채점과 복습은 앱이 맡습니다.</p>
-        </header>
-        <div class="tile-grid">
-          <article class="tile card" aria-labelledby="tileWordTitle">
-            <span class="emoji emoji-lg tile-mark" data-emoji="WordMaster" aria-hidden="true"></span>
-            <h3 id="tileWordTitle" class="title-2">WordMaster</h3>
-            <p class="tile-line text-secondary">DAY 1–50에서 범위를 고르면 시험이 만들어집니다. 표기가 달라도 정규화해 채점하고, 틀린 단어만 다시 냅니다.</p>
-            <div class="tile-meta">
-              <span class="badge">2,000단어</span>
-              <span class="badge">정규화 채점</span>
-            </div>
-            <a class="link-arrow" href="/WordMaster/"><span>WordMaster 열기</span></a>
-          </article>
-
-          <article class="tile card" aria-labelledby="tileSocietyTitle">
-            <span class="emoji emoji-lg tile-mark" data-emoji="smstudy" aria-hidden="true"></span>
-            <h3 id="tileSocietyTitle" class="title-2">사회·문화</h3>
-            <p class="tile-line text-secondary">평가원 기출을 원본 지문 그대로 풀고, 해설에서 정답 근거와 오답 원인을 확인합니다. 약한 개념은 노트로 돌아갑니다.</p>
-            <div class="tile-meta">
-              <span class="badge">기출 78문항</span>
-              <span class="badge">개념 노트 13장</span>
-            </div>
-            <a class="link-arrow" href="/smstudy/"><span>사회·문화 열기</span></a>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section reveal" aria-labelledby="syncTitle">
-      <div class="container-text">
-        <header class="section-head">
-          <h2 id="syncTitle" class="display">기록은 계정에.</h2>
-          <p class="section-sub text-body-lg text-secondary">로그인 한 번이면 진행도·오답·통계가 기기를 따라옵니다.</p>
-        </header>
-        <div class="list-group">
-          <div class="list-row">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="save" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">즉시 저장</span>
-              <span class="list-row-sub">문항을 풀 때마다 서버로 올라갑니다. 저장 버튼은 없습니다.</span>
-            </span>
-          </div>
-          <div class="list-row">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="review" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">오답 회독</span>
-              <span class="list-row-sub">틀린 항목은 오답률순으로 다시 나옵니다.</span>
-            </span>
-          </div>
-          <div class="list-row">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="anywhere" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">어디서나</span>
-              <span class="list-row-sub">브라우저만 있으면 됩니다. 설치도 동기화 버튼도 없습니다.</span>
-            </span>
-          </div>
-        </div>
-        <div class="stats-row">
-          <div class="stat"><span class="stat-value">2,078</span><span class="stat-label">항목</span></div>
-          <div class="stat"><span class="stat-value">2</span><span class="stat-label">앱</span></div>
-          <div class="stat"><span class="stat-value">1</span><span class="stat-label">계정</span></div>
-        </div>
-      </div>
-    </section>
-    </template>
 
     <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
       <div class="container-text">
@@ -205,12 +135,6 @@
   <footer class="footer">
     <div class="container footer-inner">
       <span class="brand footer-brand">hvsdcm</span>
-      <nav class="footer-nav" aria-label="바닥글">
-        <template data-study>
-          <a href="/WordMaster/">WordMaster</a>
-          <a href="/smstudy/">사회·문화</a>
-        </template>
-      </nav>
       <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
     </div>
   </footer>

@@ -56,8 +56,51 @@ function publishedHtml() {
     .filter((file) => jekyllOff || !isJekyllHidden(relative(file)));
 }
 
+function scriptReferences(source) {
+  return [...source.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/giu)].map(([, src]) => src);
+}
+
+// 게시되는 HTML이 **실제로 로드하는** 로컬 스크립트. 검사 대상 JS 목록을 손으로 적으면
+// 새 화면(/usage/ 같은)이 생겨도 게이트가 그 화면의 스크립트를 보지 않는다 —
+// 목록을 마크업에서 도출해 화면이 늘면 검사도 함께 늘어나게 한다 (LESSONS 규칙 5).
+function publishedScripts() {
+  const scripts = new Set();
+  for (const file of publishedHtml()) {
+    for (const source of scriptReferences(readFileSync(file, 'utf8'))) {
+      if (/^https?:/iu.test(source)) continue;
+      const absolute = resolveAsset(file, source);
+      if (existsSync(absolute)) scripts.add(relative(absolute));
+    }
+  }
+  return [...scripts].sort();
+}
+
+// ---- 로그인 게이트의 판정 ----------------------------------------------------
+// 파일 이름(account.js / admin.js)을 적는 대신 **게이트가 하는 일**을 스크립트 소스에서
+// 찾는다: 랜딩으로 되돌리는 리다이렉트이거나, 관리자 토큰을 요구하거나.
+// 게이트 스크립트를 새로 만들거나 이름을 바꿔도 계약이 따라온다.
+//
+// 이 판정이 **못 보는 것**: 게이트가 *실제로 렌더 전에 도는지*(코드 순서), 조건이
+// 올바른지, 그리고 서버가 같은 규칙을 강제하는지. 여기서 보는 것은 "가리려는 코드가
+// 이 화면에 실려 있는가"까지다.
+const GATE_MARKERS = [
+  { name: 'login redirect', test: (js) => /location\.replace\(/u.test(js) && js.includes('login=1') },
+  { name: 'admin token', test: (js) => js.includes('hvsdcm.admin') },
+];
+function loginGateOf(htmlFile, source) {
+  for (const reference of scriptReferences(source)) {
+    if (/^https?:/iu.test(reference)) continue;
+    const absolute = resolveAsset(htmlFile, reference);
+    if (!existsSync(absolute)) continue;
+    const js = readFileSync(absolute, 'utf8');
+    const marker = GATE_MARKERS.find((candidate) => candidate.test(js));
+    if (marker) return { script: relative(absolute), marker: marker.name };
+  }
+  return null;
+}
+
 // 미로그인 방문자에게 학습 내용을 노출하지 않는다는 계약을 **게시되는 모든 HTML**에 건다
-// (plan.md §3). 랜딩은 <template data-study>로, 앱 3면은 account.js / admin.js 게이트로
+// (plan.md §3). 랜딩은 <template data-study>로, 나머지 화면은 자기 게이트 스크립트로
 // 가려진다. 그 어느 쪽도 아닌 게시 HTML은 학습 문구를 담고 있으면 안 된다.
 const STUDY_KEYWORDS = ['학습', 'WordMaster', 'smstudy', 'Study'];
 function validateStudyExposure() {
@@ -67,8 +110,7 @@ function validateStudyExposure() {
     const name = relative(file);
     if (name === 'index.html') continue;   // validateLandingGating()이 따로 본다
     const source = readFileSync(file, 'utf8');
-    const gated = /<script\b[^>]*\bsrc=["'][^"']*\/(?:account|admin)\.js["']/u.test(source);
-    if (gated) continue;
+    if (loginGateOf(file, source)) continue;
     for (const keyword of STUDY_KEYWORDS) {
       check(!source.includes(keyword),
         `${name}: published without a login gate but contains study keyword "${keyword}" — move it out of the published surface (a "_" directory) or gate it (plan.md §3)`);
@@ -152,6 +194,9 @@ function validateUiContracts() {
   const adminHtml = readFileSync(path.join(ROOT, 'admin/index.html'), 'utf8');
   const adminCss = readFileSync(path.join(ROOT, 'admin/assets/css/admin.css'), 'utf8');
   const adminJs = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
+  const usageHtml = readFileSync(path.join(ROOT, 'usage/index.html'), 'utf8');
+  const usageCss = readFileSync(path.join(ROOT, 'usage/assets/css/usage.css'), 'utf8');
+  const usageJs = readFileSync(path.join(ROOT, 'usage/assets/js/usage.js'), 'utf8');
 
   // 조건을 includes 두 개로 나누면 서로 다른 요소를 봐도 통과한다 — 한 태그 안에서 매칭한다 (review-3a M-6).
   // 학습 드로어는 미로그인 문서에 렌더되면 안 된다 — <template data-study> 안에만 존재한다 (사이클 #3 게이팅).
@@ -175,6 +220,40 @@ function validateUiContracts() {
     'home: mountStudyContent() must run only inside the logged-in branch');
   check(homeJs.includes("querySelectorAll('template[data-study]')"), 'home: study template mount routine is missing');
   check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
+
+  // ---- 랜딩 학습 은닉 완결 (plan.md §1-1) ----
+  // 로그인해도 **본문**에는 학습이 없다. 진입은 좌상단 드로어 하나뿐이다.
+  // 두 조건이 함께 있어야 계약이 닫힌다: (1) 로그인-후 템플릿이 드로어 안에만 있고,
+  // (2) 주입 루틴이 드로어만 훑는다. 하나만 걸면 나머지 한쪽으로 학습이 본문에 돌아온다.
+  //
+  // 이 검사가 **못 보는 것**: 본문에 학습 문구를 *정적으로* 적는 경우는 여기가 아니라
+  // validateLandingGating()의 키워드·경로 검사가 잡는다. 그리고 home.js 밖에서
+  // (다른 스크립트가) DOM을 조립해 넣는 경로는 정적으로 볼 수 없다.
+  const drawerMarkup = /<aside id="drawer"[^]*?<\/aside>/u.exec(homeHtml)?.[0] ?? '';
+  check(drawerMarkup.length > 0,
+    'home: the drawer landmark could not be located — the drawer-only study contract cannot be checked');
+  const studyTemplateCount = (homeHtml.match(/<template data-study>/gu) || []).length;
+  const drawerTemplateCount = (drawerMarkup.match(/<template data-study>/gu) || []).length;
+  check(studyTemplateCount > 0 && studyTemplateCount === drawerTemplateCount,
+    `home: ${studyTemplateCount - drawerTemplateCount} of ${studyTemplateCount} <template data-study> blocks live outside the drawer — study entry points belong to the drawer only (plan.md §1-1)`);
+  check(/elements\.drawer\.querySelectorAll\('template\[data-study\]'\)/u.test(homeJs),
+    'home: mountStudyContent() must scope its query to the drawer so a template placed in the body can never mount (plan.md §1-1)');
+
+  // ---- 사용량 화면 (plan.md §1-2 / §3.2) ----
+  // 이 검사가 **못 보는 것**: API 응답의 실제 모양(런타임 계약은 worker/test.mjs가 본다),
+  // 게이지 폭이 퍼센트와 맞는지(스냅샷의 고정 표본이 사람 눈에 보여 준다).
+  check(usageHtml.includes('id="usageBody"'), 'usage: the dashboard mount point #usageBody is missing');
+  check(/location\.replace\(loginPath\(\)\)/u.test(usageJs),
+    'usage: an anonymous visitor must be sent back to the landing (plan.md §1-2)');
+  check(usageJs.includes('login=1&next='),
+    'usage: the redirect must carry ?login=1&next= so the visitor returns here after login');
+  check(/Object\.entries\(group\.buckets\)/u.test(usageJs),
+    'usage: rate-limit buckets must be derived from the payload keys, not from a hardcoded list (plan.md §3.2)');
+  check(/BUCKET_LABELS\[key\] \|\| key/u.test(usageJs),
+    'usage: an unknown bucket key must fall back to the key itself (plan.md §3.2)');
+  check(usageJs.includes('STALE_MS'),
+    'usage: a captured_at older than 24h must be flagged as stale data (plan.md §3.2)');
+  check(usageCss.includes('.us-body'), 'usage: the screen stylesheet lost its layout rules');
 
   // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
   for (const primitive of ['.btn ', '.btn-primary ', '.field-input ', '.card ', '.sheet ', '.sheet-backdrop ', '.table ', '.badge ', '.segmented ', '.toolbar ', '.sidebar ', '.toast ', '.topbar ', '.app-shell ', '.segmented-btn ', '.sidebar-item ']) {
@@ -211,15 +290,18 @@ function validateUiContracts() {
   // 3c에서 앱 셸 보조 규칙(.app-main / .view-head / .side-* / .app-footer / .app-page)을
   // system.css로 승격했다. 화면마다 같은 규칙을 다시 두지 않으므로 단일 원본에서 확인한다.
   check(systemCss.includes('.app-main:focus { outline: none; }'), 'system.css: programmatic main focus must not paint an outline');
-  for (const primitive of ['.app-page', '.app-main', '.view-head', '.view-head-main', '.side-facts', '.side-note', '.app-footer', '.sr-only', '.list-row-stretch', '.list-row-accessory', '.disclosure', '.disclosure-head', '.disclosure-body', '.list-group-head-row']) {
+  for (const primitive of ['.app-page', '.app-main', '.view-head', '.view-head-main', '.side-facts', '.side-note', '.app-footer', '.sr-only', '.list-row-stretch', '.list-row-accessory', '.disclosure', '.disclosure-head', '.disclosure-body', '.list-group-head-row',
+    // 사이클5 — 콘솔 대시보드 프리미티브 (plan.md §3.4). admin과 usage가 공유한다.
+    '.sidebar-label', '.summary-strip', '.summary-cell', '.status-dot', '.gauge-track', '.gauge-fill']) {
     check(systemCss.includes(primitive + ' {') || systemCss.includes(primitive + ','),
       `system.css: primitive ${primitive} is missing`);
   }
   // 승격된 규칙이 화면 CSS에 되살아나면(같은 모양의 재구현) 톤이 다시 갈라진다.
   // 인쇄 블록은 제외한다 — 거기서 프리미티브를 숨기는 것은 재구현이 아니라 소비다.
   const withoutPrint = (css) => css.replace(/@media\s+print\s*\{[\s\S]*$/u, '');
-  for (const [name, css] of [['WordMaster', wordMasterCss], ['smstudy', withoutPrint(smstudyCss)], ['admin', adminCss]]) {
-    for (const primitive of ['.app-main', '.view-head', '.side-facts', '.side-note', '.app-footer']) {
+  for (const [name, css] of [['WordMaster', wordMasterCss], ['smstudy', withoutPrint(smstudyCss)], ['admin', adminCss], ['usage', usageCss]]) {
+    for (const primitive of ['.app-main', '.view-head', '.side-facts', '.side-note', '.app-footer',
+      '.summary-strip', '.summary-cell', '.status-dot', '.gauge-track', '.gauge-fill']) {
       check(!new RegExp(`(^|[\\s,}])\\${primitive}\\s*(\\{|,)`, 'mu').test(css),
         `${name}: ${primitive} is promoted to system.css — do not redefine it in a screen stylesheet (DESIGN.md §7)`);
     }
@@ -287,8 +369,41 @@ function validateUiContracts() {
   check(/<table class="table">/u.test(adminHtml), 'admin: tables must use the shared table primitive');
   check(/id="panel"[^>]*\bhidden\b/u.test(adminHtml), 'admin: dashboard panel must start hidden');
   check(adminCss.includes('.hidden { display: none !important; }'), 'admin: hidden-state utility is missing');
-  check(adminJs.includes('class="ad-stat"'), 'admin: stat cards must render on the rewritten markup');
   check(adminJs.includes('btn btn-danger btn-sm delete-user'), 'admin: destructive user action must use the danger button primitive');
+
+  // ---- 어드민 카테고리 뷰 (plan.md §3 요구사항 3 / §3.4) ----
+  // 뷰 목록을 여기에 적지 않는다 — 사이드바의 data-view가 원본이고, 뷰 컨테이너와 초기
+  // 표시 상태를 거기서 도출한다. 사이드바에 항목을 더하면 짝이 되는 뷰가 없을 때 실패한다.
+  //
+  // 이 검사가 **못 보는 것**: 런타임의 뷰 전환(클릭했을 때 정말 하나만 남는지)과 각 뷰의
+  // 내용 적절성. 정적으로 볼 수 있는 것은 "문서 초기 상태에서 뷰가 하나만 열려 있는가"와
+  // "hidden이 CSS에 지지 않는가"까지다. 나머지는 사람이 스냅샷과 화면에서 본다.
+  const adminNavViews = [...adminHtml.matchAll(/<button class="sidebar-item"[^>]*\sdata-view="([\w-]+)"/gu)]
+    .map(([, name]) => name);
+  const adminViewSections = [...adminHtml.matchAll(/<section class="ad-view" data-view="([\w-]+)"([^>]*)>/gu)];
+  check(adminNavViews.length >= 3,
+    `admin: only ${adminNavViews.length} sidebar views were derived — the category check is inert`);
+  check(adminViewSections.length === adminNavViews.length,
+    `admin: ${adminNavViews.length} sidebar entries but ${adminViewSections.length} view containers — every category needs exactly one view (plan.md §3.4)`);
+  for (const name of adminNavViews) {
+    check(adminViewSections.some(([, view]) => view === name),
+      `admin: sidebar entry data-view="${name}" has no matching <section class="ad-view">`);
+  }
+  const adminVisibleViews = adminViewSections.filter(([, , attributes]) => !/\shidden(?=[\s>]|$)/u.test(attributes));
+  check(adminVisibleViews.length === 1,
+    `admin: ${adminVisibleViews.length} views render without the hidden attribute — exactly one category may be on screen at a time (plan.md §3 requirement 3)`);
+  // UA 스타일시트의 [hidden] { display: none }은 저자 규칙에 항상 진다. 뷰 컨테이너의
+  // 기본 display가 none이어야 hidden이 실제로 숨긴다 (사이클4의 같은 결함 계열).
+  check(/\.ad-view\s*\{[^}]*display:\s*none/su.test(adminCss),
+    'admin: .ad-view must default to display: none so the hidden attribute actually hides a view');
+  check((adminHtml.match(/<p class="sidebar-label">/gu) || []).length >= 3,
+    'admin: sidebar entries must be grouped under uppercase section labels (plan.md §3.4)');
+  check(adminHtml.includes('id="stats" class="summary-strip"'),
+    'admin: the overview view must open with the shared summary strip (plan.md §3.4)');
+  check(adminJs.includes('class="summary-cell"'),
+    'admin: the summary strip must be filled with .summary-cell tiles derived from /api/admin/stats');
+  check(/<header class="view-head">[^]*?<div class="toolbar-group">\s*<button/u.test(adminHtml),
+    'admin: the content header must carry its action buttons on the right (plan.md §3.4)');
 }
 
 function validateMigrations() {
@@ -1234,6 +1349,7 @@ function validateDesignTokens() {
     'WordMaster/assets/css/style.css',
     'smstudy/assets/css/style.css',
     'admin/assets/css/admin.css',
+    'usage/assets/css/usage.css',
   ]);
   const vendorCss = new Set();
 
@@ -1406,11 +1522,8 @@ function validateEmojiSystem() {
   check(Object.keys(site).length > 0,
     `${SITE_EMOJI_SOURCE}: SITE_EMOJI mapping is missing — the landing emoji need a single source (DESIGN.md §5.1)`);
 
-  const surfaces = [
-    ...publishedHtml().map(relative),
-    ...['assets/js/home.js', 'account.js', 'WordMaster/assets/js/app.js',
-      'smstudy/assets/js/app.js', 'admin/assets/js/admin.js'],
-  ];
+  // 검사 대상 표면은 게시 HTML과 **그 HTML이 로드하는 스크립트 전부**다 (하드코딩 금지).
+  const surfaces = [...publishedHtml().map(relative), ...publishedScripts()];
 
   for (const file of surfaces) {
     const source = readFileSync(path.join(ROOT, file), 'utf8');
@@ -1661,11 +1774,7 @@ function validateBrandName() {
   const casing = /HVSDCM|HvsDcm|Hvsdcm|hvsDcm|HVSdcm|hvsDCM/u;
   const brandSurfaces = [
     ...[...publishedHtml(), ...walk(ROOT, (item) => item.endsWith('.css'))].map(relative),
-    'assets/js/home.js',
-    'account.js',
-    'WordMaster/assets/js/app.js',
-    'smstudy/assets/js/app.js',
-    'admin/assets/js/admin.js',
+    ...publishedScripts(),
   ];
   for (const file of brandSurfaces) {
     const source = readFileSync(path.join(ROOT, file), 'utf8');
@@ -1701,9 +1810,16 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
+    'usage/index.html': ['/usage/assets/js/usage.js'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
+  }
+  // 화면 목록을 손으로 적으면 새 화면이 검사 밖에 남는다 — 게시되는 진입 HTML에서 도출해
+  // 위 표와 대조한다 (LESSONS "파생 가능한 것을 손으로 적지 않는다").
+  for (const screen of publishedHtml().map(relative).filter((file) => file === 'index.html' || file.endsWith('/index.html'))) {
+    check(Object.prototype.hasOwnProperty.call(expectedOrders, screen),
+      `${screen}: no script load order is declared — add it to expectedOrders in scripts/validate.mjs (load order is the deployment contract)`);
   }
 
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -1752,11 +1868,7 @@ function validateOgImageLock() {
 // 런타임에 조립한 id, 그리고 다른 파일에 정의된 id. <summary> 안의 span처럼 제목이
 // 아니어도 정당한 라벨이 있으므로 "p 금지 + .list-group-head는 제목"까지만 강제한다.
 function validateLabelledBy() {
-  const surfaces = [
-    ...publishedHtml().map(relative),
-    ...['assets/js/home.js', 'WordMaster/assets/js/app.js',
-      'smstudy/assets/js/app.js', 'admin/assets/js/admin.js'],
-  ];
+  const surfaces = [...publishedHtml().map(relative), ...publishedScripts()];
   let resolved = 0;
   for (const file of surfaces) {
     const source = readFileSync(path.join(ROOT, file), 'utf8');
@@ -1941,31 +2053,55 @@ function validateContrastTable() {
 
 function validateLandingGating() {
   // 사이클 #3 게이팅 잠금 (plan.md D7 철회) — 미로그인 랜딩은 "개인 웹사이트"여야 한다.
-  // 학습 콘텐츠는 <template data-study>에만 존재하고 로그인 판정 후 home.js가 주입한다.
-  // 마크업을 재작성하더라도 이 계약이 조용히 풀리지 않도록 정적으로 확인한다.
+  // 사이클5에서 계약이 한 단계 더 좁아졌다: 로그인해도 본문은 학습을 말하지 않고,
+  // 학습·사용량 진입은 드로어 템플릿에만 있다 (plan.md §1-1 / §3.3).
+  //
+  // 이 검사가 **못 보는 것**: 런타임에 조립돼 삽입되는 링크·문구, 그리고 Worker가 같은
+  // 규칙을 강제하는지. 정적으로 볼 수 있는 것은 문서에 무엇이 적혀 있는가까지다.
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
   const templatePattern = /<template data-study>[^]*?<\/template>/gu;
   const studyTemplates = homeHtml.match(templatePattern) || [];
   const staticMarkup = homeHtml.replace(templatePattern, '');
+  const templateMarkup = studyTemplates.join('\n');
 
-  // 1) 미로그인 상태로 렌더되는 정적 마크업에 학습 앱 경로가 있으면 실패.
-  for (const appPath of ['/WordMaster/', '/smstudy/', '/admin/']) {
+  // 로그인-후 진입 경로 목록을 손으로 적지 않는다 — 템플릿 자신에서 도출한다.
+  // 드로어에 항목을 추가하면 그 경로가 자동으로 "정적 마크업 금지" 대상이 된다.
+  // '/admin/'만 예외로 더한다: 템플릿에는 없지만(진입은 로그인 후 타이틀 링크가 만든다)
+  // 미로그인 문서에 노출돼선 안 되는 경로다.
+  const templateTargets = [...new Set(
+    [...templateMarkup.matchAll(/href="(\/[\w./-]*\/)"/gu)].map(([, href]) => href),
+  )];
+  check(templateTargets.length >= 3,
+    `index.html: only ${templateTargets.length} gated entry paths were derived from <template data-study> — this check is inert`);
+
+  // 1) 미로그인 상태로 렌더되는 정적 마크업에 로그인-후 진입 경로가 있으면 실패.
+  for (const appPath of [...new Set([...templateTargets, '/admin/'])]) {
     check(!new RegExp(`(?:href|src|action)=["']${appPath.replaceAll('/', '\\/')}`, 'u').test(staticMarkup),
-      `index.html: logged-out static markup must not link to study app path ${appPath}`);
+      `index.html: logged-out static markup must not link to gated path ${appPath}`);
   }
   // 2) 학습을 드러내는 문구도 정적 마크업에 남으면 안 된다 (메타/OG 포함 전체 소스 기준).
   for (const keyword of STUDY_KEYWORDS) {
     check(!staticMarkup.includes(keyword),
       `index.html: logged-out static markup must not contain study keyword "${keyword}"`);
   }
-  // 3) 복원 계약 — 로그인 시 주입될 템플릿 안에는 두 학습 앱 링크가 반드시 있어야 한다.
-  const templateMarkup = studyTemplates.join('\n');
+  // 3) 복원 계약 — 로그인 시 주입될 템플릿 안에 두 학습 앱과 사용량 링크가 있어야 한다.
   check(studyTemplates.length > 0, 'index.html: <template data-study> blocks are missing');
   check(templateMarkup.includes('href="/WordMaster/"'), 'index.html: study templates must restore the /WordMaster/ link on login');
   check(templateMarkup.includes('href="/smstudy/"'), 'index.html: study templates must restore the /smstudy/ link on login');
+  check(templateMarkup.includes('href="/usage/"'), 'index.html: the drawer must expose the usage page after login (plan.md §1-2)');
   // 4) 주입 루틴 존재 — 템플릿만 있고 주입 코드가 사라지면 로그인 화면이 빈다.
   check(homeJs.includes('mountStudyContent'), 'home.js: mountStudyContent is missing — study templates would never render');
+
+  // 5) 드로어가 여는 페이지는 전부 자기 로그인 게이트를 지나야 한다. 대상 목록도 템플릿의
+  //    링크에서 도출하므로, 드로어에 항목을 추가하면 그 페이지가 자동으로 검사를 받는다.
+  for (const target of templateTargets) {
+    const entry = path.join(ROOT, target.slice(1), 'index.html');
+    check(existsSync(entry), `index.html: the drawer links to ${target} but ${target}index.html does not exist`);
+    if (!existsSync(entry)) continue;
+    check(Boolean(loginGateOf(entry, readFileSync(entry, 'utf8'))),
+      `${target}index.html: it is opened from the login-gated drawer but no script gates it — an anonymous visitor could read it (plan.md §3.3)`);
+  }
 }
 
 validateJavaScriptSyntax();

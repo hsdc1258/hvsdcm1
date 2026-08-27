@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>사용량 — hvsdcm</title>
+  <link rel="stylesheet" href="/assets/css/system.css">
+  <link rel="stylesheet" href="/usage/assets/css/usage.css">
+  <script src="/usage/assets/js/usage.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">usage</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
+
+  <div class="container app-page">
+    <main id="usageMain" class="app-main" tabindex="-1">
+      <header class="view-head">
+        <div class="view-head-main">
+          <div>
+            <h1 class="title-1">사용량</h1>
+            <p>Codex · Claude 한도 소진 현황</p>
+          </div>
+        </div>
+        <div class="toolbar-group">
+          <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+        </div>
+      </header>
+
+      <p id="usageError" class="field-error" role="alert"></p>
+
+      <!-- 본문은 GET /api/usage 응답으로 usage.js가 그린다. 수집기가 보낸 payload의
+           키를 그대로 순회하므로, 새 한도 버킷이 생겨도 이 문서는 손대지 않는다. -->
+      <div id="usageBody" class="us-body"></div>
+    </main>
+  </div>
+</body>
+</html>

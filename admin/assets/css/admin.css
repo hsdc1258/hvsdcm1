@@ -2,6 +2,13 @@
    admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
 
+   사이클5 재편 요지 (plan.md §3.4 — 콘솔 대시보드 문법)
+   - 한 화면 세로 나열을 **카테고리별 독립 뷰**로 바꿨다. 사이드바가 뷰를 고르고,
+     선택되지 않은 뷰는 hidden으로 문서에서 빠진다. 뷰 컨테이너는 여기서 배치만 맡는다.
+   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다 —
+     같은 모양을 사용량 화면과 공유한다 (DESIGN.md §7).
+   - 공용 답안의 접힘 그룹(.disclosure)은 없앴다. 자기 뷰를 가진 표를 다시 접을 이유가 없다.
+
    사이클4 재조판 요지
    - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
      행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
@@ -14,16 +21,12 @@
      표가 가로로 밀리지 않게 했다.
 
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
-     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-stat-note / .ad-ip)
+     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-ip)
      --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
      --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
    ========================================================================== */
 
 .hidden { display: none !important; }
-
-/* ---- 사이드바 ---- */
-
-.sidebar-item[href] { scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
 
 /* ---- 로그인 ---- */
 
@@ -38,12 +41,16 @@
 
 /* ---- 패널 ---- */
 
-.ad-panel { display: grid; gap: var(--space-6); }
-.ad-section { display: grid; gap: var(--space-3); scroll-margin-top: calc(var(--topbar-h) + var(--space-5)); }
+.ad-panel { display: grid; gap: var(--space-5); }
+
+/* 뷰 컨테이너 — 한 번에 하나만 보인다. hidden 속성으로 감추므로 여기서 display를 주면
+   UA의 [hidden] 규칙을 이겨 버린다. 그래서 :not([hidden])에만 display를 건다. */
+.ad-view { display: none; }
+.ad-view:not([hidden]) { display: grid; gap: var(--space-3); }
 /* 그리드 자식의 기본 min-width는 auto다. 그래서 넓은 표를 감싼 .table-wrap이 자기
    가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
    여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
-.ad-panel > *, .ad-section > * { min-width: 0; }
+.ad-panel > *, .ad-view > * { min-width: 0; }
 
 .ad-filter-label {
   font-size: var(--fs-micro);
@@ -52,25 +59,6 @@
   text-transform: uppercase;
   color: var(--text-3);   /* on --bg 5.80:1 */
 }
-
-/* ---- 요약 타일 ---- */
-
-.ad-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-  gap: var(--space-2);
-}
-
-.ad-stat {
-  display: grid;
-  gap: 1px;
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-m);
-}
-.ad-stat .stat-value { font-size: var(--fs-title-2); }
-.ad-stat-note { font-size: var(--fs-micro); line-height: 1.4; color: var(--text-2); }  /* on --surface 7.03:1 */
 
 /* ---- 툴바 ---- */
 
@@ -112,5 +100,5 @@
 /* ---- 반응형 ---- */
 
 @media (max-width: 860px) {
-  .ad-panel { gap: var(--space-5); }
+  .ad-panel { gap: var(--space-4); }
 }

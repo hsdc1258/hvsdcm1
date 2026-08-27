@@ -57,7 +57,8 @@
     elements.account.classList.add('logged');
     elements.drawer.classList.add('logged');
     document.body.classList.add('logged');
-    document.title = 'hvsdcm — Study, distilled.';
+    // 로그인해도 문서 제목은 바꾸지 않는다 — 랜딩은 어느 상태에서도 학습을 말하지 않는다
+    // (plan.md §1-1). 이전 값 "hvsdcm — Study, distilled."가 그 계약의 예외였다.
   }
 
   // 이모지 리터럴은 마크업에 없다. 슬롯은 data-emoji="<키>"만 갖고 글자는 여기서
@@ -71,10 +72,15 @@
     }
   }
 
-  // 학습 콘텐츠는 <template data-study>로만 존재한다 — 미로그인 문서에는 아예 렌더되지
-  // 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다. 로그인 판정 후 한 번만 주입한다.
+  // 학습·계정 진입점은 <template data-study>로만 존재한다 — 미로그인 문서에는 아예
+  // 렌더되지 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다.
+  //
+  // 주입 대상을 **드로어로 한정한다** (plan.md §1-1). 랜딩 본문은 로그인 여부와 무관하게
+  // 학습을 말하지 않고, 진입은 좌상단 드로어 하나로 모은다. 탐색 범위를 문서 전체가
+  // 아니라 elements.drawer로 좁혀 두면, 본문에 템플릿을 되살려도 마운트되지 않는다 —
+  // 계약이 주석이 아니라 코드에 있다.
   function mountStudyContent() {
-    for (const template of document.querySelectorAll('template[data-study]')) {
+    for (const template of elements.drawer.querySelectorAll('template[data-study]')) {
       template.parentNode.insertBefore(template.content.cloneNode(true), template);
     }
     // 템플릿 안의 슬롯은 주입되기 전까지 문서에 없다 — 주입 직후에 다시 칠한다.
@@ -134,9 +140,9 @@
       localStorage.setItem('hvsdcm.token', data.token);
       localStorage.setItem('hvsdcm.user', data.user.username);
 
-      // 학습 콘텐츠 복원은 로그인 문서의 로드 경로(mountStudyContent → showUser →
-      // setupReveal) 하나로 통일한다 — 로그아웃의 location.reload()와 대칭.
-      // 제자리 주입으로 갈라놓으면 reveal 관찰·타이틀 복원을 여기서 중복 구현해야 한다.
+      // 드로어 복원은 로그인 문서의 로드 경로(mountStudyContent → showUser) 하나로
+      // 통일한다 — 로그아웃의 location.reload()와 대칭.
+      // 제자리 주입으로 갈라놓으면 타이틀 복원을 여기서 중복 구현해야 한다.
       const nextPath = getSafeNextPath();
       if (nextPath) {
         location.assign(nextPath);
@@ -195,7 +201,8 @@
     mountStudyContent();
     showUser(savedUsername);
   }
-  // reveal 관찰은 학습 콘텐츠 주입 이후에 시작해야 주입된 섹션도 등장 처리가 된다.
+  // 등장 대상은 이제 정적 본문뿐이지만(드로어는 화면 밖) 관찰 시작 순서는 유지한다 —
+  // 주입이 끝난 뒤에 관찰해야 나중에 템플릿이 늘어도 순서 때문에 깨지지 않는다.
   setupReveal();
   if (new URLSearchParams(location.search).get('login') === '1' && !token) openLogin();
 })();

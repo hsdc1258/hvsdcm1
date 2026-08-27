@@ -1,0 +1,44 @@
+/* ==========================================================================
+   usage — 사용량 화면 (DESIGN.md §1.1: 콘솔 대시보드 문법)
+   색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음.
+
+   이 파일은 프리미티브를 다시 만들지 않는다. 요약 스트립(.summary-strip), 퍼센트
+   게이지(.gauge-*), 상태 점(.status-dot), 그룹 리스트, 카드는 모두 system.css의 것을
+   소비한다 (DESIGN.md §7). 여기 남는 것은 이 화면의 배치뿐이다.
+
+   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산").
+   신규 색 토큰은 없고, 아래 값은 system.css 상단 대비 전수표의 실측치를 그대로 쓴다:
+     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.us-card-meta — 카드 위 캡션)
+     --text-2 #a1a1a6 on --bg      #000     8.16:1  (.us-empty — 카드 밖 빈 상태)
+   ========================================================================== */
+
+.us-body { display: grid; gap: var(--space-5); }
+
+/* 수집 원본(codex·claude)마다 카드 하나. 원본이 둘뿐이라 카드 스택이 3연속으로 자라지
+   않는다 (DESIGN.md §6). 넓은 화면에서는 두 카드를 나란히 놓아 세로 스크롤을 줄인다. */
+.us-cards { display: grid; gap: var(--space-4); }
+
+.us-card { display: grid; gap: var(--space-4); align-content: start; }
+
+.us-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.us-card-meta {
+  font-size: var(--fs-caption);
+  color: var(--text-2);   /* on --surface 7.03:1 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 모델별 그룹(claude)은 라벨 + 그룹 리스트 한 벌이다. codex는 라벨이 하나뿐이다.
+   라벨(.list-group-head)이 자기 아래 여백을 이미 갖고 있으므로 gap을 더하지 않는다. */
+.us-group { display: grid; gap: 0; min-width: 0; }
+
+.us-empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-2); }
+
+@media (min-width: 900px) {
+  .us-cards { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
+}

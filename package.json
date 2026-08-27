@@ -5,6 +5,6 @@
   "scripts": {
     "test": "node scripts/validate.mjs && node --test scripts/study-utils.test.mjs worker/test.mjs",
     "validate": "node scripts/validate.mjs",
-    "format:css": "node scripts/format-css.mjs assets/css/home.css admin/assets/css/admin.css smstudy/assets/css/style.css WordMaster/assets/css/style.css"
+    "format:css": "node scripts/format-css.mjs assets/css/home.css admin/assets/css/admin.css usage/assets/css/usage.css smstudy/assets/css/style.css WordMaster/assets/css/style.css"
   }
 }

@@ -34,11 +34,8 @@
 .menu-button.open span:first-child { transform: rotate(45deg); }
 .menu-button.open span:last-child { transform: rotate(-45deg); }
 
-body.logged .topbar-login { display: none; }
 
-@media (max-width: 640px) {
-  .topbar-nav .topbar-link { display: none; }
-}
+body.logged .topbar-login { display: none; }
 
 /* ---- 드로어 ---- */
 
@@ -132,9 +129,6 @@ body.logged .topbar-login { display: none; }
 
 /* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
 .hero-sub { max-width: 26em; }
-/* 미로그인 소개 문구는 로그인 후 숨김 (학습 카피가 템플릿에서 주입된다) */
-body.logged .hero-sub-guest,
-body.logged .hero-browse-guest { display: none; }
 
 .hero-actions {
   margin-top: var(--space-4);
@@ -145,76 +139,27 @@ body.logged .hero-browse-guest { display: none; }
   gap: var(--space-3) var(--space-5);
 }
 
-/* 로그인 상태 전환: 로그인 버튼 ↔ 앱 바로가기 */
-.account .account-app { display: none; }
-.account.logged .account-app { display: inline-flex; }
+/* 로그인하면 히어로의 로그인 버튼이 빠지고 "프로필 보기"만 남는다.
+   학습 진입은 본문이 아니라 좌상단 드로어가 전담한다 (plan.md §1-1). */
 .account.logged #loginBtn { display: none; }
 
 /* ---- 섹션 리듬 ---- */
 
 .section {
-  /* #apps 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
+  /* #contact 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
   scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
   padding-bottom: var(--section-gap);
 }
 .section-last { padding-bottom: var(--space-9); }
 
+/* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
 .section-head {
   display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-6);
-}
-.section-head h2 { max-width: 16em; }
-.section-sub { max-width: 30em; }
-
-/* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
-.section-last .section-head {
   justify-items: start;
-  text-align: left;
+  gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-
-/* ---- 앱 타일 ---- */
-
-.tile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-.tile {
-  display: grid;
-  align-content: start;
-  gap: var(--space-3);
-  padding: var(--space-5);
-}
-.tile-mark { margin-bottom: var(--space-1); }
-.tile-line {
-  font-size: var(--fs-body-sm);
-  line-height: var(--lh-snug);
-  max-width: 32em;
-}
-.tile-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.tile .link-arrow { margin-top: var(--space-1); font-size: var(--fs-body-sm); }
-
-@media (max-width: 760px) {
-  .tile-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* ---- 수치 줄 ---- */
-
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line-faint);
-  text-align: center;
-}
-.stats-row .stat-value { font-size: var(--fs-title-1); }
+.section-head h2 { max-width: 16em; }
 
 /* ---- 연락 리스트: 브랜드 마크를 이모지 슬롯에 담는다 ---- */
 
@@ -234,9 +179,6 @@ body.logged .hero-browse-guest { display: none; }
   flex-wrap: wrap;
 }
 .footer-brand { font-size: var(--fs-caption); }
-.footer-nav { display: flex; gap: var(--space-4); }
-.footer-nav a { font-size: var(--fs-caption); color: var(--text-3); }
-.footer-nav a:hover { color: var(--text); text-decoration: none; }
 .footer-copy { margin-left: auto; font-size: var(--fs-caption); }
 
 /* ---- 로그인 시트 ---- */

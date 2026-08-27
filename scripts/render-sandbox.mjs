@@ -279,6 +279,50 @@ export function renderWordMasterHome() {
   return markup;
 }
 
+// usage.js도 IIFE다. 화면 전체를 문자열 하나로 만드는 buildDashboard()를 window에 얹어
+// 두었으므로, 소스를 **그대로** 평가하고 그 함수를 fixture로 부르면 실제 렌더가 나온다.
+// 로그인 게이트(토큰 없으면 location.replace) 때문에 토큰을 미리 심고, fetch는 영원히
+// 대기하는 프라미스로 둔다 — 로드 시 load()가 부르는 네트워크는 스냅샷의 대상이 아니다.
+export const USAGE_APP_SOURCE = 'usage/assets/js/usage.js';
+export function renderUsageDashboard(snapshots, now) {
+  const store = new Map();
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = {
+    href: 'https://hvsdcm1.xyz/usage/',
+    pathname: '/usage/',
+    search: '',
+    hash: '',
+    replace() { throw new Error(`${USAGE_APP_SOURCE}: the login gate fired inside the snapshot sandbox`); },
+    assign() {},
+    reload() {},
+  };
+  context.localStorage = {
+    store: new Map([['hvsdcm.token', 'gate-token']]),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  context.fetch = () => new Promise(() => {});
+  context.setTimeout = (callback) => { void callback; return 0; };
+  context.clearTimeout = () => {};
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
+
+  const build = context.USAGE_RENDER?.buildDashboard;
+  if (typeof build !== 'function') {
+    throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
+  }
+  const markup = build(snapshots, now);
+  if (!markup.includes('summary-strip') || !markup.includes('gauge-fill')) {
+    throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without a summary strip or gauge — the fixture no longer matches the payload contract`);
+  }
+  return markup;
+}
+
 // 함수 **본문 경계**를 잡는다. 소스 전체 정규식으로 마크업을 찾으면 함수 밖의 같은 모양
 // 문자열을 잡을 수 있다 (review R2-B-3: 앞선 미사용 <figure> 문자열이 진짜 검사를 가렸다).
 export function functionBody(source, name) {

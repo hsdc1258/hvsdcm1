@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex, nofollow">
-  <title>hvsdcm admin</title>
+  <title>사용량 — hvsdcm</title>
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
@@ -1203,110 +1203,50 @@ label.list-row { cursor: pointer; }
   .js .reveal.in { opacity: 1; transform: none; }
 }
 </style>
-<style>/* admin/assets/css/admin.css (inlined) */
+<style>/* usage/assets/css/usage.css (inlined) */
 /* ==========================================================================
-   admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
-   색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
+   usage — 사용량 화면 (DESIGN.md §1.1: 콘솔 대시보드 문법)
+   색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음.
 
-   사이클5 재편 요지 (plan.md §3.4 — 콘솔 대시보드 문법)
-   - 한 화면 세로 나열을 **카테고리별 독립 뷰**로 바꿨다. 사이드바가 뷰를 고르고,
-     선택되지 않은 뷰는 hidden으로 문서에서 빠진다. 뷰 컨테이너는 여기서 배치만 맡는다.
-   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다 —
-     같은 모양을 사용량 화면과 공유한다 (DESIGN.md §7).
-   - 공용 답안의 접힘 그룹(.disclosure)은 없앴다. 자기 뷰를 가진 표를 다시 접을 이유가 없다.
+   이 파일은 프리미티브를 다시 만들지 않는다. 요약 스트립(.summary-strip), 퍼센트
+   게이지(.gauge-*), 상태 점(.status-dot), 그룹 리스트, 카드는 모두 system.css의 것을
+   소비한다 (DESIGN.md §7). 여기 남는 것은 이 화면의 배치뿐이다.
 
-   사이클4 재조판 요지
-   - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
-     행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
-   - 섹션 머리를 다른 3면과 같은 어법으로 맞췄다: 뷰 제목은 h1(title-1),
-     섹션 라벨은 .list-group-head(마이크로 캡스). title-2 두 줄 헤더를 걷어냈다.
-   - 접기 카드(.ad-fold)는 system.css의 .disclosure 프리미티브로 대체했다.
-   - 로그인 카드의 box-shadow를 제거했다. 카드는 떠 있지 않다 — 그림자는 시트·토스트·
-     세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
-   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js)로 줄여
-     표가 가로로 밀리지 않게 했다.
-
-   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
-     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-ip)
-     --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
-     --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
+   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산").
+   신규 색 토큰은 없고, 아래 값은 system.css 상단 대비 전수표의 실측치를 그대로 쓴다:
+     --text-2 #a1a1a6 on --surface #161617  7.03:1  (.us-card-meta — 카드 위 캡션)
+     --text-2 #a1a1a6 on --bg      #000     8.16:1  (.us-empty — 카드 밖 빈 상태)
    ========================================================================== */
 
-.hidden { display: none !important; }
+.us-body { display: grid; gap: var(--space-5); }
 
-/* ---- 로그인 ---- */
+/* 수집 원본(codex·claude)마다 카드 하나. 원본이 둘뿐이라 카드 스택이 3연속으로 자라지
+   않는다 (DESIGN.md §6). 넓은 화면에서는 두 카드를 나란히 놓아 세로 스크롤을 줄인다. */
+.us-cards { display: grid; gap: var(--space-4); }
 
-.ad-login { display: grid; place-items: center; min-height: 60dvh; }
+.us-card { display: grid; gap: var(--space-4); align-content: start; }
 
-.ad-login-card {
-  display: grid;
-  gap: var(--space-4);
-  width: min(360px, 100%);
+.us-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
-.ad-login-sub { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
-
-/* ---- 패널 ---- */
-
-.ad-panel { display: grid; gap: var(--space-5); }
-
-/* 뷰 컨테이너 — 한 번에 하나만 보인다. hidden 속성으로 감추므로 여기서 display를 주면
-   UA의 [hidden] 규칙을 이겨 버린다. 그래서 :not([hidden])에만 display를 건다. */
-.ad-view { display: none; }
-.ad-view:not([hidden]) { display: grid; gap: var(--space-3); }
-/* 그리드 자식의 기본 min-width는 auto다. 그래서 넓은 표를 감싼 .table-wrap이 자기
-   가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
-   여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
-.ad-panel > *, .ad-view > * { min-width: 0; }
-
-.ad-filter-label {
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--text-3);   /* on --bg 5.80:1 */
+.us-card-meta {
+  font-size: var(--fs-caption);
+  color: var(--text-2);   /* on --surface 7.03:1 */
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- 툴바 ---- */
+/* 모델별 그룹(claude)은 라벨 + 그룹 리스트 한 벌이다. codex는 라벨이 하나뿐이다.
+   라벨(.list-group-head)이 자기 아래 여백을 이미 갖고 있으므로 gap을 더하지 않는다. */
+.us-group { display: grid; gap: 0; min-width: 0; }
 
-.ad-add-fields { flex: 1 1 320px; gap: var(--space-2); }
-.ad-add-fields .field-input { flex: 1 1 150px; min-width: 0; }
+.us-empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-2); }
 
-.ad-note { font-size: var(--fs-micro); color: var(--text-3); flex: 1 1 240px; }
-
-/* ---- 표 ---- */
-
-.ad-caption {
-  padding: 9px 14px;
-  text-align: left;
-  font-size: var(--fs-micro);
-  color: var(--text-3);   /* on --surface 4.99:1 */
-  border-bottom: 1px solid var(--line-faint);
-}
-
-/* 수치 열 — 자릿수가 흔들리지 않게 우측 정렬 + 고정폭 숫자 (HIG의 표 정렬). */
-.ad-n { text-align: right; font-variant-numeric: tabular-nums; }
-.table th.ad-n { text-align: right; }
-
-.ad-ip { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-2); }
-
-.ad-device { display: grid; gap: 1px; max-width: 260px; }
-.ad-device strong { font-weight: 600; }
-.ad-device small {
-  font-size: var(--fs-micro);
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ad-row-actions { display: flex; gap: var(--space-2); }
-
-.ad-empty { padding: var(--space-6); text-align: center; color: var(--text-2); }
-
-/* ---- 반응형 ---- */
-
-@media (max-width: 860px) {
-  .ad-panel { gap: var(--space-4); }
+@media (min-width: 900px) {
+  .us-cards { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
 }
 </style>
 <style>
@@ -1316,164 +1256,158 @@ label.list-row { cursor: pointer; }
 </style>
 </head>
 <body>
-  <div class="snap-note"><strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며, 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다.
-  <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>). 사이드바가 대문자 소제목으로 묶여 있다.
-  <br><strong>주의</strong> — 요약 스트립과 표의 행은 Worker API가 채우므로 이 사본에서는 비어 있다. 검증 대상은 셸·사이드바·툴바·표 머리의 조판이다.
+  <div class="snap-note"><strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
+  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.
+  <br><strong>여기서 확인할 것</strong> — 요약 스트립(1카드 N칸), 게이지의 세 색 구간(정상·경고·초과), 그리고 <strong>모르는 버킷 키</strong>(<code>monthly</code>)가 키 문자열 그대로 나오는지.
+  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
-  <a class="skip-link" href="#adminMain">본문으로 건너뛰기</a>
+  <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
 
   <header class="topbar">
     <div class="topbar-inner container-wide">
       <a class="brand" href="/">hvsdcm</a>
-      <span class="topbar-crumb">admin</span>
+      <span class="topbar-crumb">usage</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
         <a class="topbar-link" href="/">홈</a>
-        <span class="topbar-link">private · secure</span>
       </nav>
     </div>
   </header>
   <div class="topbar-spacer"></div>
 
-  <div class="container-wide app-page">
-    <div class="app-shell">
-      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이다 (plan.md §3.4). 각 항목은 뷰
-           전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 — admin.js가
-           button의 텍스트와 data-sub를 읽는다. 라벨을 두 곳에 적지 않기 위해서다. -->
-      <aside class="sidebar" aria-label="관리 메뉴">
-        <nav class="sidebar-group" aria-label="대시보드">
-          <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약" aria-current="page">개요</button>
-        </nav>
-
-        <nav class="sidebar-group" aria-label="사용자 관리">
-          <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트">사용자</button>
-          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션">접속 기기</button>
-        </nav>
-
-        <nav class="sidebar-group" aria-label="학습 데이터">
-          <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다">공용 답안</button>
-        </nav>
-
-        <div class="sidebar-group">
-          <p class="sidebar-label">범위</p>
-          <p class="side-note">세션은 최근 90일, IP 통계는 최근 30일 기준입니다. 관리자 세션은 탭을 닫으면 사라집니다.</p>
+  <div class="container app-page">
+    <main id="usageMain" class="app-main" tabindex="-1">
+      <header class="view-head">
+        <div class="view-head-main">
+          <div>
+            <h1 class="title-1">사용량</h1>
+            <p>Codex · Claude 한도 소진 현황</p>
+          </div>
         </div>
-      </aside>
+        <div class="toolbar-group">
+          <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+        </div>
+      </header>
 
-      <main id="adminMain" class="app-main" tabindex="-1">
-        <section id="login" class="ad-login hidden">
-          <form id="adminLogin" class="card ad-login-card">
-            <div>
-              <h1 class="title-3">관리자 인증</h1>
-              <p class="ad-login-sub">계정 · 접속 기기 · 공용 답안</p>
-            </div>
-            <div class="field">
-              <label class="field-label" for="adminPassword">관리자 비밀번호</label>
-              <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required autofocus>
-            </div>
-            <button class="btn btn-primary" type="submit">로그인</button>
-            <p id="loginError" class="field-error" role="alert"></p>
-          </form>
-        </section>
+      <p id="usageError" class="field-error" role="alert"></p>
 
-        <section id="panel" class="ad-panel">
-          <header class="view-head">
-            <div class="view-head-main">
-              <div>
-                <h1 id="viewTitle" class="title-1">개요</h1>
-                <p id="viewSub">운영 상태 요약</p>
-              </div>
-            </div>
-            <div class="toolbar-group">
-              <button id="refresh" class="btn btn-secondary btn-sm" type="button">새로고침</button>
-              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button">로그아웃</button>
-            </div>
-          </header>
+      <!-- 본문은 GET /api/usage 응답으로 usage.js가 그린다. 수집기가 보낸 payload의
+           키를 그대로 순회하므로, 새 한도 버킷이 생겨도 이 문서는 손대지 않는다. -->
+      <div id="usageBody" class="us-body"><div class="summary-strip">
+      <div class="summary-cell">
+        <span class="stat-label">데이터 상태</span>
+        <span class="stat-state"><span class="status-dot" aria-hidden="true"></span>최신</span>
+      </div>
 
-          <!-- 한 화면 한 주제 (plan.md §3.4). 뷰는 하나만 렌더되고 나머지는 hidden으로
-               문서에서 빠진다 — 전 섹션 세로 나열을 대체한다. -->
-          <section class="ad-view" data-view="overview" aria-labelledby="overviewTitle">
-            <div id="stats" class="summary-strip"></div>
-            <div class="list-group-head-row">
-              <h2 class="list-group-head" id="overviewTitle">구성</h2>
-            </div>
-            <div id="overviewNav" class="list-group"></div>
-          </section>
+      <div class="summary-cell">
+        <span class="stat-label">최근 수집</span>
+        <span class="stat-value">8분 전</span>
+      </div>
 
-          <section class="ad-view" data-view="users" aria-labelledby="userSectionTitle" hidden>
-            <div class="list-group-head-row">
-              <h2 class="list-group-head" id="userSectionTitle">계정 목록</h2>
-            </div>
+      <div class="summary-cell">
+        <span class="stat-label">최고 사용률</span>
+        <span class="stat-value">96%</span>
+      </div>
 
-            <form id="addUser" class="toolbar" aria-label="사용자 추가">
-              <div class="toolbar-group ad-add-fields">
-                <input id="newUsername" class="field-input field-input-sm" autocomplete="off" placeholder="아이디 (3자 이상)" aria-label="새 사용자 아이디" required>
-                <input id="newPassword" class="field-input field-input-sm" type="password" autocomplete="new-password" placeholder="비밀번호 (6자 이상)" aria-label="새 사용자 비밀번호" required>
-              </div>
-              <div class="toolbar-spacer"></div>
-              <button class="btn btn-primary btn-sm" type="submit">사용자 추가</button>
-            </form>
-            <p id="userError" class="field-error" role="alert"></p>
+      <div class="summary-cell">
+        <span class="stat-label">한도 버킷</span>
+        <span class="stat-value">7</span>
+      </div>
+    </div><div class="us-cards">
+      <article class="card us-card">
+        <header class="us-card-head">
+          <h2 class="title-3">Codex</h2>
+          <span class="us-card-meta">12분 전 수집</span>
+        </header>
 
-            <div class="table-wrap">
-              <table class="table">
-                <caption class="ad-caption">등록된 계정과 앱별 학습 이벤트</caption>
-                <thead>
-                  <tr><th scope="col">아이디</th><th scope="col">생성</th><th scope="col">최근 로그인</th><th scope="col">마지막 활동</th><th scope="col" class="ad-n">기기</th><th scope="col">최근 IP</th><th scope="col" class="ad-n">로그인</th><th scope="col" class="ad-n">영단어</th><th scope="col" class="ad-n">사문</th><th scope="col"><span class="sr-only">관리</span></th></tr>
-                </thead>
-                <tbody id="users"></tbody>
-              </table>
-            </div>
-          </section>
+      <div class="us-group">
+        <p class="list-group-head">gpt-5-codex</p>
+        <div class="list-group is-inset">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">5시간</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 41.5%"></span></span>
+          <span class="list-row-sub">3시간 10분 후 초기화</span>
+        </span>
+        <span class="list-row-value">42%</span>
+      </div>
 
-          <section class="ad-view" data-view="sessions" aria-labelledby="sessionSectionTitle" hidden>
-            <div class="list-group-head-row">
-              <h2 class="list-group-head" id="sessionSectionTitle">세션 목록</h2>
-              <div class="toolbar-group">
-                <label class="ad-filter-label" for="sessionUserFilter">사용자</label>
-                <select id="sessionUserFilter" class="field-input field-input-sm">
-                  <option value="all">전체 사용자</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="toolbar">
-              <span id="sessionCount" class="badge badge-accent">0개 세션</span>
-              <p class="ad-note">최근 90일. 이전 로그인은 IP 해시만 남아 있을 수 있습니다.</p>
-            </div>
-
-            <div class="table-wrap">
-              <table class="table">
-                <caption class="ad-caption">로그인 세션 상세 — 기기·브라우저·IP와 마지막 활동 시각</caption>
-                <thead>
-                  <tr><th scope="col">상태</th><th scope="col">아이디</th><th scope="col">기기</th><th scope="col">브라우저</th><th scope="col">IP</th><th scope="col">로그인</th><th scope="col">마지막 활동</th><th scope="col">만료</th></tr>
-                </thead>
-                <tbody id="sessions"></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="ad-view" data-view="answers" aria-labelledby="answerSectionTitle" hidden>
-            <div class="list-group-head-row">
-              <h2 class="list-group-head" id="answerSectionTitle">허용된 답안</h2>
-            </div>
-
-            <div class="table-wrap">
-              <table class="table">
-                <caption class="ad-caption">사용자가 직접 정답으로 추가한 표현 — 모든 계정의 채점에 적용됩니다</caption>
-                <thead>
-                  <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
-                </thead>
-                <tbody id="answers"></tbody>
-              </table>
-            </div>
-          </section>
-        </section>
-      </main>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">주간</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill is-warn" style="width: 78.2%"></span></span>
+          <span class="list-row-sub">3일 21시간 후 초기화</span>
+        </span>
+        <span class="list-row-value">78%</span>
+      </div>
     </div>
+      </div>
+
+      </article>
+
+      <article class="card us-card">
+        <header class="us-card-head">
+          <h2 class="title-3">Claude</h2>
+          <span class="us-card-meta">8분 전 수집</span>
+        </header>
+
+      <div class="us-group">
+        <p class="list-group-head">claude-fable-5</p>
+        <div class="list-group is-inset">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">5시간</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 22.0%"></span></span>
+          <span class="list-row-sub">2시간 30분 후 초기화</span>
+        </span>
+        <span class="list-row-value">22%</span>
+      </div>
+
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">주간</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 63.0%"></span></span>
+          <span class="list-row-sub">4일 12시간 후 초기화</span>
+        </span>
+        <span class="list-row-value">63%</span>
+      </div>
+    </div>
+      </div>
+
+      <div class="us-group">
+        <p class="list-group-head">claude-opus-5</p>
+        <div class="list-group is-inset">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">5시간</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 8.4%"></span></span>
+          <span class="list-row-sub">2시간 30분 후 초기화</span>
+        </span>
+        <span class="list-row-value">8%</span>
+      </div>
+
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">주간 (Opus)</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill is-over" style="width: 96.1%"></span></span>
+          <span class="list-row-sub">4일 12시간 후 초기화</span>
+        </span>
+        <span class="list-row-value">96%</span>
+      </div>
+
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">monthly</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 12.0%"></span></span>
+
+        </span>
+        <span class="list-row-value">12%</span>
+      </div>
+    </div>
+      </div>
+
+      </article>
+    </div></div>
+    </main>
   </div>
 </body>
 </html>

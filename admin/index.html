@@ -28,13 +28,24 @@
 
   <div class="container-wide app-page">
     <div class="app-shell">
+      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이다 (plan.md §3.4). 각 항목은 뷰
+           전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 — admin.js가
+           button의 텍스트와 data-sub를 읽는다. 라벨을 두 곳에 적지 않기 위해서다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
-        <nav class="sidebar-group" aria-label="섹션 이동">
+        <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <a class="sidebar-item" href="#statsSection">개요</a>
-          <a class="sidebar-item" href="#userSection">사용자</a>
-          <a class="sidebar-item" href="#sessionCard">접속 기기</a>
-          <a class="sidebar-item" href="#answerSection">공용 정답</a>
+          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약">개요</button>
+        </nav>
+
+        <nav class="sidebar-group" aria-label="사용자 관리">
+          <p class="sidebar-label">사용자 관리</p>
+          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트">사용자</button>
+          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션">접속 기기</button>
+        </nav>
+
+        <nav class="sidebar-group" aria-label="학습 데이터">
+          <p class="sidebar-label">학습 데이터</p>
+          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다">공용 답안</button>
         </nav>
 
         <div class="sidebar-group">
@@ -48,7 +59,7 @@
           <form id="adminLogin" class="card ad-login-card">
             <div>
               <h1 class="title-3">관리자 인증</h1>
-              <p class="ad-login-sub">계정 · 접속 기기 · 공용 정답</p>
+              <p class="ad-login-sub">계정 · 접속 기기 · 공용 답안</p>
             </div>
             <div class="field">
               <label class="field-label" for="adminPassword">관리자 비밀번호</label>
@@ -61,19 +72,31 @@
 
         <section id="panel" class="ad-panel hidden">
           <header class="view-head">
-            <div>
-              <h1 class="title-1">운영 대시보드</h1>
-              <p>계정 · 접속 기기 · 공용 정답</p>
+            <div class="view-head-main">
+              <div>
+                <h1 id="viewTitle" class="title-1">개요</h1>
+                <p id="viewSub">운영 상태 요약</p>
+              </div>
+            </div>
+            <div class="toolbar-group">
+              <button id="refresh" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button">로그아웃</button>
             </div>
           </header>
 
-          <section id="statsSection" class="ad-section" aria-label="전체 통계">
-            <div id="stats" class="ad-stats"></div>
+          <!-- 한 화면 한 주제 (plan.md §3.4). 뷰는 하나만 렌더되고 나머지는 hidden으로
+               문서에서 빠진다 — 전 섹션 세로 나열을 대체한다. -->
+          <section class="ad-view" data-view="overview" aria-labelledby="overviewTitle">
+            <div id="stats" class="summary-strip"></div>
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="overviewTitle">구성</h2>
+            </div>
+            <div id="overviewNav" class="list-group"></div>
           </section>
 
-          <section id="userSection" class="ad-section" aria-labelledby="userSectionTitle">
+          <section class="ad-view" data-view="users" aria-labelledby="userSectionTitle" hidden>
             <div class="list-group-head-row">
-              <h2 class="list-group-head" id="userSectionTitle">사용자</h2>
+              <h2 class="list-group-head" id="userSectionTitle">계정 목록</h2>
             </div>
 
             <form id="addUser" class="toolbar" aria-label="사용자 추가">
@@ -97,9 +120,9 @@
             </div>
           </section>
 
-          <section id="sessionCard" class="ad-section" aria-labelledby="sessionSectionTitle">
+          <section class="ad-view" data-view="sessions" aria-labelledby="sessionSectionTitle" hidden>
             <div class="list-group-head-row">
-              <h2 class="list-group-head" id="sessionSectionTitle">접속 기기 및 IP</h2>
+              <h2 class="list-group-head" id="sessionSectionTitle">세션 목록</h2>
               <div class="toolbar-group">
                 <label class="ad-filter-label" for="sessionUserFilter">사용자</label>
                 <select id="sessionUserFilter" class="field-input field-input-sm">
@@ -124,24 +147,20 @@
             </div>
           </section>
 
-          <section id="answerSection" class="ad-section" aria-labelledby="answerSectionTitle">
-            <details class="disclosure">
-              <summary class="disclosure-head">
-                <span class="disclosure-title" id="answerSectionTitle">공용으로 인정된 답안</span>
-                <span class="disclosure-hint">모든 계정의 채점에 적용됩니다</span>
-              </summary>
-              <div class="disclosure-body">
-                <div class="table-wrap">
-                  <table class="table">
-                    <caption class="ad-caption">사용자가 직접 정답으로 추가한 표현</caption>
-                    <thead>
-                      <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
-                    </thead>
-                    <tbody id="answers"></tbody>
-                  </table>
-                </div>
-              </div>
-            </details>
+          <section class="ad-view" data-view="answers" aria-labelledby="answerSectionTitle" hidden>
+            <div class="list-group-head-row">
+              <h2 class="list-group-head" id="answerSectionTitle">허용된 답안</h2>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <caption class="ad-caption">사용자가 직접 정답으로 추가한 표현 — 모든 계정의 채점에 적용됩니다</caption>
+                <thead>
+                  <tr><th scope="col">과목</th><th scope="col">문제</th><th scope="col">사용자</th><th scope="col">기본 뜻</th><th scope="col">허용한 뜻</th><th scope="col">시각</th></tr>
+                </thead>
+                <tbody id="answers"></tbody>
+              </table>
+            </div>
           </section>
         </section>
       </main>
