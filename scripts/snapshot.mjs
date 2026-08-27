@@ -241,13 +241,14 @@ export function buildSnapshots() {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
         + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: 드로어 안 <code>&lt;template data-study&gt;</code> 주입,'
         + ' <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기.'
-        + ' 즉 <strong>로그인한 방문자가 보는 화면</strong>이다.'
+        + ' 즉 <strong>소유자 계정으로 로그인한 화면</strong>이다(사용량 항목은 소유자에게만 주입된다).'
         + '\n  <br><strong>여기서 확인할 것</strong> — 로그인 상태인데도 본문에 학습 요소가 하나도 없어야 한다(plan.md §1-1).'
         + ' 학습·사용량 진입은 드로어에만 있고, 드로어는 닫힌 상태(화면 밖)라 이 사본에서는 보이지 않는다.'
         + '\n  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => paintEmoji(html
-        .replace(/<template data-study>([^]*?)<\/template>/gu, '$1')
+        // 소유자로 로그인한 상태를 얼린다 — data-owner 그룹(사용량)까지 주입된다.
+        .replace(/<template data-(?:study|owner)>([^]*?)<\/template>/gu, '$1')
         .replace('<body>', '<body class="logged">')
         .replace('<aside id="drawer" class="drawer"', '<aside id="drawer" class="drawer logged"')
         .replace('<div id="account" class="account hero-actions">', '<div id="account" class="account hero-actions logged">')),
@@ -256,13 +257,15 @@ export function buildSnapshots() {
       note: '<strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며,'
         + ' 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다.'
-        + '\n  <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>). 사이드바가 대문자 소제목으로 묶여 있다.'
+        + ' 사이드바 아이콘 슬롯은 <code>site-emoji.js</code> 매핑으로 채웠다(<code>admin.js</code>가 하는 일).'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>).'
+        + ' 사이드바가 대문자 소제목으로 묶여 있고, 각 항목이 <strong>아이콘 + 텍스트</strong>다(DESIGN.md §1.1).'
         + '\n  <br><strong>주의</strong> — 요약 스트립과 표의 행은 Worker API가 채우므로 이 사본에서는 비어 있다. 검증 대상은 셸·사이드바·툴바·표 머리의 조판이다.'
         + `\n  ${GENERATED_NOTE}`,
-      mutate: (html) => html
+      mutate: (html) => paintEmoji(html
         .replace('<section id="login" class="ad-login">', '<section id="login" class="ad-login hidden">')
         .replace('<section id="panel" class="ad-panel hidden">', '<section id="panel" class="ad-panel">')
-        .replace(/(<button class="sidebar-item" type="button" data-view="overview"[^>]*?)>/u, '$1 aria-current="page">'),
+        .replace(/(<button class="sidebar-item" type="button" data-view="overview"[^>]*?)>/u, '$1 aria-current="page">')),
     }),
     [SNAPSHOT_BY_SCREEN['usage/index.html']]: documentSnapshot('usage/index.html', {
       note: '<strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'

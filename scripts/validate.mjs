@@ -213,12 +213,13 @@ function validateUiContracts() {
   check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
   check(/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u.test(homeHtml), 'home: menu button accessibility wiring is missing');
   check(homeCss.includes('.drawer.logged .drawer-study'), 'home: STUDY drawer must depend on logged-in state');
+  check(homeCss.includes('.drawer.logged .drawer-owner'), 'home: owner-only drawer group must depend on logged-in state');
   check(homeCss.includes('.account.logged'), 'home: CTA switch must depend on logged-in state');
   check(homeCss.includes('.hero-title[data-user]'), 'home: personalized title responsive rule is missing');
   // 주입은 로그인 판정 분기 안에서만 일어나야 한다 — 무조건 mount하면 게이팅이 무너진다.
-  check(/if \(savedUsername && token\) \{[^]*?mountStudyContent\(\);/u.test(homeJs),
-    'home: mountStudyContent() must run only inside the logged-in branch');
-  check(homeJs.includes("querySelectorAll('template[data-study]')"), 'home: study template mount routine is missing');
+  check(/if \(savedUsername && token\) \{[^]*?mountDrawerTemplates\(/u.test(homeJs),
+    'home: mountDrawerTemplates() must run only inside the logged-in branch');
+  check(homeJs.includes("selector: 'template[data-study]'"), 'home: study template mount routine is missing');
   check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
 
   // ---- 랜딩 학습 은닉 완결 (plan.md §1-1) ----
@@ -232,27 +233,33 @@ function validateUiContracts() {
   const drawerMarkup = /<aside id="drawer"[^]*?<\/aside>/u.exec(homeHtml)?.[0] ?? '';
   check(drawerMarkup.length > 0,
     'home: the drawer landmark could not be located — the drawer-only study contract cannot be checked');
-  const studyTemplateCount = (homeHtml.match(/<template data-study>/gu) || []).length;
-  const drawerTemplateCount = (drawerMarkup.match(/<template data-study>/gu) || []).length;
+  // 템플릿 종류(data-study / data-owner)를 손으로 적지 않는다 — 문서에 있는 것을 센다.
+  const templateTag = /<template data-(study|owner)>/gu;
+  const studyTemplateCount = (homeHtml.match(templateTag) || []).length;
+  const drawerTemplateCount = (drawerMarkup.match(templateTag) || []).length;
   check(studyTemplateCount > 0 && studyTemplateCount === drawerTemplateCount,
-    `home: ${studyTemplateCount - drawerTemplateCount} of ${studyTemplateCount} <template data-study> blocks live outside the drawer — study entry points belong to the drawer only (plan.md §1-1)`);
-  check(/elements\.drawer\.querySelectorAll\('template\[data-study\]'\)/u.test(homeJs),
-    'home: mountStudyContent() must scope its query to the drawer so a template placed in the body can never mount (plan.md §1-1)');
+    `home: ${studyTemplateCount - drawerTemplateCount} of ${studyTemplateCount} login-gated <template> blocks live outside the drawer — gated entry points belong to the drawer only (plan.md §1-1)`);
+  check(/elements\.drawer\.querySelectorAll\(selector\)/u.test(homeJs),
+    'home: mountDrawerTemplates() must scope its query to the drawer so a template placed in the body can never mount (plan.md §1-1)');
+  // 소유자 전용 템플릿은 소유자 판정에서만 복제된다 (review WP1 M-5).
+  // 이 검사가 **못 보는 것**: 판정 자체가 옳은지(소유자 이름의 정오)와 서버의 강제 여부.
+  // 서버 쪽은 worker/test.mjs가 본다 — 두 검사가 함께 있어야 계약이 닫힌다.
+  check(/\{ selector: 'template\[data-owner\]', ownerOnly: true \}/u.test(homeJs),
+    'home: the owner-only drawer template must be declared with ownerOnly: true (review WP1 M-5)');
+  check(/if \(ownerOnly && !owner\) continue;/u.test(homeJs),
+    'home: an ownerOnly template must never be cloned for a non-owner — hiding it with CSS is not gating (LESSONS)');
 
   // ---- 사용량 화면 (plan.md §1-2 / §3.2) ----
+  // 여기서 보는 것은 **마크업 구조 계약**뿐이다. 렌더 로직(버킷 키 도출, 모르는 키 폴백,
+  // resets_at 파싱, 24시간 stale, 게이지 색 구간)은 소스 문자열 grep이 아니라
+  // `scripts/usage.test.mjs`가 buildDashboard()를 **실제로 실행해** 검증한다 (review WP1 M-2).
+  // grep은 변수명만 바꿔도 깨지고 로직이 틀려도 통과했다 — 그래서 지웠다.
+  //
   // 이 검사가 **못 보는 것**: API 응답의 실제 모양(런타임 계약은 worker/test.mjs가 본다),
   // 게이지 폭이 퍼센트와 맞는지(스냅샷의 고정 표본이 사람 눈에 보여 준다).
   check(usageHtml.includes('id="usageBody"'), 'usage: the dashboard mount point #usageBody is missing');
-  check(/location\.replace\(loginPath\(\)\)/u.test(usageJs),
-    'usage: an anonymous visitor must be sent back to the landing (plan.md §1-2)');
   check(usageJs.includes('login=1&next='),
     'usage: the redirect must carry ?login=1&next= so the visitor returns here after login');
-  check(/Object\.entries\(group\.buckets\)/u.test(usageJs),
-    'usage: rate-limit buckets must be derived from the payload keys, not from a hardcoded list (plan.md §3.2)');
-  check(/BUCKET_LABELS\[key\] \|\| key/u.test(usageJs),
-    'usage: an unknown bucket key must fall back to the key itself (plan.md §3.2)');
-  check(usageJs.includes('STALE_MS'),
-    'usage: a captured_at older than 24h must be flagged as stale data (plan.md §3.2)');
   check(usageCss.includes('.us-body'), 'usage: the screen stylesheet lost its layout rules');
 
   // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
@@ -1341,17 +1348,39 @@ function validateDesignTokens() {
     check(systemTokens.has(name), `system.css: canonical token ${name} must appear in the parsed :root token set`);
   }
 
-  // 자체 작성 CSS 등록부. 미등록 CSS는 실패시키므로 서드파티 CSS를 슬쩍 끼워 넣어
-  // 게이트를 우회할 수 없고, var(--) 소비 강제는 자체 작성 CSS에만 적용된다 (review-3a N-11).
-  const firstPartyCss = new Set([
-    'assets/css/system.css',
-    'assets/css/home.css',
-    'WordMaster/assets/css/style.css',
-    'smstudy/assets/css/style.css',
-    'admin/assets/css/admin.css',
-    'usage/assets/css/usage.css',
-  ]);
-  const vendorCss = new Set();
+  // 자체 작성 CSS 목록은 **파일 시스템에서 도출한다** (review WP1 M-3 / LESSONS 규칙 5).
+  // 손으로 적은 등록부는 새 화면의 CSS를 빠뜨리는 순간 토큰 검사 전체가 그 파일을
+  // 조용히 건너뛴다 — 검사가 초록불인 채 결함이 통과하는 형태다.
+  //
+  // 서드파티 차단 목적은 등록부 없이도 산다: (1) 저장소 안의 CSS는 **전부** 검사 대상이고
+  // (벤더 경로만 규칙으로 제외), (2) 게시 HTML이 참조하는 스타일시트가 저장소 파일 집합의
+  // 부분집합인지 아래에서 확인한다. 즉 외부 CSS를 끼워 넣으면 (2)에서 걸린다.
+  const isVendorCss = (name) => name.includes('assets/vendor/');
+  const repoCss = walk(ROOT, (item) => item.endsWith('.css')).map(relative);
+  const firstPartyCss = new Set(repoCss.filter((name) => !isVendorCss(name)));
+  const vendorCss = new Set(repoCss.filter(isVendorCss));
+  check(firstPartyCss.size >= 5,
+    `design tokens: only ${firstPartyCss.size} first-party stylesheets were derived from the repository — this check is inert`);
+
+  // 게시 HTML이 로드하는 **로컬** 스타일시트는 전부 저장소 파일이어야 한다. 저장소 밖
+  // 경로(../../)를 가리키면 위 도출 집합에 없으므로 토큰 검사를 통째로 비껴간다.
+  //
+  // 이 검사가 **못 보는 것**: 외부 호스트 스타일시트(현재는 Pretendard 웹폰트 CDN 하나뿐이고
+  // 폰트 @font-face만 들어 있다 — 자산을 받아오지 않으면 내용을 볼 수 없다),
+  // @import로 끌어오는 CSS, 런타임에 주입되는 <link>.
+  const publishedCss = new Set();
+  for (const file of publishedHtml()) {
+    for (const [, href] of readFileSync(file, 'utf8').matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"/gu)) {
+      if (/^https?:/iu.test(href)) continue;
+      publishedCss.add(relative(resolveAsset(file, href)));
+    }
+  }
+  check(publishedCss.size >= 2,
+    `design tokens: only ${publishedCss.size} local stylesheet links were derived from the published pages — this check is inert`);
+  for (const name of publishedCss) {
+    check(firstPartyCss.has(name) || vendorCss.has(name),
+      `${name}: a published page links this stylesheet but it is not a file in the repository — the design token gate cannot see it`);
+  }
 
   // 유일한 정당한 재정의: smstudy 개념노트 인쇄용 라이트 팔레트 (plan.md §2).
   // 파일 + @media print + html 셀렉터 + at-rule 1겹 + system.css가 아는 토큰 — 5중으로 좁혀
@@ -1370,8 +1399,6 @@ function validateDesignTokens() {
     const source = readFileSync(file, 'utf8');
 
     check(!legacyPalette.test(source), `${name}: legacy palette literal found`);
-    check(firstPartyCss.has(name) || vendorCss.has(name),
-      `${name}: unregistered stylesheet — add it to firstPartyCss or vendorCss in scripts/validate.mjs`);
     if (name === 'assets/css/system.css') continue;
 
     if (firstPartyCss.has(name)) check(/var\(--/u.test(source), `${name}: stylesheet must consume system.css tokens`);
@@ -1809,7 +1836,7 @@ function validateGlobalsAndOrder() {
     'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
-    'admin/index.html': ['/admin/assets/js/admin.js'],
+    'admin/index.html': ['/assets/js/site-emoji.js', '/admin/assets/js/admin.js'],
     'usage/index.html': ['/usage/assets/js/usage.js'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
@@ -2060,7 +2087,7 @@ function validateLandingGating() {
   // 규칙을 강제하는지. 정적으로 볼 수 있는 것은 문서에 무엇이 적혀 있는가까지다.
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
-  const templatePattern = /<template data-study>[^]*?<\/template>/gu;
+  const templatePattern = /<template data-(?:study|owner)>[^]*?<\/template>/gu;
   const studyTemplates = homeHtml.match(templatePattern) || [];
   const staticMarkup = homeHtml.replace(templatePattern, '');
   const templateMarkup = studyTemplates.join('\n');
@@ -2089,9 +2116,15 @@ function validateLandingGating() {
   check(studyTemplates.length > 0, 'index.html: <template data-study> blocks are missing');
   check(templateMarkup.includes('href="/WordMaster/"'), 'index.html: study templates must restore the /WordMaster/ link on login');
   check(templateMarkup.includes('href="/smstudy/"'), 'index.html: study templates must restore the /smstudy/ link on login');
-  check(templateMarkup.includes('href="/usage/"'), 'index.html: the drawer must expose the usage page after login (plan.md §1-2)');
+  // 사용량은 소유자 개인 데이터다 — 항목은 소유자 전용 템플릿에만 있어야 한다 (review WP1 M-5).
+  const ownerTemplate = /<template data-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
+  const studyOnlyMarkup = studyTemplates.filter((block) => block.startsWith('<template data-study>')).join('\n');
+  check(ownerTemplate.includes('href="/usage/"'),
+    'index.html: the usage entry must live inside <template data-owner> — it is owner-only data (review WP1 M-5)');
+  check(!studyOnlyMarkup.includes('href="/usage/"'),
+    'index.html: the usage entry must not sit in <template data-study> — that template mounts for every logged-in account');
   // 4) 주입 루틴 존재 — 템플릿만 있고 주입 코드가 사라지면 로그인 화면이 빈다.
-  check(homeJs.includes('mountStudyContent'), 'home.js: mountStudyContent is missing — study templates would never render');
+  check(homeJs.includes('mountDrawerTemplates'), 'home.js: mountDrawerTemplates is missing — drawer templates would never render');
 
   // 5) 드로어가 여는 페이지는 전부 자기 로그인 게이트를 지나야 한다. 대상 목록도 템플릿의
   //    링크에서 도출하므로, 드로어에 항목을 추가하면 그 페이지가 자동으로 검사를 받는다.

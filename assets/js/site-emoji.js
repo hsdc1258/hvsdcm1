@@ -11,8 +11,15 @@
 // 랜딩 본문에서 학습 콘텐츠를 걷어내면서(plan.md §1-1) 동기화 리스트가 사라졌다.
 // 그 리스트만 쓰던 save/review/anywhere 키는 함께 지운다 — 아무도 안 읽는 매핑을 남기면
 // 다음 사람이 "어딘가 쓰이겠거니" 하고 값을 고친다.
+// 어드민 사이드바 항목 아이콘(plan.md §3.4 "각 항목은 작은 아이콘 + 텍스트").
+// 키는 저장소의 디렉터리 이름과 겹치지 않게 캐멀케이스로 둔다 — validate의 교차 검사가
+// 디렉터리 이름 키를 "앱 자신"으로 접기 때문이다.
 window.SITE_EMOJI = {
   WordMaster: '📗',
   smstudy: '📘',
   usage: '📶',
+  adminOverview: '🧭',
+  adminUsers: '🧑',
+  adminSessions: '💻',
+  adminAnswers: '📋',
 };

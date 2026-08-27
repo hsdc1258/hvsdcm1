@@ -9,6 +9,7 @@
   <title>hvsdcm admin</title>
   <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="/admin/assets/css/admin.css">
+  <script src="/assets/js/site-emoji.js" defer></script>
   <script src="/admin/assets/js/admin.js" defer></script>
 </head>
 <body>
@@ -28,24 +29,26 @@
 
   <div class="container-wide app-page">
     <div class="app-shell">
-      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이다 (plan.md §3.4). 각 항목은 뷰
-           전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 — admin.js가
-           button의 텍스트와 data-sub를 읽는다. 라벨을 두 곳에 적지 않기 위해서다. -->
+      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 작은 아이콘 + 텍스트다
+           (plan.md §3.4 / DESIGN.md §1.1). 아이콘 글리프는 마크업에 없다 —
+           data-emoji 슬롯을 site-emoji.js 매핑이 채운다 (DESIGN.md §5).
+           각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
+           admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약">개요</button>
+          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약"><span class="emoji" data-emoji="adminOverview" aria-hidden="true"></span><span class="sidebar-item-text">개요</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
           <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트">사용자</button>
-          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션">접속 기기</button>
+          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><span class="emoji" data-emoji="adminUsers" aria-hidden="true"></span><span class="sidebar-item-text">사용자</span></button>
+          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><span class="emoji" data-emoji="adminSessions" aria-hidden="true"></span><span class="sidebar-item-text">접속 기기</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="학습 데이터">
           <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다">공용 답안</button>
+          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><span class="emoji" data-emoji="adminAnswers" aria-hidden="true"></span><span class="sidebar-item-text">공용 답안</span></button>
         </nav>
 
         <div class="sidebar-group">

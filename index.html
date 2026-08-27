@@ -61,6 +61,13 @@
             </span>
           </a>
         </nav>
+      </div>
+    </template>
+    <!-- 소유자 전용 그룹. 사용량은 개인 운영 데이터라 다른 계정에는 항목 자체를 만들지
+         않는다 (review WP1 M-5). 서버도 같은 규칙을 강제한다 — 비소유자의
+         GET /api/usage는 404다(worker/src/router.js). -->
+    <template data-owner>
+      <div class="drawer-owner">
         <p class="list-group-head">계정</p>
         <nav class="list-group" aria-label="계정 도구">
           <a class="list-row list-row-nav" href="/usage/">

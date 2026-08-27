@@ -359,12 +359,13 @@ test('usage report rejects oversized payloads and non-object bodies', async () =
 test('usage lookup survives a corrupted snapshot row', async () => {
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
     DB: {
       prepare(sql) {
         if (sql.includes('SELECT s.*, u.username')) {
           return {
             bind() {
-              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0 }; } };
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
             },
           };
         }
@@ -397,6 +398,46 @@ test('usage lookup survives a corrupted snapshot row', async () => {
   assert.deepEqual(snapshots[1].payload, { model: 'gpt-5.6' });
 });
 
+// review WP1 M-5 — 사용량은 소유자 개인 데이터다. 로그인만으로는 부족하고,
+// 비소유자에게는 존재 자체를 숨긴다(404). 소유자 이름은 vars.OWNER_USERNAME이 원본이므로
+// 그 값이 없으면 아무도 통과하지 못한다(fail-closed).
+test('usage lookup hides itself from every account that is not the owner', async () => {
+  const dbFor = (username) => ({
+    prepare(sql) {
+      if (sql.includes('SELECT s.*, u.username')) {
+        return {
+          bind() {
+            return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username }; } };
+          },
+        };
+      }
+      if (sql.includes('UPDATE sessions')) {
+        return { bind() { return { async run() { return { success: true }; } }; } };
+      }
+      if (sql.includes('FROM usage_snapshots')) {
+        throw new Error('the owner gate let a non-owner reach the snapshot query');
+      }
+      throw new Error(`Unexpected SQL in test: ${sql}`);
+    },
+  });
+  const get = (env) => worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token' },
+  }), env);
+
+  // 학생 계정 — 로그인은 유효하지만 소유자가 아니다.
+  const student = await get({ ALLOWED_ORIGIN: 'https://example.test', OWNER_USERNAME: 'hvsdcm', DB: dbFor('student1') });
+  assert.equal(student.status, 404);
+  assert.deepEqual(await student.json(), { error: 'Not found' });
+
+  // 비밀번호만으로 발급되는 관리자 세션에는 username이 없다 — 소유자가 아니다.
+  const adminOnly = await get({ ALLOWED_ORIGIN: 'https://example.test', OWNER_USERNAME: 'hvsdcm', DB: dbFor(null) });
+  assert.equal(adminOnly.status, 404);
+
+  // OWNER_USERNAME 미설정 — 소유자 이름을 알 수 없으면 소유자도 막힌다(fail-closed).
+  const unset = await get({ ALLOWED_ORIGIN: 'https://example.test', DB: dbFor('hvsdcm') });
+  assert.equal(unset.status, 404);
+});
+
 test('usage lookup requires a session and returns parsed snapshots', async () => {
   const unauthenticated = await worker.fetch(new Request('https://api.test/api/usage'), {
     ALLOWED_ORIGIN: 'https://example.test',
@@ -407,12 +448,13 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
   const storedPayload = { models: { fable: { rate_limits: { five_hour: { used_percentage: 8 } } } } };
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
     DB: {
       prepare(sql) {
         if (sql.includes('SELECT s.*, u.username')) {
           return {
             bind() {
-              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0 }; } };
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
             },
           };
         }

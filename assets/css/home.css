@@ -84,10 +84,15 @@ body.logged .topbar-login { display: none; }
 .drawer-head { padding: var(--space-1) var(--space-2) 0; }
 .drawer-head .brand { font-size: 1.1875rem; }
 
-.drawer-study { display: none; }
-.drawer.logged .drawer-study { display: grid; gap: var(--space-2); }
+/* 드로어의 로그인-후 그룹. 노드 자체가 로그인 시에만 주입되므로(home.js) 이 규칙은
+   이중 안전장치다 — .drawer-owner는 소유자에게만 주입된다 (review WP1 M-5). */
+.drawer-study,
+.drawer-owner { display: none; }
+.drawer.logged .drawer-study,
+.drawer.logged .drawer-owner { display: grid; gap: var(--space-2); }
 /* 드로어 안의 그룹은 --surface 위에 놓이므로 한 단 올려 경계를 만든다. */
-.drawer-study .list-group { background: var(--surface-2); border-color: transparent; }
+.drawer-study .list-group,
+.drawer-owner .list-group { background: var(--surface-2); border-color: transparent; }
 
 .drawer-bottom {
   margin-top: auto;

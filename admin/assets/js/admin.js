@@ -35,6 +35,9 @@
   // 여기서는 그 둘을 이름으로 짝짓는다. 사이드바에 항목을 추가하면 뷰도 따라온다.
   const navButtons = [...document.querySelectorAll('.sidebar-item[data-view]')];
   const views = [...document.querySelectorAll('.ad-view[data-view]')];
+  // 항목 라벨은 텍스트 슬롯에서만 읽는다 — button.textContent에는 아이콘 글리프가
+  // 섞이므로 뷰 제목이 "🧭개요"가 된다.
+  const labelOf = (button) => (button.querySelector('.sidebar-item-text') || button).textContent.trim();
   const DEFAULT_VIEW = navButtons[0]?.dataset.view || '';
   let currentView = DEFAULT_VIEW;
 
@@ -47,7 +50,7 @@
       else button.removeAttribute('aria-current');
       // 뷰 제목은 사이드바 라벨에서 가져온다 — 같은 문구를 두 곳에 적지 않기 위해서다.
       if (button.dataset.view !== target) continue;
-      elements.viewTitle.textContent = button.textContent.trim();
+      elements.viewTitle.textContent = labelOf(button);
       elements.viewSub.textContent = button.dataset.sub || '';
     }
   }
@@ -139,7 +142,7 @@
         return `
           <button type="button" class="list-row list-row-nav" data-goto="${escapeHtml(view)}">
             <span class="list-row-body">
-              <span class="list-row-title">${escapeHtml(button.textContent.trim())}</span>
+              <span class="list-row-title">${escapeHtml(labelOf(button))}</span>
               <span class="list-row-sub">${escapeHtml(button.dataset.sub || '')}</span>
             </span>
             <span class="list-row-value">${count === undefined ? '-' : Number(count).toLocaleString()}</span>
@@ -358,6 +361,17 @@
     location.reload();
   });
 
+  // 사이드바 아이콘은 마크업이 아니라 site-emoji.js 매핑에서 온다 (DESIGN.md §5).
+  // 매핑이 없거나 키가 빠지면 슬롯은 빈 채로 남는다 — 아이콘은 aria-hidden이라
+  // 항목은 텍스트만으로도 그대로 읽힌다.
+  function paintEmoji(root) {
+    const map = window.SITE_EMOJI || {};
+    for (const slot of root.querySelectorAll('[data-emoji]')) {
+      slot.textContent = map[slot.dataset.emoji] || '';
+    }
+  }
+
+  paintEmoji(document);
   setView(DEFAULT_VIEW);
 
   if (adminToken) {

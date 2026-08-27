@@ -110,9 +110,21 @@ async function reportUsage(request, env) {
   return json({ ok: true });
 }
 
+// 사용량은 소유자 한 사람의 운영 데이터다. 소유자 이름은 wrangler.toml의
+// vars.OWNER_USERNAME 하나가 원본이고 코드에 적지 않는다 — 값이 없으면 아무도 통과하지
+// 못한다(fail-closed). 세션의 username은 users 테이블에서 조인된 값이다(lib.js).
+function isOwnerSession(session, env) {
+  const owner = String(env.OWNER_USERNAME || '').trim().toLowerCase();
+  const username = String(session?.username || '').trim().toLowerCase();
+  return owner.length > 0 && username === owner;
+}
+
 async function usage(request, env) {
   const session = await authenticate(request, env);
   if (!session) return json({ error: '로그인이 필요합니다.' }, 401);
+  // 비소유자에게는 **존재를 숨긴다** — 라우트가 없을 때와 같은 404를 준다.
+  // 403이면 "여기 뭔가 있다"는 사실이 새어 나간다 (review WP1 M-5).
+  if (!isOwnerSession(session, env)) return json({ error: 'Not found' }, 404);
 
   const rows = await env.DB.prepare(`
     SELECT source, captured_at, payload

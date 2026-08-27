@@ -59,6 +59,12 @@
       location.replace(loginPath());
       throw new Error('unauthorized');
     }
+    // 소유자가 아니면 Worker가 404(존재 은닉)를 준다. 로그인은 유효하므로 로그인
+    // 모달로 되돌리지 않고 랜딩으로 보낸다 — 재로그인해도 결과는 같다 (review WP1 M-5).
+    if (response.status === 404 || response.status === 403) {
+      location.replace('/');
+      throw new Error('unauthorized');
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || '사용량을 불러오지 못했습니다.');
     return data;

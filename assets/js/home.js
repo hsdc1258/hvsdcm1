@@ -4,6 +4,19 @@
   const DEFAULT_API_URL = 'https://hvsdcm-api.hvsdcm1.workers.dev';
   const API_URL = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
 
+  // 소유자 계정. 관리자 링크와 소유자 전용 드로어 항목이 **같은 판정**을 쓴다 —
+  // 이름을 두 곳에 적지 않는다. 이 값은 화면 분기용일 뿐이고, 실제 접근 차단은
+  // Worker가 한다(비소유자의 GET /api/usage는 404 — worker/wrangler.toml OWNER_USERNAME).
+  const OWNER_USERNAME = 'hvsdcm';
+  const isOwner = (username) => String(username || '').trim().toLowerCase() === OWNER_USERNAME;
+
+  // 드로어의 로그인-후 템플릿. ownerOnly 항목은 소유자에게만 **노드를 만든다** —
+  // CSS 숨김이 아니라 렌더 시점 분기다 (LESSONS 승격 규칙 "권한별 은닉").
+  const DRAWER_TEMPLATES = [
+    { selector: 'template[data-study]', ownerOnly: false },
+    { selector: 'template[data-owner]', ownerOnly: true },
+  ];
+
   const elements = {
     account: document.getElementById('account'),
     closeLogin: document.getElementById('closeLogin'),
@@ -41,7 +54,7 @@
 
   function showUser(username) {
     const prefix = document.createElement('span');
-    const isAdmin = username.trim().toLowerCase() === 'hvsdcm';
+    const isAdmin = isOwner(username);
     const user = document.createElement(isAdmin ? 'a' : 'span');
     prefix.className = 'welcome-prefix';
     prefix.textContent = 'Welcome,';
@@ -72,16 +85,22 @@
     }
   }
 
-  // 학습·계정 진입점은 <template data-study>로만 존재한다 — 미로그인 문서에는 아예
-  // 렌더되지 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다.
+  // 학습·계정 진입점은 <template>으로만 존재한다 — 미로그인 문서에는 아예 렌더되지
+  // 않으므로 로그인 판정 전 깜빡임이 원천적으로 없다.
   //
   // 주입 대상을 **드로어로 한정한다** (plan.md §1-1). 랜딩 본문은 로그인 여부와 무관하게
   // 학습을 말하지 않고, 진입은 좌상단 드로어 하나로 모은다. 탐색 범위를 문서 전체가
   // 아니라 elements.drawer로 좁혀 두면, 본문에 템플릿을 되살려도 마운트되지 않는다 —
   // 계약이 주석이 아니라 코드에 있다.
-  function mountStudyContent() {
-    for (const template of elements.drawer.querySelectorAll('template[data-study]')) {
-      template.parentNode.insertBefore(template.content.cloneNode(true), template);
+  //
+  // owner=false면 ownerOnly 템플릿은 **복제조차 하지 않는다**. 만들고 지우거나 숨기는
+  // 방식은 쓰지 않는다 (review WP1 M-5 / LESSONS "권한별 은닉은 렌더 시점 분기").
+  function mountDrawerTemplates(owner) {
+    for (const { selector, ownerOnly } of DRAWER_TEMPLATES) {
+      if (ownerOnly && !owner) continue;
+      for (const template of elements.drawer.querySelectorAll(selector)) {
+        template.parentNode.insertBefore(template.content.cloneNode(true), template);
+      }
     }
     // 템플릿 안의 슬롯은 주입되기 전까지 문서에 없다 — 주입 직후에 다시 칠한다.
     paintEmoji(document);
@@ -140,7 +159,7 @@
       localStorage.setItem('hvsdcm.token', data.token);
       localStorage.setItem('hvsdcm.user', data.user.username);
 
-      // 드로어 복원은 로그인 문서의 로드 경로(mountStudyContent → showUser) 하나로
+      // 드로어 복원은 로그인 문서의 로드 경로(mountDrawerTemplates → showUser) 하나로
       // 통일한다 — 로그아웃의 location.reload()와 대칭.
       // 제자리 주입으로 갈라놓으면 타이틀 복원을 여기서 중복 구현해야 한다.
       const nextPath = getSafeNextPath();
@@ -198,7 +217,7 @@
   const savedUsername = localStorage.getItem('hvsdcm.user');
   const token = localStorage.getItem('hvsdcm.token');
   if (savedUsername && token) {
-    mountStudyContent();
+    mountDrawerTemplates(isOwner(savedUsername));
     showUser(savedUsername);
   }
   // 등장 대상은 이제 정적 본문뿐이지만(드로어는 화면 밖) 관찰 시작 순서는 유지한다 —
