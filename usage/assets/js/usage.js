@@ -7,10 +7,10 @@
   const WARN_PERCENT = 75;
   const OVER_PERCENT = 95;
   const PHASES = [
-    { key: 'plan', label: '구상' },
-    { key: 'work', label: '작업' },
-    { key: 'review', label: '검토' },
-    { key: 'done', label: '완료' },
+    { key: 'plan', label: '구상', detail: '계약 · 증거 고정' },
+    { key: 'work', label: '작업', detail: '격리 구현 · 검증' },
+    { key: 'review', label: '검토', detail: '독립 반증 · 수정' },
+    { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
   const BUCKET_LABELS = { primary: '5시간', secondary: '주간' };
   const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT' };
@@ -154,9 +154,9 @@
         </div>`;
     }).join('');
     return `
-      <article class="card us-quota-card">
+      <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">CODEX LIMIT</p><h3 class="title-3">Codex</h3></div>
+          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">Codex 한도</h3></div>
           <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 오래된 데이터' : ''}</span>
         </header>
         ${groups || '<p class="us-empty">읽을 수 있는 Codex 한도 정보가 없습니다.</p>'}
@@ -194,6 +194,11 @@
 
   function renderActor(actor, isMain = false) {
     const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
+    const details = [
+      ['모델', modelAndReasoning(actor.model, actor.reasoning)],
+      actor.role ? ['역할', actor.role] : null,
+      actor.assignment ? ['현재 작업', actor.assignment] : null,
+    ].filter(Boolean);
     return `
       <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}">
         <header class="h-actor-head">
@@ -201,9 +206,9 @@
           <span class="h-actor-state"><span class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
         </header>
         <h4>${escapeHtml(actor.name || '이름 미기록')}</h4>
-        <p class="h-model">${escapeHtml(modelAndReasoning(actor.model, actor.reasoning))}</p>
-        ${actor.role ? `<p class="h-role">${escapeHtml(actor.role)}</p>` : ''}
-        ${actor.assignment ? `<p class="h-assignment">${escapeHtml(actor.assignment)}</p>` : ''}
+        <dl class="h-actor-details">
+          ${details.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
+        </dl>
       </article>`;
   }
 
@@ -211,44 +216,49 @@
     const foundIndex = PHASES.findIndex((phase) => phase.key === task.phase);
     const currentIndex = foundIndex < 0 ? 0 : foundIndex;
     return `
-      <ol class="h-phase-rail" aria-label="파이프라인 gate">
+      <section class="h-flow" aria-label="실제 하네스 작업 흐름">
+        <header class="h-flow-head">
+          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <strong>${Math.round(clampPercent(Number(task.progress) || 0))}%</strong>
+        </header>
+        <ol class="h-phase-rail">
         ${PHASES.map((phase, index) => {
     const state = index < currentIndex || task.status === 'complete'
       ? ' is-complete'
       : index === currentIndex
         ? ' is-current'
         : '';
-    return `<li class="h-phase${state}"><span class="h-phase-index">${index + 1}</span><span>${phase.label}</span></li>`;
+    return `<li class="h-phase${state}"><span class="h-phase-index">${index + 1}</span><span class="h-phase-copy"><strong>${phase.label}</strong><small>${phase.detail}</small></span></li>`;
   }).join('')}
-      </ol>`;
+        </ol>
+      </section>`;
   }
 
   function renderGate(task) {
     const progress = clampPercent(Number(task.progress) || 0);
     const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
     return `
-      <section class="h-session-status" aria-label="선택한 세션 상태">
+      <section class="h-session-status" aria-label="선택한 세션의 현재 gate">
         <div class="h-session-progress">
-          <div><p class="us-eyebrow">CURRENT GATE</p><strong>${escapeHtml(phase)} · ${Math.round(progress)}%</strong></div>
+          <div><p class="us-eyebrow">CURRENT GATE</p><strong>${escapeHtml(phase)}</strong></div>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
         </div>
         <div class="h-session-facts">
           <p><span>현재</span>${escapeHtml(task.current || '상태 보고 대기')}</p>
-          <p><span>다음</span>${escapeHtml(task.next || '아직 없음')}</p>
           <p><span>완료</span>${escapeHtml(task.done || '아직 없음')}</p>
+          <p><span>다음</span>${escapeHtml(task.next || '아직 없음')}</p>
         </div>
       </section>`;
   }
 
   function renderArtifacts(task) {
     const artifacts = Array.isArray(task.artifacts) ? task.artifacts.filter(Boolean) : [];
+    if (artifacts.length === 0) return '';
     return `
       <footer class="h-evidence">
         <span class="h-evidence-label">검증 ARTIFACT</span>
         <div class="h-evidence-list">
-          ${artifacts.length > 0
-    ? artifacts.map((artifact) => `<span>${escapeHtml(artifact)}</span>`).join('')
-    : '<span class="is-empty">아직 보고된 artifact가 없습니다.</span>'}
+          ${artifacts.map((artifact) => `<span>${escapeHtml(artifact)}</span>`).join('')}
         </div>
       </footer>`;
   }
@@ -297,8 +307,8 @@
     return `
       <section class="h-org-chart" aria-label="${escapeHtml(task.name || '작업')} 보고 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">REPORTING LINE</p><h4>담당 조직도</h4></div>
-          <span>${actorCount}명 투입</span>
+          <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
+          <span>실제 보고 ${actorCount}명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree">${renderActorBranch(mainActor, children, true)}</ul>
@@ -310,17 +320,15 @@
     const mainActor = mainActorOf(task);
     const updated = relativeTime(task.updated_at, now);
     const complete = task.status === 'complete';
-    const category = task.category || '기타 Codex 작업';
     return `
-      <article class="card h-task${complete ? ' is-complete' : ''}">
+      <article class="h-task${complete ? ' is-complete' : ''}">
         <header class="h-task-head">
           <div>
-            <p class="us-eyebrow">${complete ? 'COMPLETED PIPELINE' : 'LIVE PIPELINE'}</p>
+            <p class="us-eyebrow">${complete ? 'COMPLETED SESSION' : 'SELECTED SESSION'}</p>
             <h3>${escapeHtml(task.name || '이름 없는 작업')}</h3>
             <p>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'}${task.deadline ? ` · 마감 ${escapeHtml(task.deadline)}` : ''}</p>
           </div>
           <div class="h-task-badges">
-            <span class="h-category-chip">${escapeHtml(category)}</span>
             <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
           </div>
         </header>
@@ -373,33 +381,6 @@
       </div>`;
   }
 
-  function renderSummary(snapshots, tasks, now) {
-    const codexBuckets = snapshots.flatMap((snapshot) => groupsOf(snapshot.payload))
-      .flatMap((group) => bucketsOf(group));
-    const percents = codexBuckets.map((bucket) => bucket.percent).filter((value) => value !== null);
-    const activeTasks = tasks.filter((task) => task.status !== 'complete');
-    const categoryCount = new Set(tasks.map((task) => taskCategory(task).key)).size;
-    const activeActors = activeTasks.flatMap((task) => taskActors(task))
-      .filter((actor) => !['done', 'unavailable'].includes(actor.status));
-    const currentTask = activeTasks[0] || tasks[0];
-    const currentPhase = PHASES.find((phase) => phase.key === currentTask?.phase)?.label || '—';
-    const latestTimes = [
-      ...snapshots.map((snapshot) => parseTime(snapshot.captured_at)),
-      ...tasks.map((task) => parseTime(task.updated_at)),
-    ].filter((time) => time !== null);
-    const latest = latestTimes.length > 0 ? Math.max(...latestTimes) : null;
-    const cells = [
-      ['동기화', `<span class="stat-state"><span class="status-dot" aria-hidden="true"></span>${latest === null ? '대기' : escapeHtml(relativeTime(new Date(latest).toISOString(), now))}</span>`],
-      ['활성 작업', `<span class="stat-value">${activeTasks.length}</span>`],
-      ['작업 카테고리', `<span class="stat-value">${categoryCount}</span>`],
-      ['작업 중 AI', `<span class="stat-value">${activeActors.length}</span>`],
-      ['현재 gate', `<span class="stat-value">${escapeHtml(currentPhase)}</span>`],
-      ['Codex 최고 사용률', `<span class="stat-value">${percents.length === 0 ? '—' : `${Math.round(clampPercent(Math.max(...percents)))}%`}</span>`],
-    ];
-    return `<div class="summary-strip">${cells.map(([label, value]) => `
-      <div class="summary-cell"><span class="stat-label">${escapeHtml(label)}</span>${value}</div>`).join('')}</div>`;
-  }
-
   function buildDashboard(input, now) {
     const rawSnapshots = Array.isArray(input) ? input : input?.snapshots;
     const rawTasks = Array.isArray(input?.tasks) ? input.tasks : [];
@@ -410,27 +391,27 @@
         if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
         return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
       });
-    return [
-      renderSummary(snapshots, tasks, now),
-      `<section class="us-section" aria-labelledby="harnessTitle">
-        <header class="us-section-head">
-          <div><p class="us-eyebrow">AI BUREAU</p><h2 id="harnessTitle" class="title-2">실행 조직도</h2></div>
-          <p>Discord와 같은 보고 이벤트로 갱신됩니다.</p>
-        </header>
-        <div class="h-session-list">${tasks.length > 0
+    return `
+      <div class="us-command-layout">
+        <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
+          <header class="us-workspace-head">
+            <div><p class="us-eyebrow">LIVE HARNESS</p><h2 id="harnessTitle" class="title-2">실행 파이프라인</h2></div>
+            <p>보고된 세션과 에이전트만 표시</p>
+          </header>
+          <div class="h-session-list">${tasks.length > 0
     ? renderTaskTabs(tasks, now)
     : '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>'}</div>
-      </section>`,
-      `<section class="us-section" aria-labelledby="quotaTitle">
-        <header class="us-section-head">
-          <div><p class="us-eyebrow">ACCOUNT LIMIT</p><h2 id="quotaTitle" class="title-2">Codex 사용량</h2></div>
-          <p>계정에서 수집된 실제 한도만 표시합니다.</p>
-        </header>
-        <div class="us-quota-list">${snapshots.length > 0
+        </section>
+        <aside class="us-quota-rail" aria-labelledby="quotaTitle">
+          <header class="us-quota-head">
+            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex 사용 한도</h2></div>
+            <p>실제 계정 보고</p>
+          </header>
+          <div class="us-quota-list">${snapshots.length > 0
     ? snapshots.map((snapshot) => renderQuota(snapshot, now)).join('')
-    : '<p class="us-empty card">아직 수집된 Codex 사용량 기록이 없습니다.</p>'}</div>
-      </section>`,
-    ].join('');
+    : '<p class="us-empty">아직 수집된 한도 기록이 없습니다.</p>'}</div>
+        </aside>
+      </div>`;
   }
 
   function activateTaskTab(root, tab, moveFocus = false) {

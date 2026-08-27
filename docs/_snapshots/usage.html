@@ -1470,51 +1470,91 @@ label.list-row {
 </style>
 <style>/* usage/assets/css/usage.css (inlined) */
 /* ==========================================================================
-   usage — Codex 사용량 + 병렬 세션 조직도
+   usage — 실제 하네스 흐름 + 보고 actor + 오른쪽 Codex 한도
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다.
-   새 색 토큰, 그라디언트, 글로우, 카드 그림자를 만들지 않는다.
    ========================================================================== */
-.us-body, .us-section, .h-session-list, .h-session-switcher, .h-session-panels, .us-quota-list, .us-quota-card, .us-group {
+.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-flow, .h-session-progress {
   display: grid;
   min-width: 0;
 }
-.us-body {
-  gap: var(--space-8);
+.us-command-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 300px);
+  align-items: start;
+  gap: var(--space-5);
 }
-.us-section {
+.us-pipeline-workspace {
   gap: var(--space-4);
 }
-.us-section-head, .us-card-head, .h-task-head, .h-actor-head, .h-org-chart-head {
+.us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-flow-head, .h-actor-head, .h-org-chart-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
 }
-.us-section-head > p, .h-task-head > div > p, .us-card-meta, .h-role, .h-assignment {
+.us-workspace-head > p, .us-quota-head > p, .h-task-head > div > p, .us-card-meta, .h-org-chart-head > span {
   color: var(--text-2);
-}
-.us-section-head > p, .h-task-head > div > p, .us-card-meta {
   font-size: var(--fs-caption);
+}
+.us-workspace-head h2, .us-quota-head h2 {
+  margin-top: var(--space-1);
 }
 .us-eyebrow, .h-kind, .h-evidence-label {
   color: var(--text-3);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: .12em;
   line-height: 1.3;
-}
-.us-quota-list {
-  gap: var(--space-4);
-}
-.us-quota-card, .us-group {
-  gap: var(--space-4);
 }
 .us-empty {
   padding: var(--space-6) var(--space-4);
   color: var(--text-2);
   text-align: center;
 }
-/* 병렬 task는 세로 목록이 아니라 한 줄 세션 탭으로 선택한다. */
+/* 오른쪽 rail은 계정 한도만 가진다. 세션 메타를 다시 요약하지 않는다. */
+.us-quota-rail {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--space-4));
+  align-content: start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.us-quota-head {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+}
+.us-quota-list, .us-limit-widget, .us-group {
+  gap: var(--space-3);
+}
+.us-limit-widget + .us-limit-widget {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-faint);
+}
+.us-card-head {
+  align-items: center;
+}
+.us-card-meta {
+  max-width: 120px;
+  text-align: right;
+}
+.us-quota-rail .list-group {
+  border-radius: var(--radius-m);
+}
+.us-quota-rail .list-row {
+  min-height: 72px;
+  padding: var(--space-3);
+}
+.us-quota-rail .list-row-title {
+  font-weight: 650;
+}
+.us-quota-rail .list-row-value {
+  color: var(--text);
+  font-size: var(--fs-title-3);
+  font-weight: 700;
+}
+/* 병렬 task는 탭 하나가 panel 하나만 제어한다. */
 .h-session-switcher {
   gap: var(--space-4);
 }
@@ -1534,10 +1574,11 @@ label.list-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  flex: 0 0 clamp(230px, 29vw, 310px);
+  flex: 0 0 clamp(220px, 26vw, 300px);
   gap: var(--space-2);
   min-width: 0;
-  padding: 12px 14px;
+  min-height: 52px;
+  padding: 10px 12px;
   border: 0;
   border-radius: calc(var(--radius-m) - 2px);
   background: transparent;
@@ -1592,14 +1633,15 @@ label.list-row {
 .h-session-panel[hidden] {
   display: none;
 }
+/* 선택된 세션 하나가 task header, 흐름, gate, 실제 조직을 가진다. */
 .h-task {
-  display: grid;
+  align-content: start;
   gap: var(--space-5);
-  min-width: 0;
+  padding: var(--space-5);
   overflow: hidden;
-}
-.h-task.is-complete {
-  opacity: 0.9;
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
 }
 .h-task-head h3 {
   margin-top: var(--space-1);
@@ -1610,16 +1652,6 @@ label.list-row {
   align-items: center;
   justify-content: flex-end;
   flex: none;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.h-category-chip {
-  padding: 4px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-full);
-  color: var(--text-2);
-  font-size: 11px;
-  font-weight: 650;
 }
 .h-task-state, .h-actor-state {
   display: inline-flex;
@@ -1629,9 +1661,24 @@ label.list-row {
   color: var(--text-2);
   font-size: var(--fs-caption);
 }
+/* 네 단계는 AGENTS.md와 notify report가 공통으로 보장하는 실제 protocol이다. */
+.h-flow {
+  gap: var(--space-3);
+}
+.h-flow-head {
+  align-items: end;
+}
+.h-flow-head h4 {
+  margin-top: var(--space-1);
+  font-size: var(--fs-title-3);
+}
+.h-flow-head > strong {
+  font-size: var(--fs-title-2);
+  font-variant-numeric: tabular-nums;
+}
 .h-phase-rail {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -1641,14 +1688,13 @@ label.list-row {
   list-style: none;
 }
 .h-phase {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-3);
+  padding: 12px;
   color: var(--text-3);
-  font-size: var(--fs-caption);
 }
 .h-phase + .h-phase {
   border-left: 1px solid var(--line-faint);
@@ -1656,12 +1702,27 @@ label.list-row {
 .h-phase-index {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--line);
   border-radius: 50%;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+.h-phase-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.h-phase-copy strong {
+  color: inherit;
+  font-size: var(--fs-caption);
+}
+.h-phase-copy small {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .h-phase.is-complete, .h-phase.is-current {
   color: var(--text);
@@ -1673,18 +1734,16 @@ label.list-row {
   border-color: var(--accent);
   color: var(--accent);
 }
-/* gate는 사람이 아니므로 조직도 밖의 압축된 세션 메타 정보로 둔다. */
+/* gate는 actor가 아니라 현재 세션의 사실 세 줄이다. */
 .h-session-status {
   display: grid;
-  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1.45fr);
+  grid-template-columns: minmax(140px, .42fr) minmax(0, 1.58fr);
   gap: var(--space-4);
-  padding: var(--space-4);
-  background: var(--surface-2);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-m);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--line-faint);
 }
 .h-session-progress {
-  display: grid;
   align-content: start;
   gap: var(--space-3);
 }
@@ -1692,7 +1751,6 @@ label.list-row {
   display: block;
   margin-top: var(--space-1);
   font-size: var(--fs-title-3);
-  font-variant-numeric: tabular-nums;
 }
 .h-session-facts {
   display: grid;
@@ -1709,7 +1767,7 @@ label.list-row {
   gap: var(--space-1);
   min-width: 0;
   padding: var(--space-3);
-  background: var(--surface-3);
+  background: var(--surface-2);
   color: var(--text-2);
   font-size: var(--fs-caption);
 }
@@ -1718,12 +1776,12 @@ label.list-row {
   font-size: 10px;
   font-weight: 700;
 }
-/* 고전적인 조직도 연결 규칙: 부모 아래 trunk, 형제 사이 branch, 각 카드로 stem. */
+/* 고전 조직도: parent 아래 trunk, 형제 branch, actor stem. */
 .h-org-chart {
   display: grid;
   min-width: 0;
   padding: var(--space-4);
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
 }
@@ -1734,10 +1792,6 @@ label.list-row {
 .h-org-chart-head h4 {
   margin-top: var(--space-1);
   font-size: var(--fs-title-3);
-}
-.h-org-chart-head > span {
-  color: var(--text-2);
-  font-size: var(--fs-caption);
 }
 .h-org-scroll {
   max-width: 100%;
@@ -1760,7 +1814,7 @@ label.list-row {
 }
 .h-org-node {
   position: relative;
-  padding: 28px 10px 0;
+  padding: 28px 8px 0;
   text-align: center;
 }
 .h-org-tree > .h-org-node {
@@ -1803,10 +1857,10 @@ label.list-row {
   border-left: 1px solid var(--line-strong);
 }
 .h-actor {
-  width: 240px;
+  width: 218px;
   min-width: 0;
-  padding: var(--space-4);
-  background: var(--surface-2);
+  padding: var(--space-3);
+  background: var(--surface-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
   text-align: left;
@@ -1815,8 +1869,8 @@ label.list-row {
   margin-inline: auto;
 }
 .h-actor.is-main {
-  width: 300px;
-  background: var(--surface-3);
+  width: 280px;
+  background: var(--surface-4);
   border-color: var(--line-strong);
 }
 .h-actor.is-webgpt {
@@ -1826,21 +1880,34 @@ label.list-row {
   margin-top: var(--space-2);
   font-size: var(--fs-title-3);
 }
-.h-model {
-  margin-top: var(--space-1);
-  color: var(--text);
-  font-size: var(--fs-body-small);
-  font-weight: 650;
-}
-.h-role {
-  margin-top: var(--space-2);
-  font-size: var(--fs-caption);
-}
-.h-assignment {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
+.h-actor-details {
+  display: grid;
+  gap: 0;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) 0 0;
   border-top: 1px solid var(--line-faint);
+}
+.h-actor-details > div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: 5px 0;
+}
+.h-actor-details dt {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+}
+.h-actor-details dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-2);
   font-size: var(--fs-caption);
+  overflow-wrap: anywhere;
+}
+.h-actor-details > div:first-child dd {
+  color: var(--text);
+  font-weight: 650;
 }
 .h-evidence {
   display: grid;
@@ -1863,9 +1930,16 @@ label.list-row {
   color: var(--text-2);
   font-size: 11px;
 }
-.h-evidence-list .is-empty {
-  border: 0;
-  background: none;
+@media (max-width: 1100px) {
+  .us-command-layout {
+    grid-template-columns: 1fr;
+  }
+  .us-quota-rail {
+    position: static;
+  }
+  .us-quota-list {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
 }
 @media (max-width: 900px) {
   .h-org-scroll {
@@ -1906,9 +1980,13 @@ label.list-row {
   }
 }
 @media (max-width: 700px) {
-  .us-section-head, .h-task-head, .us-card-head, .h-org-chart-head {
+  .us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-org-chart-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .us-card-meta {
+    max-width: none;
+    text-align: left;
   }
   .h-session-tab {
     flex-basis: min(78vw, 280px);
@@ -1916,10 +1994,15 @@ label.list-row {
   .h-task-badges {
     justify-content: flex-start;
   }
-  .h-phase {
-    flex-direction: column;
-    gap: 4px;
-    padding: var(--space-2) 4px;
+  .h-phase-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .h-phase:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--line-faint);
+  }
+  .h-phase:nth-child(4) {
+    border-top: 1px solid var(--line-faint);
   }
   .h-session-status, .h-session-facts {
     grid-template-columns: 1fr;
@@ -1930,16 +2013,16 @@ label.list-row {
 }
 @media (max-width: 430px) {
   .h-task {
+    gap: var(--space-4);
     padding: var(--space-4);
   }
-  .h-phase span:last-child {
-    font-size: 11px;
+  .h-phase {
+    padding: 10px 8px;
   }
-  .h-phase-index {
-    width: 18px;
-    height: 18px;
+  .h-phase-copy small {
+    white-space: normal;
   }
-  .h-org-chart {
+  .h-org-chart, .us-quota-rail {
     padding: var(--space-3);
   }
 }
@@ -1953,7 +2036,7 @@ label.list-row {
 <body>
   <div class="snap-note"><strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
   <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.
-  <br><strong>여기서 확인할 것</strong> — 병렬 task 3개가 세션 탭으로 분리되고 선택된 한 panel만 보이는지, Main Codex에서 실행자/검토자/WebGPT로 실제 가지가 갈라지는 조직도, 요약 스트립, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.
+  <br><strong>여기서 확인할 것</strong> — 병렬 task 3개가 세션 탭으로 분리되고 선택된 한 panel만 보이는지, Main Codex에서 실행자/검토자/WebGPT로 실제 가지가 갈라지는 조직도, 실제 4단계 흐름, 오른쪽 Codex 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.
   <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
@@ -1969,13 +2052,13 @@ label.list-row {
   </header>
   <div class="topbar-spacer"></div>
 
-  <div class="container app-page">
+  <div class="container-wide app-page">
     <main id="usageMain" class="app-main" tabindex="-1">
       <header class="view-head">
         <div class="view-head-main">
           <div>
-            <h1 class="title-1">사용량과 AI 하네스</h1>
-            <p>Codex 한도와 병렬 세션 실행 조직도</p>
+            <h1 class="title-1">AI 실행 현황</h1>
+            <p>세션별 파이프라인, 투입 에이전트, Codex 한도</p>
           </div>
         </div>
         <div class="toolbar-group">
@@ -1986,18 +2069,14 @@ label.list-row {
       <p id="usageError" class="field-error" role="alert"></p>
 
       <!-- 소유자 전용 GET /api/usage의 Codex 한도와 하네스 작업을 같은 화면에 그린다. -->
-      <div id="usageBody" class="us-body"><div class="summary-strip">
-      <div class="summary-cell"><span class="stat-label">동기화</span><span class="stat-state"><span class="status-dot" aria-hidden="true"></span>6분 전</span></div>
-      <div class="summary-cell"><span class="stat-label">활성 작업</span><span class="stat-value">3</span></div>
-      <div class="summary-cell"><span class="stat-label">작업 카테고리</span><span class="stat-value">3</span></div>
-      <div class="summary-cell"><span class="stat-label">작업 중 AI</span><span class="stat-value">5</span></div>
-      <div class="summary-cell"><span class="stat-label">현재 gate</span><span class="stat-value">검토</span></div>
-      <div class="summary-cell"><span class="stat-label">Codex 최고 사용률</span><span class="stat-value">96%</span></div></div><section class="us-section" aria-labelledby="harnessTitle">
-        <header class="us-section-head">
-          <div><p class="us-eyebrow">AI BUREAU</p><h2 id="harnessTitle" class="title-2">실행 조직도</h2></div>
-          <p>Discord와 같은 보고 이벤트로 갱신됩니다.</p>
-        </header>
-        <div class="h-session-list">
+      <div id="usageBody" class="us-body">
+      <div class="us-command-layout">
+        <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
+          <header class="us-workspace-head">
+            <div><p class="us-eyebrow">LIVE HARNESS</p><h2 id="harnessTitle" class="title-2">실행 파이프라인</h2></div>
+            <p>보고된 세션과 에이전트만 표시</p>
+          </header>
+          <div class="h-session-list">
       <div class="h-session-switcher">
         <div class="h-session-tabs" role="tablist" aria-label="병렬 Codex 세션">
 
@@ -2034,39 +2113,44 @@ label.list-row {
             <section class="h-session-panel" role="tabpanel" id="hSessionPanel0"
               aria-labelledby="hSessionTab0" data-task-panel="0">
 
-      <article class="card h-task">
+      <article class="h-task">
         <header class="h-task-head">
           <div>
-            <p class="us-eyebrow">LIVE PIPELINE</p>
+            <p class="us-eyebrow">SELECTED SESSION</p>
             <h3>사용량 하네스 시각화 (08-27)</h3>
             <p>6분 전 동기화 · 마감 20:10 KST</p>
           </div>
           <div class="h-task-badges">
-            <span class="h-category-chip">파이프라인 시각화</span>
             <span class="h-task-state"><span class="status-dot is-warn" aria-hidden="true"></span>진행 중</span>
           </div>
         </header>
 
-      <ol class="h-phase-rail" aria-label="파이프라인 gate">
-        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span>구상</span></li><li class="h-phase is-complete"><span class="h-phase-index">2</span><span>작업</span></li><li class="h-phase is-current"><span class="h-phase-index">3</span><span>검토</span></li><li class="h-phase"><span class="h-phase-index">4</span><span>완료</span></li>
-      </ol>
+      <section class="h-flow" aria-label="실제 하네스 작업 흐름">
+        <header class="h-flow-head">
+          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <strong>86%</strong>
+        </header>
+        <ol class="h-phase-rail">
+        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span class="h-phase-copy"><strong>구상</strong><small>계약 · 증거 고정</small></span></li><li class="h-phase is-complete"><span class="h-phase-index">2</span><span class="h-phase-copy"><strong>작업</strong><small>격리 구현 · 검증</small></span></li><li class="h-phase is-current"><span class="h-phase-index">3</span><span class="h-phase-copy"><strong>검토</strong><small>독립 반증 · 수정</small></span></li><li class="h-phase"><span class="h-phase-index">4</span><span class="h-phase-copy"><strong>완료</strong><small>배포 · 기록</small></span></li>
+        </ol>
+      </section>
 
-      <section class="h-session-status" aria-label="선택한 세션 상태">
+      <section class="h-session-status" aria-label="선택한 세션의 현재 gate">
         <div class="h-session-progress">
-          <div><p class="us-eyebrow">CURRENT GATE</p><strong>검토 · 86%</strong></div>
+          <div><p class="us-eyebrow">CURRENT GATE</p><strong>검토</strong></div>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span>
         </div>
         <div class="h-session-facts">
           <p><span>현재</span>독립 검토와 반응형 확인</p>
-          <p><span>다음</span>라이브 배포</p>
           <p><span>완료</span>Worker 연결 · 렌더 구현 · 결정적 gate</p>
+          <p><span>다음</span>라이브 배포</p>
         </div>
       </section>
 
       <section class="h-org-chart" aria-label="사용량 하네스 시각화 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">REPORTING LINE</p><h4>담당 조직도</h4></div>
-          <span>4명 투입</span>
+          <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
+          <span>실제 보고 4명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree">
@@ -2078,9 +2162,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
         </header>
         <h4>Main Codex</h4>
-        <p class="h-model">gpt-5.6-sol · xhigh</p>
-        <p class="h-role">기획 · 통합 · 최종 판정</p>
-        <p class="h-assignment">전체 계약과 최종 판정</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>기획 · 통합 · 최종 판정</dd></div><div><dt>현재 작업</dt><dd>전체 계약과 최종 판정</dd></div>
+        </dl>
       </article>
         <ul>
       <li class="h-org-node">
@@ -2091,9 +2175,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>완료</span>
         </header>
         <h4>구현 컨텍스트</h4>
-        <p class="h-model">gpt-5.6-sol · xhigh</p>
-        <p class="h-role">구현자</p>
-        <p class="h-assignment">Worker와 사용량 화면 구현</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>구현자</dd></div><div><dt>현재 작업</dt><dd>Worker와 사용량 화면 구현</dd></div>
+        </dl>
       </article>
 
       </li>
@@ -2105,9 +2189,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
         </header>
         <h4>독립 검토</h4>
-        <p class="h-model">gpt-5.6-sol · xhigh</p>
-        <p class="h-role">검토자</p>
-        <p class="h-assignment">diff와 실제 artifact 반증</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>검토자</dd></div><div><dt>현재 작업</dt><dd>diff와 실제 artifact 반증</dd></div>
+        </dl>
       </article>
 
       </li>
@@ -2119,9 +2203,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot is-warn" aria-hidden="true"></span>대기</span>
         </header>
         <h4>WebGPT 실행자</h4>
-        <p class="h-model">WebGPT PRO</p>
-        <p class="h-role">보조 실행</p>
-        <p class="h-assignment">경계가 명확한 저위험 작업 대기</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>현재 작업</dt><dd>경계가 명확한 저위험 작업 대기</dd></div>
+        </dl>
       </article>
 
       </li></ul>
@@ -2140,39 +2224,44 @@ label.list-row {
             <section class="h-session-panel" role="tabpanel" id="hSessionPanel1"
               aria-labelledby="hSessionTab1" data-task-panel="1" hidden>
 
-      <article class="card h-task">
+      <article class="h-task">
         <header class="h-task-head">
           <div>
-            <p class="us-eyebrow">LIVE PIPELINE</p>
+            <p class="us-eyebrow">SELECTED SESSION</p>
             <h3>Pipeline 개선 프로토콜 (08-27)</h3>
             <p>8분 전 동기화 · 마감 20:15 KST</p>
           </div>
           <div class="h-task-badges">
-            <span class="h-category-chip">자체 pipeline 개선 프로토콜</span>
             <span class="h-task-state"><span class="status-dot is-warn" aria-hidden="true"></span>진행 중</span>
           </div>
         </header>
 
-      <ol class="h-phase-rail" aria-label="파이프라인 gate">
-        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span>구상</span></li><li class="h-phase is-complete"><span class="h-phase-index">2</span><span>작업</span></li><li class="h-phase is-current"><span class="h-phase-index">3</span><span>검토</span></li><li class="h-phase"><span class="h-phase-index">4</span><span>완료</span></li>
-      </ol>
+      <section class="h-flow" aria-label="실제 하네스 작업 흐름">
+        <header class="h-flow-head">
+          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <strong>82%</strong>
+        </header>
+        <ol class="h-phase-rail">
+        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span class="h-phase-copy"><strong>구상</strong><small>계약 · 증거 고정</small></span></li><li class="h-phase is-complete"><span class="h-phase-index">2</span><span class="h-phase-copy"><strong>작업</strong><small>격리 구현 · 검증</small></span></li><li class="h-phase is-current"><span class="h-phase-index">3</span><span class="h-phase-copy"><strong>검토</strong><small>독립 반증 · 수정</small></span></li><li class="h-phase"><span class="h-phase-index">4</span><span class="h-phase-copy"><strong>완료</strong><small>배포 · 기록</small></span></li>
+        </ol>
+      </section>
 
-      <section class="h-session-status" aria-label="선택한 세션 상태">
+      <section class="h-session-status" aria-label="선택한 세션의 현재 gate">
         <div class="h-session-progress">
-          <div><p class="us-eyebrow">CURRENT GATE</p><strong>검토 · 82%</strong></div>
+          <div><p class="us-eyebrow">CURRENT GATE</p><strong>검토</strong></div>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 82.0%"></span></span>
         </div>
         <div class="h-session-facts">
           <p><span>현재</span>독립 gate 검토</p>
-          <p><span>다음</span>하네스 회귀 확인</p>
           <p><span>완료</span>WIP와 실패 복구 규칙 고정</p>
+          <p><span>다음</span>하네스 회귀 확인</p>
         </div>
       </section>
 
       <section class="h-org-chart" aria-label="Pipeline 개선 프로토콜 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">REPORTING LINE</p><h4>담당 조직도</h4></div>
-          <span>1명 투입</span>
+          <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
+          <span>실제 보고 1명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree">
@@ -2184,9 +2273,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>검토 중</span>
         </header>
         <h4>Main Codex</h4>
-        <p class="h-model">gpt-5.6-sol · xhigh</p>
-        <p class="h-role">프로토콜 소유자</p>
-        <p class="h-assignment">결정적 gate와 최종 판정</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>프로토콜 소유자</dd></div><div><dt>현재 작업</dt><dd>결정적 gate와 최종 판정</dd></div>
+        </dl>
       </article>
 
       </li></ul>
@@ -2204,39 +2293,44 @@ label.list-row {
             <section class="h-session-panel" role="tabpanel" id="hSessionPanel2"
               aria-labelledby="hSessionTab2" data-task-panel="2" hidden>
 
-      <article class="card h-task">
+      <article class="h-task">
         <header class="h-task-head">
           <div>
-            <p class="us-eyebrow">LIVE PIPELINE</p>
+            <p class="us-eyebrow">SELECTED SESSION</p>
             <h3>프로젝트 지문한장 (08-27)</h3>
             <p>10분 전 동기화 · 마감 20:20 KST</p>
           </div>
           <div class="h-task-badges">
-            <span class="h-category-chip">지문한장 프로젝트</span>
             <span class="h-task-state"><span class="status-dot is-warn" aria-hidden="true"></span>진행 중</span>
           </div>
         </header>
 
-      <ol class="h-phase-rail" aria-label="파이프라인 gate">
-        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span>구상</span></li><li class="h-phase is-current"><span class="h-phase-index">2</span><span>작업</span></li><li class="h-phase"><span class="h-phase-index">3</span><span>검토</span></li><li class="h-phase"><span class="h-phase-index">4</span><span>완료</span></li>
-      </ol>
+      <section class="h-flow" aria-label="실제 하네스 작업 흐름">
+        <header class="h-flow-head">
+          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <strong>58%</strong>
+        </header>
+        <ol class="h-phase-rail">
+        <li class="h-phase is-complete"><span class="h-phase-index">1</span><span class="h-phase-copy"><strong>구상</strong><small>계약 · 증거 고정</small></span></li><li class="h-phase is-current"><span class="h-phase-index">2</span><span class="h-phase-copy"><strong>작업</strong><small>격리 구현 · 검증</small></span></li><li class="h-phase"><span class="h-phase-index">3</span><span class="h-phase-copy"><strong>검토</strong><small>독립 반증 · 수정</small></span></li><li class="h-phase"><span class="h-phase-index">4</span><span class="h-phase-copy"><strong>완료</strong><small>배포 · 기록</small></span></li>
+        </ol>
+      </section>
 
-      <section class="h-session-status" aria-label="선택한 세션 상태">
+      <section class="h-session-status" aria-label="선택한 세션의 현재 gate">
         <div class="h-session-progress">
-          <div><p class="us-eyebrow">CURRENT GATE</p><strong>작업 · 58%</strong></div>
+          <div><p class="us-eyebrow">CURRENT GATE</p><strong>작업</strong></div>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 58.0%"></span></span>
         </div>
         <div class="h-session-facts">
           <p><span>현재</span>판매 수준 개선 카나리</p>
-          <p><span>다음</span>첫 개선 finding 검증</p>
           <p><span>완료</span>제품 저장소 격리와 E2E 계약</p>
+          <p><span>다음</span>첫 개선 finding 검증</p>
         </div>
       </section>
 
       <section class="h-org-chart" aria-label="프로젝트 지문한장 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
-          <div><p class="us-eyebrow">REPORTING LINE</p><h4>담당 조직도</h4></div>
-          <span>1명 투입</span>
+          <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
+          <span>실제 보고 1명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree">
@@ -2248,9 +2342,9 @@ label.list-row {
           <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>작업 중</span>
         </header>
         <h4>Main Codex</h4>
-        <p class="h-model">gpt-5.6-sol · xhigh</p>
-        <p class="h-role">제품 개선 총괄</p>
-        <p class="h-assignment">카나리 gate와 제품 판정</p>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>제품 개선 총괄</dd></div><div><dt>현재 작업</dt><dd>카나리 gate와 제품 판정</dd></div>
+        </dl>
       </article>
 
       </li></ul>
@@ -2267,15 +2361,16 @@ label.list-row {
             </section>
         </div>
       </div></div>
-      </section><section class="us-section" aria-labelledby="quotaTitle">
-        <header class="us-section-head">
-          <div><p class="us-eyebrow">ACCOUNT LIMIT</p><h2 id="quotaTitle" class="title-2">Codex 사용량</h2></div>
-          <p>계정에서 수집된 실제 한도만 표시합니다.</p>
-        </header>
-        <div class="us-quota-list">
-      <article class="card us-quota-card">
+        </section>
+        <aside class="us-quota-rail" aria-labelledby="quotaTitle">
+          <header class="us-quota-head">
+            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex 사용 한도</h2></div>
+            <p>실제 계정 보고</p>
+          </header>
+          <div class="us-quota-list">
+      <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">CODEX LIMIT</p><h3 class="title-3">Codex</h3></div>
+          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">Codex 한도</h3></div>
           <span class="us-card-meta">12분 전 수집</span>
         </header>
 
@@ -2308,7 +2403,8 @@ label.list-row {
       </div></div>
         </div>
       </article></div>
-      </section></div>
+        </aside>
+      </div></div>
     </main>
   </div>
 </body>

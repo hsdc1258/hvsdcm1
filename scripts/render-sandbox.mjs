@@ -324,8 +324,8 @@ export function createUsageRenderers() {
 export function renderUsageDashboard(input, now) {
   const build = createUsageRenderers().buildDashboard;
   const markup = build(input, now);
-  if (!markup.includes('summary-strip') || !markup.includes('gauge-fill')) {
-    throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without a summary strip or gauge — the fixture no longer matches the payload contract`);
+  if (!markup.includes('us-command-layout') || !markup.includes('us-quota-rail')) {
+    throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without command-center contracts`);
   }
   return markup;
 }

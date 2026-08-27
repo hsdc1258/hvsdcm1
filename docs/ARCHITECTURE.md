@@ -11,7 +11,7 @@ The front end is static and requires no bundler. GitHub Pages serves the reposit
 3. `account.js` requires the account token, fetches remote progress and shared accepted answers, then hydrates the app-specific localStorage record.
 4. The app controller renders from static content plus that local record.
 5. Each app saves its local record and explicitly schedules a debounced 350 ms synchronization to `PUT /api/progress/:app`. Custom aliases are also sent to `/api/answers/accept`.
-6. The local Codex control plane sends one authenticated harness report alongside each Discord progress report. The Worker merges actors by stable ID, and the owner-only usage screen presents parallel tasks as session tabs. The selected tab renders one reporting tree from Main Codex through the actors' stable parent IDs, while gate, model plus reasoning effort, assignments and evidence remain session metadata.
+6. The local Codex control plane sends one authenticated harness report alongside each Discord progress report. The Worker merges actors by stable ID, and the owner-only usage screen presents parallel tasks as session tabs. The selected tab renders the canonical four reported phases and one reporting tree from Main Codex through the actors' stable parent IDs. Model plus reasoning, role, assignment and status come directly from each actor report; gate and evidence remain non-person session metadata. A desktop `aside` shows only Codex account-limit snapshots and reflows below the pipeline on narrower screens.
 
 The local record is a fast browser cache, while D1 is the cross-device source of truth. The one-time session marker `hvsdcm.loaded.<app>` prevents repeated reloads during hydration.
 

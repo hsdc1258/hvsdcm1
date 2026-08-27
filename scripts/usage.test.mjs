@@ -17,8 +17,7 @@ const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
 const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString();
 
-// renderUsageDashboard()는 요약 스트립·게이지가 없으면 throw한다(샌드박스의 계약 검사).
-// 게이지가 필요 없는 표본은 이 함수 대신 아래 buildOnly()로 부른다.
+// renderUsageDashboard()는 command-center 골격이 없으면 throw한다(샌드박스의 계약 검사).
 function dashboard(input, now = NOW) {
   return renderUsageDashboard(input, now);
 }
@@ -149,16 +148,17 @@ test('a captured_at older than 24h flips the stale state, 23h59m does not', () =
   assert.match(stale, /오래된 데이터/u);
 });
 
-test('the summary strip joins Codex usage with active task, actor, and gate counts', () => {
+test('the command layout keeps the pipeline first and the Codex limit in a dedicated side rail', () => {
   const markup = dashboard({
     snapshots: [codexSnapshot({ primary: { used_percent: 12 }, secondary: { used_percent: 88 } })],
     tasks: [harnessTask()],
   });
+  assert.match(markup, /class="us-command-layout"/u);
+  assert.match(markup, /class="us-pipeline-workspace"/u);
+  assert.match(markup, /<aside class="us-quota-rail"/u);
+  assert.ok(markup.indexOf('us-pipeline-workspace') < markup.indexOf('us-quota-rail'));
   assert.match(markup, /88%/u);
-  assert.match(markup, /활성 작업<\/span><span class="stat-value">1<\/span>/u);
-  assert.match(markup, /작업 중 AI<\/span><span class="stat-value">2<\/span>/u);
-  assert.match(markup, /작업 카테고리<\/span><span class="stat-value">1<\/span>/u);
-  assert.match(markup, /현재 gate<\/span><span class="stat-value">검토<\/span>/u);
+  assert.doesNotMatch(markup, /summary-strip|활성 작업|작업 카테고리|작업 중 AI|Codex 최고 사용률/u);
 });
 
 test('the hierarchy renders Main Codex and actual child actors as a reporting tree', () => {
@@ -166,7 +166,7 @@ test('the hierarchy renders Main Codex and actual child actors as a reporting tr
     snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
     tasks: [harnessTask()],
   });
-  for (const expected of ['Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
+  for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 수정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', '역할', '현재 작업', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
   assert.equal((markup.match(/class="h-phase(?: |")/gu) || []).length, 4);
@@ -204,7 +204,7 @@ test('parallel project, protocol, and visualization reports render as session ta
   assert.equal((markup.match(/role="tabpanel"/gu) || []).length, 3);
   assert.equal((markup.match(/aria-selected="true"/gu) || []).length, 1);
   assert.equal((markup.match(/data-task-panel="\d+" hidden/gu) || []).length, 2);
-  assert.match(markup, /작업 카테고리<\/span><span class="stat-value">3<\/span>/u);
+  assert.doesNotMatch(markup, /작업 카테고리<\/span>/u);
 });
 
 test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {
@@ -265,7 +265,7 @@ test('Claude snapshots are ignored and actor text is escaped', () => {
 });
 
 test('an empty snapshot list and a payload without buckets render an empty state', async () => {
-  // buildDashboard()를 직접 부른다 — 게이지가 없는 표본이라 샌드박스의 계약 검사에 걸린다.
+  // buildDashboard()를 직접 불러 빈 payload의 낮은 수준 렌더 계약을 확인한다.
   const { readSource, USAGE_APP_SOURCE } = await import('./render-sandbox.mjs');
   const vm = await import('node:vm');
   const context = {
@@ -281,8 +281,8 @@ test('an empty snapshot list and a payload without buckets render an empty state
   vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
   const { buildDashboard } = context.USAGE_RENDER;
 
-  assert.match(buildDashboard([], NOW), /아직 수집된 Codex 사용량 기록이 없습니다/u);
-  assert.match(buildDashboard(null, NOW), /아직 수집된 Codex 사용량 기록이 없습니다/u);
+  assert.match(buildDashboard([], NOW), /아직 수집된 한도 기록이 없습니다/u);
+  assert.match(buildDashboard(null, NOW), /아직 수집된 한도 기록이 없습니다/u);
   assert.match(
     buildDashboard([{ source: 'codex', captured_at: iso(HOUR), payload: { model: 'x' } }], NOW),
     /읽을 수 있는 Codex 한도 정보가 없습니다/u,
