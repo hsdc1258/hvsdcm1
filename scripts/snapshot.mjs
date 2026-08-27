@@ -230,7 +230,7 @@ function documentSnapshot(file, { note, mutate }) {
   const hrefs = [...source.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/gu)]
     .map(([, href]) => href)
     .filter((href) => !/^https?:/iu.test(href))
-    .map((href) => href.replace(/^\//u, ''));
+    .map((href) => href.replace(/[?#].*$/u, '').replace(/^\//u, ''));
   let html = source
     .replace(/\n?\s*<link\b[^>]*rel="stylesheet"[^>]*>/gu, '')
     .replace(/\n?\s*<script\b[^>]*>\s*<\/script>/gu, '');
