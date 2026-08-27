@@ -631,7 +631,15 @@
     selectedSessionView = ['active', 'complete', 'org'].includes(tab.dataset.sessionView)
       ? tab.dataset.sessionView
       : 'active';
+    if (selectedSessionView === 'org') centerPortfolioOrg(root);
     if (moveFocus) tab.focus();
+  }
+
+  function centerPortfolioOrg(root) {
+    const panel = root?.querySelector?.('[data-session-view-panel="org"]');
+    const scroll = panel?.querySelector?.('.h-org-scroll');
+    if (!scroll) return;
+    scroll.scrollLeft = Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2);
   }
 
   function wireSessionViews(root) {
@@ -659,6 +667,7 @@
   function wireDashboard(root) {
     wireSessionViews(root);
     wireTaskTabs(root);
+    if (selectedSessionView === 'org') centerPortfolioOrg(root);
   }
 
   async function load({ announce = false } = {}) {
@@ -688,6 +697,7 @@
   load();
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioOrg,
-    activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard, load,
+    activateTaskTab, wireTaskTabs, activateSessionView, centerPortfolioOrg,
+    wireSessionViews, wireDashboard, load,
   };
 })();

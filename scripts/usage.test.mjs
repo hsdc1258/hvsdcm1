@@ -276,13 +276,15 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   });
   const tabs = [makeTab('active', true), makeTab('complete'), makeTab('org')];
   const panels = tabs.map((tab, index) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: index !== 0 }));
+  const orgScroll = { scrollWidth: 1000, clientWidth: 400, scrollLeft: 0 };
+  panels[2].querySelector = () => orgScroll;
   const tablist = {
     addEventListener(type, handler) { listeners[type] = handler; },
     querySelectorAll() { return tabs; },
     contains(tab) { return tabs.includes(tab); },
   };
   const root = {
-    querySelector() { return tablist; },
+    querySelector(selector) { return selector === '[data-session-view-panel="org"]' ? panels[2] : tablist; },
     querySelectorAll(selector) { return selector === '[data-session-view]' ? tabs : panels; },
   };
 
@@ -299,6 +301,38 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   assert.equal(prevented, true);
   assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
   assert.equal(tabs[2].focused, true);
+  assert.equal(orgScroll.scrollLeft, 300);
+});
+
+test('dashboard wiring re-centers a persisted org view after refresh', () => {
+  const { activateSessionView, wireDashboard } = createUsageRenderers();
+  const tabs = ['active', 'complete', 'org'].map((view) => ({
+    dataset: { sessionView: view }, tabIndex: view === 'active' ? 0 : -1,
+    classList: { toggle() {} }, setAttribute() {}, focus() {},
+  }));
+  const panels = tabs.map((tab) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: tab.dataset.sessionView !== 'active' }));
+  const activationScroll = { scrollWidth: 1000, clientWidth: 400, scrollLeft: 0 };
+  panels[2].querySelector = () => activationScroll;
+  const activationRoot = {
+    querySelector(selector) { return selector === '[data-session-view-panel="org"]' ? panels[2] : null; },
+    querySelectorAll(selector) { return selector === '[data-session-view]' ? tabs : panels; },
+  };
+  activateSessionView(activationRoot, tabs[2]);
+  assert.equal(activationScroll.scrollLeft, 300);
+
+  const refreshedScroll = { scrollWidth: 1200, clientWidth: 600, scrollLeft: 0 };
+  const viewTablist = { addEventListener() {} };
+  const refreshedOrgPanel = { querySelector() { return refreshedScroll; } };
+  const refreshedRoot = {
+    querySelector(selector) {
+      if (selector === '[data-session-view-tablist]') return viewTablist;
+      if (selector === '[data-session-view-panel="org"]') return refreshedOrgPanel;
+      return null;
+    },
+    querySelectorAll() { return []; },
+  };
+  wireDashboard(refreshedRoot);
+  assert.equal(refreshedScroll.scrollLeft, 300);
 });
 
 test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {
