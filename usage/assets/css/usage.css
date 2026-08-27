@@ -105,6 +105,21 @@
   font-size: var(--fs-micro);
   text-align: right;
 }
+/* 계정·모델 그룹 머리에 붙는 자기 수집 시각. rail은 좁아서 긴 모델 이름과 시각이
+   한 줄에 다 들어가지 않는 조합이 나온다. 그때 이름을 'CLAUDE-/FABLE-5'처럼 쪼개는
+   대신 시각을 아랫줄로 내린다 — 이름이 먼저이고 시각은 따라붙는 정보다
+   (DESIGN.md §2 어절 쪼개짐 금지). */
+.us-quota-rail .list-group-head-row {
+  flex-wrap: wrap;
+}
+.us-quota-rail .list-group-head-row > .list-group-head {
+  white-space: nowrap;
+}
+.us-quota-rail .list-group-head-row > .us-card-meta {
+  max-width: 100%;
+  margin-left: auto;
+  word-break: keep-all;
+}
 .us-quota-rail .list-group {
   border-radius: var(--radius-m);
 }

@@ -31,13 +31,17 @@ const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
   payload: { model: 'gpt-5.6-codex', plan_type: 'pro', rate_limits: buckets },
 });
 
-// claude 수집기는 모델별로 창을 담는다 (scripts/usage-push.mjs buildClaudeReport).
+// claude 수집기는 모델별로 창을 담고, **모델마다 자기 수집 시각**을 함께 싣는다
+// (claude-workspace scripts/usage-push.mjs buildClaudeReport).
+// rateLimits 자리에 { at, buckets }를 주면 그 모델만 다른 시각으로 수집된 것으로 만든다.
 const claudeSnapshot = (models, capturedAt = iso(HOUR)) => ({
   source: 'claude',
   captured_at: capturedAt,
   payload: {
-    models: Object.fromEntries(Object.entries(models)
-      .map(([id, rateLimits]) => [id, { captured_at: capturedAt, rate_limits: rateLimits }])),
+    models: Object.fromEntries(Object.entries(models).map(([id, value]) => [id, {
+      captured_at: value?.at || capturedAt,
+      rate_limits: value?.buckets || value,
+    }])),
   },
 });
 
@@ -160,6 +164,53 @@ test('a captured_at older than 15m is marked as delayed', () => {
 
   const stale = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((15 * 60_000) + 1000))]);
   assert.match(stale, /수집 지연/u);
+});
+
+// ---- 수집 시각은 그룹(계정·모델)마다 정직하게 -------------------------------
+//
+// 실측된 결함(2026-08-28): 한 카드에 여러 그룹이 들어가는데 시각은 카드 머리 하나뿐이라,
+// 몇 시간 전에 멈춘 모델과 방금 수집된 모델이 한 문장으로 뭉뚱그려졌다. 계약은
+// usage.js의 "수집 시각 계약" 주석에 있다 — 그룹마다 자기 시각·지연, 카드 머리는
+// 가장 신선한 그룹.
+
+test('each model carries its own capture time and only the stale one is flagged', () => {
+  const markup = dashboard([claudeSnapshot({
+    'claude-opus-5': { at: iso(5 * 60_000), buckets: { five_hour: { used_percentage: 44 } } },
+    'claude-fable-5': { at: iso(3 * HOUR), buckets: { five_hour: { used_percentage: 12 } } },
+  }, iso(5 * 60_000))]);
+  // 신선한 모델의 시각과 낡은 모델의 시각이 **둘 다** 화면에 있다.
+  assert.match(markup, /5분 전 수집/u);
+  assert.match(markup, /3시간 전 수집/u);
+  // 지연 표시는 낡은 모델 쪽 하나뿐이다 — 카드 전체를 지연으로 묶지 않는다.
+  assert.equal((markup.match(/수집 지연/gu) || []).length, 1);
+});
+
+test('the card head follows the freshest group, not the oldest or the row time', () => {
+  // 행 시각이 낡아도(수집기가 오래 전에 행을 갱신) 그룹이 더 신선하면 그룹이 이긴다.
+  const markup = dashboard([claudeSnapshot({
+    'claude-opus-5': { at: iso(2 * 60_000), buckets: { five_hour: { used_percentage: 44 } } },
+    'claude-fable-5': { at: iso(4 * HOUR), buckets: { five_hour: { used_percentage: 12 } } },
+  }, iso(4 * HOUR))]);
+  const head = markup.match(/Claude 한도<\/h3><\/div>\s*<span class="us-card-meta">([^<]*)</u);
+  assert.ok(head, '카드 머리의 수집 시각 메타를 찾지 못했다');
+  assert.equal(head[1], '2분 전 수집');
+});
+
+test('every group is delayed only when even the freshest one is', () => {
+  const markup = dashboard([claudeSnapshot({
+    'claude-opus-5': { at: iso(40 * 60_000), buckets: { five_hour: { used_percentage: 44 } } },
+    'claude-fable-5': { at: iso(3 * HOUR), buckets: { five_hour: { used_percentage: 12 } } },
+  }, iso(40 * 60_000))]);
+  // 카드 머리 + 모델 둘 = 세 곳 모두 지연.
+  assert.equal((markup.match(/수집 지연/gu) || []).length, 3);
+});
+
+// codex payload는 계정이 하나뿐이라 그룹 시각을 싣지 않는다 — 행 시각이 곧 그 계정의
+// 시각이므로 카드 머리와 그룹에 같은 값을 두 번 적지 않는다.
+test('a source without per-group times prints its capture time exactly once', () => {
+  const markup = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso(3 * HOUR))]);
+  assert.equal((markup.match(/3시간 전 수집/gu) || []).length, 1);
+  assert.equal((markup.match(/수집 지연/gu) || []).length, 1);
 });
 
 test('Pro weekly limit is account-scoped and never named after the active model', () => {

@@ -221,12 +221,18 @@
   // 수집 원본마다 payload 모양이 다르다: codex는 rate_limits 하나, claude는 모델별
   // models[<id>].rate_limits다. 어느 쪽인지는 **모양으로** 판정한다 — source 이름으로
   // 분기하면 세 번째 원본이 생길 때 UI가 조용히 빈 화면을 낸다.
+  //
+  // capturedAt은 **그룹 자신의 수집 시각**이고, 없으면 null이다(아래 수집 시각 계약).
   function groupsOf(payload) {
     if (!payload || typeof payload !== 'object') return [];
     if (payload.models && typeof payload.models === 'object') {
       return Object.entries(payload.models)
         .filter(([, model]) => model && typeof model === 'object')
-        .map(([id, model]) => ({ label: id, buckets: model.rate_limits }));
+        .map(([id, model]) => ({
+          label: id,
+          buckets: model.rate_limits,
+          capturedAt: model.captured_at ?? null,
+        }));
     }
     if (!payload.rate_limits || typeof payload.rate_limits !== 'object') return [];
     const plan = String(payload.plan_type || '').trim().toLowerCase();
@@ -234,7 +240,8 @@
       pro: 'ChatGPT Pro', plus: 'ChatGPT Plus', business: 'ChatGPT Business',
       team: 'ChatGPT Team', enterprise: 'ChatGPT Enterprise', free: 'ChatGPT Free',
     };
-    return [{ label: planLabels[plan] || 'Codex 계정', buckets: payload.rate_limits }];
+    // codex payload는 계정이 하나뿐이라 그룹별 시각을 싣지 않는다 — 행 시각이 곧 이 계정의 시각이다.
+    return [{ label: planLabels[plan] || 'Codex 계정', buckets: payload.rate_limits, capturedAt: null }];
   }
 
   function bucketLabel(key, windowMinutes) {
@@ -285,27 +292,67 @@
       </div>`;
   }
 
+  // ---- 수집 시각 계약 (2026-08-28 정합 수정) --------------------------------
+  //
+  // 시각의 원본이 두 층이다.
+  //   · **행 시각** `snapshot.captured_at` — D1 usage_snapshots 한 행의 시각.
+  //     수집기가 그 원본 전체를 마지막으로 갱신한 시점이다.
+  //   · **그룹 시각** payload 안의 계정·모델별 `captured_at` — claude payload의
+  //     `models[<id>].captured_at`이 이것이다. codex payload에는 없다(계정이 하나뿐이라
+  //     행 시각이 곧 그 계정의 시각이다).
+  //
+  // 표시는 **그룹이 기준**이다. 그룹마다 자기 시각으로 지연을 판정하고, 카드 머리에는
+  // 그중 **가장 신선한** 시각을 쓴다. 낡은 그룹 하나를 카드 대표로 삼으면 분 단위로
+  // 갱신되는 원본이 화면에서 "몇 시간 전 · 수집 지연"으로 보이고(실측된 결함),
+  // 반대로 카드 머리 하나만 두면 실제로 멈춘 모델이 신선한 모델 뒤에 숨는다.
+  // 그룹 시각이 아예 없는 원본(codex)은 그룹이 행 시각을 물려받고, 같은 값을 카드
+  // 머리와 그룹에 두 번 적지 않는다.
+  function quotaGroupOf(group, rowCapturedAt, now) {
+    const ownTime = parseTime(group.capturedAt);
+    const time = ownTime === null ? parseTime(rowCapturedAt) : ownTime;
+    return {
+      ...group,
+      rows: bucketsOf(group),
+      hasOwnTime: ownTime !== null,
+      time,
+      captured: time === null ? null : relativeTime(time, now),
+      stale: time !== null && now - time > STALE_MS,
+    };
+  }
+
+  function renderCaptureMeta(captured, stale) {
+    return `<span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 수집 지연' : ''}</span>`;
+  }
+
   function renderQuota(snapshot, now) {
     const label = SOURCE_LABELS[snapshot.source] || snapshot.source;
-    const capturedTime = parseTime(snapshot.captured_at);
-    const captured = relativeTime(snapshot.captured_at, now);
-    const stale = capturedTime !== null && now - capturedTime > STALE_MS;
-    const groups = groupsOf(snapshot.payload).map((group) => {
-      const buckets = bucketsOf(group);
-      if (buckets.length === 0) return '';
+    const groups = groupsOf(snapshot.payload)
+      .map((group) => quotaGroupOf(group, snapshot.captured_at, now))
+      .filter((group) => group.rows.length > 0);
+    // 그릴 그룹이 하나도 없으면 남는 근거는 행 시각뿐이다.
+    const times = groups.map((group) => group.time).filter((time) => time !== null);
+    const headTime = times.length ? Math.max(...times) : parseTime(snapshot.captured_at);
+    const headCaptured = headTime === null ? null : relativeTime(headTime, now);
+    const headStale = headTime !== null && now - headTime > STALE_MS;
+    const body = groups.map((group) => {
+      const head = !group.label
+        ? ''
+        : group.hasOwnTime
+          ? `<div class="list-group-head-row"><p class="list-group-head">${escapeHtml(group.label)}</p>${renderCaptureMeta(group.captured, group.stale)}</div>`
+          : `<p class="list-group-head">${escapeHtml(group.label)}</p>`;
       return `
         <div class="us-group">
-          ${group.label ? `<p class="list-group-head">${escapeHtml(group.label)}</p>` : ''}
-          <div class="list-group is-inset">${buckets.map((bucket) => renderQuotaRow(bucket, now)).join('')}</div>
+          ${head}
+          <div class="list-group is-inset">${group.rows.map((bucket) => renderQuotaRow(bucket, now)).join('')}</div>
         </div>`;
     }).join('');
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
           <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
-          <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 수집 지연' : ''}</span>
+          ${renderCaptureMeta(headCaptured, headStale)}
         </header>
-        ${groups || `<p class="us-empty">읽을 수 있는 ${escapeHtml(label)} 한도 정보가 없습니다.</p>`}
+        ${body || `<p class="us-empty">읽을 수 있는 ${escapeHtml(label)} 한도 정보가 없습니다.</p>`}
       </article>`;
   }
 

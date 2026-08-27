@@ -70,6 +70,9 @@ const USAGE_FIXTURE = {
     },
   }, {
     source: 'claude',
+    // 행 시각은 모델 시각의 최댓값이다. 아래 두 모델은 수집 시각이 다르다 —
+    // 그룹마다 자기 시각·지연을 그리는 계약(usage.js "수집 시각 계약")을 스냅샷이
+    // 실제로 지나가게 하려는 표본이다. 카드 머리는 신선한 쪽(11:52)을 따른다.
     captured_at: '2026-08-27T11:52:00Z',
     payload: {
       models: {
@@ -78,6 +81,12 @@ const USAGE_FIXTURE = {
           rate_limits: {
             five_hour: { used_percentage: 33.4, resets_at: '2026-08-27T14:00:00Z' },
             seven_day: { used_percentage: 57.9, resets_at: '2026-09-01T00:00:00Z' },
+          },
+        },
+        'claude-fable-5': {
+          captured_at: '2026-08-27T09:20:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 18.6, resets_at: '2026-08-27T14:00:00Z' },
           },
         },
       },
