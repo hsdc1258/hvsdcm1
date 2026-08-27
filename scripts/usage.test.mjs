@@ -11,7 +11,10 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createUsageAppSandbox, createUsageRenderers, renderUsageDashboard } from './render-sandbox.mjs';
+import {
+  createFakeClock, createUsageAppSandbox, createUsageRenderers, renderUsageDashboard,
+  HANGING_RESPONSE,
+} from './render-sandbox.mjs';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -347,14 +350,24 @@ test('status-view activation exposes one view and keyboard wiring advances to th
 // ---- 조직도 확대·이동 (plan §4-3) -----------------------------------------
 // 계약은 셋이다: 처음에는 트리 전체가 보이게 맞추고, 휠은 커서를 고정점으로 확대하며,
 // 배율은 0.3~2.5 밖으로 나가지 않는다. 그리고 그 휠 이벤트는 **조직도 안에서만** 잡는다.
-function fakeOrgViewport(key, { clientWidth = 400, contentWidth = 1000 } = {}) {
-  const canvas = { style: {}, scrollWidth: contentWidth, offsetWidth: contentWidth };
+// 높이를 반드시 함께 준다 — 폭만 주면 "맞춤"이 세로를 무시해도 검사가 못 본다
+// (review WPA2 M3의 사각지대가 정확히 그것이었다).
+function fakeOrgViewport(key, {
+  clientWidth = 400, contentWidth = 1000, clientHeight = 300, contentHeight = 300,
+} = {}) {
+  const canvas = {
+    style: {},
+    scrollWidth: contentWidth,
+    offsetWidth: contentWidth,
+    scrollHeight: contentHeight,
+    offsetHeight: contentHeight,
+  };
   return {
     canvas,
     listeners: {},
     dataset: { orgView: key },
     clientWidth,
-    clientHeight: 300,
+    clientHeight,
     classList: { add() {}, remove() {} },
     querySelector(selector) { return selector === '[data-org-canvas]' ? canvas : null; },
     addEventListener(type, handler) { this.listeners[type] = handler; },
@@ -372,9 +385,10 @@ test('an org view fits the whole tree on first paint and zooms around the cursor
   const viewport = fakeOrgViewport('portfolio');
   wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
 
-  // 400px 창에 1000px 트리 → 0.4배로 줄여 전부 보인다. 남는 폭이 없으므로 x는 0.
+  // 400px 창에 1000px 트리 → 0.4배로 줄여 전부 보인다. 남는 폭이 없으므로 x는 0이고,
+  // 세로는 300px 창에 300 × 0.4 = 120px만 차지하므로 남는 180px의 절반이 y가 된다.
   assert.equal(scaleOf(viewport), 0.4);
-  assert.deepEqual(offsetOf(viewport), [0, 0]);
+  assert.deepEqual(offsetOf(viewport), [0, 90]);
 
   // 휠은 preventDefault로 잡는다 — 이 리스너는 뷰포트에만 달려 있어 바깥 페이지
   // 스크롤은 그대로다.
@@ -413,6 +427,31 @@ test('zoom stops at the 0.3-2.5 band and dragging pans the canvas', () => {
   // 손을 뗀 뒤의 커서 이동은 무시한다.
   viewport.listeners.pointermove({ pointerId: 7, clientX: 400, clientY: 400 });
   assert.deepEqual(offsetOf(viewport), [before[0] + 60, before[1] + 30]);
+});
+
+// review WPA2 M3 — 실측 재현: 390×844 화면, 액터 10명 세션에서 내용 908×2065,
+// 뷰포트 317×480. 폭만 맞추면 0.347배가 뽑혀 16노드 중 4개가 잘린 채로 "맞춤"이었다.
+test('fit covers both axes, so a tall mobile tree is not clipped', () => {
+  const { wireOrgViews, fitOrgView, orgViewState } = createUsageRenderers();
+  const viewport = fakeOrgViewport('session:tall', {
+    clientWidth: 317, clientHeight: 480, contentWidth: 908, contentHeight: 2065,
+  });
+  wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
+
+  const fitted = scaleOf(viewport);
+  assert.ok(fitted < 317 / 908, '폭만 맞춘 배율(0.349)이 그대로 남아 있으면 세로가 잘린다.');
+  assert.ok(908 * fitted <= 317 + 0.5, `가로가 뷰포트를 넘습니다: ${908 * fitted}`);
+  assert.ok(2065 * fitted <= 480 + 0.5, `세로가 뷰포트를 넘습니다: ${2065 * fitted}`);
+
+  // 확대해서 보다가 다시 "맞춤"을 눌러도 같은 배율로 돌아온다.
+  viewport.listeners.wheel({ deltaY: -300, clientX: 0, clientY: 0, preventDefault() {} });
+  assert.ok(scaleOf(viewport) > fitted);
+  fitOrgView(viewport, orgViewState.get('session:tall'));
+  assert.equal(scaleOf(viewport), fitted);
+
+  // 맞춤이 0.3 아래로 내려간 상태에서 축소 휠이 화면을 도로 **확대**하면 안 된다.
+  viewport.listeners.wheel({ deltaY: 200, clientX: 0, clientY: 0, preventDefault() {} });
+  assert.ok(scaleOf(viewport) <= fitted, '축소가 배율을 올려서는 안 됩니다.');
 });
 
 test('an org view keeps its zoom and pan across a re-render of the same key', () => {
@@ -620,4 +659,278 @@ test('an empty snapshot list and a payload without buckets render an empty state
     buildDashboard([{ source: 'codex', captured_at: iso(HOUR), payload: { model: 'x' } }], NOW),
     /읽을 수 있는 Codex 한도 정보가 없습니다/u,
   );
+});
+
+// ---- 자동 갱신의 생존 (review WPA2 M2) ------------------------------------
+// 계약: 성공·거절·**응답 없음** 셋 다 in-flight 잠금을 풀고 다음 주기를 예약한다.
+// 이전 구현은 세 번째 경우에 finally가 영영 돌지 않아 화면이 조용히 멎었다.
+test('a fetch that never settles times out and the automatic poll keeps running', async () => {
+  const clock = createFakeClock();
+  const sandbox = await createUsageAppSandbox(
+    [HANGING_RESPONSE, { snapshots: [], tasks: [harnessTask()] }],
+    { clock },
+  );
+  assert.equal(sandbox.requests.length, 1);
+
+  // 제한 시간 전에는 재요청하지 않는다 — 요청을 겹치지 않는 성질은 그대로다.
+  await clock.advance(14_000);
+  assert.equal(sandbox.requests.length, 1);
+
+  // 15초에서 시간초과 → 오류를 말하고 다음 주기를 예약한다.
+  await clock.advance(2_000);
+  assert.match(sandbox.store.get('usageError').textContent, /응답이 없어/u);
+
+  // 유휴 주기(60초) 뒤 두 번째 요청이 실제로 나가고 화면이 채워진다.
+  await clock.advance(60_000);
+  assert.equal(sandbox.requests.length, 2);
+  assert.match(sandbox.store.get('usageBody').innerHTML, /h-tree/u);
+  assert.equal(sandbox.store.get('usageError').textContent, '');
+});
+
+// ---- 결측은 0이 아니다 (review WPA2 M1) -----------------------------------
+test('null usage snapshots and a null actor percent stay unmeasured instead of becoming zero', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'null-events',
+    events: [
+      // 앞머리 null: 아직 스냅샷이 없던 시점. 뒤의 90 → 80만 소모다(10%p).
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'plan', usage_codex: null, usage_claude: null },
+      { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'work', usage_codex: null, usage_claude: 90 },
+      { ts: iso(HOUR), kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: 55, usage_claude: 80 },
+      // 꼬리 null: 진행률을 싣지 않은 늦은 보고가 앞선 55%를 0%로 덮으면 안 된다.
+      { ts: iso(0), kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: null, usage_claude: null },
+    ],
+  });
+  const markup = renderers.renderPortfolioOrg([task], NOW);
+  assert.match(markup, /한도 소모 Claude 10\.0%p/u);
+  // Codex는 측정값이 하나도 없다 — 0%p로 지어내지 않는다.
+  assert.doesNotMatch(markup, /소모[^<]*Codex/u);
+  assert.doesNotMatch(markup, /Claude 80\.0%p/u);
+  assert.match(markup, /data-actor-id="usage-harness:reviewer"[\s\S]*?<strong>55%<\/strong>/u);
+});
+
+// 한도 창이 초기화되면 잔여가 도로 오른다. 그 상승은 소모가 아니므로 더하지 않고,
+// 초기화가 있었다는 사실만 따로 적는다.
+test('a quota window reset is excluded from consumption and marked', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'reset-events',
+    events: [
+      { ts: iso(4 * HOUR), kind: 'phase-change', phase: 'plan', usage_codex: 30 },
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'work', usage_codex: 12 },
+      { ts: iso(2 * HOUR), kind: 'report', phase: 'work', usage_codex: 100 },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'review', usage_codex: 93 },
+    ],
+  });
+  const markup = renderers.renderPortfolioOrg([task], NOW);
+  // 18 + 7 = 25%p. 12 → 100의 상승(+88)은 소모가 아니다.
+  assert.match(markup, /한도 소모 Codex 25\.0%p \(한도 초기화 1회\)/u);
+});
+
+// ---- Worker → 브라우저 경계 계약 (review WPA2 B1 / M5) ---------------------
+// 여기서는 이벤트 fixture를 손으로 짓지 않는다. **실제 Worker**에 스냅샷과 하네스
+// 보고를 넣고, Worker가 조립한 GET /api/usage 응답을 그대로 렌더러에 먹인다.
+// usage_codex·usage_claude가 "잔여 한도"라는 뜻이 양쪽에서 같아야만 통과한다 —
+// 손으로 지은 "증가하는 사용량" fixture는 이 어긋남을 볼 수 없었다.
+function harnessReportBody(overrides = {}) {
+  return {
+    version: 1,
+    task_id: 'usage-harness',
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    task: {
+      name: '사용량 하네스 시각화 (08-27)',
+      phase: 'work',
+      progress: 55,
+      status: 'active',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      category_key: 'pipeline-visualization',
+      category: '파이프라인 시각화',
+      current: 'Worker 연결',
+      done: '계약 고정',
+      next: '화면 렌더',
+      deadline: '20:10 KST',
+    },
+    actors: [{
+      id: 'usage-harness:main',
+      parent_id: '',
+      name: 'Main Codex',
+      kind: 'codex',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      role: '기획 · 통합 · 최종 판정',
+      status: 'working',
+      assignment: 'Worker 연결',
+      progress: 55,
+    }],
+    modules: [],
+    artifacts: ['npm test'],
+    ...overrides,
+  };
+}
+
+function workerBoundaryEnv() {
+  const state = { snapshots: new Map(), tasks: new Map(), events: [], eventId: 0 };
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    USAGE_INGEST_TOKEN: 'usage-token',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      // D1 batch는 한 트랜잭션에서 순서대로 돈다. 이벤트 삽입은 바로 앞 upsert의
+      // changes()를 보므로 그 연결도 그대로 흉내 낸다.
+      async batch(statements) {
+        let changes = 0;
+        const results = [];
+        for (const statement of statements) {
+          const result = await statement.run(changes);
+          changes = result?.meta?.changes || 0;
+          results.push(result);
+        }
+        return results;
+      },
+      prepare(sql) {
+        if (sql.includes('INSERT INTO usage_snapshots')) {
+          return {
+            bind(source, capturedAt, payload) {
+              return {
+                async run() {
+                  state.snapshots.set(source, { source, captured_at: capturedAt, payload });
+                  return { success: true };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return {
+            bind(...sources) {
+              return {
+                async all() {
+                  return {
+                    results: [...state.snapshots.values()].filter((row) => sources.includes(row.source)),
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return { bind(taskId) { return { async first() { return state.tasks.get(taskId) || null; } }; } };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          return {
+            bind(taskId, status, updatedAt, payload) {
+              return {
+                async run() {
+                  state.tasks.set(taskId, {
+                    task_id: taskId, status, updated_at: updatedAt, payload,
+                  });
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('INSERT INTO harness_events')) {
+          return {
+            bind(taskId, ts, kind, actorId, phase, percent, model, reasoning, status, usageCodex, usageClaude) {
+              return {
+                async run(changes) {
+                  if (changes === 0) return { success: true, meta: { changes: 0 } };
+                  state.eventId += 1;
+                  state.events.push({
+                    task_id: taskId,
+                    id: state.eventId,
+                    ts,
+                    kind,
+                    actor_id: actorId,
+                    phase,
+                    percent,
+                    model,
+                    reasoning,
+                    status,
+                    usage_codex: usageCodex,
+                    usage_claude: usageClaude,
+                  });
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('DELETE FROM harness_events')) {
+          return { async run() { return { success: true, meta: { changes: 0 } }; } };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return { async all() { return { results: [...state.tasks.values()] }; } };
+        }
+        if (sql.includes('FROM harness_events')) {
+          return { async all() { return { results: state.events }; } };
+        }
+        throw new Error(`Unexpected SQL in the worker boundary test: ${sql}`);
+      },
+    },
+  };
+  return { env, state };
+}
+
+test('consumption rendered in the browser matches what the Worker actually records', async () => {
+  const { default: worker } = await import('../worker/src/index.js');
+  const { env, state } = workerBoundaryEnv();
+  const postSnapshot = (usedPercent) => worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer usage-token', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      source: 'codex',
+      captured_at: '2026-08-27T09:00:00.000Z',
+      payload: {
+        model: 'gpt-5.6-codex',
+        plan_type: 'pro',
+        rate_limits: { secondary: { used_percent: usedPercent, window_minutes: 10_080 } },
+      },
+    }),
+  }), env);
+  const postReport = (occurredAt) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(harnessReportBody({ occurred_at: occurredAt })),
+  }), env);
+
+  // 사용량 20% → 잔여 80, 이어서 사용량 40% → 잔여 60. 이 세션이 쓴 것은 20%p다.
+  assert.equal((await postSnapshot(20)).status, 200);
+  assert.equal((await postReport('2026-08-27T09:00:00.000Z')).status, 200);
+  assert.equal((await postSnapshot(40)).status, 200);
+  assert.equal((await postReport('2026-08-27T10:00:00.000Z')).status, 200);
+
+  // Worker가 적는 것은 **잔여**다 — 이 전제가 깨지면 아래 렌더 기대값도 함께 깨진다.
+  assert.deepEqual(state.events.map((event) => event.usage_codex), [80, 60]);
+  assert.deepEqual(state.events.map((event) => event.usage_claude), [null, null]);
+
+  const response = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token', 'cf-connecting-ip': '198.51.100.7' },
+  }), env);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.tasks.length, 1);
+  assert.equal(data.tasks[0].events.length, 2);
+
+  const markup = createUsageRenderers().renderPortfolioOrg(data.tasks, NOW);
+  assert.match(markup, /한도 소모 Codex 20\.0%p/u);
+  // Claude 스냅샷이 없어 두 이벤트 모두 null이다 — 0%p 소모를 지어내지 않는다.
+  assert.doesNotMatch(markup, /소모[^<]*Claude/u);
 });

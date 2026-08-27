@@ -324,7 +324,47 @@ export function createUsageRenderers() {
   return renderers;
 }
 
-export async function createUsageAppSandbox(responses = []) {
+// 응답이 영영 오지 않는 요청. 큐에 이 표식을 넣으면 fetch가 정착하지 않는다.
+// (review WPA2 M2 — 그 상황에서 자동 갱신이 통째로 멈췄다.)
+export const HANGING_RESPONSE = Symbol('hanging-response');
+
+// 제어 가능한 시계. 샌드박스의 setTimeout이 no-op이면 "타이머가 걸렸는가"를 물을 수
+// 없어 폴링 계약을 검사할 수 없다 — 그래서 시간을 손으로 밀 수 있게 만든다.
+export function createFakeClock() {
+  let current = 0;
+  let sequence = 0;
+  const timers = new Map();
+  const settle = () => new Promise((resolve) => { setImmediate(resolve); });
+  return {
+    now() { return current; },
+    pending() { return timers.size; },
+    setTimeout(callback, delay) {
+      sequence += 1;
+      timers.set(sequence, { at: current + (Number(delay) || 0), callback });
+      return sequence;
+    },
+    clearTimeout(id) { timers.delete(id); },
+    // 예약 시각 순서대로 실제로 실행한다. 콜백이 다시 예약한 타이머도 목표 시각
+    // 안이면 이어서 돈다 (freshness 틱처럼 스스로를 다시 거는 타이머가 있다).
+    async advance(milliseconds) {
+      const target = current + milliseconds;
+      for (;;) {
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.at <= target)
+          .sort((left, right) => left[1].at - right[1].at)[0];
+        if (!due) break;
+        timers.delete(due[0]);
+        current = due[1].at;
+        due[1].callback();
+        await settle();
+      }
+      current = target;
+      await settle();
+    },
+  };
+}
+
+export async function createUsageAppSandbox(responses = [], options = {}) {
   const store = new Map();
   const requests = [];
   const queue = [...responses];
@@ -342,15 +382,20 @@ export async function createUsageAppSandbox(responses = []) {
     setItem(key, value) { this.store.set(key, String(value)); },
     removeItem(key) { this.store.delete(key); },
   };
-  context.fetch = async (url, options) => {
-    requests.push({ url: String(url), options });
+  context.fetch = async (url, requestOptions) => {
+    requests.push({ url: String(url), options: requestOptions });
     const next = queue.shift();
+    if (next === HANGING_RESPONSE) return new Promise(() => {});
     if (next instanceof Error) throw next;
     const data = next || { snapshots: [], tasks: [] };
     return { ok: true, status: 200, json: async () => data };
   };
-  context.setTimeout = (callback) => { void callback; return 0; };
-  context.clearTimeout = () => {};
+  const clock = options.clock || null;
+  context.setTimeout = clock
+    ? ((callback, delay) => clock.setTimeout(callback, delay))
+    : ((callback) => { void callback; return 0; });
+  context.clearTimeout = clock ? ((id) => clock.clearTimeout(id)) : (() => {});
+  context.AbortController = AbortController;
   context.console = { log() {}, warn() {}, error() {} };
   vm.createContext(context);
   vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });

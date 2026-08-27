@@ -96,12 +96,16 @@ assert.doesNotMatch(org, /\(08-27\)/u);
 assert.doesNotMatch(org, /이 세션 소모/u);
 assert.doesNotMatch(org, /h-node-time/u, '이벤트가 없는 세션에는 단계 소요시간을 지어내지 않습니다.');
 
+// usage_codex·usage_claude는 그 시점의 **잔여 한도(%)**다 (worker/src/router.js의
+// remainingUsagePercent). 그러므로 소모는 "처음 − 끝"이고, 값은 시간이 갈수록 **줄어든다**.
+// 이 fixture가 늘어나는 값을 쓰면 화면의 부호 오류를 그대로 잠근다 (review WPA2 B1/M5).
 const eventTask = {
   ...tasks[1],
   events: [
-    { ts: '2026-08-27T09:00:00.000Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 10, usage_claude: 4 },
-    { ts: '2026-08-27T10:30:00.000Z', kind: 'phase-change', phase: 'work', model: 'claude-opus-5', reasoning: 'high', usage_codex: 22.5, usage_claude: 4 },
-    { ts: '2026-08-27T11:00:00.000Z', kind: 'report', phase: 'work', actor_id: 'work:calc', percent: 41 },
+    { ts: '2026-08-27T09:00:00.000Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 90, usage_claude: 4 },
+    { ts: '2026-08-27T10:30:00.000Z', kind: 'phase-change', phase: 'work', model: 'claude-opus-5', reasoning: 'high', usage_codex: 77.5, usage_claude: 4 },
+    // 진행률만 실은 보고. 스냅샷이 없으면 usage는 null이고, 그 null은 0으로 읽히면 안 된다.
+    { ts: '2026-08-27T11:00:00.000Z', kind: 'report', phase: 'work', actor_id: 'work:calc', percent: 41, usage_codex: null, usage_claude: null },
   ],
 };
 const timed = renderers.renderPortfolioOrg([eventTask], NOW);
@@ -110,9 +114,11 @@ assert.match(timed, /data-org-phase="plan"[\s\S]*?h-node-time">1시간 30분/u);
 assert.match(timed, /data-org-phase="work"[\s\S]*?h-node-time">2시간 30분/u);
 // 현재 단계의 모델은 그 단계의 이벤트가 말한 것을 그대로 쓴다.
 assert.match(timed, /data-org-phase="work"[\s\S]*?claude-opus-5 · high/u);
-// 세션 한도 소모는 첫·끝 스냅샷의 차다. 변화가 없는 원본(Claude 4→4)은 적지 않는다.
+// 세션 한도 소모 = 잔여의 감소분(90 → 77.5 = 12.5%p). 변화가 없는 원본(Claude 4→4)은
+// 적지 않고, null 이벤트는 0으로 세지 않는다.
 assert.match(timed, /소모 Codex 12\.5%p/u);
 assert.doesNotMatch(timed, /Claude \d/u);
+assert.doesNotMatch(timed, /한도 초기화/u);
 // 서브에이전트 진행도는 payload의 60%가 아니라 이벤트의 최신 41%다.
 assert.match(timed, /data-actor-id="work:calc"[\s\S]*?<strong>41%<\/strong>/u);
 

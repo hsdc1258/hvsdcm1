@@ -2117,8 +2117,10 @@ label.list-row {
     border-top: 1px solid var(--line-faint);
     border-left: 0;
   }
+  /* 모바일에서 트리는 가로보다 세로로 길다. 뷰포트가 낮으면 "맞춤" 배율이 그만큼
+     더 내려가 글자가 읽히지 않는다 — 세로를 넉넉히 줘서 맞춤 배율을 끌어올린다. */
   .h-org-viewport {
-    height: clamp(280px, 62vh, 480px);
+    height: clamp(320px, 68vh, 560px);
   }
   .h-session-tab {
     flex-basis: 74vw;

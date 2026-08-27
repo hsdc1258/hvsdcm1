@@ -283,6 +283,25 @@ function validateUiContracts() {
     'usage: the redirect must carry ?login=1&next= so the visitor returns here after login');
   check(usageCss.includes('.us-body'), 'usage: the screen stylesheet lost its layout rules');
 
+  // 화면이 그리는 단계 목록과 **Worker가 받아 주는 단계 목록**은 같아야 한다.
+  // 다르면 둘 중 하나가 반드시 거짓말이 된다: 화면이 영원히 이벤트가 오지 않는 단계를
+  // 그리거나(review WPA2 M4가 요구한 8단계가 이 경우다), 받은 단계를 못 그린다.
+  // 두 목록을 손으로 맞추지 않고 **원본 대 원본**으로 비교한다 (LESSONS: 파생 가능한
+  // 것을 손으로 적지 않는다). 계약을 넓히려면 worker의 허용 집합을 먼저 넓혀야 하고,
+  // 그때 이 검사가 화면 갱신을 강제한다.
+  const routerJs = readFileSync(path.join(ROOT, 'worker/src/router.js'), 'utf8');
+  const workerPhases = [...(/VALID_HARNESS_PHASES = new Set\(\[([^\]]*)\]\)/u.exec(routerJs)?.[1] || '')
+    .matchAll(/'([a-z0-9-]+)'/gu)].map((match) => match[1]);
+  const screenPhases = [...(/\n  const PHASES = \[([\s\S]*?)\n  \];/u.exec(usageJs)?.[1] || '')
+    .matchAll(/key: '([a-z0-9-]+)'/gu)].map((match) => match[1]);
+  check(workerPhases.length > 0,
+    'usage: could not derive VALID_HARNESS_PHASES from worker/src/router.js — this cross-check is inert');
+  check(screenPhases.length > 0,
+    'usage: could not derive the PHASES list from usage.js — this cross-check is inert');
+  check(workerPhases.join(',') === screenPhases.join(','),
+    `usage: the screen's phase chain [${screenPhases.join(', ')}] must equal the phases the Worker accepts`
+    + ` [${workerPhases.join(', ')}] — a stage the reporter cannot emit can never carry status, model, or duration`);
+
   // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
   for (const primitive of ['.btn ', '.btn-primary ', '.field-input ', '.card ', '.sheet ', '.sheet-backdrop ', '.table ', '.badge ', '.segmented ', '.toolbar ', '.sidebar ', '.toast ', '.topbar ', '.app-shell ', '.segmented-btn ', '.sidebar-item ']) {
     check(systemCss.includes(primitive.trimEnd() + ' {') || systemCss.includes(primitive.trimEnd() + ','), `system.css: primitive ${primitive.trim()} is missing`);

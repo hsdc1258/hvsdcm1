@@ -8,7 +8,8 @@
   //   1. 세션마다 "사용자 입력 → 총괄 → 단계 → 에이전트"의 **전체 트리를 항상** 그린다.
   //      현재 단계만 강조하는 것이 아니라 대기 중인 단계까지 노드로 세운다.
   //   2. 조직도 영역은 휠 = 확대(커서 중심), 끌기 = 이동. 조직도 밖 페이지 스크롤은 그대로다.
-  //   3. 세션 한도 소모는 events의 첫·끝 usage 스냅샷 차로 계산한다.
+  //   3. 세션 한도 소모는 events의 usage 스냅샷으로 계산한다. 그 값은 **잔여 한도(%)**이므로
+  //      소모는 "처음 − 끝"이고, 창 초기화(잔여 상승) 구간은 더하지 않는다.
   //   4. 활성 세션이 있고 탭이 보이면 5초, 아니면 60초 주기로 다시 읽는다.
   //
   // events는 WP-A1이 추가하는 필드다. **없어도 트리는 그대로 그리고** 단계 소요시간과
@@ -27,8 +28,15 @@
   const POLL_ACTIVE_MS = 5_000;
   const POLL_IDLE_MS = 60_000;
   const FRESHNESS_TICK_MS = 1_000;
+  // 응답이 오지 않는 요청의 최대 수명. 이것이 없으면 **영원히 대기하는 fetch 하나가
+  // 자동 갱신을 통째로 멈춘다** — inFlight가 안 풀리고 다음 타이머도 걸리지 않기
+  // 때문이다 (review WPA2 M2). 그래서 성공·거절·시간초과 셋 다 반드시 정착시킨다.
+  const REQUEST_TIMEOUT_MS = 15_000;
   // 조직도 확대 범위 (계약 §4-3).
+  // ZOOM_MIN은 **사람이 휠·버튼으로 축소할 때의 바닥**이다. 자동 "맞춤"은 이 바닥
+  // 아래로 내려갈 수 있다 — 잘린 화면을 "맞춤"이라 부르지 않기 위해서다(review M3).
   const ZOOM_MIN = 0.3;
+  const FIT_MIN = 0.12;
   const ZOOM_MAX = 2.5;
   const ZOOM_STEP = 1.2;
   const PAN_STEP = 48;
@@ -90,10 +98,26 @@
     })[character],
   );
 
-  async function api(path) {
+  // 어떤 프라미스든 제한 시간 안에 정착시킨다. fetch가 signal을 존중하지 않아도(또는
+  // 본문 읽기가 멈춰도) 여기서 거절이 나가므로 호출자의 finally가 반드시 돈다.
+  function withTimeout(promise, milliseconds, abort) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        try { abort?.(); } catch { /* abort 실패가 시간초과 처리를 막지 않는다. */ }
+        reject(new Error('서버 응답이 없어 요청을 중단했습니다.'));
+      }, milliseconds);
+      promise.then(
+        (value) => { clearTimeout(timer); resolve(value); },
+        (error) => { clearTimeout(timer); reject(error); },
+      );
+    });
+  }
+
+  async function requestUsage(path, signal) {
     const separator = path.includes('?') ? '&' : '?';
     const response = await fetch(`${API_URL}${path}${separator}_=${Date.now()}`, {
       cache: 'no-store',
+      signal,
       headers: { authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}` },
     });
     if (response.status === 401) {
@@ -110,10 +134,32 @@
     return data;
   }
 
+  function api(path) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    return withTimeout(
+      requestUsage(path, controller?.signal),
+      REQUEST_TIMEOUT_MS,
+      () => controller?.abort(),
+    );
+  }
+
   // ---- 공용 계산 -----------------------------------------------------------
 
   function clampPercent(value) {
     return Math.min(100, Math.max(0, value));
+  }
+
+  // 이벤트·payload의 수치는 **결측이 정상**이다(스냅샷이 없던 시점, 진행률을 보고하지
+  // 않은 액터). `Number(null) === 0`이라 곧장 숫자로 바꾸면 "측정 안 됨"이 "0으로 측정됨"이
+  // 되어 한도 소모와 진행도를 거짓으로 만든다 (review WPA2 M1). 그래서 숫자로 바꾸기
+  // **전에** 결측을 걸러낸다. 숫자 값 하나를 얻는 경로는 전부 이 함수를 지난다.
+  function finiteNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
   }
 
   function formatDuration(milliseconds) {
@@ -363,29 +409,44 @@
     return map;
   }
 
-  // 서브에이전트 진행도는 이벤트의 최신 percent가 우선이고, 없으면 payload의 progress다.
+  // 서브에이전트 진행도는 이벤트의 **측정된** 최신 percent가 우선이고, 없으면 payload의
+  // progress다. percent가 null인 늦은 보고가 앞선 측정값을 0%로 덮지 않는다 (M1).
   function actorProgressMap(task) {
     const map = new Map();
     for (const event of taskEvents(task)) {
-      const percent = Number(event.percent);
-      if (event.actor_id && Number.isFinite(percent)) map.set(String(event.actor_id), percent);
+      const percent = finiteNumber(event.percent);
+      if (event.actor_id && percent !== null) map.set(String(event.actor_id), percent);
     }
     return map;
   }
 
-  // 세션 한도 소모 — 이벤트 첫 스냅샷과 끝 스냅샷의 차(%p).
-  // 창이 초기화되면 값이 되감기므로 음수 차는 의미가 없다 — 그 원본은 표시하지 않는다.
+  // 세션 한도 소모.
+  //
+  // **필드 계약**: events의 `usage_codex`·`usage_claude`는 그 시점의 **잔여 한도(%)**다.
+  // worker/src/router.js의 remainingUsagePercent()가 `remaining_percent`를 그대로 쓰고,
+  // 원본이 사용량만 주면 `100 - used`로 뒤집어 기록하기 때문이다. 따라서 소모는
+  // `끝 - 처음`이 아니라 **처음 - 끝**이다 (review WPA2 B1: 부호가 뒤집혀 있었다).
+  //
+  // 한도 창이 초기화되면 잔여가 도로 올라간다. 그 상승을 "소모"로 둔갑시키지 않으려고
+  // **감소 구간만** 더하고(초기화 지점에서 끊는다), 초기화가 있었다는 사실은 따로 적는다.
   function sessionUsageDeltas(task) {
     const events = taskEvents(task);
     const deltas = [];
     for (const [field, label] of USAGE_DELTA_FIELDS) {
       const values = events
-        .map((event) => Number(event[field]))
-        .filter((value) => Number.isFinite(value));
+        .map((event) => finiteNumber(event[field]))
+        .filter((value) => value !== null);
       if (values.length < 2) continue;
-      const delta = values[values.length - 1] - values[0];
-      if (!(delta >= 0.1)) continue;
-      deltas.push(`${label} ${delta.toFixed(1)}%p`);
+      let consumed = 0;
+      let resets = 0;
+      for (let index = 1; index < values.length; index += 1) {
+        const drop = values[index - 1] - values[index];
+        if (drop > 0) consumed += drop;
+        else if (drop < 0) resets += 1;
+      }
+      if (!(consumed >= 0.1)) continue;
+      const reset = resets > 0 ? ` (한도 초기화 ${resets}회)` : '';
+      deltas.push(`${label} ${consumed.toFixed(1)}%p${reset}`);
     }
     return deltas;
   }
@@ -503,7 +564,7 @@
       const nextVisited = new Set(visited).add(actor.id);
       const progress = progressOf.has(String(actor.id))
         ? progressOf.get(String(actor.id))
-        : Number(actor.progress);
+        : finiteNumber(actor.progress);
       return {
         kind: 'agent',
         kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT',
@@ -512,7 +573,7 @@
         model: modelAndReasoning(actor.model, actor.reasoning),
         status: actorStatus(actor),
         tone: statusDotClass(actor.status),
-        progress: Number.isFinite(progress) ? progress : null,
+        progress,
         current: actor.status === 'working' || actor.status === 'reviewing',
         attributes: { 'data-actor-id': actor.id || '' },
         children: (childrenOf.get(actor.id) || [])
@@ -573,7 +634,7 @@
         children: phases,
       }];
     }
-    const progress = Number(task.progress);
+    const progress = finiteNumber(task.progress);
     return [{
       kind: 'lead',
       kindLabel: 'MAIN',
@@ -583,7 +644,7 @@
       status: actorStatus(main),
       tone: statusDotClass(main.status),
       // 전체 조직도에서는 바로 위 세션 노드가 같은 수치를 이미 들고 있다 — 두 번 그리지 않는다.
-      progress: leadProgress && Number.isFinite(progress) ? progress : null,
+      progress: leadProgress ? progress : null,
       current: main.status === 'working' || main.status === 'reviewing',
       attributes: { 'data-actor-id': main.id || '' },
       children: phases,
@@ -628,7 +689,7 @@
             note: deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
             status: complete ? '완료' : '진행 중',
             tone: complete ? ' is-idle' : ' is-accent',
-            progress: Number.isFinite(Number(task.progress)) ? Number(task.progress) : null,
+            progress: finiteNumber(task.progress),
             current: !complete,
             attributes: {
               'data-portfolio-task': task.id || '',
@@ -676,23 +737,33 @@
     canvas.style.transform = `translate(${Math.round(state.x)}px, ${Math.round(state.y)}px) scale(${state.scale.toFixed(3)})`;
   }
 
+  // "맞춤"은 **두 축 모두** 들어가야 맞춤이다. 폭만 재면 세로로 긴 모바일 트리가
+  // 잘린 채로 "맞췄다"고 말하게 된다 (review WPA2 M3 — 16노드 중 4개가 잘렸다).
+  // 세로가 부족해 ZOOM_MIN(0.3) 아래로 내려가야 한다면 내려간다. 사람이 휠로 축소할 때의
+  // 바닥은 그대로 0.3이고, 그 바닥은 zoomOrgView가 "지금 배율보다 위로 튀지 않게" 지킨다.
   function fitOrgView(viewport, state) {
     const canvas = orgCanvasOf(viewport);
     if (!canvas) return;
     const contentWidth = canvas.scrollWidth || canvas.offsetWidth || 0;
+    const contentHeight = canvas.scrollHeight || canvas.offsetHeight || 0;
     const viewWidth = viewport.clientWidth || 0;
-    const scale = contentWidth > 0 && viewWidth > 0
-      ? Math.min(1, Math.max(ZOOM_MIN, viewWidth / contentWidth))
-      : 1;
+    const viewHeight = viewport.clientHeight || 0;
+    const ratios = [];
+    if (contentWidth > 0 && viewWidth > 0) ratios.push(viewWidth / contentWidth);
+    if (contentHeight > 0 && viewHeight > 0) ratios.push(viewHeight / contentHeight);
+    const scale = ratios.length ? Math.min(1, Math.max(FIT_MIN, Math.min(...ratios))) : 1;
     state.scale = scale;
     state.x = Math.max(0, (viewWidth - (contentWidth * scale)) / 2);
-    state.y = 0;
+    state.y = Math.max(0, (viewHeight - (contentHeight * scale)) / 2);
     applyOrgTransform(viewport, state);
   }
 
   // 커서(또는 뷰포트 중앙)를 고정점으로 두고 확대한다 — 그래야 보고 있던 노드가 안 달아난다.
   function zoomOrgView(viewport, state, factor, originX, originY) {
-    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.scale * factor));
+    // 축소 바닥은 0.3이되, 맞춤이 이미 그 아래로 내려가 있으면 그 배율이 바닥이다 —
+    // 축소 버튼이 화면을 도로 **확대**해 버리는 역전을 막는다.
+    const floor = Math.min(ZOOM_MIN, state.scale);
+    const next = Math.min(ZOOM_MAX, Math.max(floor, state.scale * factor));
     if (next === state.scale) return;
     const ratio = next / state.scale;
     state.x = originX - ((originX - state.x) * ratio);

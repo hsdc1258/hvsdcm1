@@ -180,12 +180,14 @@ const USAGE_FIXTURE = {
     ],
     // WP-A1의 이벤트 로그. 셋 중 이 세션에만 넣는다 — 단계 소요시간과 세션 한도 소모가
     // 붙은 화면과, 구세션처럼 그 두 줄이 없는 화면을 한 파일에서 나란히 보기 위해서다.
+    // usage_*는 그 시점의 **잔여 한도(%)**라 시간이 갈수록 줄어든다 (worker의
+    // remainingUsagePercent). 화면의 "한도 소모"는 이 감소분의 합이다.
     events: [
-      { ts: '2026-08-27T09:00:00Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 18.4, usage_claude: 21.0 },
-      { ts: '2026-08-27T09:35:00Z', kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 24.9, usage_claude: 25.6 },
-      { ts: '2026-08-27T10:20:00Z', kind: 'report', phase: 'work', actor_id: 'usage-harness:writer', percent: 100, usage_codex: 31.2, usage_claude: 28.1 },
-      { ts: '2026-08-27T11:05:00Z', kind: 'phase-change', phase: 'review', model: 'claude-opus-5', reasoning: 'high', usage_codex: 38.6, usage_claude: 30.4 },
-      { ts: '2026-08-27T11:40:00Z', kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: 80, usage_codex: 41.5, usage_claude: 33.4 },
+      { ts: '2026-08-27T09:00:00Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 81.6, usage_claude: 79.0 },
+      { ts: '2026-08-27T09:35:00Z', kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 75.1, usage_claude: 74.4 },
+      { ts: '2026-08-27T10:20:00Z', kind: 'report', phase: 'work', actor_id: 'usage-harness:writer', percent: 100, usage_codex: 68.8, usage_claude: 71.9 },
+      { ts: '2026-08-27T11:05:00Z', kind: 'phase-change', phase: 'review', model: 'claude-opus-5', reasoning: 'high', usage_codex: 61.4, usage_claude: 69.6 },
+      { ts: '2026-08-27T11:40:00Z', kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: 80, usage_codex: 58.5, usage_claude: 66.6 },
     ],
     artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],
     },
