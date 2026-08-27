@@ -23,7 +23,13 @@ const VALID_APPS = new Set(['wordmaster', 'smstudy']);
 // 수집 원본. 이 집합이 ingest 허용 목록이자 조회 필터의 단일 원본이다 — 한쪽만 고치면
 // 받아 놓고 못 읽는(또는 그 반대의) 상태가 생긴다.
 const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
-const VALID_HARNESS_PHASES = new Set(['plan', 'work', 'review', 'done']);
+// 파이프라인 단계 집합. **순서가 곧 진행 방향**이고, 화면(usage/assets/js/usage.js의
+// PHASES)이 같은 키를 같은 순서로 그린다 — scripts/validate.mjs가 두 원본을 대조해
+// 어긋나면 게이트를 깨뜨린다. 구 4단계(plan/work/review/done)는 이 집합의 부분집합이라
+// 옛 보고자가 그대로 보고해도 계속 받아 준다.
+const VALID_HARNESS_PHASES = new Set([
+  'input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done',
+]);
 const VALID_HARNESS_TASK_STATES = new Set(['active', 'complete']);
 const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt', 'claude']);
 const VALID_HARNESS_ACTOR_STATES = new Set([

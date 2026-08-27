@@ -112,7 +112,9 @@ const USAGE_FIXTURE = {
       version: 1,
       id: 'pipeline-hardening',
       name: 'Pipeline 개선 프로토콜 (08-27)',
-      phase: 'review',
+      // 확장된 8단계 중 **새 키**를 쓰는 세션. 아래 usage-harness 세션은 구 4단계 키만
+      // 보고하므로, 한 스냅샷에서 신·구 보고가 나란히 그려지는 것을 눈으로 확인한다.
+      phase: 'gate',
       progress: 82,
       status: 'active',
       model: 'gpt-5.6-sol',
@@ -375,7 +377,7 @@ export function buildSnapshots() {
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 진행 중/완료/전체 조직도 탭의 수치가 각각 2/1/3이고, 진행 중 병렬 task 중 선택된 한 panel만 보이는지,'
-        + ' 선택된 세션의 조직도가 사용자 입력 → 총괄 → 구상/작업/검토/완료 <strong>네 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지,'
+        + ' 선택된 세션의 조직도가 사용자 입력 → 총괄 → 입력/기획/구현/게이트/리뷰/수정/승인/완료 <strong>여덟 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지,'
         + ' 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지,'
         + ' 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'

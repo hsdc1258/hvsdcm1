@@ -188,12 +188,17 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
 // 세션 트리는 "지금 어디"가 아니라 **전 단계 + 실제 액터**를 항상 그린다 (plan §4-1).
 test('the session tree always renders every phase plus the reported actors', () => {
   const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
-  for (const expected of ['사용자 입력', '계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 수정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
+  for (const expected of ['사용자 입력', '요청 접수 · 범위 확인', '계약 · 증거 고정', '격리 구현 · 검증', '빌드 · 린트 · 테스트', '독립 반증 · 지적', '지적 반영 · 재검증', '판정 · 릴리스 결정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
-  // 네 단계가 모두 노드로 서고, 진행 단계는 상태만 다르다.
-  assert.equal((markup.match(/data-org-phase="/gu) || []).length, 4);
+  // 여덟 단계가 모두 노드로 서고, 진행 단계는 상태만 다르다.
+  assert.deepEqual(
+    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]),
+    ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'],
+  );
   assert.match(markup, /data-org-phase="review" data-phase-state="current"/u);
+  assert.match(markup, /data-org-phase="gate" data-phase-state="done"/u);
+  assert.match(markup, /data-org-phase="revise" data-phase-state="pending"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
   // 뿌리 → 총괄 → 단계 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
   assert.match(markup, /<ul class="h-tree">/u);
@@ -205,6 +210,54 @@ test('the session tree always renders every phase plus the reported actors', () 
   assert.match(markup, /h-node-kind">WEBGPT</u);
   // 조직도는 확대·이동 캔버스 안에 있다.
   assert.match(markup, /class="h-org-viewport" data-org-view="session:usage-harness"/u);
+});
+
+// 단계 사슬을 8단계로 넓힌 뒤에도 **구 4단계 키만 보고한 세션**은 그대로 읽혀야 한다
+// (plan §4). 구 키는 새 사슬의 부분집합이므로, 보고된 단계까지는 완료로 서고 보고된 적
+// 없는 새 단계(gate·revise·approve)는 그냥 대기로 선다 — 없는 이벤트를 지어내지 않는다.
+test('legacy four-key reports still place every stage, leaving unreported ones pending', () => {
+  const legacy = harnessTask({
+    phase: 'work',
+    events: [
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh' },
+      { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh' },
+    ],
+  });
+  const markup = createUsageRenderers().renderSessionView([legacy], NOW, 'active');
+  const states = Object.fromEntries(
+    [...markup.matchAll(/data-org-phase="([a-z]+)" data-phase-state="([a-z]+)"/gu)]
+      .map((match) => [match[1], match[2]]),
+  );
+  assert.deepEqual(states, {
+    input: 'done',
+    plan: 'done',
+    work: 'current',
+    gate: 'pending',
+    review: 'pending',
+    revise: 'pending',
+    approve: 'pending',
+    done: 'pending',
+  });
+  // 구 보고에도 단계 소요시간은 그대로 붙는다 (plan 1시간).
+  assert.match(markup, /data-org-phase="plan"[\s\S]*?h-node-time">1시간/u);
+});
+
+// 새 키를 보고한 세션은 그 단계가 현재로 서고, 그 앞 단계는 이벤트가 없어도 완료로 접힌다.
+test('the new stage keys carry status, model, and duration like the original four', () => {
+  const task = harnessTask({
+    phase: 'approve',
+    events: [
+      { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'gate', model: 'gpt-5.6-sol', reasoning: 'xhigh' },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'revise', model: 'claude-opus-5', reasoning: 'high' },
+      { ts: iso(0), kind: 'phase-change', phase: 'approve', model: 'claude-fable-5', reasoning: 'high' },
+    ],
+  });
+  const markup = createUsageRenderers().renderSessionView([task], NOW, 'active');
+  assert.match(markup, /data-org-phase="approve" data-phase-state="current"/u);
+  assert.match(markup, /data-org-phase="revise" data-phase-state="done"/u);
+  assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
+  assert.match(markup, /data-org-phase="revise"[\s\S]*?claude-opus-5 · high/u);
+  assert.match(markup, /data-org-phase="gate"[\s\S]*?h-node-time">1시간/u);
 });
 
 test('overall, module, and actor progress render only from reported artifacts', () => {

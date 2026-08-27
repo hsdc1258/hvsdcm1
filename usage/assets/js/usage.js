@@ -41,12 +41,20 @@
   const ZOOM_STEP = 1.2;
   const PAN_STEP = 48;
 
-  // 단계는 제어면과 report schema가 함께 보장하는 네 개뿐이다 (DESIGN.md §1.1).
+  // 단계는 제어면과 report schema가 함께 보장하는 여덟 개다 (DESIGN.md §1.1).
   // 이 배열이 화면의 단일 원본이다 — 트리·상태·소요시간 계산이 모두 여기서 도출된다.
+  // **키와 순서는 worker/src/router.js의 VALID_HARNESS_PHASES와 같아야 한다** —
+  // scripts/validate.mjs가 두 원본을 대조한다. 구 4단계(plan/work/review/done)는 이
+  // 사슬의 부분집합이므로 옛 보고만 있는 세션도 그대로 그려지고, 보고된 적 없는
+  // 단계는 그냥 '대기'로 서 있는다.
   const PHASES = [
-    { key: 'plan', label: '구상', detail: '계약 · 증거 고정' },
-    { key: 'work', label: '작업', detail: '격리 구현 · 검증' },
-    { key: 'review', label: '검토', detail: '독립 반증 · 수정' },
+    { key: 'input', label: '입력', detail: '요청 접수 · 범위 확인' },
+    { key: 'plan', label: '기획', detail: '계약 · 증거 고정' },
+    { key: 'work', label: '구현', detail: '격리 구현 · 검증' },
+    { key: 'gate', label: '게이트', detail: '빌드 · 린트 · 테스트' },
+    { key: 'review', label: '리뷰', detail: '독립 반증 · 지적' },
+    { key: 'revise', label: '수정', detail: '지적 반영 · 재검증' },
+    { key: 'approve', label: '승인', detail: '판정 · 릴리스 결정' },
     { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
   const PHASE_KEYS = new Set(PHASES.map((phase) => phase.key));
@@ -377,6 +385,9 @@
     return { stats, currentKey: phased[phased.length - 1].phase, hasEvents: true };
   }
 
+  // 하위호환: 구 4단계 키(plan/work/review/done)는 PHASE_KEYS의 부분집합이라 그대로
+  // 통과한다. 키가 아예 없거나 모르는 값이면 '기획'으로 세운다 — 보고가 시작된 세션은
+  // 최소한 입력 단계는 지났기 때문이다.
   function normalizedTaskPhase(task) {
     if (task.status === 'complete') return 'done';
     return PHASE_KEYS.has(task.phase) ? task.phase : 'plan';
@@ -588,7 +599,7 @@
     };
   }
 
-  // 세션 하나의 단계 노드 4개. events가 없으면 소요시간·모델 줄이 빠진 채로 그려진다.
+  // 세션 하나의 단계 노드 전부(PHASES 순서). events가 없으면 소요시간·모델 줄이 빠진 채로 그려진다.
   function phaseNodesOf(task, now) {
     const timeline = phaseTimeline(task, now);
     const states = phaseStates(task, timeline);
@@ -617,7 +628,7 @@
     });
   }
 
-  // 세션 하나의 아래쪽 절반 — 총괄 → 단계 4개 → 서브에이전트.
+  // 세션 하나의 아래쪽 절반 — 총괄 → 단계 전부 → 서브에이전트.
   // 세션 탭과 전체 조직도가 **같은 함수**를 쓴다. 두 화면이 각자 트리를 조립하면
   // 한쪽에서만 액터가 빠지는 일이 생긴다 (실제로 그렇게 총괄 노드가 빠졌다).
   function sessionSubtreeNodes(task, now, { leadProgress = true } = {}) {
@@ -651,7 +662,7 @@
     }];
   }
 
-  // 세션 트리 — 사용자 입력 → 총괄 → 단계 4개 → 서브에이전트.
+  // 세션 트리 — 사용자 입력 → 총괄 → 단계 전부 → 서브에이전트.
   function sessionTreeNodes(task, now) {
     return [{
       kind: 'request',

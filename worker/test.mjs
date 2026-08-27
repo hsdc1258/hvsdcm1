@@ -1214,6 +1214,74 @@ test('a concurrent active report cannot demote a task that completed after its r
   assert.equal(JSON.parse(state.payload).status, 'complete');
 });
 
+// 단계 사슬 확장 — 조직도 계약은 "입력 → 기획 → 구현 → 게이트 → 리뷰 → 수정 → 승인 →
+// 완료" 여덟 단계를 요구한다. 이 목록은 화면(usage/assets/js/usage.js의 PHASES)과 같아야
+// 하고, 그 원본 대 원본 대조는 scripts/validate.mjs가 한다. 여기서는 Worker가 여덟 개를
+// 실제로 **받아 저장하는지**와, 구 4단계만 보고하는 옛 보고자가 계속 통하는지를 본다.
+const HARNESS_PHASE_CHAIN = ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'];
+const LEGACY_HARNESS_PHASES = ['plan', 'work', 'review', 'done'];
+
+test('the harness accepts all eight pipeline phases and stores each one verbatim', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  for (const [index, phase] of HARNESS_PHASE_CHAIN.entries()) {
+    const minute = String(index).padStart(2, '0');
+    const response = await post(harnessInput({
+      occurred_at: `2026-08-27T09:${minute}:00.000Z`,
+      task: { ...harnessInput().task, phase },
+    }));
+    assert.equal(response.status, 200, `${phase} 단계 보고는 수용돼야 합니다.`);
+    assert.equal(JSON.parse(state.payload).phase, phase);
+  }
+  assert.equal(state.rejected, 0);
+  assert.equal(state.upserts, HARNESS_PHASE_CHAIN.length);
+});
+
+// 하위호환: 구 4단계는 새 사슬의 **부분집합**이다. 옛 보고자가 그대로 계속 보고해도
+// 거절되지 않아야 하며, 사슬 밖의 값은 예전처럼 400이다.
+test('legacy four-phase reporters keep working while off-chain phases stay rejected', async () => {
+  assert.ok(LEGACY_HARNESS_PHASES.every((phase) => HARNESS_PHASE_CHAIN.includes(phase)),
+    '구 4단계는 새 사슬의 부분집합이어야 합니다 — 아니면 하위호환이 깨집니다.');
+
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  for (const [index, phase] of LEGACY_HARNESS_PHASES.entries()) {
+    const response = await post(harnessInput({
+      occurred_at: `2026-08-27T10:0${index}:00.000Z`,
+      task: {
+        ...harnessInput().task,
+        phase,
+        ...(phase === 'done' ? { status: 'complete', progress: 100 } : {}),
+      },
+    }));
+    assert.equal(response.status, 200, `구 ${phase} 단계 보고는 계속 수용돼야 합니다.`);
+    assert.equal(JSON.parse(state.payload).phase, phase);
+  }
+  assert.equal(state.rejected, 0);
+
+  for (const phase of ['ship', 'plan2', 'PLAN', '']) {
+    const response = await worker.fetch(new Request('https://api.test/api/harness/report', {
+      method: 'POST',
+      headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+      body: JSON.stringify(harnessInput({
+        occurred_at: '2026-08-27T11:00:00.000Z',
+        task: { ...harnessInput().task, phase },
+      })),
+    }), harnessStoreEnv().env);
+    assert.equal(response.status, 400, `사슬 밖의 "${phase}"는 거절돼야 합니다.`);
+  }
+});
+
 test('harness report rejects every bounded or non-allowlisted shape before database access', async () => {
   let databaseCalls = 0;
   const env = {

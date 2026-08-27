@@ -3,7 +3,7 @@
 // 무엇을 잠그는가
 //   조직도는 "지금 어디까지 왔나"가 아니라 **세션마다 전 단계를 상시 그리는 트리**다.
 //   그래서 검사도 "현재 단계가 보이는가"가 아니라 다음 셋을 본다:
-//     (1) 세션마다 네 단계가 빠짐없이 노드로 서고, 지나간 단계는 done·앞으로 올 단계는
+//     (1) 세션마다 여덟 단계가 빠짐없이 노드로 서고, 지나간 단계는 done·앞으로 올 단계는
 //         pending으로 **상태만** 달라진다 (노드가 사라지지 않는다),
 //     (2) 보고된 액터가 하나도 빠지지 않고 자기 단계에서 갈라져 나온다,
 //     (3) 이벤트 로그가 있으면 단계 소요시간과 세션 한도 소모가 붙고, **없으면 트리는
@@ -41,16 +41,25 @@ const task = (id, name, phase, actors) => ({
   actors,
 });
 
+// 계약이 요구하는 단계 사슬. 화면(usage.js PHASES)과 Worker(VALID_HARNESS_PHASES)가
+// 이 순서로 같아야 하고, 그 **원본 대 원본** 대조는 scripts/validate.mjs가 한다.
+// 여기서는 그 사슬이 실제 마크업으로 서는지를 본다.
+const PHASE_CHAIN = ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'];
+
+// 구 4단계 키(plan/work/review/done)와 확장된 새 키(gate/approve)를 한 fixture에 섞는다 —
+// 하위호환과 확장이 같은 렌더 경로를 지나는지 한 번에 본다.
 const tasks = [
   task('plan-task', '기획 세션 (08-27)', 'plan', [actor('plan:main', '기획 Main')]),
   task('work-task', '구현 세션 (08-27)', 'work', [
     actor('work:main', '구현 Main'),
     actor('work:calc', '계산 서브에이전트', 'work:main'),
   ]),
+  task('gate-task', '게이트 세션 (08-27)', 'gate', [actor('gate:main', '게이트 Main')]),
   task('review-task', '검토 세션 (08-27)', 'review', [
     actor('review:main', '검토 Main'),
     actor('review:critic', '반증 서브에이전트', 'review:main'),
   ]),
+  task('approve-task', '승인 세션 (08-27)', 'approve', [actor('approve:main', '승인 Main')]),
   task('done-task', '완료 세션 (08-27)', 'done', [actor('done:main', '완료 Main')]),
 ];
 
@@ -58,25 +67,34 @@ const renderers = createUsageRenderers();
 const org = renderers.renderPortfolioOrg(tasks, NOW);
 
 // ---- (1) 세션마다 전 단계가 상시 선다 -------------------------------------
-assert.match(org, /사용자 입력[\s\S]*메인 오케스트레이션[\s\S]*구상[\s\S]*작업[\s\S]*검토[\s\S]*완료/u);
-for (const phase of ['plan', 'work', 'review', 'done']) {
+assert.match(org, /사용자 입력[\s\S]*메인 오케스트레이션[\s\S]*입력[\s\S]*기획[\s\S]*구현[\s\S]*게이트[\s\S]*리뷰[\s\S]*수정[\s\S]*승인[\s\S]*완료/u);
+for (const phase of PHASE_CHAIN) {
   assert.equal((org.match(new RegExp(`data-org-phase="${phase}"`, 'gu')) || []).length, tasks.length,
     `${phase} 단계 노드는 세션마다 하나씩, 총 ${tasks.length}개여야 합니다.`);
 }
-for (const id of ['plan-task', 'work-task', 'review-task', 'done-task']) {
+for (const id of tasks.map((item) => item.id)) {
   assert.equal((org.match(new RegExp(`data-portfolio-task="${id}"`, 'gu')) || []).length, 1);
 }
 
 // 세션 하나를 떼어내 단계 상태의 진행 방향을 확인한다: 지난 단계 done → 현재 current
 // → 남은 단계 pending. 이것이 "현 단계만 강조"와 갈리는 지점이다.
+// **구 4단계 키만 보고한 세션**(work)이므로 이 검사가 곧 하위호환 검사다: 새 단계는
+// 보고된 적이 없어도 노드로 서고 pending으로 남는다.
 const workOnly = renderers.renderPortfolioOrg([tasks[1]], NOW);
-for (const [phase, state] of [['plan', 'done'], ['work', 'current'], ['review', 'pending'], ['done', 'pending']]) {
+const expectedStates = { input: 'done', plan: 'done', work: 'current' };
+for (const phase of PHASE_CHAIN) {
+  const state = expectedStates[phase] || 'pending';
   assert.match(workOnly, new RegExp(`data-org-phase="${phase}" data-phase-state="${state}"`, 'u'),
     `${phase} 단계는 ${state} 상태여야 합니다.`);
 }
-// 완료 세션은 네 단계가 모두 done이다 (되돌아간 단계를 pending으로 되돌리지 않는다).
-const doneOnly = renderers.renderPortfolioOrg([tasks[3]], NOW);
-assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, 4);
+// 새 키를 보고한 세션도 같은 규칙을 따른다 (approve가 current, done만 pending).
+const approveOnly = renderers.renderPortfolioOrg([tasks[4]], NOW);
+assert.match(approveOnly, /data-org-phase="approve" data-phase-state="current"/u);
+assert.match(approveOnly, /data-org-phase="revise" data-phase-state="done"/u);
+assert.match(approveOnly, /data-org-phase="done" data-phase-state="pending"/u);
+// 완료 세션은 전 단계가 모두 done이다 (되돌아간 단계를 pending으로 되돌리지 않는다).
+const doneOnly = renderers.renderPortfolioOrg([tasks[5]], NOW);
+assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, PHASE_CHAIN.length);
 assert.doesNotMatch(doneOnly, /data-phase-state="(?:current|pending)"/u);
 
 // ---- (2) 보고된 액터가 하나도 빠지지 않는다 --------------------------------
@@ -125,6 +143,6 @@ assert.match(timed, /data-actor-id="work:calc"[\s\S]*?<strong>41%<\/strong>/u);
 // ---- 세션 탭 쪽 표기 ------------------------------------------------------
 const activeView = renderers.renderSessionView(tasks, NOW, 'active');
 assert.doesNotMatch(activeView, /\(08-27\)/u);
-assert.match(activeView, /작업 60%[\s\S]*<time class="h-task-date" datetime="2026-08-27">08\.27<\/time>/u);
+assert.match(activeView, /구현 60%[\s\S]*<time class="h-task-date" datetime="2026-08-27">08\.27<\/time>/u);
 
 console.log('FULL PIPELINE ORG E2E: PASS');
