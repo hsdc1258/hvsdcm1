@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createUsageRenderers } from './render-sandbox.mjs';
+import worker from '../worker/src/index.js';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 
@@ -80,5 +81,59 @@ assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 4);
 assert.equal((org.match(/data-actor-id=/gu) || []).length, 6);
 assert.match(org, /완료 Delta[\s\S]*?에이전트 보고 없음/u);
 assert.match(org, /세션 4개[\s\S]*?실제 에이전트 6명/u);
+
+// 실제 owner API가 12개에서 자르지 않고 보존된 전체 task를 renderer까지 넘기는지 확인한다.
+const retainedTasks = Array.from({ length: 13 }, (_, index) => {
+  const number = String(index + 1).padStart(2, '0');
+  const id = `retained-${number}`;
+  return task(id, `보존 세션 ${number}`, index < 2 ? 'active' : 'complete', [
+    actor(`${id}:main`, `보존 Main ${number}`),
+  ]);
+});
+const apiEnv = {
+  ALLOWED_ORIGIN: 'https://example.test',
+  OWNER_USERNAME: 'hvsdcm',
+  DB: {
+    prepare(sql) {
+      if (sql.includes('SELECT s.*, u.username')) {
+        return {
+          bind() {
+            return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
+          },
+        };
+      }
+      if (sql.includes('UPDATE sessions')) {
+        return { bind() { return { async run() { return { success: true }; } }; } };
+      }
+      if (sql.includes('FROM usage_snapshots')) {
+        return { async all() { return { results: [] }; } };
+      }
+      if (sql.includes('FROM harness_tasks')) {
+        assert.doesNotMatch(sql, /LIMIT\s+12/iu, 'owner API가 전체 조직을 12개로 잘라서는 안 됩니다.');
+        return {
+          async all() {
+            return {
+              results: retainedTasks.map((item) => ({
+                task_id: item.id, status: item.status, updated_at: item.updated_at, payload: JSON.stringify(item),
+              })),
+            };
+          },
+        };
+      }
+      throw new Error(`Unexpected SQL in session-state E2E: ${sql}`);
+    },
+  },
+};
+const apiResponse = await worker.fetch(new Request('https://api.test/api/usage', {
+  headers: { authorization: 'Bearer owner-token' },
+}), apiEnv);
+assert.equal(apiResponse.status, 200);
+const apiPayload = await apiResponse.json();
+assert.equal(apiPayload.tasks.length, 13);
+const retainedOrg = renderers.renderPortfolioOrg(apiPayload.tasks, NOW);
+assert.equal((retainedOrg.match(/data-portfolio-task=/gu) || []).length, 13);
+assert.equal((retainedOrg.match(/data-actor-id=/gu) || []).length, 13);
+assert.match(retainedOrg, /보존 세션 01/u);
+assert.match(retainedOrg, /보존 세션 13/u);
 
 console.log('SESSION STATE + PORTFOLIO ORG E2E: PASS');

@@ -340,7 +340,6 @@ async function usage(request, env) {
     SELECT task_id, status, updated_at, payload
     FROM harness_tasks
     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at DESC
-    LIMIT 12
   `).all();
   return json({
     snapshots: rows.results.filter((row) => row.source === 'codex').map((row) => {
