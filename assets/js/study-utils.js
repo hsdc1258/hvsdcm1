@@ -19,6 +19,20 @@
     })[character]);
   }
 
+  function normalizeStudySearch(value) {
+    return String(value ?? '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/\s+/gu, '');
+  }
+
+  function matchesStudySearch(query, fields) {
+    const normalizedQuery = normalizeStudySearch(query);
+    if (!normalizedQuery) return true;
+    const candidates = Array.isArray(fields) ? fields : [fields];
+    return candidates.some((field) => normalizeStudySearch(field).includes(normalizedQuery));
+  }
+
   function shuffle(items) {
     const result = [...items];
     for (let index = result.length - 1; index > 0; index -= 1) {
@@ -72,6 +86,7 @@
   globalThis.HvsStudyUtils = Object.freeze({
     SORT_MODES,
     escapeHtml,
+    matchesStudySearch,
     shuffle,
     sortStudyItems,
   });

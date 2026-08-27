@@ -1668,6 +1668,28 @@ label.list-row {
   color: var(--text-3);
 }
 /* on --surface 4.99:1 */
+.wm-wrong-head {
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+.wm-wrong-head > .list-group-head {
+  padding-bottom: 0;
+}
+.wm-wrong-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-3);
+}
+.wm-search-input {
+  min-width: 0;
+}
+.wm-wrong-controls .wm-sort {
+  min-width: 0;
+}
 .wm-sort {
   display: flex;
   align-items: center;
@@ -1707,6 +1729,18 @@ label.list-row {
   }
   .wm-presets {
     margin-left: 0;
+  }
+  .wm-wrong-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wm-sort {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+  }
+  .wm-sort .field-input-inline {
+    width: 100%;
+    min-width: 0;
   }
   /* 오답 행은 좌우 두 덩어리를 위아래로 편다 — 320px에서 두 열을 유지하면 우측 메타가
      제목 위로 밀려 올라온다(측정으로 확인). 메타는 제 줄에서 왼쪽 정렬한다. */
