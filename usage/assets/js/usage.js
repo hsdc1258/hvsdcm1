@@ -24,6 +24,7 @@
     error: document.getElementById('usageError'),
     reload: document.getElementById('reload'),
   };
+  let selectedTaskId = '';
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -226,16 +227,15 @@
     const progress = clampPercent(Number(task.progress) || 0);
     const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
     return `
-      <section class="h-gate" aria-label="현재 gate">
-        <header class="h-gate-head">
-          <div><p class="us-eyebrow">CURRENT GATE</p><h4>${escapeHtml(phase)}</h4></div>
-          <strong>${Math.round(progress)}%</strong>
-        </header>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
-        <div class="h-gate-grid">
+      <section class="h-session-status" aria-label="선택한 세션 상태">
+        <div class="h-session-progress">
+          <div><p class="us-eyebrow">CURRENT GATE</p><strong>${escapeHtml(phase)} · ${Math.round(progress)}%</strong></div>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
+        </div>
+        <div class="h-session-facts">
           <p><span>현재</span>${escapeHtml(task.current || '상태 보고 대기')}</p>
-          <p><span>완료</span>${escapeHtml(task.done || '아직 없음')}</p>
           <p><span>다음</span>${escapeHtml(task.next || '아직 없음')}</p>
+          <p><span>완료</span>${escapeHtml(task.done || '아직 없음')}</p>
         </div>
       </section>`;
   }
@@ -253,9 +253,61 @@
       </footer>`;
   }
 
+  function actorHierarchy(task, mainActor) {
+    const actors = taskActors(task).filter((actor) => actor.id !== mainActor.id);
+    const byId = new Map([[mainActor.id, mainActor], ...actors.map((actor) => [actor.id, actor])]);
+    const children = new Map();
+    for (const actor of actors) {
+      let parentId = actor.parent_id;
+      let cursor = parentId;
+      let connected = false;
+      const ancestry = new Set([actor.id]);
+      while (cursor) {
+        if (cursor === mainActor.id) {
+          connected = true;
+          break;
+        }
+        if (ancestry.has(cursor)) break;
+        ancestry.add(cursor);
+        cursor = byId.get(cursor)?.parent_id || '';
+      }
+      if (!connected) parentId = mainActor.id;
+      if (!children.has(parentId)) children.set(parentId, []);
+      children.get(parentId).push(actor);
+    }
+    return children;
+  }
+
+  function renderActorBranch(actor, children, isMain = false, visited = new Set()) {
+    if (visited.has(actor.id)) return '';
+    const nextVisited = new Set(visited).add(actor.id);
+    const descendants = (children.get(actor.id) || [])
+      .map((child) => renderActorBranch(child, children, false, nextVisited))
+      .filter(Boolean);
+    return `
+      <li class="h-org-node${isMain ? ' is-root' : ''}">
+        ${renderActor(actor, isMain)}
+        ${descendants.length > 0 ? `<ul>${descendants.join('')}</ul>` : ''}
+      </li>`;
+  }
+
+  function renderActorTree(task, mainActor) {
+    const children = actorHierarchy(task, mainActor);
+    const actorCount = taskActors(task).length || 1;
+    return `
+      <section class="h-org-chart" aria-label="${escapeHtml(task.name || '작업')} 보고 조직도">
+        <header class="h-org-chart-head">
+          <div><p class="us-eyebrow">REPORTING LINE</p><h4>담당 조직도</h4></div>
+          <span>${actorCount}명 투입</span>
+        </header>
+        <div class="h-org-scroll">
+          <ul class="h-org-tree">${renderActorBranch(mainActor, children, true)}</ul>
+        </div>
+      </section>`;
+  }
+
   function renderTask(task, now) {
     const mainActor = mainActorOf(task);
-    const agents = taskActors(task).filter((actor) => actor.id !== mainActor.id);
     const updated = relativeTime(task.updated_at, now);
     const complete = task.status === 'complete';
     const category = task.category || '기타 Codex 작업';
@@ -273,14 +325,8 @@
           </div>
         </header>
         ${renderPhaseRail(task)}
-        <div class="h-org" aria-label="${escapeHtml(task.name || '작업')} 실행 조직도">
-          <div class="h-org-level is-command">${renderActor(mainActor, true)}</div>
-          <div class="h-org-link" aria-hidden="true"></div>
-          <div class="h-org-level is-gate">${renderGate(task)}</div>
-          ${agents.length > 0 ? `
-            <div class="h-org-link is-branch" aria-hidden="true"></div>
-            <div class="h-org-level is-agents">${agents.map((actor) => renderActor(actor)).join('')}</div>` : ''}
-        </div>
+        ${renderGate(task)}
+        ${renderActorTree(task, mainActor)}
         ${renderArtifacts(task)}
       </article>`;
   }
@@ -292,21 +338,39 @@
     };
   }
 
-  function renderTaskCategories(tasks, now) {
-    const groups = new Map();
-    for (const task of tasks) {
-      const category = taskCategory(task);
-      if (!groups.has(category.key)) groups.set(category.key, { ...category, tasks: [] });
-      groups.get(category.key).tasks.push(task);
-    }
-    return [...groups.values()].map((group, index) => `
-      <section class="h-category" aria-labelledby="hCategory${index}">
-        <header class="h-category-head">
-          <div><p class="us-eyebrow">WORK CATEGORY</p><h3 id="hCategory${index}">${escapeHtml(group.label)}</h3></div>
-          <span>${group.tasks.length}개 파이프라인</span>
-        </header>
-        <div class="h-task-list">${group.tasks.map((task) => renderTask(task, now)).join('')}</div>
-      </section>`).join('');
+  function renderTaskTabs(tasks, now) {
+    const selectedIndex = Math.max(0, tasks.findIndex((task) => task.id === selectedTaskId));
+    return `
+      <div class="h-session-switcher">
+        <div class="h-session-tabs" role="tablist" aria-label="병렬 Codex 세션">
+          ${tasks.map((task, index) => {
+    const selected = index === selectedIndex;
+    const category = taskCategory(task);
+    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
+    const progress = Math.round(clampPercent(Number(task.progress) || 0));
+    return `
+            <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
+              id="hSessionTab${index}" aria-controls="hSessionPanel${index}" aria-selected="${selected}"
+              tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}">
+              <span class="h-session-tab-state status-dot${task.status === 'complete' ? '' : ' is-warn'}" aria-hidden="true"></span>
+              <span class="h-session-tab-copy">
+                <strong>${escapeHtml(task.name || '이름 없는 세션')}</strong>
+                <span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>
+              </span>
+            </button>`;
+  }).join('')}
+        </div>
+        <div class="h-session-panels">
+          ${tasks.map((task, index) => {
+    const selected = index === selectedIndex;
+    return `
+            <section class="h-session-panel" role="tabpanel" id="hSessionPanel${index}"
+              aria-labelledby="hSessionTab${index}" data-task-panel="${index}"${selected ? '' : ' hidden'}>
+              ${renderTask(task, now)}
+            </section>`;
+  }).join('')}
+        </div>
+      </div>`;
   }
 
   function renderSummary(snapshots, tasks, now) {
@@ -353,8 +417,8 @@
           <div><p class="us-eyebrow">AI BUREAU</p><h2 id="harnessTitle" class="title-2">실행 조직도</h2></div>
           <p>Discord와 같은 보고 이벤트로 갱신됩니다.</p>
         </header>
-        <div class="h-category-list">${tasks.length > 0
-    ? renderTaskCategories(tasks, now)
+        <div class="h-session-list">${tasks.length > 0
+    ? renderTaskTabs(tasks, now)
     : '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>'}</div>
       </section>`,
       `<section class="us-section" aria-labelledby="quotaTitle">
@@ -369,12 +433,50 @@
     ].join('');
   }
 
+  function activateTaskTab(root, tab, moveFocus = false) {
+    if (!root || !tab) return;
+    const tabs = [...root.querySelectorAll('[data-task-tab]')];
+    const panels = [...root.querySelectorAll('[data-task-panel]')];
+    for (const item of tabs) {
+      const selected = item === tab;
+      item.classList.toggle('is-selected', selected);
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    }
+    for (const panel of panels) panel.hidden = panel.dataset.taskPanel !== tab.dataset.taskTab;
+    selectedTaskId = tab.dataset.taskId || '';
+    if (moveFocus) tab.focus();
+  }
+
+  function wireTaskTabs(root) {
+    const tablist = root?.querySelector('[role="tablist"]');
+    if (!tablist) return;
+    tablist.addEventListener('click', (event) => {
+      const tab = event.target.closest('[data-task-tab]');
+      if (tab && tablist.contains(tab)) activateTaskTab(root, tab);
+    });
+    tablist.addEventListener('keydown', (event) => {
+      const tabs = [...tablist.querySelectorAll('[data-task-tab]')];
+      const current = event.target.closest('[data-task-tab]');
+      const index = tabs.indexOf(current);
+      if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? tabs.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      activateTaskTab(root, tabs[next], true);
+    });
+  }
+
   async function load() {
     elements.error.textContent = '';
     elements.reload.disabled = true;
     try {
       const data = await api('/api/usage');
       elements.body.innerHTML = buildDashboard(data, Date.now());
+      wireTaskTabs(elements.body);
     } catch (error) {
       if (error.message === 'unauthorized') return;
       elements.body.innerHTML = '';
@@ -386,5 +488,5 @@
 
   elements.reload.addEventListener('click', load);
   load();
-  window.USAGE_RENDER = { buildDashboard };
+  window.USAGE_RENDER = { buildDashboard, activateTaskTab, wireTaskTabs };
 })();
