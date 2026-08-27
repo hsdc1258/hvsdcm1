@@ -14,6 +14,9 @@ import {
 } from './lib.js';
 
 const MAX_PROGRESS_BYTES = 800_000;
+// 사용량 스냅샷은 rate_limits 몇 개짜리 객체다. 상한이 없으면 ingest 토큰이 새거나
+// 수집기 버그 하나로 D1 행이 무제한으로 부푼다.
+const MAX_USAGE_BYTES = 64_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
 const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
@@ -79,7 +82,8 @@ async function reportUsage(request, env) {
     return json({ error: '인증이 필요합니다.' }, 401);
   }
 
-  const input = await readJson(request);
+  const body = await readJson(request);
+  const input = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const source = String(input.source || '');
   const capturedAt = typeof input.captured_at === 'string' ? input.captured_at : '';
   const payloadIsObject = input.payload !== null
@@ -92,12 +96,17 @@ async function reportUsage(request, env) {
     return json({ error: '잘못된 사용량 보고입니다.' }, 400);
   }
 
+  const serialized = JSON.stringify(input.payload);
+  if (serialized.length > MAX_USAGE_BYTES) {
+    return json({ error: '사용량 보고가 너무 큽니다.' }, 413);
+  }
+
   await env.DB.prepare(`
     INSERT INTO usage_snapshots(source, captured_at, payload)
     VALUES (?1, ?2, ?3)
     ON CONFLICT(source)
     DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
-  `).bind(source, capturedAt, JSON.stringify(input.payload)).run();
+  `).bind(source, capturedAt, serialized).run();
   return json({ ok: true });
 }
 
@@ -111,11 +120,12 @@ async function usage(request, env) {
     ORDER BY source
   `).all();
   return json({
-    snapshots: rows.results.map((row) => ({
-      source: row.source,
-      captured_at: row.captured_at,
-      payload: JSON.parse(row.payload),
-    })),
+    snapshots: rows.results.map((row) => {
+      // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
+      let payload = null;
+      try { payload = JSON.parse(row.payload); } catch { payload = null; }
+      return { source: row.source, captured_at: row.captured_at, payload };
+    }),
   });
 }
 

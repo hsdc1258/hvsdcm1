@@ -318,6 +318,85 @@ test('usage report upserts the latest source snapshot', async () => {
   assert.deepEqual(upsert.values, ['codex', capturedAt, JSON.stringify(payload)]);
 });
 
+test('usage report rejects oversized payloads and non-object bodies', async () => {
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare() {
+        throw new Error('database must not be reached');
+      },
+    },
+  };
+  const headers = {
+    authorization: 'Bearer correct-token',
+    'content-type': 'application/json',
+  };
+
+  const oversized = await worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      source: 'codex',
+      captured_at: '2026-08-27T01:02:03.000Z',
+      payload: { blob: 'x'.repeat(70_000) },
+    }),
+  }), env);
+  assert.equal(oversized.status, 413);
+  assert.deepEqual(await oversized.json(), { error: '사용량 보고가 너무 큽니다.' });
+
+  for (const body of ['"just a string"', 'null', '[1,2,3]']) {
+    const response = await worker.fetch(new Request('https://api.test/api/usage/report', {
+      method: 'POST',
+      headers,
+      body,
+    }), env);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: '잘못된 사용량 보고입니다.' });
+  }
+});
+
+test('usage lookup survives a corrupted snapshot row', async () => {
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0 }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return {
+            async all() {
+              return {
+                results: [
+                  { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
+                  { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"model":"gpt-5.6"}' },
+                ],
+              };
+            },
+          };
+        }
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token' },
+  }), env);
+  assert.equal(response.status, 200);
+  const { snapshots } = await response.json();
+  assert.equal(snapshots[0].payload, null);
+  assert.deepEqual(snapshots[1].payload, { model: 'gpt-5.6' });
+});
+
 test('usage lookup requires a session and returns parsed snapshots', async () => {
   const unauthenticated = await worker.fetch(new Request('https://api.test/api/usage'), {
     ALLOWED_ORIGIN: 'https://example.test',
