@@ -173,10 +173,7 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
 });
 
 test('the hierarchy renders Main Codex and actual child actors as a reporting tree', () => {
-  const markup = dashboard({
-    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
-    tasks: [harnessTask()],
-  });
+  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
   for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 수정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', '역할', '현재 작업', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
@@ -229,12 +226,79 @@ test('parallel project, protocol, and visualization reports render as session ta
   for (const category of ['지문한장 프로젝트', '자체 pipeline 개선 프로토콜', '파이프라인 시각화']) {
     assert.match(markup, new RegExp(category, 'u'));
   }
-  assert.match(markup, /role="tablist" aria-label="병렬 Codex 세션"/u);
-  assert.equal((markup.match(/role="tab"/gu) || []).length, 3);
-  assert.equal((markup.match(/role="tabpanel"/gu) || []).length, 3);
-  assert.equal((markup.match(/aria-selected="true"/gu) || []).length, 1);
+  assert.match(markup, /role="tablist" aria-label="작업 상태별 보기"/u);
+  assert.match(markup, /role="tablist" aria-label="진행 중인 Codex 세션"/u);
+  assert.equal((markup.match(/data-session-view="/gu) || []).length, 3);
+  assert.equal((markup.match(/data-task-tab="/gu) || []).length, 3);
+  assert.equal((markup.match(/data-session-view-panel="[^"]+" hidden/gu) || []).length, 2);
   assert.equal((markup.match(/data-task-panel="\d+" hidden/gu) || []).length, 2);
   assert.doesNotMatch(markup, /작업 카테고리<\/span>/u);
+});
+
+test('active and completed tabs separate session state while the portfolio includes every reported actor', () => {
+  const renderers = createUsageRenderers();
+  const active = harnessTask({ id: 'active-one', name: '진행 세션' });
+  const completed = harnessTask({
+    id: 'complete-one', name: '완료 세션', status: 'complete', phase: 'done', progress: 100,
+    actors: [],
+  });
+  const tasks = [active, completed];
+  const views = renderers.renderSessionViews(tasks, NOW);
+  assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="1"/u);
+  assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="1"/u);
+  assert.match(views, /data-session-view="org"[^>]*>[\s\S]*?data-view-count="2"/u);
+
+  const activeMarkup = renderers.renderSessionView(tasks, NOW, 'active');
+  assert.match(activeMarkup, /진행 세션/u);
+  assert.doesNotMatch(activeMarkup, /완료 세션/u);
+
+  const completeMarkup = renderers.renderSessionView(tasks, NOW, 'complete');
+  assert.match(completeMarkup, /완료 세션/u);
+  assert.doesNotMatch(completeMarkup, /진행 세션/u);
+
+  const org = renderers.renderPortfolioOrg(tasks, NOW);
+  assert.match(org, /진행 세션/u);
+  assert.match(org, /완료 세션[\s\S]*에이전트 보고 없음/u);
+  assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 2);
+  assert.equal((org.match(/data-actor-id=/gu) || []).length, 3);
+});
+
+test('status-view activation exposes one view and keyboard wiring advances to the next view', () => {
+  const { activateSessionView, wireSessionViews } = createUsageRenderers();
+  const listeners = {};
+  const makeTab = (view, selected = false) => ({
+    dataset: { sessionView: view }, tabIndex: selected ? 0 : -1,
+    attributes: { 'aria-selected': String(selected) },
+    classList: { toggle(_name, value) { this.selected = value; } },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    focus() { this.focused = true; },
+    closest() { return this; },
+  });
+  const tabs = [makeTab('active', true), makeTab('complete'), makeTab('org')];
+  const panels = tabs.map((tab, index) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: index !== 0 }));
+  const tablist = {
+    addEventListener(type, handler) { listeners[type] = handler; },
+    querySelectorAll() { return tabs; },
+    contains(tab) { return tabs.includes(tab); },
+  };
+  const root = {
+    querySelector() { return tablist; },
+    querySelectorAll(selector) { return selector === '[data-session-view]' ? tabs : panels; },
+  };
+
+  activateSessionView(root, tabs[1], true);
+  assert.deepEqual(panels.map((panel) => panel.hidden), [true, false, true]);
+  assert.equal(tabs[1].focused, true);
+
+  wireSessionViews(root);
+  let prevented = false;
+  listeners.keydown({
+    key: 'ArrowRight', target: tabs[1],
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
+  assert.equal(tabs[2].focused, true);
 });
 
 test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {

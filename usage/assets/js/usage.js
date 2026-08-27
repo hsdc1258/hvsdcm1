@@ -24,7 +24,8 @@
     reload: document.getElementById('reload'),
     refreshStatus: document.getElementById('usageRefreshStatus'),
   };
-  let selectedTaskId = '';
+  let selectedSessionView = 'active';
+  const selectedTaskIds = { active: '', complete: '' };
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -199,16 +200,7 @@
 
   function mainActorOf(task) {
     const actors = taskActors(task);
-    return actors.find((actor) => !actor.parent_id) || actors[0] || {
-      id: `${task.id || 'task'}:main`,
-      name: 'Main Codex',
-      kind: 'codex',
-      model: task.model || '모델 미기록',
-      reasoning: task.reasoning || '',
-      role: '기획 · 통합 · 최종 판정',
-      status: task.status === 'complete' ? 'done' : 'working',
-      assignment: task.current || '',
-    };
+    return actors.find((actor) => !actor.parent_id) || actors[0] || null;
   }
 
   function actorStatus(actor) {
@@ -231,7 +223,7 @@
     const hasProgress = Number.isFinite(progress);
     const safeProgress = clampPercent(hasProgress ? progress : 0);
     return `
-      <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}">
+      <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
         <header class="h-actor-head">
           <span class="h-kind">${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span>
           <span class="h-actor-state"><span class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
@@ -362,8 +354,10 @@
   }
 
   function renderActorTree(task, mainActor) {
-    const children = actorHierarchy(task, mainActor);
-    const actorCount = taskActors(task).length || 1;
+    const actorCount = taskActors(task).length;
+    const tree = mainActor
+      ? `<ul class="h-org-tree">${renderActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul>`
+      : '<p class="h-org-empty">에이전트 보고 없음</p>';
     return `
       <section class="h-org-chart" aria-label="${escapeHtml(task.name || '작업')} 보고 조직도">
         <header class="h-org-chart-head">
@@ -371,7 +365,73 @@
           <span>실제 보고 ${actorCount}명</span>
         </header>
         <div class="h-org-scroll">
-          <ul class="h-org-tree">${renderActorBranch(mainActor, children, true)}</ul>
+          ${tree}
+        </div>
+      </section>`;
+  }
+
+  function sortTasks(tasks) {
+    return tasks.filter((task) => task && typeof task === 'object')
+      .sort((left, right) => {
+        const leftComplete = left.status === 'complete';
+        const rightComplete = right.status === 'complete';
+        if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
+        return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
+      });
+  }
+
+  function renderPortfolioTaskCard(task, now) {
+    const complete = task.status === 'complete';
+    const phase = PHASES.find((item) => item.key === task.phase)?.label || task.phase || '미기록';
+    const progress = Math.round(clampPercent(Number(task.progress) || 0));
+    const updated = relativeTime(task.updated_at, now);
+    return `
+      <article class="h-portfolio-task${complete ? ' is-complete' : ''}">
+        <header>
+          <span class="h-kind">${complete ? 'COMPLETED SESSION' : 'ACTIVE SESSION'}</span>
+          <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
+        </header>
+        <h4>${escapeHtml(task.name || '이름 없는 작업')}</h4>
+        <p>${escapeHtml(taskCategory(task).label)} · ${escapeHtml(phase)} ${progress}%</p>
+        <span>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'} · 실제 보고 ${taskActors(task).length}명</span>
+      </article>`;
+  }
+
+  function renderPortfolioTaskBranch(task, now) {
+    const mainActor = mainActorOf(task);
+    const actorTree = mainActor
+      ? `<ul>${renderActorBranch(mainActor, actorHierarchy(task, mainActor), true)}</ul>`
+      : '<ul><li class="h-org-node"><p class="h-portfolio-empty">에이전트 보고 없음</p></li></ul>';
+    return `
+      <li class="h-org-node h-portfolio-task-node" data-portfolio-task="${escapeHtml(task.id || '')}">
+        ${renderPortfolioTaskCard(task, now)}
+        ${actorTree}
+      </li>`;
+  }
+
+  function renderPortfolioOrg(inputTasks, now) {
+    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
+    const completeCount = tasks.length - activeCount;
+    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
+    if (tasks.length === 0) return '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>';
+    return `
+      <section class="h-org-chart h-portfolio-org" aria-label="전체 세션과 실제 에이전트 조직도">
+        <header class="h-org-chart-head">
+          <div><p class="us-eyebrow">ALL SESSIONS</p><h3>전체 실행 조직</h3></div>
+          <span>세션 ${tasks.length}개 · 실제 에이전트 ${actorCount}명</span>
+        </header>
+        <div class="h-org-scroll">
+          <ul class="h-org-tree h-portfolio-tree">
+            <li class="h-org-node is-root">
+              <article class="h-harness-root">
+                <p class="h-kind">AI HARNESS</p>
+                <h4>전체 파이프라인</h4>
+                <dl><div><dt>진행 중</dt><dd>${activeCount}</dd></div><div><dt>완료</dt><dd>${completeCount}</dd></div><div><dt>실제 에이전트</dt><dd>${actorCount}</dd></div></dl>
+              </article>
+              <ul>${tasks.map((task) => renderPortfolioTaskBranch(task, now)).join('')}</ul>
+            </li>
+          </ul>
         </div>
       </section>`;
   }
@@ -407,11 +467,11 @@
     };
   }
 
-  function renderTaskTabs(tasks, now) {
-    const selectedIndex = Math.max(0, tasks.findIndex((task) => task.id === selectedTaskId));
+  function renderTaskTabs(tasks, now, status) {
+    const selectedIndex = Math.max(0, tasks.findIndex((task) => task.id === selectedTaskIds[status]));
     return `
-      <div class="h-session-switcher">
-        <div class="h-session-tabs" role="tablist" aria-label="병렬 Codex 세션">
+      <div class="h-session-switcher" data-session-switcher="${status}">
+        <div class="h-session-tabs" role="tablist" aria-label="${status === 'complete' ? '완료된' : '진행 중인'} Codex 세션" data-task-tablist>
           ${tasks.map((task, index) => {
     const selected = index === selectedIndex;
     const category = taskCategory(task);
@@ -419,8 +479,8 @@
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     return `
             <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
-              id="hSessionTab${index}" aria-controls="hSessionPanel${index}" aria-selected="${selected}"
-              tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}">
+              id="hSessionTab-${status}-${index}" aria-controls="hSessionPanel-${status}-${index}" aria-selected="${selected}"
+              tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
               <span class="h-session-tab-state status-dot${task.status === 'complete' ? '' : ' is-warn'}" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>${escapeHtml(task.name || '이름 없는 세션')}</strong>
@@ -433,11 +493,55 @@
           ${tasks.map((task, index) => {
     const selected = index === selectedIndex;
     return `
-            <section class="h-session-panel" role="tabpanel" id="hSessionPanel${index}"
-              aria-labelledby="hSessionTab${index}" data-task-panel="${index}"${selected ? '' : ' hidden'}>
+            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-${status}-${index}"
+              aria-labelledby="hSessionTab-${status}-${index}" data-task-panel="${index}"${selected ? '' : ' hidden'}>
               ${renderTask(task, now)}
             </section>`;
   }).join('')}
+        </div>
+      </div>`;
+  }
+
+  function renderSessionView(inputTasks, now, view) {
+    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+    if (view === 'org') return renderPortfolioOrg(tasks, now);
+    const status = view === 'complete' ? 'complete' : 'active';
+    const filtered = tasks.filter((task) => (status === 'complete'
+      ? task.status === 'complete'
+      : task.status !== 'complete'));
+    if (filtered.length === 0) {
+      return `<p class="us-empty card">${status === 'complete' ? '완료된 작업이 없습니다.' : '현재 진행 중인 작업이 없습니다.'}</p>`;
+    }
+    return renderTaskTabs(filtered, now, status);
+  }
+
+  function renderSessionViews(inputTasks, now) {
+    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
+    const completeCount = tasks.length - activeCount;
+    const views = [
+      { key: 'active', label: '진행 중', count: activeCount },
+      { key: 'complete', label: '완료', count: completeCount },
+      { key: 'org', label: '전체 조직도', count: tasks.length },
+    ];
+    return `
+      <div class="h-session-views">
+        <div class="h-session-view-tabs" role="tablist" aria-label="작업 상태별 보기" data-session-view-tablist>
+          ${views.map((view) => {
+    const selected = view.key === selectedSessionView;
+    return `<button class="h-session-view-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
+              id="hSessionViewTab-${view.key}" aria-controls="hSessionViewPanel-${view.key}" aria-selected="${selected}"
+              tabindex="${selected ? '0' : '-1'}" data-session-view="${view.key}">
+              <span>${view.label}</span><strong data-view-count="${view.count}">${view.count}</strong>
+            </button>`;
+  }).join('')}
+        </div>
+        <div class="h-session-view-panels">
+          ${views.map((view) => `
+            <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-${view.key}"
+              aria-labelledby="hSessionViewTab-${view.key}" data-session-view-panel="${view.key}"${view.key === selectedSessionView ? '' : ' hidden'}>
+              ${renderSessionView(tasks, now, view.key)}
+            </section>`).join('')}
         </div>
       </div>`;
   }
@@ -447,21 +551,15 @@
     const rawTasks = Array.isArray(input?.tasks) ? input.tasks : [];
     const snapshots = (Array.isArray(rawSnapshots) ? rawSnapshots : [])
       .filter((snapshot) => snapshot?.source === 'codex');
-    const tasks = rawTasks.filter((task) => task && typeof task === 'object')
-      .sort((left, right) => {
-        if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
-        return (parseTime(right.updated_at) || 0) - (parseTime(left.updated_at) || 0);
-      });
+    const tasks = sortTasks(rawTasks);
     return `
       <div class="us-command-layout">
         <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
           <header class="us-workspace-head">
             <div><p class="us-eyebrow">LIVE HARNESS</p><h2 id="harnessTitle" class="title-2">실행 파이프라인</h2></div>
-            <p>보고된 세션과 에이전트만 표시</p>
+            <p>상태별 세션 · 전체 실제 보고 조직</p>
           </header>
-          <div class="h-session-list">${tasks.length > 0
-    ? renderTaskTabs(tasks, now)
-    : '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>'}</div>
+          <div class="h-session-list">${renderSessionViews(tasks, now)}</div>
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
@@ -477,8 +575,10 @@
 
   function activateTaskTab(root, tab, moveFocus = false) {
     if (!root || !tab) return;
-    const tabs = [...root.querySelectorAll('[data-task-tab]')];
-    const panels = [...root.querySelectorAll('[data-task-panel]')];
+    const switcher = tab.closest?.('[data-session-switcher]');
+    const scope = switcher && typeof switcher.querySelectorAll === 'function' ? switcher : root;
+    const tabs = [...scope.querySelectorAll('[data-task-tab]')];
+    const panels = [...scope.querySelectorAll('[data-task-panel]')];
     for (const item of tabs) {
       const selected = item === tab;
       item.classList.toggle('is-selected', selected);
@@ -486,20 +586,64 @@
       item.tabIndex = selected ? 0 : -1;
     }
     for (const panel of panels) panel.hidden = panel.dataset.taskPanel !== tab.dataset.taskTab;
-    selectedTaskId = tab.dataset.taskId || '';
+    const status = tab.dataset.taskStatus === 'complete' ? 'complete' : 'active';
+    selectedTaskIds[status] = tab.dataset.taskId || '';
     if (moveFocus) tab.focus();
   }
 
   function wireTaskTabs(root) {
-    const tablist = root?.querySelector('[role="tablist"]');
+    const found = [...(root?.querySelectorAll?.('[data-task-tablist]') || [])]
+      .filter((item) => typeof item.addEventListener === 'function');
+    const legacy = found.length === 0 ? root?.querySelector?.('[role="tablist"]') : null;
+    const tablists = found.length > 0 ? found : legacy ? [legacy] : [];
+    for (const tablist of tablists) {
+      tablist.addEventListener('click', (event) => {
+        const tab = event.target.closest('[data-task-tab]');
+        if (tab && tablist.contains(tab)) activateTaskTab(root, tab);
+      });
+      tablist.addEventListener('keydown', (event) => {
+        const tabs = [...tablist.querySelectorAll('[data-task-tab]')];
+        const current = event.target.closest('[data-task-tab]');
+        const index = tabs.indexOf(current);
+        if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? tabs.length - 1
+            : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+        activateTaskTab(root, tabs[next], true);
+      });
+    }
+  }
+
+  function activateSessionView(root, tab, moveFocus = false) {
+    if (!root || !tab) return;
+    const tabs = [...root.querySelectorAll('[data-session-view]')];
+    const panels = [...root.querySelectorAll('[data-session-view-panel]')];
+    for (const item of tabs) {
+      const selected = item === tab;
+      item.classList.toggle('is-selected', selected);
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    }
+    for (const panel of panels) panel.hidden = panel.dataset.sessionViewPanel !== tab.dataset.sessionView;
+    selectedSessionView = ['active', 'complete', 'org'].includes(tab.dataset.sessionView)
+      ? tab.dataset.sessionView
+      : 'active';
+    if (moveFocus) tab.focus();
+  }
+
+  function wireSessionViews(root) {
+    const tablist = root?.querySelector?.('[data-session-view-tablist]');
     if (!tablist) return;
     tablist.addEventListener('click', (event) => {
-      const tab = event.target.closest('[data-task-tab]');
-      if (tab && tablist.contains(tab)) activateTaskTab(root, tab);
+      const tab = event.target.closest('[data-session-view]');
+      if (tab && tablist.contains(tab)) activateSessionView(root, tab);
     });
     tablist.addEventListener('keydown', (event) => {
-      const tabs = [...tablist.querySelectorAll('[data-task-tab]')];
-      const current = event.target.closest('[data-task-tab]');
+      const tabs = [...tablist.querySelectorAll('[data-session-view]')];
+      const current = event.target.closest('[data-session-view]');
       const index = tabs.indexOf(current);
       if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
@@ -508,8 +652,13 @@
         : event.key === 'End'
           ? tabs.length - 1
           : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-      activateTaskTab(root, tabs[next], true);
+      activateSessionView(root, tabs[next], true);
     });
+  }
+
+  function wireDashboard(root) {
+    wireSessionViews(root);
+    wireTaskTabs(root);
   }
 
   async function load({ announce = false } = {}) {
@@ -520,7 +669,7 @@
     try {
       const data = await api('/api/usage');
       elements.body.innerHTML = buildDashboard(data, Date.now());
-      wireTaskTabs(elements.body);
+      wireDashboard(elements.body);
       if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
       if (announce) elements.reload.textContent = '업데이트됨';
     } catch (error) {
@@ -537,5 +686,8 @@
 
   elements.reload.addEventListener('click', () => load({ announce: true }));
   load();
-  window.USAGE_RENDER = { buildDashboard, activateTaskTab, wireTaskTabs, load };
+  window.USAGE_RENDER = {
+    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioOrg,
+    activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard, load,
+  };
 })();
