@@ -292,6 +292,77 @@ export function mergeHarnessReport(previous, incoming) {
   };
 }
 
+function remainingUsagePercent(bucket) {
+  if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return null;
+  const remaining = Number.isFinite(bucket.remaining_percent)
+    ? bucket.remaining_percent
+    : bucket.remaining_percentage;
+  if (Number.isFinite(remaining) && remaining >= 0 && remaining <= 100) return remaining;
+  const used = Number.isFinite(bucket.used_percent) ? bucket.used_percent : bucket.used_percentage;
+  if (!Number.isFinite(used) || used < 0 || used > 100) return null;
+  return 100 - used;
+}
+
+function codexRemainingPercent(payload) {
+  const limits = payload?.rate_limits;
+  if (!limits || typeof limits !== 'object' || Array.isArray(limits)) return null;
+  const entries = Object.entries(limits).filter(([, bucket]) => (
+    bucket && typeof bucket === 'object' && !Array.isArray(bucket)
+  ));
+  const selected = entries.find(([, bucket]) => bucket.window_minutes === 10_080)?.[1]
+    || limits.secondary
+    || limits.primary;
+  return remainingUsagePercent(selected);
+}
+
+function claudeRemainingPercent(payload, subjectModel) {
+  const models = payload?.models;
+  if (!models || typeof models !== 'object' || Array.isArray(models)) return null;
+  const entries = Object.entries(models).filter(([, value]) => (
+    value && typeof value === 'object' && !Array.isArray(value)
+  ));
+  const exact = entries.find(([model]) => model === subjectModel)?.[1];
+  const selectedModel = exact || entries.reduce((newest, candidate) => {
+    if (!newest) return candidate;
+    const newestTime = Date.parse(newest[1].captured_at || '');
+    const candidateTime = Date.parse(candidate[1].captured_at || '');
+    return Number.isFinite(candidateTime)
+      && (!Number.isFinite(newestTime) || candidateTime > newestTime) ? candidate : newest;
+  }, null)?.[1];
+  const limits = selectedModel?.rate_limits;
+  if (!limits || typeof limits !== 'object' || Array.isArray(limits)) return null;
+  const entriesForModel = Object.entries(limits).filter(([, bucket]) => (
+    bucket && typeof bucket === 'object' && !Array.isArray(bucket)
+  ));
+  const selected = limits.seven_day
+    || entriesForModel.find(([key]) => key.startsWith('seven_day'))?.[1]
+    || entriesForModel.find(([, bucket]) => bucket.window_minutes === 10_080)?.[1]
+    || limits.five_hour
+    || entriesForModel[0]?.[1];
+  return remainingUsagePercent(selected);
+}
+
+async function harnessEventUsage(env, subjectModel) {
+  const snapshots = await env.DB.prepare(`
+    SELECT source, payload
+    FROM usage_snapshots
+    WHERE source IN (?1, ?2)
+  `).bind('codex', 'claude').all();
+  let codex = null;
+  let claude = null;
+  for (const row of snapshots.results || []) {
+    let payload = null;
+    try { payload = JSON.parse(row.payload); } catch { payload = null; }
+    if (row.source === 'codex') codex = codexRemainingPercent(payload);
+    if (row.source === 'claude') claude = claudeRemainingPercent(payload, subjectModel);
+  }
+  return { codex, claude };
+}
+
+function optionalEventText(value) {
+  return typeof value === 'string' && value ? value : null;
+}
+
 async function reportHarness(request, env) {
   if (!(await ingestTokenMatches(request, env.HARNESS_INGEST_TOKEN))) {
     return json({ error: '인증이 필요합니다.' }, 401);
@@ -349,7 +420,17 @@ async function reportHarness(request, env) {
   // 계약이 깨졌을 때의 최악(끝난 태스크가 되살아남)만 DB 조건으로 한 겹 더 막는다: 우리가
   // 읽은 뒤 행이 complete가 됐다면, resume 없는 active 보고는 그 강등을 적용하지 못한다.
   const guardsTerminal = merged.status !== 'complete' && incoming.resume !== true;
-  await env.DB.prepare(`
+  const serialized = JSON.stringify(merged);
+  // notify.mjs always emits `${task_id}:main` first and appends an --actor-* report last.
+  // Only that distinct final actor changes the event subject; ordinary reports use task fields.
+  const mainActorId = `${incoming.task_id}:main`;
+  const lastActor = incoming.actors.at(-1);
+  const isActorReport = Boolean(lastActor?.id && lastActor.id !== mainActorId);
+  const subject = isActorReport ? lastActor : merged;
+  const subjectModel = optionalEventText(subject.model);
+  const eventUsage = await harnessEventUsage(env, subjectModel);
+  const kind = previous && previous.phase !== merged.phase ? 'phase-change' : 'report';
+  const upsertStatement = env.DB.prepare(`
     INSERT INTO harness_tasks(task_id, status, updated_at, payload)
     VALUES (?1, ?2, ?3, ?4)
     ON CONFLICT(task_id)
@@ -357,7 +438,43 @@ async function reportHarness(request, env) {
     WHERE (datetime(excluded.updated_at) >= datetime(harness_tasks.updated_at)
         OR datetime(harness_tasks.updated_at) IS NULL)
       ${guardsTerminal ? "AND harness_tasks.status != 'complete'" : ''}
-  `).bind(incoming.task_id, merged.status, merged.updated_at, JSON.stringify(merged)).run();
+  `).bind(incoming.task_id, merged.status, merged.updated_at, serialized);
+  const eventStatement = env.DB.prepare(`
+    INSERT INTO harness_events(
+      task_id, ts, kind, actor_id, phase, percent, model, reasoning, status,
+      usage_codex, usage_claude, payload
+    )
+    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+    WHERE changes() > 0
+  `).bind(
+    incoming.task_id,
+    incoming.occurred_at,
+    kind,
+    isActorReport ? lastActor.id : null,
+    optionalEventText(merged.phase),
+    Number.isFinite(subject.progress) ? subject.progress : null,
+    subjectModel,
+    optionalEventText(subject.reasoning),
+    optionalEventText(subject.status),
+    eventUsage.codex,
+    eventUsage.claude,
+    serialized,
+  );
+  // D1 batch executes sequentially as one transaction. The SQL changes() predicate observes the
+  // immediately preceding conditional upsert, so a rejected task write cannot append an event.
+  const [upsert] = await env.DB.batch([upsertStatement, eventStatement]);
+  if (upsert?.meta?.changes === 0) {
+    return json({ ok: true, task_id: incoming.task_id });
+  }
+
+  if (Math.random() < 0.05) {
+    try {
+      await env.DB.prepare(`
+        DELETE FROM harness_events
+        WHERE datetime(ts) < datetime('now', '-14 days')
+      `).run();
+    } catch { /* Retention is opportunistic and must not reject an accepted report. */ }
+  }
   return json({ ok: true, task_id: incoming.task_id });
 }
 
@@ -390,6 +507,35 @@ async function usage(request, env) {
     FROM harness_tasks
     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, datetime(updated_at) DESC
   `).all();
+  const eventRows = await env.DB.prepare(`
+    SELECT task_id, id, ts, kind, actor_id, phase, percent, model, reasoning, status,
+      usage_codex, usage_claude
+    FROM (
+      SELECT task_id, id, ts, kind, actor_id, phase, percent, model, reasoning, status,
+        usage_codex, usage_claude,
+        ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY id DESC) AS task_rank
+      FROM harness_events
+    )
+    WHERE task_rank <= 300
+    ORDER BY task_id ASC, id ASC
+  `).all();
+  const eventsByTask = new Map();
+  for (const row of eventRows.results || []) {
+    const events = eventsByTask.get(row.task_id) || [];
+    events.push({
+      ts: row.ts,
+      kind: row.kind,
+      actor_id: row.actor_id,
+      phase: row.phase,
+      percent: row.percent,
+      model: row.model,
+      reasoning: row.reasoning,
+      status: row.status,
+      usage_codex: row.usage_codex,
+      usage_claude: row.usage_claude,
+    });
+    eventsByTask.set(row.task_id, events);
+  }
   return json({
     snapshots: rows.results.filter((row) => VALID_USAGE_SOURCES.has(row.source)).map((row) => {
       // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
@@ -400,7 +546,9 @@ async function usage(request, env) {
     tasks: taskRows.results.flatMap((row) => {
       try {
         const payload = JSON.parse(row.payload);
-        return payload && typeof payload === 'object' ? [payload] : [];
+        return payload && typeof payload === 'object'
+          ? [{ ...payload, events: eventsByTask.get(row.task_id) || [] }]
+          : [];
       } catch {
         return [];
       }

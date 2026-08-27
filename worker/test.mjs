@@ -446,6 +446,9 @@ test('a claude usage report posted through the API comes back from the usage loo
         if (sql.includes('FROM harness_tasks')) {
           return { async all() { return { results: [] }; } };
         }
+        if (sql.includes('FROM harness_events')) {
+          return { async all() { return { results: [] }; } };
+        }
         throw new Error(`Unexpected SQL in usage round-trip test: ${sql}`);
       },
     },
@@ -520,12 +523,32 @@ function harnessInput(overrides = {}) {
   };
 }
 
+function emptyHarnessEventStatement(sql) {
+  if (sql.includes('FROM usage_snapshots')) {
+    return { bind() { return { async all() { return { results: [] }; } }; } };
+  }
+  if (sql.includes('INSERT INTO harness_events')) {
+    return { bind() { return { async run() { return { success: true, meta: { changes: 1 } }; } }; } };
+  }
+  if (sql.includes('DELETE FROM harness_events')) {
+    return { async run() { return { success: true, meta: { changes: 0 } }; } };
+  }
+  return null;
+}
+
+async function runFakeBatch(statements) {
+  const results = [];
+  for (const statement of statements) results.push(await statement.run());
+  return results;
+}
+
 test('harness report requires its own token and merges actors into one task', async () => {
   let storedPayload = '';
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
     HARNESS_INGEST_TOKEN: 'harness-token',
     DB: {
+      batch: runFakeBatch,
       prepare(sql) {
         if (sql.includes('SELECT payload FROM harness_tasks')) {
           return { bind() { return { async first() { return storedPayload ? { payload: storedPayload } : null; } }; } };
@@ -536,10 +559,12 @@ test('harness report requires its own token and merges actors into one task', as
               assert.equal(taskId, 'usage-harness');
               assert.equal(status, 'active');
               assert.equal(updatedAt, '2026-08-27T09:00:00.000Z');
-              return { async run() { storedPayload = payload; return { success: true }; } };
+              return { async run() { storedPayload = payload; return { success: true, meta: { changes: 1 } }; } };
             },
           };
         }
+        const eventStatement = emptyHarnessEventStatement(sql);
+        if (eventStatement) return eventStatement;
         throw new Error(`Unexpected SQL in test: ${sql}`);
       },
     },
@@ -613,6 +638,270 @@ test('harness report requires its own token and merges actors into one task', as
   assert.equal(invalidCategory.status, 400);
 });
 
+test('accepted harness upserts append subject-aware events with remaining usage snapshots', async () => {
+  const state = {
+    payload: '',
+    allowUpsert: true,
+    failEventInsert: false,
+    batchCalls: 0,
+    snapshotReads: 0,
+    operations: [],
+    events: [],
+    snapshots: [
+      {
+        source: 'codex',
+        payload: JSON.stringify({
+          rate_limits: {
+            primary: { remaining_percent: 91, window_minutes: 300 },
+            secondary: { remaining_percent: 62, used_percent: 99, window_minutes: 10_080 },
+          },
+        }),
+      },
+      {
+        source: 'claude',
+        payload: JSON.stringify({
+          models: {
+            'claude-opus-5': {
+              captured_at: '2026-08-27T09:00:00.000Z',
+              rate_limits: { seven_day: { used_percentage: 41 } },
+            },
+            'claude-newest': {
+              captured_at: '2026-08-27T09:01:00.000Z',
+              rate_limits: { seven_day_sonnet: { remaining_percentage: 44 } },
+            },
+          },
+        }),
+      },
+    ],
+  };
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      async batch(statements) {
+        state.batchCalls += 1;
+        state.operations.push('batch');
+        assert.deepEqual(statements.map((statement) => statement.kind), ['task-upsert', 'event-insert']);
+        const beforePayload = state.payload;
+        const beforeEvents = state.events.length;
+        let lastChanges = 0;
+        try {
+          const results = [];
+          for (const statement of statements) {
+            const result = await statement.run(lastChanges);
+            lastChanges = result?.meta?.changes || 0;
+            results.push(result);
+          }
+          return results;
+        } catch (error) {
+          state.payload = beforePayload;
+          state.events.length = beforeEvents;
+          throw error;
+        }
+      },
+      prepare(sql) {
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return { bind() { return { async first() { return state.payload ? { payload: state.payload } : null; } }; } };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          return {
+            bind(taskId, status, updatedAt, payload) {
+              return {
+                kind: 'task-upsert',
+                async run() {
+                  if (!state.allowUpsert) return { success: true, meta: { changes: 0 } };
+                  state.payload = payload;
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return {
+            bind(...sources) {
+              assert.deepEqual(sources, ['codex', 'claude']);
+              return {
+                async all() {
+                  state.snapshotReads += 1;
+                  state.operations.push('snapshots');
+                  return { results: state.snapshots };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('INSERT INTO harness_events')) {
+          assert.match(sql, /SELECT \?1, \?2, \?3, \?4, \?5, \?6, \?7, \?8, \?9, \?10, \?11, \?12\s+WHERE changes\(\) > 0/u);
+          return {
+            bind(...values) {
+              return {
+                kind: 'event-insert',
+                async run(lastChanges) {
+                  if (state.failEventInsert) throw new Error('forced event insert failure');
+                  if (lastChanges === 0) return { success: true, meta: { changes: 0 } };
+                  state.events.push(values);
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('DELETE FROM harness_events')) {
+          return { async run() { return { success: true, meta: { changes: 0 } }; } };
+        }
+        throw new Error(`Unexpected SQL in event insertion test: ${sql}`);
+      },
+    },
+  };
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  assert.equal((await post(harnessInput())).status, 200);
+  assert.deepEqual(state.operations.slice(0, 2), ['snapshots', 'batch']);
+  assert.equal(state.batchCalls, 1);
+  assert.deepEqual(state.events[0].slice(0, 11), [
+    'usage-harness', '2026-08-27T09:00:00.000Z', 'report', null, 'work', 55,
+    'gpt-5.6-sol', 'xhigh', 'active', 62, 44,
+  ]);
+
+  const extraActor = {
+    id: 'usage-harness:reviewer',
+    parent_id: 'usage-harness:main',
+    name: 'Reviewer',
+    kind: 'claude',
+    model: 'claude-opus-5',
+    reasoning: 'high',
+    role: '독립 검토',
+    status: 'reviewing',
+    assignment: 'event contract review',
+    progress: 77,
+  };
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T09:05:00.000Z',
+    actors: [harnessInput().actors[0], extraActor],
+  }))).status, 200);
+  assert.deepEqual(state.events[1].slice(2, 11), [
+    'report', 'usage-harness:reviewer', 'work', 77,
+    'claude-opus-5', 'high', 'reviewing', 62, 59,
+  ]);
+
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T09:10:00.000Z',
+    task: { ...harnessInput().task, phase: 'review', progress: 80 },
+    actors: [{ ...harnessInput().actors[0], progress: 80, status: 'reviewing' }],
+  }))).status, 200);
+  assert.equal(state.events[2][2], 'phase-change');
+  assert.equal(state.events[2][4], 'review');
+  assert.equal(JSON.parse(state.events[2][11]).phase, 'review');
+
+  state.snapshots = [
+    { source: 'codex', payload: JSON.stringify({ rate_limits: { secondary: { used_percent: 120 } } }) },
+    { source: 'claude', payload: '{broken' },
+  ];
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T09:15:00.000Z',
+    task: { ...harnessInput().task, phase: 'review', progress: 85 },
+  }))).status, 200);
+  assert.deepEqual(state.events[3].slice(9, 11), [null, null]);
+  assert.equal(state.events.length, 4);
+
+  state.allowUpsert = false;
+  const readsBeforeRejectedUpsert = state.snapshotReads;
+  const eventsBeforeRejectedUpsert = state.events.length;
+  assert.equal((await post(harnessInput({ occurred_at: '2026-08-27T09:20:00.000Z' }))).status, 200);
+  assert.equal(state.snapshotReads, readsBeforeRejectedUpsert + 1);
+  assert.equal(state.events.length, eventsBeforeRejectedUpsert);
+
+  state.allowUpsert = true;
+  state.failEventInsert = true;
+  const payloadBeforeFailedBatch = state.payload;
+  const eventsBeforeFailedBatch = state.events.length;
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const failed = await post(harnessInput({ occurred_at: '2026-08-27T09:25:00.000Z' }));
+    assert.equal(failed.status, 500);
+  } finally {
+    console.error = originalError;
+    state.failEventInsert = false;
+  }
+  assert.equal(state.payload, payloadBeforeFailedBatch);
+  assert.equal(state.events.length, eventsBeforeFailedBatch);
+  assert.equal(state.batchCalls, 6);
+});
+
+test('harness retention uses the strict five-percent boundary and stays best-effort', async () => {
+  const createEnv = (deleteFails = false) => {
+    const state = { deletes: [] };
+    return {
+      state,
+      env: {
+        ALLOWED_ORIGIN: 'https://example.test',
+        HARNESS_INGEST_TOKEN: 'harness-token',
+        DB: {
+          batch: runFakeBatch,
+          prepare(sql) {
+            if (sql.includes('SELECT payload FROM harness_tasks')) {
+              return { bind() { return { async first() { return null; } }; } };
+            }
+            if (sql.includes('FROM usage_snapshots')) {
+              return { bind() { return { async all() { return { results: [] }; } }; } };
+            }
+            if (sql.includes('INSERT INTO harness_tasks')) {
+              return { bind() { return { async run() { return { success: true, meta: { changes: 1 } }; } }; } };
+            }
+            if (sql.includes('INSERT INTO harness_events')) {
+              assert.match(sql, /WHERE changes\(\) > 0/u);
+              return { bind() { return { async run() { return { success: true, meta: { changes: 1 } }; } }; } };
+            }
+            if (sql.includes('DELETE FROM harness_events')) {
+              state.deletes.push(sql);
+              return {
+                async run() {
+                  if (deleteFails) throw new Error('forced retention failure');
+                  return { success: true, meta: { changes: 0 } };
+                },
+              };
+            }
+            throw new Error(`Unexpected SQL in retention test: ${sql}`);
+          },
+        },
+      },
+    };
+  };
+  const post = (env) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(harnessInput()),
+  }), env);
+  const originalRandom = Math.random;
+  try {
+    const boundary = createEnv();
+    Math.random = () => 0.05;
+    assert.equal((await post(boundary.env)).status, 200);
+    assert.equal(boundary.state.deletes.length, 0);
+
+    const belowBoundary = createEnv();
+    Math.random = () => 0.049;
+    assert.equal((await post(belowBoundary.env)).status, 200);
+    assert.equal(belowBoundary.state.deletes.length, 1);
+    assert.match(
+      belowBoundary.state.deletes[0],
+      /WHERE datetime\(ts\) < datetime\('now', '-14 days'\)/u,
+    );
+
+    const failedDelete = createEnv(true);
+    assert.equal((await post(failedDelete.env)).status, 200);
+    assert.equal(failedDelete.state.deletes.length, 1);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test('harness report keeps the merged actor total within twenty', async () => {
   let storedPayload = '';
   let upserts = 0;
@@ -620,6 +909,7 @@ test('harness report keeps the merged actor total within twenty', async () => {
     ALLOWED_ORIGIN: 'https://example.test',
     HARNESS_INGEST_TOKEN: 'harness-token',
     DB: {
+      batch: runFakeBatch,
       prepare(sql) {
         if (sql.includes('SELECT payload FROM harness_tasks')) {
           return { bind() { return { async first() { return storedPayload ? { payload: storedPayload } : null; } }; } };
@@ -631,12 +921,14 @@ test('harness report keeps the merged actor total within twenty', async () => {
                 async run() {
                   upserts += 1;
                   storedPayload = payload;
-                  return { success: true };
+                  return { success: true, meta: { changes: 1 } };
                 },
               };
             },
           };
         }
+        const eventStatement = emptyHarnessEventStatement(sql);
+        if (eventStatement) return eventStatement;
         throw new Error(`Unexpected SQL in actor cap test: ${sql}`);
       },
     },
@@ -681,6 +973,7 @@ function harnessStoreEnv() {
       ALLOWED_ORIGIN: 'https://example.test',
       HARNESS_INGEST_TOKEN: 'harness-token',
       DB: {
+        batch: runFakeBatch,
         prepare(sql) {
           if (sql.includes('SELECT payload FROM harness_tasks')) {
             return {
@@ -725,6 +1018,8 @@ function harnessStoreEnv() {
               },
             };
           }
+          const eventStatement = emptyHarnessEventStatement(sql);
+          if (eventStatement) return eventStatement;
           throw new Error(`Unexpected SQL in stale-report test: ${sql}`);
         },
       },
@@ -1031,6 +1326,9 @@ test('usage lookup survives a corrupted snapshot row', async () => {
         if (sql.includes('FROM harness_tasks')) {
           return { async all() { return { results: [] }; } };
         }
+        if (sql.includes('FROM harness_events')) {
+          return { async all() { return { results: [] }; } };
+        }
         throw new Error(`Unexpected SQL in test: ${sql}`);
       },
     },
@@ -1171,6 +1469,9 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
             },
           };
         }
+        if (sql.includes('FROM harness_events')) {
+          return { async all() { return { results: [] }; } };
+        }
         throw new Error(`Unexpected SQL in test: ${sql}`);
       },
     },
@@ -1197,8 +1498,89 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
         payload: storedPayload,
       },
     ],
-    tasks: [storedTask],
+    tasks: [{ ...storedTask, events: [] }],
   });
+});
+
+test('usage lookup returns each task latest three hundred events in ascending order', async () => {
+  const task = (id) => ({
+    version: 1, id, name: id, phase: 'work', progress: 50, status: 'active',
+    actors: [], modules: [], artifacts: [], updated_at: '2026-08-27T09:00:00.000Z',
+  });
+  const event = (taskId, id) => ({
+    task_id: taskId,
+    id,
+    ts: `2026-08-27T09:${String(id).padStart(3, '0')}:00.000Z`,
+    kind: id % 10 === 0 ? 'phase-change' : 'report',
+    actor_id: null,
+    phase: 'work',
+    percent: id,
+    model: 'gpt-5.6-sol',
+    reasoning: 'high',
+    status: 'active',
+    usage_codex: 100 - (id / 10),
+    usage_claude: null,
+  });
+  const latest = (taskId, count) => Array.from({ length: count }, (_, index) => event(taskId, index + 1)).slice(-300);
+  let eventQueries = 0;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return { bind() { return { async all() { return { results: [] }; } }; } };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return {
+            async all() {
+              return {
+                results: ['task-a', 'task-b', 'task-empty'].map((taskId) => ({
+                  task_id: taskId,
+                  status: 'active',
+                  updated_at: '2026-08-27T09:00:00.000Z',
+                  payload: JSON.stringify(task(taskId)),
+                })),
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM harness_events')) {
+          eventQueries += 1;
+          assert.match(sql, /ROW_NUMBER\(\) OVER \(PARTITION BY task_id ORDER BY id DESC\) AS task_rank/u);
+          assert.match(sql, /WHERE task_rank <= 300/u);
+          assert.match(sql, /ORDER BY task_id ASC, id ASC/u);
+          return { async all() { return { results: [...latest('task-a', 302), ...latest('task-b', 301)] }; } };
+        }
+        throw new Error(`Unexpected SQL in event cap test: ${sql}`);
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token' },
+  }), env);
+  assert.equal(response.status, 200);
+  const { tasks } = await response.json();
+  assert.equal(eventQueries, 1);
+  assert.deepEqual(tasks.map((entry) => entry.events.length), [300, 300, 0]);
+  assert.deepEqual(tasks[0].events.map((entry) => entry.percent).slice(0, 2), [3, 4]);
+  assert.deepEqual(tasks[0].events.map((entry) => entry.percent).slice(-2), [301, 302]);
+  assert.deepEqual(tasks[1].events.map((entry) => entry.percent).slice(0, 2), [2, 3]);
+  assert.deepEqual(Object.keys(tasks[0].events[0]), [
+    'ts', 'kind', 'actor_id', 'phase', 'percent', 'model', 'reasoning', 'status',
+    'usage_codex', 'usage_claude',
+  ]);
 });
 
 test('unexpected server errors do not expose internal details', async () => {
