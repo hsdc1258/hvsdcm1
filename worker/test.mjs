@@ -354,6 +354,239 @@ test('usage report rejects oversized payloads and non-object bodies', async () =
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: '잘못된 사용량 보고입니다.' });
   }
+
+  const claude = await worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      source: 'claude',
+      captured_at: '2026-08-27T01:02:03.000Z',
+      payload: {},
+    }),
+  }), env);
+  assert.equal(claude.status, 400);
+});
+
+function harnessInput(overrides = {}) {
+  return {
+    version: 1,
+    task_id: 'usage-harness',
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    task: {
+      name: '사용량 하네스 시각화 (08-27)',
+      phase: 'work',
+      progress: 55,
+      status: 'active',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      category_key: 'pipeline-visualization',
+      category: '파이프라인 시각화',
+      current: 'Worker 연결',
+      done: '계약 고정',
+      next: '화면 렌더',
+      deadline: '20:10 KST',
+    },
+    actors: [{
+      id: 'usage-harness:main',
+      parent_id: '',
+      name: 'Main Codex',
+      kind: 'codex',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      role: '기획 · 통합 · 최종 판정',
+      status: 'working',
+      assignment: 'Worker 연결',
+    }],
+    artifacts: ['npm test'],
+    ...overrides,
+  };
+}
+
+test('harness report requires its own token and merges actors into one task', async () => {
+  let storedPayload = '';
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return { bind() { return { async first() { return storedPayload ? { payload: storedPayload } : null; } }; } };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          return {
+            bind(taskId, status, updatedAt, payload) {
+              assert.equal(taskId, 'usage-harness');
+              assert.equal(status, 'active');
+              assert.equal(updatedAt, '2026-08-27T09:00:00.000Z');
+              return { async run() { storedPayload = payload; return { success: true }; } };
+            },
+          };
+        }
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    },
+  };
+  const post = (body, token = 'harness-token') => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  const denied = await post(harnessInput(), 'wrong');
+  assert.equal(denied.status, 401);
+
+  const first = await post(harnessInput());
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), { ok: true, task_id: 'usage-harness' });
+
+  const second = await post(harnessInput({
+    actors: [{
+      id: 'usage-harness:webgpt',
+      parent_id: 'usage-harness:main',
+      name: 'WebGPT 실행자',
+      kind: 'webgpt',
+      model: 'WebGPT PRO',
+      role: '위임 실행',
+      status: 'working',
+      assignment: 'fixture 정리',
+    }],
+    artifacts: ['HARNESS E2E: PASS'],
+  }));
+  assert.equal(second.status, 200);
+  const merged = JSON.parse(storedPayload);
+  assert.equal(merged.category_key, 'pipeline-visualization');
+  assert.equal(merged.category, '파이프라인 시각화');
+  assert.equal(merged.reasoning, 'xhigh');
+  assert.equal(merged.actors[0].reasoning, 'xhigh');
+  assert.deepEqual(merged.actors.map((actor) => actor.kind), ['codex', 'webgpt']);
+  assert.deepEqual(merged.artifacts, ['npm test', 'HARNESS E2E: PASS']);
+
+  const invalidReasoning = await post(harnessInput({
+    task: { ...harnessInput().task, reasoning: 'made-up-effort' },
+  }));
+  assert.equal(invalidReasoning.status, 400);
+
+  const invalidCategory = await post(harnessInput({
+    task: { ...harnessInput().task, category_key: 'bad category!' },
+  }));
+  assert.equal(invalidCategory.status, 400);
+});
+
+test('harness report keeps the merged actor total within twenty', async () => {
+  let storedPayload = '';
+  let upserts = 0;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return { bind() { return { async first() { return storedPayload ? { payload: storedPayload } : null; } }; } };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          return {
+            bind(taskId, status, updatedAt, payload) {
+              return {
+                async run() {
+                  upserts += 1;
+                  storedPayload = payload;
+                  return { success: true };
+                },
+              };
+            },
+          };
+        }
+        throw new Error(`Unexpected SQL in actor cap test: ${sql}`);
+      },
+    },
+  };
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer harness-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }), env);
+  const actors = (prefix) => Array.from({ length: 20 }, (_, index) => ({
+    ...harnessInput().actors[0],
+    id: `usage-harness:${prefix}-${index}`,
+    parent_id: '',
+  }));
+
+  const first = await post(harnessInput({ actors: actors('a') }));
+  assert.equal(first.status, 200);
+  const second = await post(harnessInput({ actors: actors('b') }));
+  assert.equal(second.status, 400);
+  assert.deepEqual(await second.json(), { error: '하네스 실행자가 너무 많습니다.' });
+  assert.equal(JSON.parse(storedPayload).actors.length, 20);
+  assert.equal(upserts, 1);
+});
+
+test('harness report rejects every bounded or non-allowlisted shape before database access', async () => {
+  let databaseCalls = 0;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      prepare() {
+        databaseCalls += 1;
+        throw new Error('invalid harness input must not reach the database');
+      },
+    },
+  };
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer harness-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }), env);
+  const postRaw = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer harness-token',
+      'content-type': 'application/json',
+    },
+    body,
+  }), env);
+  const invalidCases = [
+    ['phase allowlist', (input) => { input.task.phase = 'ship'; }],
+    ['task status allowlist', (input) => { input.task.status = 'paused'; }],
+    ['actor kind allowlist', (input) => { input.actors[0].kind = 'claude'; }],
+    ['actor status allowlist', (input) => { input.actors[0].status = 'idle'; }],
+    ['at least one actor', (input) => { input.actors = []; }],
+    ['at most twenty actors', (input) => {
+      input.actors = Array.from({ length: 21 }, (_, index) => ({
+        ...input.actors[0],
+        id: `usage-harness:actor-${index}`,
+      }));
+    }],
+    ['at most ten artifacts', (input) => {
+      input.artifacts = Array.from({ length: 11 }, (_, index) => `artifact-${index}`);
+    }],
+    ['bounded task strings', (input) => { input.task.name = 'x'.repeat(121); }],
+  ];
+
+  for (const [label, mutate] of invalidCases) {
+    const input = structuredClone(harnessInput());
+    mutate(input);
+    const response = await post(input);
+    assert.equal(response.status, 400, label);
+    assert.deepEqual(await response.json(), { error: '잘못된 하네스 보고입니다.' }, label);
+  }
+
+  const oversized = structuredClone(harnessInput());
+  oversized.ignored = '한'.repeat(25_000);
+  const oversizedResponse = await post(oversized);
+  assert.equal(oversizedResponse.status, 413);
+  assert.deepEqual(await oversizedResponse.json(), { error: '하네스 보고가 너무 큽니다.' });
+
+  const whitespaceResponse = await postRaw(`${' '.repeat(70_000)}${JSON.stringify(harnessInput())}`);
+  assert.equal(whitespaceResponse.status, 413);
+  assert.deepEqual(await whitespaceResponse.json(), { error: '하네스 보고가 너무 큽니다.' });
+  assert.equal(databaseCalls, 0);
 });
 
 test('usage lookup survives a corrupted snapshot row', async () => {
@@ -373,16 +606,20 @@ test('usage lookup survives a corrupted snapshot row', async () => {
           return { bind() { return { async run() { return { success: true }; } }; } };
         }
         if (sql.includes('FROM usage_snapshots')) {
+          assert.match(sql, /WHERE source = 'codex'/u);
           return {
             async all() {
               return {
                 results: [
-                  { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
-                  { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"model":"gpt-5.6"}' },
+                  { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"model":"claude"}' },
+                  { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
                 ],
               };
             },
           };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return { async all() { return { results: [] }; } };
         }
         throw new Error(`Unexpected SQL in test: ${sql}`);
       },
@@ -394,8 +631,8 @@ test('usage lookup survives a corrupted snapshot row', async () => {
   }), env);
   assert.equal(response.status, 200);
   const { snapshots } = await response.json();
+  assert.deepEqual(snapshots.map((snapshot) => snapshot.source), ['codex']);
   assert.equal(snapshots[0].payload, null);
-  assert.deepEqual(snapshots[1].payload, { model: 'gpt-5.6' });
 });
 
 // review WP1 M-5 — 사용량은 소유자 개인 데이터다. 로그인만으로는 부족하고,
@@ -445,7 +682,22 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
   assert.equal(unauthenticated.status, 401);
   assert.deepEqual(await unauthenticated.json(), { error: '로그인이 필요합니다.' });
 
-  const storedPayload = { models: { fable: { rate_limits: { five_hour: { used_percentage: 8 } } } } };
+  const storedPayload = { model: 'gpt-5.6-sol', rate_limits: { primary: { used_percent: 8 } } };
+  const storedTask = {
+    version: 1,
+    id: 'usage-harness',
+    name: '사용량 하네스 시각화 (08-27)',
+    phase: 'work',
+    progress: 55,
+    status: 'active',
+    model: 'gpt-5.6-sol',
+    reasoning: 'xhigh',
+    category_key: 'pipeline-visualization',
+    category: '파이프라인 시각화',
+    actors: [],
+    artifacts: [],
+    updated_at: '2026-08-27T09:00:00.000Z',
+  };
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
     OWNER_USERNAME: 'hvsdcm',
@@ -466,9 +718,23 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
             async all() {
               return {
                 results: [{
-                  source: 'claude',
+                  source: 'codex',
                   captured_at: '2026-08-27T01:02:03.000Z',
                   payload: JSON.stringify(storedPayload),
+                }],
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return {
+            async all() {
+              return {
+                results: [{
+                  task_id: 'usage-harness',
+                  status: 'active',
+                  updated_at: '2026-08-27T09:00:00.000Z',
+                  payload: JSON.stringify(storedTask),
                 }],
               };
             },
@@ -489,10 +755,11 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     snapshots: [{
-      source: 'claude',
+      source: 'codex',
       captured_at: '2026-08-27T01:02:03.000Z',
       payload: storedPayload,
     }],
+    tasks: [storedTask],
   });
 });
 

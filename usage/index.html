@@ -31,8 +31,8 @@
       <header class="view-head">
         <div class="view-head-main">
           <div>
-            <h1 class="title-1">사용량</h1>
-            <p>Codex · Claude 한도 소진 현황</p>
+            <h1 class="title-1">사용량과 AI 하네스</h1>
+            <p>Codex 한도와 카테고리별 현재 작업 구조</p>
           </div>
         </div>
         <div class="toolbar-group">
@@ -42,8 +42,7 @@
 
       <p id="usageError" class="field-error" role="alert"></p>
 
-      <!-- 본문은 GET /api/usage 응답으로 usage.js가 그린다. 수집기가 보낸 payload의
-           키를 그대로 순회하므로, 새 한도 버킷이 생겨도 이 문서는 손대지 않는다. -->
+      <!-- 소유자 전용 GET /api/usage의 Codex 한도와 하네스 작업을 같은 화면에 그린다. -->
       <div id="usageBody" class="us-body"></div>
     </main>
   </div>

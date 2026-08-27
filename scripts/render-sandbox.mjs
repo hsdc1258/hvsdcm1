@@ -284,7 +284,7 @@ export function renderWordMasterHome() {
 // 로그인 게이트(토큰 없으면 location.replace) 때문에 토큰을 미리 심고, fetch는 영원히
 // 대기하는 프라미스로 둔다 — 로드 시 load()가 부르는 네트워크는 스냅샷의 대상이 아니다.
 export const USAGE_APP_SOURCE = 'usage/assets/js/usage.js';
-export function renderUsageDashboard(snapshots, now) {
+export function renderUsageDashboard(input, now) {
   const store = new Map();
   const context = {};
   context.window = context;
@@ -316,7 +316,7 @@ export function renderUsageDashboard(snapshots, now) {
   if (typeof build !== 'function') {
     throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
   }
-  const markup = build(snapshots, now);
+  const markup = build(input, now);
   if (!markup.includes('summary-strip') || !markup.includes('gauge-fill')) {
     throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without a summary strip or gauge — the fixture no longer matches the payload contract`);
   }

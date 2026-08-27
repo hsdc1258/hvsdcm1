@@ -454,6 +454,12 @@ function validateMigrations() {
       .test(usageMigration),
     'worker: migration 0005 must define the usage snapshot contract',
   );
+  const harnessMigration = readFileSync(path.join(migrationDirectory, '0006_harness_tasks.sql'), 'utf8');
+  check(
+    /CREATE TABLE harness_tasks[\s\S]*task_id TEXT PRIMARY KEY[\s\S]*status TEXT NOT NULL[\s\S]*updated_at TEXT NOT NULL[\s\S]*payload TEXT NOT NULL/u
+      .test(harnessMigration),
+    'worker: migration 0006 must define the harness task contract',
+  );
 }
 
 function readWebpDimensions(file) {
