@@ -1424,6 +1424,16 @@ label.list-row {
 .status-dot.is-warn {
   background: var(--orange);
 }
+/* 진행 중(working·reviewing) 상태 점 — 강조 1색을 상태 신호로 쓴다 (DESIGN.md §3).
+   그래픽 3:1 기준: --accent on surface 6.00 / surface-2 5.58 / surface-3 4.62 (상단 표). */
+.status-dot.is-accent {
+  background: var(--accent);
+}
+/* 끝났거나 쉬는(done·waiting) 상태 점 — 중립. 항상 텍스트 라벨과 짝이라 점 자체는
+   장식 그래픽이다. --text-3: surface 4.99 / surface-2 4.65 / surface-3 3.85 / surface-4 3.13. */
+.status-dot.is-idle {
+  background: var(--text-3);
+}
 /* 퍼센트 게이지 — 실제 진행/소진 데이터에만 쓴다 (DESIGN.md §6).
    .list-row-body 안에 넣으면 제목과 부제 사이 한 줄을 차지한다. */
 .gauge-track {

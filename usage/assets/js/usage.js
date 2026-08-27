@@ -240,6 +240,14 @@
     return ACTOR_STATUS_LABELS[actor.status] || actor.status || '상태 미기록';
   }
 
+  // 상태색은 상태에만 쓴다 — 진행(작업·검토)=강조, 끝났거나 쉬는 것=중립, 막힘=경고.
+  // (WP-D 계약. 이전에는 "진행 중"이 경고색 점으로 나가 orange가 장식이 됐다.)
+  function statusDotClass(status) {
+    if (status === 'blocked' || status === 'unavailable') return ' is-warn';
+    if (status === 'working' || status === 'reviewing') return ' is-accent';
+    return ' is-idle';
+  }
+
   function modelAndReasoning(model, reasoning) {
     const modelLabel = model || '모델 미기록';
     return reasoning ? `${modelLabel} · ${reasoning}` : modelLabel;
@@ -268,7 +276,6 @@
   }
 
   function renderActor(actor, isMain = false) {
-    const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
     const details = [
       ['모델', modelAndReasoning(actor.model, actor.reasoning)],
       actor.role ? ['역할', actor.role] : null,
@@ -279,11 +286,11 @@
     const safeProgress = clampPercent(hasProgress ? progress : 0);
     return `
       <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
+        <h4>${escapeHtml(actor.name || '이름 미기록')}</h4>
         <header class="h-actor-head">
           <span class="h-kind">${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span>
-          <span class="h-actor-state"><span class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
+          <span class="h-actor-state"><span class="status-dot${statusDotClass(actor.status)}" aria-hidden="true"></span>${escapeHtml(actorStatus(actor))}</span>
         </header>
-        <h4>${escapeHtml(actor.name || '이름 미기록')}</h4>
         <dl class="h-actor-details">
           ${details.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
         </dl>
@@ -307,7 +314,7 @@
       : index === currentIndex
         ? ' is-current'
         : '';
-    return `<li class="h-phase${state}"><span class="h-phase-index">${index + 1}</span><span class="h-phase-copy"><strong>${phase.label}</strong><small>${phase.detail}</small></span></li>`;
+    return `<li class="h-phase${state}"><span class="h-phase-copy"><strong>${phase.label}</strong><small>${phase.detail}</small></span></li>`;
   }).join('')}
         </ol>
       </section>`;
@@ -444,8 +451,8 @@
     return `
       <article class="h-portfolio-task${complete ? ' is-complete' : ''}">
         <header>
-          <span class="h-kind">${complete ? 'COMPLETED SESSION' : 'ACTIVE SESSION'}</span>
-          <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
+          <span class="h-kind">SESSION</span>
+          <span class="h-task-state"><span class="status-dot${complete ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
         </header>
         <h4>${escapeHtml(presentation.name)}</h4>
         <p class="h-portfolio-task-meta"><span>${escapeHtml(taskCategory(task).label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</p>
@@ -454,11 +461,10 @@
   }
 
   function renderMiniActor(actor, isMain = false) {
-    const warn = ['blocked', 'unavailable', 'waiting'].includes(actor.status);
     return `
       <article class="h-agent-mini${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}" data-actor-id="${escapeHtml(actor.id || '')}">
-        <header><span>${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span><span><i class="status-dot${warn ? ' is-warn' : ''}" aria-hidden="true"></i>${escapeHtml(actorStatus(actor))}</span></header>
         <strong>${escapeHtml(actor.name || '이름 미기록')}</strong>
+        <header><span>${isMain ? 'MAIN' : escapeHtml(ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT')}</span><span><i class="status-dot${statusDotClass(actor.status)}" aria-hidden="true"></i>${escapeHtml(actorStatus(actor))}</span></header>
         <span class="h-agent-mini-model">${escapeHtml(modelAndReasoning(actor.model, actor.reasoning))}</span>
         ${actor.role ? `<small>${escapeHtml(actor.role)}</small>` : ''}
         ${actor.assignment ? `<small>${escapeHtml(actor.assignment)}</small>` : ''}
@@ -494,13 +500,12 @@
       </article>`;
   }
 
-  function renderPipelineStage(phase, index, tasks, now) {
+  function renderPipelineStage(phase, tasks, now) {
     const phaseTasks = tasks.filter((task) => normalizedTaskPhase(task) === phase.key);
     const active = phaseTasks.some((task) => task.status !== 'complete');
     return `
       <li class="h-pipeline-stage${active ? ' is-active' : ''}" data-pipeline-phase="${phase.key}" data-phase-active="${active}">
         <header class="h-pipeline-stage-head">
-          <span class="h-pipeline-stage-index">${index + 1}</span>
           <span><strong>${phase.label}</strong><small>${phase.detail}</small></span>
           <b>${phaseTasks.length}</b>
         </header>
@@ -532,7 +537,7 @@
             </article>
           </div>
           <ol class="h-pipeline-stages">
-            ${PHASES.map((phase, index) => renderPipelineStage(phase, index, tasks, now)).join('')}
+            ${PHASES.map((phase) => renderPipelineStage(phase, tasks, now)).join('')}
           </ol>
         </div>
       </section>`;
@@ -552,7 +557,7 @@
             <p>${updated ? escapeHtml(`${updated} 동기화`) : '동기화 시각 없음'}${task.deadline ? ` · 마감 ${escapeHtml(task.deadline)}` : ''}</p>
           </div>
           <div class="h-task-badges">
-            <span class="h-task-state"><span class="status-dot${complete ? '' : ' is-warn'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
+            <span class="h-task-state"><span class="status-dot${complete ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
           </div>
         </header>
         ${renderPhaseRail(task)}
@@ -585,7 +590,7 @@
             <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
               id="hSessionTab-${status}-${index}" aria-controls="hSessionPanel-${status}-${index}" aria-selected="${selected}"
               tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
-              <span class="h-session-tab-state status-dot${task.status === 'complete' ? '' : ' is-warn'}" aria-hidden="true"></span>
+              <span class="h-session-tab-state status-dot${task.status === 'complete' ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>${escapeHtml(presentation.name)}</strong>
                 <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</small>
@@ -630,10 +635,10 @@
     ];
     return `
       <div class="h-session-views">
-        <div class="h-session-view-tabs" role="tablist" aria-label="작업 상태별 보기" data-session-view-tablist>
+        <div class="h-session-view-tabs segmented" role="tablist" aria-label="작업 상태별 보기" data-session-view-tablist>
           ${views.map((view) => {
     const selected = view.key === selectedSessionView;
-    return `<button class="h-session-view-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
+    return `<button class="segmented-btn h-session-view-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
               id="hSessionViewTab-${view.key}" aria-controls="hSessionViewPanel-${view.key}" aria-selected="${selected}"
               tabindex="${selected ? '0' : '-1'}" data-session-view="${view.key}">
               <span>${view.label}</span><strong data-view-count="${view.count}">${view.count}</strong>
@@ -666,15 +671,12 @@
     return `
       <div class="us-command-layout">
         <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
-          <header class="us-workspace-head">
-            <div><p class="us-eyebrow">LIVE HARNESS</p><h2 id="harnessTitle" class="title-2">실행 파이프라인</h2></div>
-            <p>상태별 세션 · 전체 실제 보고 조직</p>
-          </header>
+          <h2 id="harnessTitle" class="sr-only">실행 파이프라인</h2>
           <div class="h-session-list">${renderSessionViews(tasks, now)}</div>
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
-            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex · Claude 한도</h2></div>
+            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-3">Codex · Claude 한도</h2></div>
             <p>실제 계정 보고</p>
           </header>
           <div class="us-quota-list">${quotas}</div>

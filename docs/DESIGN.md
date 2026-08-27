@@ -310,7 +310,7 @@ viewBox `0 0 200 200`. 사용자가 2026-08-27 확정했다. 워드마크·텍�
 | `.topbar` / `.app-shell` / `.sidebar` / `.sidebar-item` | 전역 셸. |
 | `.sidebar-label` | 사이드바 그룹의 대문자 소제목. `.sidebar-group` 안 첫 자식. |
 | `.summary-strip` / `.summary-cell` | 상태 요약 스트립(가로 1카드 N칸). 칸 안에 `.stat-label` + `.stat-value`(또는 `.stat-state`)를 둔다. §1.1. |
-| `.status-dot` (+`.is-warn`) | 상태를 나타내는 색 점. **항상 텍스트 라벨과 짝**이고 `aria-hidden`이다. |
+| `.status-dot` (+`.is-warn`/`.is-accent`/`.is-idle`) | 상태를 나타내는 색 점. **항상 텍스트 라벨과 짝**이고 `aria-hidden`이다. 기본=성공(green), `.is-accent`=진행 중, `.is-idle`=완료·대기(중립), `.is-warn`=경고. |
 | `.gauge-track` / `.gauge-fill` (+`.is-warn`/`.is-over`) | 퍼센트 게이지. `.list-row-body` 안에 넣으면 제목과 부제 사이 한 줄을 차지한다. 실제 진행 데이터 전용(§6). |
 | `.app-page` / `.app-main` / `.app-footer` / `.app-footer-inner` | 앱 3면(smstudy·WordMaster·admin)의 페이지 여백·본문 그리드·푸터. 화면마다 다시 만들지 않는다. |
 | `.view-head` / `.view-head-main` / `.view-head h1` / `.view-head p` | 뷰 제목 줄. `.view-head-main`이 앱 이모지(`.emoji.emoji-lg`)와 제목 묶음을 담는다. |
