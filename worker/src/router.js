@@ -225,7 +225,6 @@ export function mergeHarnessReport(previous, incoming) {
   }
   return {
     version: 1,
-    id: incoming.task_id,
     ...current,
     ...incoming.task,
     id: incoming.task_id,
