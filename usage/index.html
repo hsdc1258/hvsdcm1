@@ -9,8 +9,8 @@
   <title>사용량 — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260827-full-pipeline-org">
-  <script src="/usage/assets/js/usage.js?v=20260827-full-pipeline-org" defer></script>
+  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260827-full-pipeline-org-claude-quota">
+  <script src="/usage/assets/js/usage.js?v=20260827-full-pipeline-org-claude-quota" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
@@ -32,7 +32,7 @@
         <div class="view-head-main">
           <div>
             <h1 class="title-1">AI 실행 현황</h1>
-            <p>세션별 파이프라인, 투입 에이전트, Codex 한도</p>
+            <p>세션별 파이프라인, 투입 에이전트, Codex · Claude 한도</p>
           </div>
         </div>
         <div class="toolbar-group">
@@ -44,7 +44,7 @@
 
       <p id="usageError" class="field-error" role="alert"></p>
 
-      <!-- 소유자 전용 GET /api/usage의 Codex 한도와 하네스 작업을 같은 화면에 그린다. -->
+      <!-- 소유자 전용 GET /api/usage의 Codex · Claude 한도와 하네스 작업을 같은 화면에 그린다. -->
       <div id="usageBody" class="us-body"></div>
     </main>
   </div>

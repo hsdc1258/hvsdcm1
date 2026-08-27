@@ -961,6 +961,11 @@
   .us-quota-list {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   }
+  /* 가로로 나란히 놓이면 위쪽 구분선은 칸막이가 아니라 어긋난 선이 된다. */
+  .us-limit-widget + .us-limit-widget {
+    padding-top: 0;
+    border-top: 0;
+  }
 }
 @media (max-width: 900px) {
   .h-org-scroll {

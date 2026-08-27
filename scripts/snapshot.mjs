@@ -51,7 +51,8 @@ const CONCEPT_SAMPLE_ID = 'III-01';
 // 상대 시간을 렌더하므로 now가 흐르면 스냅샷이 매번 달라져 대조가 무의미해진다.
 //
 // 표본은 계약의 갈래를 전부 한 번씩 지난다: Codex의 primary/secondary와 모르는
-// 키(monthly), 게이지 세 구간, 그리고 Main Codex·Codex 서브에이전트·WebGPT 실행자를
+// 키(monthly), 게이지 세 구간, 모델별로 창을 담는 Claude payload(used_percentage),
+// 그리고 Main Codex·Codex 서브에이전트·WebGPT 실행자·Claude 오케스트레이터를
 // 같은 작업 계층에 둔 실제 하네스 payload.
 const USAGE_NOW = Date.parse('2026-08-27T12:00:00Z');
 const USAGE_FIXTURE = {
@@ -65,6 +66,20 @@ const USAGE_FIXTURE = {
         primary: { used_percent: 41.5, resets_at: '2026-08-27T15:10:00Z', window_minutes: 300 },
         secondary: { used_percent: 78.2, resets_at: '2026-08-31T09:00:00Z', window_minutes: 10_080 },
         monthly: { used_percent: 96.1 },
+      },
+    },
+  }, {
+    source: 'claude',
+    captured_at: '2026-08-27T11:52:00Z',
+    payload: {
+      models: {
+        'claude-opus-5': {
+          captured_at: '2026-08-27T11:52:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 33.4, resets_at: '2026-08-27T14:00:00Z' },
+            seven_day: { used_percentage: 57.9, resets_at: '2026-09-01T00:00:00Z' },
+          },
+        },
       },
     },
   }],
@@ -156,6 +171,11 @@ const USAGE_FIXTURE = {
       {
         id: 'usage-harness:webgpt', parent_id: 'usage-harness:main', name: 'WebGPT 실행자', kind: 'webgpt',
         model: 'WebGPT PRO', role: '보조 실행', status: 'waiting', assignment: '경계가 명확한 저위험 작업 대기', progress: 37,
+      },
+      {
+        id: 'usage-harness:claude', parent_id: 'usage-harness:main', name: 'Fable 5 오케스트레이터', kind: 'claude',
+        model: 'claude-fable-5', reasoning: 'high', role: '기획 · 총괄', status: 'working',
+        assignment: 'Claude 한도 복원 통합', progress: 62,
       },
     ],
     artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],
@@ -344,7 +364,8 @@ export function buildSnapshots() {
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 진행 중/완료/전체 조직도 탭의 수치가 각각 2/1/3이고, 진행 중 병렬 task 중 선택된 한 panel만 보이는지,'
-        + ' 전체 조직도에서 세 세션과 실제 Main Codex/실행자/검토자/WebGPT 가지가 모두 보존되는지, 실제 4단계 흐름, 오른쪽 Codex 한도 rail, 게이지의 세 색 구간,'
+        + ' 전체 파이프라인 조직도에서 사용자 입력 → 메인 오케스트레이션 → 구상/작업/검토/완료 4단계가 이어지고 세 세션이 각 단계로 배치되는지,'
+        + ' 실제 Main Codex/실행자/검토자/WebGPT/Claude 오케스트레이터 가지가 모두 보존되는지, 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간,'
         + ' 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
         + `\n  ${GENERATED_NOTE}`,
