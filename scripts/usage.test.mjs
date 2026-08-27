@@ -197,7 +197,11 @@ test('the session tree always renders every phase plus the reported actors', () 
     ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'],
   );
   assert.match(markup, /data-org-phase="review" data-phase-state="current"/u);
-  assert.match(markup, /data-org-phase="gate" data-phase-state="done"/u);
+  // 이벤트가 없는 세션이라 구 4단계 키만 완료로 접히고, 확장으로 생긴 gate·input은
+  // 보고된 적이 없으므로 완료가 아니라 '기록 없음'이다.
+  assert.match(markup, /data-org-phase="plan" data-phase-state="done"/u);
+  assert.match(markup, /data-org-phase="gate" data-phase-state="skipped"/u);
+  assert.match(markup, /data-org-phase="input" data-phase-state="skipped"/u);
   assert.match(markup, /data-org-phase="revise" data-phase-state="pending"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
   // 뿌리 → 총괄 → 단계 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
@@ -229,7 +233,9 @@ test('legacy four-key reports still place every stage, leaving unreported ones p
       .map((match) => [match[1], match[2]]),
   );
   assert.deepEqual(states, {
-    input: 'done',
+    // input은 이벤트에 없다 — 이벤트가 있는 세션에서 등장하지 않은 앞 단계는 완료가
+    // 아니라 '기록 없음'이다 (없던 단계를 지어내지 않는다).
+    input: 'skipped',
     plan: 'done',
     work: 'current',
     gate: 'pending',
@@ -242,7 +248,7 @@ test('legacy four-key reports still place every stage, leaving unreported ones p
   assert.match(markup, /data-org-phase="plan"[\s\S]*?h-node-time">1시간/u);
 });
 
-// 새 키를 보고한 세션은 그 단계가 현재로 서고, 그 앞 단계는 이벤트가 없어도 완료로 접힌다.
+// 새 키를 보고한 세션은 그 단계가 현재로 서고, 보고된 앞 단계만 완료로 접힌다.
 test('the new stage keys carry status, model, and duration like the original four', () => {
   const task = harnessTask({
     phase: 'approve',
@@ -258,6 +264,72 @@ test('the new stage keys carry status, model, and duration like the original fou
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
   assert.match(markup, /data-org-phase="revise"[\s\S]*?claude-opus-5 · high/u);
   assert.match(markup, /data-org-phase="gate"[\s\S]*?h-node-time">1시간/u);
+  // gate보다 앞선 input·plan·work는 이 세션이 보고한 적이 없다 — 완료로 세지 않는다.
+  for (const phase of ['input', 'plan', 'work']) {
+    assert.match(markup, new RegExp(`data-org-phase="${phase}" data-phase-state="skipped"`, 'u'));
+  }
+});
+
+// review major(커밋 ab8f82a): 인덱스만 보고 앞 단계를 접으면 **보고된 적 없는 단계가
+// 완료로 날조된다**. 구 4단계 세션이 review를 보고하면 그 사이의 gate가, done을 보고하면
+// input·gate·revise·approve까지 전부 "완료"가 됐다. 앞 단계의 완료는 보고 이력이 근거다.
+test('unreported stages before the current one read as no-record, never as done', () => {
+  const renderers = createUsageRenderers();
+
+  // (1) 이벤트가 있는 구 4단계 세션: 등장한 plan·work·review만 완료다.
+  const legacyReview = harnessTask({
+    phase: 'review',
+    events: [
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'plan' },
+      { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'work' },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'review' },
+    ],
+  });
+  const reviewStates = Object.fromEntries(
+    [...renderers.renderSessionView([legacyReview], NOW, 'active')
+      .matchAll(/data-org-phase="([a-z]+)" data-phase-state="([a-z]+)"/gu)]
+      .map((match) => [match[1], match[2]]),
+  );
+  assert.deepEqual(reviewStates, {
+    input: 'skipped',
+    plan: 'done',
+    work: 'done',
+    gate: 'skipped',
+    review: 'current',
+    revise: 'pending',
+    approve: 'pending',
+    done: 'pending',
+  });
+
+  // (2) 완료 보고도 앞 단계를 지어내지 않는다. 완료 사실만 done이고 나머지는 보고 이력대로다.
+  const legacyDone = harnessTask({
+    phase: 'done',
+    status: 'complete',
+    progress: 100,
+    events: [
+      { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'work' },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'done' },
+    ],
+  });
+  const doneMarkup = renderers.renderSessionView([legacyDone], NOW, 'complete');
+  const doneStates = Object.fromEntries(
+    [...doneMarkup.matchAll(/data-org-phase="([a-z]+)" data-phase-state="([a-z]+)"/gu)]
+      .map((match) => [match[1], match[2]]),
+  );
+  assert.deepEqual(doneStates, {
+    input: 'skipped',
+    plan: 'skipped',
+    work: 'done',
+    gate: 'skipped',
+    review: 'skipped',
+    revise: 'skipped',
+    approve: 'skipped',
+    done: 'done',
+  });
+  // 건너뛴 단계는 라벨로도 완료와 갈린다 — 노드는 그대로 서 있고 상태만 다르다.
+  // 건너뛴 단계는 상태 라벨로도 완료와 갈린다 — 노드는 그대로 서 있고 상태만 다르다.
+  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, 6);
+  assert.match(doneMarkup, /data-phase-state="skipped"/u);
 });
 
 test('overall, module, and actor progress render only from reported artifacts', () => {

@@ -3,8 +3,9 @@
 // 무엇을 잠그는가
 //   조직도는 "지금 어디까지 왔나"가 아니라 **세션마다 전 단계를 상시 그리는 트리**다.
 //   그래서 검사도 "현재 단계가 보이는가"가 아니라 다음 셋을 본다:
-//     (1) 세션마다 여덟 단계가 빠짐없이 노드로 서고, 지나간 단계는 done·앞으로 올 단계는
-//         pending으로 **상태만** 달라진다 (노드가 사라지지 않는다),
+//     (1) 세션마다 여덟 단계가 빠짐없이 노드로 서고, 보고된 지난 단계는 done·보고된 적
+//         없는 지난 단계는 skipped·앞으로 올 단계는 pending으로 **상태만** 달라진다
+//         (노드가 사라지지 않고, 없던 단계를 완료로 지어내지도 않는다),
 //     (2) 보고된 액터가 하나도 빠지지 않고 자기 단계에서 갈라져 나온다,
 //     (3) 이벤트 로그가 있으면 단계 소요시간과 세션 한도 소모가 붙고, **없으면 트리는
 //         그대로인 채 그 두 줄만 사라진다** (구세션 하위호환).
@@ -78,23 +79,28 @@ for (const id of tasks.map((item) => item.id)) {
 
 // 세션 하나를 떼어내 단계 상태의 진행 방향을 확인한다: 지난 단계 done → 현재 current
 // → 남은 단계 pending. 이것이 "현 단계만 강조"와 갈리는 지점이다.
-// **구 4단계 키만 보고한 세션**(work)이므로 이 검사가 곧 하위호환 검사다: 새 단계는
-// 보고된 적이 없어도 노드로 서고 pending으로 남는다.
+// **구 4단계 키만 보고한 세션**(work)이므로 이 검사가 곧 하위호환 검사다: 이벤트가 없는
+// 구세션은 구 4단계 사슬만 완료로 접히고, 확장으로 생긴 단계(input)는 지나왔다는 근거가
+// 없으므로 완료가 아니라 skipped('기록 없음')로, 아직 오지 않은 단계는 pending으로 선다.
 const workOnly = renderers.renderPortfolioOrg([tasks[1]], NOW);
-const expectedStates = { input: 'done', plan: 'done', work: 'current' };
+const expectedStates = { input: 'skipped', plan: 'done', work: 'current' };
 for (const phase of PHASE_CHAIN) {
   const state = expectedStates[phase] || 'pending';
   assert.match(workOnly, new RegExp(`data-org-phase="${phase}" data-phase-state="${state}"`, 'u'),
     `${phase} 단계는 ${state} 상태여야 합니다.`);
 }
 // 새 키를 보고한 세션도 같은 규칙을 따른다 (approve가 current, done만 pending).
+// 보고된 적 없는 앞 단계(revise 등)를 완료로 날조하지 않는 것이 이 검사의 핵심이다.
 const approveOnly = renderers.renderPortfolioOrg([tasks[4]], NOW);
 assert.match(approveOnly, /data-org-phase="approve" data-phase-state="current"/u);
-assert.match(approveOnly, /data-org-phase="revise" data-phase-state="done"/u);
+assert.match(approveOnly, /data-org-phase="review" data-phase-state="done"/u);
+assert.match(approveOnly, /data-org-phase="revise" data-phase-state="skipped"/u);
 assert.match(approveOnly, /data-org-phase="done" data-phase-state="pending"/u);
-// 완료 세션은 전 단계가 모두 done이다 (되돌아간 단계를 pending으로 되돌리지 않는다).
+// 완료 세션은 pending으로 되돌아가는 단계가 없다. 다만 "완료"는 실제로 지나온 단계에만
+// 붙고(구 4단계), 보고된 적 없는 신설 단계는 skipped로 남는다.
 const doneOnly = renderers.renderPortfolioOrg([tasks[5]], NOW);
-assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, PHASE_CHAIN.length);
+assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, 4);
+assert.equal((doneOnly.match(/data-phase-state="skipped"/gu) || []).length, 4);
 assert.doesNotMatch(doneOnly, /data-phase-state="(?:current|pending)"/u);
 
 // ---- (2) 보고된 액터가 하나도 빠지지 않는다 --------------------------------
@@ -130,6 +136,10 @@ const timed = renderers.renderPortfolioOrg([eventTask], NOW);
 // plan 09:00→10:30 = 1시간 30분, work 10:30→now(13:00) = 2시간 30분.
 assert.match(timed, /data-org-phase="plan"[\s\S]*?h-node-time">1시간 30분/u);
 assert.match(timed, /data-org-phase="work"[\s\S]*?h-node-time">2시간 30분/u);
+// 이벤트가 있으면 완료의 근거도 이벤트다 — plan·work만 등장했으므로 그 앞의 input은
+// 완료가 아니라 '기록 없음'이다 (인덱스만 보고 접으면 없던 단계가 완료로 날조된다).
+assert.match(timed, /data-org-phase="input" data-phase-state="skipped"/u);
+assert.match(timed, /data-org-phase="plan" data-phase-state="done"/u);
 // 현재 단계의 모델은 그 단계의 이벤트가 말한 것을 그대로 쓴다.
 assert.match(timed, /data-org-phase="work"[\s\S]*?claude-opus-5 · high/u);
 // 세션 한도 소모 = 잔여의 감소분(90 → 77.5 = 12.5%p). 변화가 없는 원본(Claude 4→4)은

@@ -518,6 +518,16 @@
 .h-node.is-current {
   border-color: var(--accent);
 }
+/* 보고된 적 없는 앞 단계(= '기록 없음')는 완료와 눈으로 갈라져야 한다 — 실선 대신
+   점선 테두리로 비우고, 이름을 본문 강조에서 보조 색으로 낮춘다. 새 색 토큰을 만들지
+   않고 노드 안에서 이미 쓰는 --text-2(surface-3 위 5.42)만 재사용한다. */
+.h-node[data-phase-state="skipped"] {
+  border-style: dashed;
+}
+.h-node[data-phase-state="skipped"] .h-node-name {
+  color: var(--text-2);
+  font-weight: 500;
+}
 /* 트리의 뿌리(입력·하네스)는 면을 바꾸지 않고 헤어라인 한 단으로만 구분한다. */
 .h-node.is-request, .h-node.is-harness {
   border-color: var(--line);

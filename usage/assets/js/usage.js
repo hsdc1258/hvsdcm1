@@ -58,7 +58,13 @@
     { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
   const PHASE_KEYS = new Set(PHASES.map((phase) => phase.key));
-  const PHASE_STATE_LABELS = { done: '완료', current: '진행 중', pending: '대기' };
+  // 8단계 확장 이전의 보고자가 쓰던 네 키. **이벤트 로그가 아예 없는 세션**에서만
+  // 쓰인다 — 그런 세션은 이 네 단계 사슬을 따라 왔다고 볼 근거가 있지만, 확장으로
+  // 새로 생긴 단계까지 지나왔다고 볼 근거는 없다 (review major: 날조 금지).
+  const LEGACY_PHASE_KEYS = new Set(['plan', 'work', 'review', 'done']);
+  const PHASE_STATE_LABELS = {
+    done: '완료', current: '진행 중', pending: '대기', skipped: '기록 없음',
+  };
   const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT', claude: 'CLAUDE' };
   // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
   // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
@@ -399,15 +405,37 @@
     return PHASES.find((phase) => phase.key === key)?.label || '미기록';
   }
 
+  // 실제로 보고된 적이 있는 단계 키. 이벤트 로그의 phase와 payload의 현재 phase가
+  // 근거이고, 그 밖의 단계는 "지나갔다"고 말할 근거가 없다.
+  function reportedPhaseKeys(task) {
+    const keys = new Set();
+    for (const event of taskEvents(task)) {
+      if (PHASE_KEYS.has(event.phase)) keys.add(event.phase);
+    }
+    if (PHASE_KEYS.has(task?.phase)) keys.add(task.phase);
+    return keys;
+  }
+
   // 이벤트가 있으면 그 마지막 단계가 현재 단계다. 없으면 payload의 phase를 쓴다.
+  //
+  // 앞선 단계를 무조건 '완료'로 칠하지 않는다 (review major). 인덱스만 보고 접으면
+  // 구 4단계 세션이 review를 보고하는 순간 보고된 적 없는 gate가, done을 보고하는
+  // 순간 input·gate·revise·approve까지 전부 완료로 **날조**된다. 그래서 앞선 단계는
+  //   (a) 이벤트나 payload에 실제로 등장했으면 done,
+  //   (b) 등장한 적이 없으면 skipped(= '기록 없음', 흐린 점선)로 구분해 그린다.
+  // 이벤트가 아예 없는 구세션만 예외로, 구 4단계 키에 한해 종전 추론을 유지한다 —
+  // 그 세션은 네 단계 사슬을 따라 왔다고 볼 근거가 있기 때문이다.
   function phaseStates(task, timeline) {
-    const currentKey = timeline.currentKey || normalizedTaskPhase(task);
+    const complete = task.status === 'complete';
+    const currentKey = complete ? 'done' : (timeline.currentKey || normalizedTaskPhase(task));
     const currentIndex = Math.max(0, PHASES.findIndex((phase) => phase.key === currentKey));
+    const reported = reportedPhaseKeys(task);
+    const hasEvents = timeline.stats.size > 0;
     return new Map(PHASES.map((phase, index) => {
-      if (task.status === 'complete') return [phase.key, 'done'];
-      if (index < currentIndex) return [phase.key, 'done'];
-      if (index === currentIndex) return [phase.key, 'current'];
-      return [phase.key, 'pending'];
+      if (index > currentIndex) return [phase.key, 'pending'];
+      if (index === currentIndex) return [phase.key, complete ? 'done' : 'current'];
+      if (hasEvents) return [phase.key, reported.has(phase.key) ? 'done' : 'skipped'];
+      return [phase.key, LEGACY_PHASE_KEYS.has(phase.key) ? 'done' : 'skipped'];
     }));
   }
 

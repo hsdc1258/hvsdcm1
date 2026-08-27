@@ -1999,6 +1999,16 @@ label.list-row {
 .h-node.is-current {
   border-color: var(--accent);
 }
+/* 보고된 적 없는 앞 단계(= '기록 없음')는 완료와 눈으로 갈라져야 한다 — 실선 대신
+   점선 테두리로 비우고, 이름을 본문 강조에서 보조 색으로 낮춘다. 새 색 토큰을 만들지
+   않고 노드 안에서 이미 쓰는 --text-2(surface-3 위 5.42)만 재사용한다. */
+.h-node[data-phase-state="skipped"] {
+  border-style: dashed;
+}
+.h-node[data-phase-state="skipped"] .h-node-name {
+  color: var(--text-2);
+  font-weight: 500;
+}
 /* 트리의 뿌리(입력·하네스)는 면을 바꾸지 않고 헤어라인 한 단으로만 구분한다. */
 .h-node.is-request, .h-node.is-harness {
   border-color: var(--line);
@@ -2313,13 +2323,13 @@ label.list-row {
         <p class="h-node-progress"><span>진행도</span><strong>86%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span>
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -2350,13 +2360,13 @@ label.list-row {
         <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
       </article></li></ul></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
         <p class="h-node-detail">빌드 · 린트 · 테스트</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase is-current" data-org-phase="review" data-phase-state="current">
@@ -2491,13 +2501,13 @@ label.list-row {
         <p class="h-node-progress"><span>진행도</span><strong>82%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 82.0%"></span></span>
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -2649,13 +2659,13 @@ label.list-row {
         <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -2676,13 +2686,13 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
         <p class="h-node-detail">빌드 · 린트 · 테스트</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="review" data-phase-state="done">
@@ -2694,22 +2704,22 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">수정</h5>
         <p class="h-node-detail">지적 반영 · 재검증</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">승인</h5>
         <p class="h-node-detail">판정 · 릴리스 결정</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="done" data-phase-state="done">
@@ -2790,13 +2800,13 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
 
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -2827,13 +2837,13 @@ label.list-row {
         <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
       </article></li></ul></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
         <p class="h-node-detail">빌드 · 린트 · 테스트</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase is-current" data-org-phase="review" data-phase-state="current">
@@ -2921,13 +2931,13 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
 
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -3012,13 +3022,13 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
       </article><ul><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
         <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
@@ -3039,13 +3049,13 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
         <p class="h-node-detail">빌드 · 린트 · 테스트</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="review" data-phase-state="done">
@@ -3057,22 +3067,22 @@ label.list-row {
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">수정</h5>
         <p class="h-node-detail">지적 반영 · 재검증</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
-      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="done">
+      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">승인</h5>
         <p class="h-node-detail">판정 · 릴리스 결정</p>
 
 
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article></li><li class="h-node-slot">
       <article class="h-node is-phase" data-org-phase="done" data-phase-state="done">
