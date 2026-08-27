@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createUsageRenderers, renderUsageDashboard } from './render-sandbox.mjs';
+import { createUsageAppSandbox, createUsageRenderers, renderUsageDashboard } from './render-sandbox.mjs';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -25,7 +25,7 @@ function dashboard(input, now = NOW) {
 const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
   source: 'codex',
   captured_at: capturedAt,
-  payload: { model: 'gpt-5.6-codex', rate_limits: buckets },
+  payload: { model: 'gpt-5.6-codex', plan_type: 'pro', rate_limits: buckets },
 });
 
 const harnessTask = (overrides = {}) => ({
@@ -63,12 +63,14 @@ const harnessTask = (overrides = {}) => ({
   ...overrides,
 });
 
-test('unknown bucket keys render with the key itself and known keys with their label', () => {
+test('bucket labels come from window duration, never primary position', () => {
   const markup = dashboard([codexSnapshot({
     primary: { used_percent: 40 },
+    secondary: { used_percent: 20, window_minutes: 300 },
     monthly: { used_percent: 10 },
   })]);
-  assert.match(markup, /5시간/u);          // primary → 사전에 있는 라벨
+  assert.match(markup, /기본 사용량/u);
+  assert.match(markup, /5시간 사용량/u);
   assert.match(markup, />monthly</u);      // 모르는 키 → 키 문자열 그대로
   assert.doesNotMatch(markup, />primary</u);
 });
@@ -131,21 +133,30 @@ test('resets_at is read as an ISO8601 string and rendered as a relative time', (
   assert.match(markup, /2시간 후 초기화/u);
 });
 
-test('an unparsable resets_at falls back to the window length, never to NaN', () => {
-  // 수집기가 정규화하지 못한 값(계약상 필드째 빠져야 하는 값)이 들어와도 화면이 깨지지 않는다.
+test('epoch-second resets_at is rendered as a relative time', () => {
   const markup = dashboard([codexSnapshot({
-    primary: { used_percent: 30, resets_at: 1787804453, window_minutes: 300 },
+    primary: { used_percent: 30, resets_at: Math.floor((NOW + (2 * HOUR)) / 1000), window_minutes: 300 },
   })]);
   assert.doesNotMatch(markup, /NaN|Invalid/u);
-  assert.match(markup, /5시간 창/u);
+  assert.match(markup, /2시간 후 초기화/u);
 });
 
-test('a captured_at older than 24h flips the stale state, 23h59m does not', () => {
-  const fresh = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((24 * HOUR) - 60_000))]);
-  assert.doesNotMatch(fresh, /오래된 데이터/u);
+test('a captured_at older than 15m is marked as delayed', () => {
+  const fresh = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((15 * 60_000) - 1000))]);
+  assert.doesNotMatch(fresh, /수집 지연/u);
 
-  const stale = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((24 * HOUR) + 60_000))]);
-  assert.match(stale, /오래된 데이터/u);
+  const stale = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso((15 * 60_000) + 1000))]);
+  assert.match(stale, /수집 지연/u);
+});
+
+test('Pro weekly limit is account-scoped and never named after the active model', () => {
+  const markup = dashboard([codexSnapshot({
+    primary: { used_percent: 26, window_minutes: 10_080 },
+  })]);
+  assert.match(markup, /ChatGPT Pro/u);
+  assert.match(markup, /주간 사용량/u);
+  assert.doesNotMatch(markup, /gpt-5\.6-codex/iu);
+  assert.doesNotMatch(markup, /5시간 사용량/u);
 });
 
 test('the command layout keeps the pipeline first and the Codex limit in a dedicated side rail', () => {
@@ -175,6 +186,25 @@ test('the hierarchy renders Main Codex and actual child actors as a reporting tr
   assert.equal((markup.match(/class="h-org-node(?: |")/gu) || []).length, 3);
   assert.match(markup, /h-actor is-webgpt/u);
   assert.doesNotMatch(markup, /h-org-level is-gate/u);
+});
+
+test('overall, module, and actor progress render only from reported artifacts', () => {
+  const task = harnessTask({
+    progress: 64,
+    modules: [
+      { id: 'verify', name: '검증 단계', progress: 80, status: 'reviewing', owner: 'Main Codex' },
+      { id: 'css', name: 'CSS 구현', progress: 88, status: 'working', owner: 'Main Codex' },
+    ],
+    actors: harnessTask().actors.map((actor, index) => ({
+      ...actor,
+      ...(index === 1 ? { role: '계산 작업', progress: 37 } : {}),
+    })),
+  });
+  const markup = dashboard({ snapshots: [], tasks: [task] });
+  assert.equal((markup.match(/전체 진행률/gu) || []).length, 1);
+  for (const expected of ['64%', '검증 단계', '80%', 'CSS 구현', '88%', '계산 작업', '37%']) {
+    assert.match(markup, new RegExp(expected, 'u'));
+  }
 });
 
 test('parallel project, protocol, and visualization reports render as session tabs with one visible panel', () => {
@@ -249,6 +279,46 @@ test('tab activation exposes one panel and keyboard wiring advances to the next 
   assert.equal(prevented, true);
   assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
   assert.equal(tabs[2].focused, true);
+});
+
+test('manual refresh bypasses cache, reports success, and preserves the selected session', async () => {
+  const tasks = [
+    harnessTask({ id: 'task-one', name: '첫 세션' }),
+    harnessTask({ id: 'task-two', name: '둘째 세션' }),
+  ];
+  const sandbox = await createUsageAppSandbox([
+    { snapshots: [], tasks },
+    { snapshots: [], tasks },
+  ]);
+  const makeTab = (index, id) => ({
+    dataset: { taskTab: String(index), taskId: id }, tabIndex: index ? -1 : 0,
+    classList: { toggle() {} }, setAttribute() {}, focus() {},
+  });
+  const tabs = [makeTab(0, 'task-one'), makeTab(1, 'task-two')];
+  const panels = tabs.map((_, index) => ({ dataset: { taskPanel: String(index) }, hidden: index !== 0 }));
+  sandbox.renderers.activateTaskTab({
+    querySelectorAll(selector) { return selector === '[data-task-tab]' ? tabs : panels; },
+  }, tabs[1]);
+
+  await sandbox.store.get('reload').listeners.click();
+  assert.equal(sandbox.requests.length, 2);
+  assert.match(sandbox.requests[1].url, /\/api\/usage\?_=[0-9]+/u);
+  assert.equal(sandbox.requests[1].options.cache, 'no-store');
+  assert.equal(sandbox.store.get('reload').textContent, '업데이트됨');
+  assert.equal(sandbox.store.get('usageRefreshStatus').textContent, '서버에서 방금 확인했습니다.');
+  const markup = sandbox.store.get('usageBody').innerHTML;
+  assert.match(markup, /data-task-panel="1"(?! hidden)/u);
+});
+
+test('failed manual refresh keeps the last good dashboard and restores the button', async () => {
+  const data = { snapshots: [], tasks: [harnessTask()] };
+  const sandbox = await createUsageAppSandbox([data, new Error('network down')]);
+  const before = sandbox.store.get('usageBody').innerHTML;
+  await sandbox.store.get('reload').listeners.click();
+  assert.equal(sandbox.store.get('usageBody').innerHTML, before);
+  assert.equal(sandbox.store.get('reload').textContent, '새로고침');
+  assert.equal(sandbox.store.get('usageRefreshStatus').textContent, '업데이트하지 못했습니다.');
+  assert.equal(sandbox.store.get('usageError').textContent, 'network down');
 });
 
 test('Claude snapshots are ignored and actor text is escaped', () => {

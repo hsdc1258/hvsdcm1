@@ -396,6 +396,14 @@ function harnessInput(overrides = {}) {
       role: '기획 · 통합 · 최종 판정',
       status: 'working',
       assignment: 'Worker 연결',
+      progress: 55,
+    }],
+    modules: [{
+      id: 'css',
+      name: 'CSS 구현',
+      progress: 88,
+      status: 'working',
+      owner: 'Main Codex',
     }],
     artifacts: ['npm test'],
     ...overrides,
@@ -458,7 +466,9 @@ test('harness report requires its own token and merges actors into one task', as
   assert.equal(merged.category, '파이프라인 시각화');
   assert.equal(merged.reasoning, 'xhigh');
   assert.equal(merged.actors[0].reasoning, 'xhigh');
+  assert.equal(merged.actors[0].progress, 55);
   assert.deepEqual(merged.actors.map((actor) => actor.kind), ['codex', 'webgpt']);
+  assert.deepEqual(merged.modules.map((module) => [module.name, module.progress]), [['CSS 구현', 88]]);
   assert.deepEqual(merged.artifacts, ['npm test', 'HARNESS E2E: PASS']);
 
   const invalidReasoning = await post(harnessInput({
@@ -556,11 +566,19 @@ test('harness report rejects every bounded or non-allowlisted shape before datab
     ['task status allowlist', (input) => { input.task.status = 'paused'; }],
     ['actor kind allowlist', (input) => { input.actors[0].kind = 'claude'; }],
     ['actor status allowlist', (input) => { input.actors[0].status = 'idle'; }],
+    ['actor progress range', (input) => { input.actors[0].progress = 101; }],
+    ['module status allowlist', (input) => { input.modules[0].status = 'idle'; }],
+    ['module progress range', (input) => { input.modules[0].progress = -1; }],
     ['at least one actor', (input) => { input.actors = []; }],
     ['at most twenty actors', (input) => {
       input.actors = Array.from({ length: 21 }, (_, index) => ({
         ...input.actors[0],
         id: `usage-harness:actor-${index}`,
+      }));
+    }],
+    ['at most twenty modules', (input) => {
+      input.modules = Array.from({ length: 21 }, (_, index) => ({
+        ...input.modules[0], id: `module-${index}`,
       }));
     }],
     ['at most ten artifacts', (input) => {

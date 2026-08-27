@@ -1473,7 +1473,7 @@ label.list-row {
    usage — 실제 하네스 흐름 + 보고 actor + 오른쪽 Codex 한도
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다.
    ========================================================================== */
-.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-flow, .h-session-progress {
+.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-flow, .h-session-progress, .h-modules, .h-module-list, .h-module, .h-actor-progress {
   display: grid;
   min-width: 0;
 }
@@ -1485,13 +1485,13 @@ label.list-row {
 .us-pipeline-workspace {
   gap: var(--space-4);
 }
-.us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-flow-head, .h-actor-head, .h-org-chart-head {
+.us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-flow-head, .h-actor-head, .h-org-chart-head, .h-modules-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
 }
-.us-workspace-head > p, .us-quota-head > p, .h-task-head > div > p, .us-card-meta, .h-org-chart-head > span {
+.us-workspace-head > p, .us-quota-head > p, .h-task-head > div > p, .us-card-meta, .h-org-chart-head > span, .h-modules-head > span {
   color: var(--text-2);
   font-size: var(--fs-caption);
 }
@@ -1509,6 +1509,13 @@ label.list-row {
   padding: var(--space-6) var(--space-4);
   color: var(--text-2);
   text-align: center;
+}
+.usage-refresh-status {
+  min-height: 1.4em;
+  margin: -2px 0 var(--space-3);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  text-align: right;
 }
 /* 오른쪽 rail은 계정 한도만 가진다. 세션 메타를 다시 요약하지 않는다. */
 .us-quota-rail {
@@ -1776,6 +1783,53 @@ label.list-row {
   font-size: 10px;
   font-weight: 700;
 }
+/* module progress는 보고 payload에 실제 항목이 있을 때만 나타난다. */
+.h-modules {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+}
+.h-modules-head h4 {
+  margin-top: var(--space-1);
+  font-size: var(--fs-title-3);
+}
+.h-module-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.h-module {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-s);
+}
+.h-module-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.h-module-copy strong {
+  overflow: hidden;
+  font-size: var(--fs-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.h-module-copy span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.h-module-value {
+  font-size: var(--fs-body-small);
+  font-variant-numeric: tabular-nums;
+}
+.h-module-track {
+  grid-column: 1 / -1;
+}
 /* 고전 조직도: parent 아래 trunk, 형제 branch, actor stem. */
 .h-org-chart {
   display: grid;
@@ -1909,6 +1963,25 @@ label.list-row {
   color: var(--text);
   font-weight: 650;
 }
+.h-actor-progress {
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+}
+.h-actor-progress > span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--text-3);
+  font-size: 10px;
+}
+.h-actor-progress strong {
+  color: var(--text);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
 .h-evidence {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1980,7 +2053,7 @@ label.list-row {
   }
 }
 @media (max-width: 700px) {
-  .us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-org-chart-head {
+  .us-workspace-head, .us-quota-head, .us-card-head, .h-task-head, .h-org-chart-head, .h-modules-head {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -2066,6 +2139,8 @@ label.list-row {
         </div>
       </header>
 
+      <p id="usageRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+
       <p id="usageError" class="field-error" role="alert"></p>
 
       <!-- 소유자 전용 GET /api/usage의 Codex 한도와 하네스 작업을 같은 화면에 그린다. -->
@@ -2127,7 +2202,7 @@ label.list-row {
 
       <section class="h-flow" aria-label="실제 하네스 작업 흐름">
         <header class="h-flow-head">
-          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <div><p class="us-eyebrow">OVERALL</p><h4>전체 진행률</h4></div>
           <strong>86%</strong>
         </header>
         <ol class="h-phase-rail">
@@ -2144,6 +2219,28 @@ label.list-row {
           <p><span>현재</span>독립 검토와 반응형 확인</p>
           <p><span>완료</span>Worker 연결 · 렌더 구현 · 결정적 gate</p>
           <p><span>다음</span>라이브 배포</p>
+        </div>
+      </section>
+
+      <section class="h-modules" aria-label="모듈별 진행도">
+        <header class="h-modules-head">
+          <div><p class="us-eyebrow">MODULES</p><h4>모듈별 진행도</h4></div>
+          <span>보고된 작업 3개</span>
+        </header>
+        <div class="h-module-list">
+          <article class="h-module">
+            <div class="h-module-copy"><strong>검증 단계</strong><span>독립 검토</span></div>
+            <strong class="h-module-value">80%</strong>
+            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 80.0%"></span></span>
+          </article><article class="h-module">
+            <div class="h-module-copy"><strong>CSS 구현</strong><span>Main Codex</span></div>
+            <strong class="h-module-value">88%</strong>
+            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 88.0%"></span></span>
+          </article><article class="h-module">
+            <div class="h-module-copy"><strong>한도 수집</strong><span>Main Codex</span></div>
+            <strong class="h-module-value">72%</strong>
+            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 72.0%"></span></span>
+          </article>
         </div>
       </section>
 
@@ -2165,6 +2262,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>기획 · 통합 · 최종 판정</dd></div><div><dt>현재 작업</dt><dd>전체 계약과 최종 판정</dd></div>
         </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>86%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span></div>
       </article>
         <ul>
       <li class="h-org-node">
@@ -2178,6 +2276,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>구현자</dd></div><div><dt>현재 작업</dt><dd>Worker와 사용량 화면 구현</dd></div>
         </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>100%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span></div>
       </article>
 
       </li>
@@ -2192,6 +2291,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>검토자</dd></div><div><dt>현재 작업</dt><dd>diff와 실제 artifact 반증</dd></div>
         </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>80%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 80.0%"></span></span></div>
       </article>
 
       </li>
@@ -2206,6 +2306,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>현재 작업</dt><dd>경계가 명확한 저위험 작업 대기</dd></div>
         </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>37%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span></div>
       </article>
 
       </li></ul>
@@ -2238,7 +2339,7 @@ label.list-row {
 
       <section class="h-flow" aria-label="실제 하네스 작업 흐름">
         <header class="h-flow-head">
-          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <div><p class="us-eyebrow">OVERALL</p><h4>전체 진행률</h4></div>
           <strong>82%</strong>
         </header>
         <ol class="h-phase-rail">
@@ -2258,6 +2359,7 @@ label.list-row {
         </div>
       </section>
 
+
       <section class="h-org-chart" aria-label="Pipeline 개선 프로토콜 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
@@ -2276,6 +2378,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>프로토콜 소유자</dd></div><div><dt>현재 작업</dt><dd>결정적 gate와 최종 판정</dd></div>
         </dl>
+
       </article>
 
       </li></ul>
@@ -2307,7 +2410,7 @@ label.list-row {
 
       <section class="h-flow" aria-label="실제 하네스 작업 흐름">
         <header class="h-flow-head">
-          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <div><p class="us-eyebrow">OVERALL</p><h4>전체 진행률</h4></div>
           <strong>58%</strong>
         </header>
         <ol class="h-phase-rail">
@@ -2327,6 +2430,7 @@ label.list-row {
         </div>
       </section>
 
+
       <section class="h-org-chart" aria-label="프로젝트 지문한장 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
@@ -2345,6 +2449,7 @@ label.list-row {
         <dl class="h-actor-details">
           <div><dt>모델</dt><dd>gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>제품 개선 총괄</dd></div><div><dt>현재 작업</dt><dd>카나리 gate와 제품 판정</dd></div>
         </dl>
+
       </article>
 
       </li></ul>
@@ -2375,11 +2480,11 @@ label.list-row {
         </header>
 
         <div class="us-group">
-          <p class="list-group-head">gpt-5.6-sol</p>
+          <p class="list-group-head">ChatGPT Pro</p>
           <div class="list-group is-inset">
       <div class="list-row">
         <span class="list-row-body">
-          <span class="list-row-title">5시간</span>
+          <span class="list-row-title">5시간 사용량</span>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 41.5%"></span></span>
           <span class="list-row-sub">3시간 10분 후 초기화</span>
         </span>
@@ -2387,7 +2492,7 @@ label.list-row {
       </div>
       <div class="list-row">
         <span class="list-row-body">
-          <span class="list-row-title">주간</span>
+          <span class="list-row-title">주간 사용량</span>
           <span class="gauge-track" aria-hidden="true"><span class="gauge-fill is-warn" style="width: 78.2%"></span></span>
           <span class="list-row-sub">3일 21시간 후 초기화</span>
         </span>

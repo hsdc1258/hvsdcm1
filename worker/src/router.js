@@ -134,9 +134,11 @@ function normalizeHarnessReport(input) {
   const task = input.task;
   const actors = input.actors;
   const artifacts = input.artifacts;
+  const modules = input.modules === undefined ? [] : input.modules;
   if (!taskId || !occurredAt || !Number.isFinite(Date.parse(occurredAt))) return null;
   if (!task || typeof task !== 'object' || Array.isArray(task)) return null;
   if (!Array.isArray(actors) || actors.length < 1 || actors.length > 20) return null;
+  if (!Array.isArray(modules) || modules.length > 20) return null;
   if (!Array.isArray(artifacts) || artifacts.length > 10) return null;
 
   const phase = harnessText(task.phase, 16, true);
@@ -186,14 +188,38 @@ function normalizeHarnessReport(input) {
       role: harnessText(actor.role, 120),
       status: harnessText(actor.status, 20, true),
       assignment: harnessText(actor.assignment, 240),
+      ...(actor.progress === undefined ? {} : { progress: Number(actor.progress) }),
     };
     if (Object.values(normalized).some((value) => value === null)
       || ids.has(normalized.id)
       || !VALID_HARNESS_ACTOR_KINDS.has(normalized.kind)
       || !VALID_HARNESS_REASONING.has(normalized.reasoning)
-      || !VALID_HARNESS_ACTOR_STATES.has(normalized.status)) return null;
+      || !VALID_HARNESS_ACTOR_STATES.has(normalized.status)
+      || (normalized.progress !== undefined
+        && (!Number.isFinite(normalized.progress) || normalized.progress < 0 || normalized.progress > 100))) return null;
     ids.add(normalized.id);
     normalizedActors.push(normalized);
+  }
+
+  const normalizedModules = [];
+  const moduleIds = new Set();
+  for (const module of modules) {
+    if (!module || typeof module !== 'object' || Array.isArray(module)) return null;
+    const normalized = {
+      id: harnessText(module.id, 120, true),
+      name: harnessText(module.name, 120, true),
+      progress: Number(module.progress),
+      status: harnessText(module.status, 20, true),
+      owner: harnessText(module.owner, 80),
+    };
+    if (Object.values(normalized).some((value) => value === null)
+      || moduleIds.has(normalized.id)
+      || !Number.isFinite(normalized.progress)
+      || normalized.progress < 0
+      || normalized.progress > 100
+      || !VALID_HARNESS_ACTOR_STATES.has(normalized.status)) return null;
+    moduleIds.add(normalized.id);
+    normalizedModules.push(normalized);
   }
 
   const normalizedArtifacts = artifacts.map((artifact) => harnessText(artifact, 180, true));
@@ -204,6 +230,7 @@ function normalizeHarnessReport(input) {
     occurred_at: occurredAt,
     task: normalizedTask,
     actors: normalizedActors,
+    modules: normalizedModules,
     artifacts: normalizedArtifacts,
   };
 }
@@ -216,12 +243,21 @@ export function mergeHarnessReport(previous, incoming) {
   for (const actor of incoming.actors) {
     actorMap.set(actor.id, { ...actorMap.get(actor.id), ...actor, updated_at: incoming.occurred_at });
   }
+  const moduleMap = new Map(
+    Array.isArray(current.modules) ? current.modules.map((module) => [module.id, module]) : [],
+  );
+  for (const module of incoming.modules) {
+    moduleMap.set(module.id, { ...moduleMap.get(module.id), ...module, updated_at: incoming.occurred_at });
+  }
   let actors = [...actorMap.values()];
+  let modules = [...moduleMap.values()];
   if (incoming.task.status === 'complete') {
     actors = actors.map((actor) => ({
       ...actor,
       status: actor.status === 'unavailable' ? actor.status : 'done',
+      ...(actor.progress === undefined || actor.status === 'unavailable' ? {} : { progress: 100 }),
     }));
+    modules = modules.map((module) => ({ ...module, status: 'done', progress: 100 }));
   }
   return {
     version: 1,
@@ -231,6 +267,7 @@ export function mergeHarnessReport(previous, incoming) {
     created_at: current.created_at || incoming.occurred_at,
     updated_at: incoming.occurred_at,
     actors,
+    modules,
     artifacts: [...new Set([...(current.artifacts || []), ...incoming.artifacts])].slice(-10),
   };
 }
@@ -259,6 +296,13 @@ async function reportHarness(request, env) {
   ].map((actor) => actor?.id).filter(Boolean));
   if (mergedActorIds.size > 20) {
     return json({ error: '하네스 실행자가 너무 많습니다.' }, 400);
+  }
+  const mergedModuleIds = new Set([
+    ...(Array.isArray(previous?.modules) ? previous.modules : []),
+    ...incoming.modules,
+  ].map((module) => module?.id).filter(Boolean));
+  if (mergedModuleIds.size > 20) {
+    return json({ error: '하네스 모듈이 너무 많습니다.' }, 400);
   }
   const merged = mergeHarnessReport(previous, incoming);
   await env.DB.prepare(`
