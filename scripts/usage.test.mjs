@@ -276,13 +276,15 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   });
   const tabs = [makeTab('active', true), makeTab('complete'), makeTab('org')];
   const panels = tabs.map((tab, index) => ({ dataset: { sessionViewPanel: tab.dataset.sessionView }, hidden: index !== 0 }));
+  const orgScroll = { scrollWidth: 1000, clientWidth: 400, scrollLeft: 0 };
+  panels[2].querySelector = () => orgScroll;
   const tablist = {
     addEventListener(type, handler) { listeners[type] = handler; },
     querySelectorAll() { return tabs; },
     contains(tab) { return tabs.includes(tab); },
   };
   const root = {
-    querySelector() { return tablist; },
+    querySelector(selector) { return selector === '[data-session-view-panel="org"]' ? panels[2] : tablist; },
     querySelectorAll(selector) { return selector === '[data-session-view]' ? tabs : panels; },
   };
 
@@ -299,6 +301,7 @@ test('status-view activation exposes one view and keyboard wiring advances to th
   assert.equal(prevented, true);
   assert.deepEqual(panels.map((panel) => panel.hidden), [true, true, false]);
   assert.equal(tabs[2].focused, true);
+  assert.equal(orgScroll.scrollLeft, 300);
 });
 
 test('tab activation exposes one panel and keyboard wiring advances to the next session', () => {
