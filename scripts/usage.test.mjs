@@ -465,6 +465,24 @@ test('a source with no snapshot keeps its slot as a waiting empty state', () => 
   assert.match(markup, /아직 Claude 스냅샷이 없습니다/u);
 });
 
+// 반대 조합도 고정한다 — Claude만 보고했고 Codex가 아직 없을 때 (review nit).
+test('a Claude-only snapshot set renders its card while Codex keeps a waiting slot', () => {
+  const markup = dashboard({
+    snapshots: [claudeSnapshot({
+      'claude-opus-5': { five_hour: { used_percentage: 44 }, seven_day: { used_percentage: 61 } },
+    })],
+    tasks: [harnessTask()],
+  });
+  assert.ok(markup.includes('>Claude 한도<'));
+  assert.match(markup, />44%</u);
+  assert.match(markup, />61%</u);
+  assert.ok(markup.includes('>Codex 한도<'));
+  assert.match(markup, /아직 Codex 스냅샷이 없습니다/u);
+  assert.doesNotMatch(markup, /아직 Claude 스냅샷이 없습니다/u);
+  // 자리 순서는 원본이 하나뿐이어도 SOURCE_LABELS 키 순서를 지킨다.
+  assert.ok(markup.indexOf('>Codex 한도<') < markup.indexOf('>Claude 한도<'));
+});
+
 // 조직도는 Claude 파이프라인 액터도 그린다 (worker의 kind 허용 목록과 짝이다).
 test('claude actors render in the reporting tree', () => {
   const markup = dashboard({

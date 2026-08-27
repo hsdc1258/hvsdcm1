@@ -408,6 +408,75 @@ test('usage report accepts the claude source and stores it beside codex', async 
   assert.deepEqual(upserts.at(-1).values, ['claude', capturedAt, JSON.stringify(payload)]);
 });
 
+// review nit — ingest와 조회가 같은 행을 두고 실제로 이어지는지 한 흐름으로 고정한다.
+// (지금까지는 POST와 GET을 각각 다른 가짜 DB로만 확인했다.)
+test('a claude usage report posted through the API comes back from the usage lookup', async () => {
+  const snapshots = new Map();
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('INSERT INTO usage_snapshots')) {
+          return {
+            bind(source, capturedAt, payload) {
+              return {
+                async run() {
+                  snapshots.set(source, { source, captured_at: capturedAt, payload });
+                  return { success: true };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return { bind() { return { async all() { return { results: [...snapshots.values()] }; } }; } };
+        }
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return { async all() { return { results: [] }; } };
+        }
+        throw new Error(`Unexpected SQL in usage round-trip test: ${sql}`);
+      },
+    },
+  };
+  const capturedAt = '2026-08-27T02:03:04.000Z';
+  const payload = {
+    models: {
+      'claude-opus-5': {
+        captured_at: capturedAt,
+        rate_limits: { five_hour: { used_percentage: 44 }, seven_day: { used_percentage: 61 } },
+      },
+    },
+  };
+
+  const posted = await worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer correct-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ source: 'claude', captured_at: capturedAt, payload }),
+  }), env);
+  assert.equal(posted.status, 200);
+
+  const looked = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token', 'cf-connecting-ip': '198.51.100.7' },
+  }), env);
+  assert.equal(looked.status, 200);
+  assert.deepEqual(await looked.json(), {
+    snapshots: [{ source: 'claude', captured_at: capturedAt, payload }],
+    tasks: [],
+  });
+});
+
 function harnessInput(overrides = {}) {
   return {
     version: 1,
@@ -593,6 +662,132 @@ test('harness report keeps the merged actor total within twenty', async () => {
   assert.deepEqual(await second.json(), { error: '하네스 실행자가 너무 많습니다.' });
   assert.equal(JSON.parse(storedPayload).actors.length, 20);
   assert.equal(upserts, 1);
+});
+
+// review M-A1 — SELECT→merge→UPSERT는 버전 검사가 없으면 늦게 도착한 과거 보고가
+// 끝난 태스크를 되살리고 최신 상태를 덮어쓴다. 저장 자체를 막는지 확인한다.
+function harnessStoreEnv() {
+  const state = { payload: '', status: '', updatedAt: '', upserts: 0 };
+  return {
+    state,
+    env: {
+      ALLOWED_ORIGIN: 'https://example.test',
+      HARNESS_INGEST_TOKEN: 'harness-token',
+      DB: {
+        prepare(sql) {
+          if (sql.includes('SELECT payload FROM harness_tasks')) {
+            return { bind() { return { async first() { return state.payload ? { payload: state.payload } : null; } }; } };
+          }
+          if (sql.includes('INSERT INTO harness_tasks')) {
+            // 동시 보고 방어는 D1 쪽 조건부 UPSERT도 함께 쓴다 — 마이그레이션 없이
+            // 기존 컬럼(updated_at)만 비교한다.
+            assert.match(sql, /WHERE excluded\.updated_at >= harness_tasks\.updated_at/u);
+            return {
+              bind(taskId, status, updatedAt, payload) {
+                return {
+                  async run() {
+                    state.upserts += 1;
+                    state.status = status;
+                    state.updatedAt = updatedAt;
+                    state.payload = payload;
+                    return { success: true };
+                  },
+                };
+              },
+            };
+          }
+          throw new Error(`Unexpected SQL in stale-report test: ${sql}`);
+        },
+      },
+    },
+  };
+}
+
+test('a late or unresumed report never revives a completed harness task', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+  const completed = harnessInput({
+    occurred_at: '2026-08-27T10:00:00.000Z',
+    task: { ...harnessInput().task, status: 'complete', phase: 'done', progress: 100 },
+  });
+
+  assert.equal((await post(completed)).status, 200);
+  assert.equal(state.status, 'complete');
+  const upsertsAfterComplete = state.upserts;
+
+  // ① 저장된 updated_at보다 오래된 보고 → no-op 200 (기존 응답 형태 + stale 표시).
+  const late = await post(harnessInput({ occurred_at: '2026-08-27T09:00:00.000Z' }));
+  assert.equal(late.status, 200);
+  assert.deepEqual(await late.json(), { ok: true, task_id: 'usage-harness', stale: true });
+  assert.equal(state.upserts, upsertsAfterComplete);
+  assert.equal(state.status, 'complete');
+  assert.equal(state.updatedAt, '2026-08-27T10:00:00.000Z');
+
+  // ② 최신 보고라도 명시적 재개 없이는 complete를 active로 강등하지 못한다.
+  const newer = await post(harnessInput({
+    occurred_at: '2026-08-27T11:00:00.000Z',
+    actors: [{
+      id: 'usage-harness:straggler',
+      parent_id: 'usage-harness:main',
+      name: '늦은 실행자',
+      kind: 'claude',
+      model: 'claude-opus-5',
+      reasoning: 'high',
+      role: '후속',
+      status: 'working',
+      assignment: '뒤늦은 보고',
+    }],
+  }));
+  assert.equal(newer.status, 200);
+  assert.deepEqual(await newer.json(), { ok: true, task_id: 'usage-harness' });
+  assert.equal(state.upserts, upsertsAfterComplete + 1);
+  assert.equal(state.status, 'complete');
+  const held = JSON.parse(state.payload);
+  assert.equal(held.status, 'complete');
+  assert.equal(held.phase, 'done');
+  assert.equal(held.progress, 100);
+  assert.deepEqual(held.actors.map((actor) => actor.status), ['done', 'done']);
+
+  // ③ resume:true를 담은 보고만 태스크를 다시 연다.
+  const resumed = await post(harnessInput({ occurred_at: '2026-08-27T12:00:00.000Z', resume: true }));
+  assert.equal(resumed.status, 200);
+  assert.equal(state.status, 'active');
+  assert.equal(JSON.parse(state.payload).phase, 'work');
+
+  // resume은 boolean만 받는다 — 문자열 'true'는 재개 신호로 통하지 않는다.
+  const bogusResume = await post(harnessInput({ occurred_at: '2026-08-27T13:00:00.000Z', resume: 'true' }));
+  assert.equal(bogusResume.status, 400);
+});
+
+test('two reports from separate harnesses keep both actors on the shared task', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+  const actor = (id, kind, model) => ({
+    id, parent_id: 'usage-harness:main', name: id, kind, model,
+    reasoning: 'high', role: '실행', status: 'working', assignment: '병렬 보고',
+  });
+
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    actors: [actor('usage-harness:codex-side', 'codex', 'gpt-5.6-sol')],
+  }))).status, 200);
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T09:00:30.000Z',
+    actors: [actor('usage-harness:claude-side', 'claude', 'claude-opus-5')],
+  }))).status, 200);
+
+  assert.deepEqual(
+    JSON.parse(state.payload).actors.map((entry) => entry.id),
+    ['usage-harness:codex-side', 'usage-harness:claude-side'],
+  );
 });
 
 test('harness report rejects every bounded or non-allowlisted shape before database access', async () => {

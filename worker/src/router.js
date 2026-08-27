@@ -226,10 +226,16 @@ function normalizeHarnessReport(input) {
 
   const normalizedArtifacts = artifacts.map((artifact) => harnessText(artifact, 180, true));
   if (normalizedArtifacts.some((artifact) => artifact === null)) return null;
+  // resume은 terminal(complete) 태스크를 다시 여는 **명시적** 신호다. 빠뜨린 필드와
+  // 오타를 구분하려고 boolean만 받는다 ('true' 같은 문자열은 400).
+  if (input.resume !== undefined && typeof input.resume !== 'boolean') return null;
   return {
     version: 1,
     task_id: taskId,
-    occurred_at: occurredAt,
+    // 시각은 정규 ISO(UTC)로 통일한다. updated_at은 payload 비교(JS)와 D1 컬럼 비교(문자열)
+    // 양쪽에서 순서 판정에 쓰이므로, 오프셋 표기가 섞이면 사전순 비교가 뒤집힌다.
+    occurred_at: new Date(occurredAt).toISOString(),
+    resume: input.resume === true,
     task: normalizedTask,
     actors: normalizedActors,
     modules: normalizedModules,
@@ -253,7 +259,12 @@ export function mergeHarnessReport(previous, incoming) {
   }
   let actors = [...actorMap.values()];
   let modules = [...moduleMap.values()];
-  if (incoming.task.status === 'complete') {
+  // terminal 보호 — 이미 complete로 잠긴 태스크는 늦게 도착한 진행 보고 하나로 되살아나지
+  // 않는다. 되살리려면 보고가 resume:true를 명시해야 한다 (review M-A1).
+  const terminalHold = current.status === 'complete'
+    && incoming.task.status !== 'complete'
+    && incoming.resume !== true;
+  if (terminalHold || incoming.task.status === 'complete') {
     actors = actors.map((actor) => ({
       ...actor,
       status: actor.status === 'unavailable' ? actor.status : 'done',
@@ -265,6 +276,12 @@ export function mergeHarnessReport(previous, incoming) {
     version: 1,
     ...current,
     ...incoming.task,
+    // 잠긴 태스크의 머리글 수치(상태·단계·진행률)는 늦은 보고를 따라 뒤로 가지 않는다.
+    ...(terminalHold ? {
+      status: 'complete',
+      phase: current.phase || incoming.task.phase,
+      progress: Number.isFinite(current.progress) ? current.progress : incoming.task.progress,
+    } : {}),
     id: incoming.task_id,
     created_at: current.created_at || incoming.occurred_at,
     updated_at: incoming.occurred_at,
@@ -292,6 +309,13 @@ async function reportHarness(request, env) {
     .first();
   let previous = null;
   try { previous = row?.payload ? JSON.parse(row.payload) : null; } catch { previous = null; }
+  // 늦게 도착한 과거 보고는 저장하지 않는다 — SELECT→merge→UPSERT 사이에 더 새로운
+  // 보고가 들어왔다면 그 위에 옛 상태를 덮어쓰는 셈이 된다 (review M-A1).
+  // 같은 시각(재전송·동시 보고)은 통과시킨다: 병합이 멱등이라 손실이 없다.
+  const storedAt = Date.parse(previous?.updated_at ?? '');
+  if (Number.isFinite(storedAt) && Date.parse(incoming.occurred_at) < storedAt) {
+    return json({ ok: true, task_id: incoming.task_id, stale: true });
+  }
   const mergedActorIds = new Set([
     ...(Array.isArray(previous?.actors) ? previous.actors : []),
     ...incoming.actors,
@@ -312,6 +336,7 @@ async function reportHarness(request, env) {
     VALUES (?1, ?2, ?3, ?4)
     ON CONFLICT(task_id)
     DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload
+    WHERE excluded.updated_at >= harness_tasks.updated_at
   `).bind(incoming.task_id, merged.status, merged.updated_at, JSON.stringify(merged)).run();
   return json({ ok: true, task_id: incoming.task_id });
 }
