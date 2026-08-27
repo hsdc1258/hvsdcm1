@@ -21,8 +21,6 @@
      --green  #30d158 on --surface-2 #1d1d1f  8.32:1  (.wm-verdict 정답 — 인셋 그룹)
      --red    #ff453a on --surface-2 #1d1d1f  4.94:1  (.wm-verdict 오답 — 인셋 그룹)
    ========================================================================== */
-
-
 .wm-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(250px, 1fr);
@@ -31,19 +29,32 @@
 }
 /* 그룹 헤더(8px 아래 여백)와 그룹이 번갈아 오므로 컨테이너 gap은 0이다.
    섹션 사이 간격만 다음 헤더에 margin-top으로 준다 — iOS 설정의 섹션 리듬. */
-.wm-col, .wm-panel { display: grid; gap: 0; align-content: start; min-width: 0; }
-.wm-panel { position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
-.wm-col > .list-group + .list-group-head,
-.wm-panel > .list-group + .list-group-head { margin-top: var(--space-5); }
-
-.wm-start { width: 100%; margin-top: var(--space-4); }
-
+.wm-col, .wm-panel {
+  display: grid;
+  gap: 0;
+  align-content: start;
+  min-width: 0;
+}
+.wm-panel {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--space-5));
+}
+.wm-col > .list-group + .list-group-head, .wm-panel > .list-group + .list-group-head {
+  margin-top: var(--space-5);
+}
+.wm-start {
+  width: 100%;
+  margin-top: var(--space-4);
+}
 /* ---- 행 안의 컨트롤 ---- */
-
 /* 행 우측 값 자리의 입력·셀렉트는 system.css의 .field-input-inline을 그대로 쓴다.
    여기 남는 것은 숫자 입력의 폭·정렬 델타뿐이다 (R4-M-7: 셀렉트 화살표를 두 벌
    구현하지 않는다 — 글리프는 --select-arrow 하나가 원본이다). */
-.wm-range { display: flex; align-items: center; gap: var(--space-2); }
+.wm-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .wm-num {
   width: 3.4em;
   padding-left: 6px;
@@ -52,18 +63,27 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-
 /* 세그먼티드가 들어가는 행은 좁은 폭에서 두 줄로 접힌다. */
-.wm-row-wrap { flex-wrap: wrap; }
-.wm-presets { margin-left: auto; flex-wrap: wrap; }
-.wm-presets .segmented-btn { padding: 5px 11px; }
-
+.wm-row-wrap {
+  flex-wrap: wrap;
+}
+.wm-presets {
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.wm-presets .segmented-btn {
+  padding: 5px 11px;
+}
 /* 파괴적 동작 행 — 붉은 라벨 하나로 말한다 (iOS 설정의 "모두 지우기" 어법). */
-.wm-row-danger .list-row-title { color: var(--red); }   /* on --surface 5.31:1 */
-
+.wm-row-danger .list-row-title {
+  color: var(--red);
+}
+/* on --surface 5.31:1 */
 /* ---- 퀴즈 ---- */
-
-.wm-progress { display: grid; gap: var(--space-2); }
+.wm-progress {
+  display: grid;
+  gap: var(--space-2);
+}
 .wm-progress-meta {
   display: flex;
   justify-content: space-between;
@@ -72,11 +92,29 @@
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.wm-track { height: 4px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
-.wm-fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width var(--dur-med) var(--ease-swift); }
-
-.wm-question { display: grid; gap: var(--space-4); }
-.wm-word-line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.wm-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.wm-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-med) var(--ease-swift);
+}
+.wm-question {
+  display: grid;
+  gap: var(--space-4);
+}
+.wm-word-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
 .wm-word {
   min-width: 0;
   font-size: clamp(2rem, 1.45rem + 2.4vw, 3rem);
@@ -87,22 +125,45 @@
      비표준 별칭 word-break: break-word 대신 표준 속성을 쓴다. */
   overflow-wrap: anywhere;
 }
-.wm-answer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; }
-.wm-hint { font-size: var(--fs-micro); color: var(--text-3); }
-
+.wm-answer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.wm-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
 /* ---- 채점 피드백 ---- */
-
-.wm-feedback { display: grid; gap: var(--space-3); justify-items: start; }
-.wm-feedback > .list-group { width: 100%; }
-.wm-verdict { font-weight: 600; }
-.wm-feedback.is-correct .wm-verdict { color: var(--green); }   /* on --surface-2 8.32:1 */
-.wm-feedback.is-wrong .wm-verdict { color: var(--red); }       /* on --surface-2 4.94:1 */
+.wm-feedback {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.wm-feedback > .list-group {
+  width: 100%;
+}
+.wm-verdict {
+  font-weight: 600;
+}
+.wm-feedback.is-correct .wm-verdict {
+  color: var(--green);
+}
+/* on --surface-2 8.32:1 */
+.wm-feedback.is-wrong .wm-verdict {
+  color: var(--red);
+}
+/* on --surface-2 4.94:1 */
 /* .list-row-value는 flex: none이라 긴 뜻이 들어오면 행이 넓어져 가로 넘침이 난다.
    값 자리에 문장이 오는 두 곳(.wm-gloss / .wm-meta)만 축소를 허용한다. */
-.wm-gloss { flex: 0 1 auto; min-width: 0; max-width: 62%; color: var(--text); }
-
+.wm-gloss {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 62%;
+  color: var(--text);
+}
 /* ---- 결과 ---- */
-
 .wm-score {
   font-size: var(--fs-title-1);
   line-height: var(--lh-title);
@@ -110,55 +171,83 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.wm-actions-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-
+.wm-actions-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
 /* ---- 오답 행 ---- */
-
-.wm-term { font-weight: 600; }
+.wm-term {
+  font-weight: 600;
+}
 .wm-meta {
   display: grid;
   flex: 0 1 auto;
   min-width: 0;
   gap: 1px;
   font-size: var(--fs-micro);
-  color: var(--text-2);        /* on --surface 7.03:1 */
+  color: var(--text-2);
+  /* on --surface 7.03:1 */
   font-variant-numeric: tabular-nums;
 }
 /* 그리드 아이템의 기본 min-width는 auto라 긴 메타 문자열이 트랙 밖으로 삐져나가
    왼쪽 제목 위에 겹친다. 축소를 허용해 트랙 안에서 줄바꿈되게 한다. */
-.wm-meta > * { min-width: 0; }
-.wm-meta small { font-size: var(--fs-micro); color: var(--text-3); }   /* on --surface 4.99:1 */
-
-.wm-sort { display: flex; align-items: center; gap: var(--space-2); }
+.wm-meta > * {
+  min-width: 0;
+}
+.wm-meta small {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+/* on --surface 4.99:1 */
+.wm-sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .wm-sort-label {
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--text-3);        /* on --bg 5.80:1 */
+  color: var(--text-3);
+  /* on --bg 5.80:1 */
 }
-
 .wm-empty {
   padding: var(--space-6) var(--space-4);
   text-align: center;
   color: var(--text-2);
   font-size: var(--fs-caption);
 }
-
 /* ---- 반응형 ---- */
-
 @media (max-width: 960px) {
-  .wm-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
-  .wm-panel { position: static; }
+  .wm-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .wm-panel {
+    position: static;
+  }
 }
-
 @media (max-width: 560px) {
-  .wm-answer-row { grid-template-columns: minmax(0, 1fr); }
+  .wm-answer-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
   /* 좁은 폭에서는 뜻이 우측 열에 갇히지 않게 폭 제한을 푼다. */
-  .wm-gloss { max-width: 100%; }
-  .wm-presets { margin-left: 0; }
+  .wm-gloss {
+    max-width: 100%;
+  }
+  .wm-presets {
+    margin-left: 0;
+  }
   /* 오답 행은 좌우 두 덩어리를 위아래로 편다 — 320px에서 두 열을 유지하면 우측 메타가
      제목 위로 밀려 올라온다(측정으로 확인). 메타는 제 줄에서 왼쪽 정렬한다. */
-  .list-row.wm-mistake { flex-wrap: wrap; }
-  .wm-mistake .wm-meta { flex: 1 1 100%; margin-left: 0; text-align: left; }
+  .list-row.wm-mistake {
+    flex-wrap: wrap;
+  }
+  .wm-mistake .wm-meta {
+    flex: 1 1 100%;
+    margin-left: 0;
+    text-align: left;
+  }
 }

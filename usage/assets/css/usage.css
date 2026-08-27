@@ -11,15 +11,21 @@
      --text-2 #a1a1a6 on --surface #161617  7.03:1  (.us-card-meta — 카드 위 캡션)
      --text-2 #a1a1a6 on --bg      #000     8.16:1  (.us-empty — 카드 밖 빈 상태)
    ========================================================================== */
-
-.us-body { display: grid; gap: var(--space-5); }
-
+.us-body {
+  display: grid;
+  gap: var(--space-5);
+}
 /* 수집 원본(codex·claude)마다 카드 하나. 원본이 둘뿐이라 카드 스택이 3연속으로 자라지
    않는다 (DESIGN.md §6). 넓은 화면에서는 두 카드를 나란히 놓아 세로 스크롤을 줄인다. */
-.us-cards { display: grid; gap: var(--space-4); }
-
-.us-card { display: grid; gap: var(--space-4); align-content: start; }
-
+.us-cards {
+  display: grid;
+  gap: var(--space-4);
+}
+.us-card {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
 .us-card-head {
   display: flex;
   align-items: baseline;
@@ -29,16 +35,25 @@
 }
 .us-card-meta {
   font-size: var(--fs-caption);
-  color: var(--text-2);   /* on --surface 7.03:1 */
+  color: var(--text-2);
+  /* on --surface 7.03:1 */
   font-variant-numeric: tabular-nums;
 }
-
 /* 모델별 그룹(claude)은 라벨 + 그룹 리스트 한 벌이다. codex는 라벨이 하나뿐이다.
    라벨(.list-group-head)이 자기 아래 여백을 이미 갖고 있으므로 gap을 더하지 않는다. */
-.us-group { display: grid; gap: 0; min-width: 0; }
-
-.us-empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-2); }
-
+.us-group {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.us-empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-2);
+}
 @media (min-width: 900px) {
-  .us-cards { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
+  .us-cards {
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    align-items: start;
+  }
 }

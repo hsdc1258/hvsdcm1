@@ -3,59 +3,108 @@
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
    인쇄용 라이트 팔레트는 @media print 안에서 html 요소에만 재정의한다.
    ========================================================================== */
-
 /* ---- 공통 헬퍼 ---- */
-
-.sm-stack { display: grid; gap: var(--space-4); }
-.sm-note { font-size: var(--fs-caption); color: var(--text-2); line-height: 1.55; }
-.sm-hint { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-full { width: 100%; }
-.sm-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.sm-actions .btn { flex: 1 1 auto; }
-.sm-empty { padding: var(--space-7); text-align: center; color: var(--text-2); font-size: var(--fs-caption); }
-ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-style: disc; }
-.sm-bullets li { font-size: var(--fs-caption); color: var(--text); }
-.sm-bullets li::marker { color: var(--text-3); }
-
+.sm-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.sm-note {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.sm-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+.sm-full {
+  width: 100%;
+}
+.sm-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sm-actions .btn {
+  flex: 1 1 auto;
+}
+.sm-empty {
+  padding: var(--space-7);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+ul.sm-bullets {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: 1.1em;
+  list-style: disc;
+}
+.sm-bullets li {
+  font-size: var(--fs-caption);
+  color: var(--text);
+}
+.sm-bullets li::marker {
+  color: var(--text-3);
+}
 /* ---- 홈 레이아웃 ---- */
-
 .sm-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
   gap: var(--space-5);
   align-items: start;
 }
-.sm-units { display: grid; gap: var(--space-4); }
-.sm-panel { display: grid; gap: var(--space-5); position: sticky; top: calc(var(--topbar-h) + var(--space-5)); }
-
-.sm-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
-.sm-metrics .stat-value { font-size: var(--fs-title-3); }
-.sm-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); }
-
+.sm-units {
+  display: grid;
+  gap: var(--space-4);
+}
+.sm-panel {
+  display: grid;
+  gap: var(--space-5);
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--space-5));
+}
+.sm-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.sm-metrics .stat-value {
+  font-size: var(--fs-title-3);
+}
+.sm-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: var(--space-3);
+}
 /* 행 비활성 / 행 전체 진입점 / 체크박스 액세서리는 system.css의 .list-row-stretch ·
    .list-row-accessory · .list-row:disabled로 승격됐다 (DESIGN.md §7.1). 여기서 다시
    만들지 않는다. */
-
 /* ---- 대단원 = 그룹 / 중단원 = 행 (DESIGN.md §7.1) ---- */
-
 /* 헤더 줄의 아래 여백은 .list-group-head-row가 갖는다(8px). 그룹 아래 캡션의 간격은
    .list-group-foot의 padding-top이 갖는다. 그래서 이 컨테이너는 gap을 두지 않는다 —
    두면 두 여백이 겹쳐 리듬이 두 배가 된다. */
-.sm-unit { display: grid; }
-.sm-unit > .list-group-foot { padding-top: var(--space-4); }
-
+.sm-unit {
+  display: grid;
+}
+.sm-unit > .list-group-foot {
+  padding-top: var(--space-4);
+}
 /* ---- 개념 노트 ---- */
-
 /* 툴바 — 중단원 이동(select)·홈·퀴즈를 한 줄에 모았다. 예전에는 칩 13개 줄과
    목차 칩 7개 줄이 화면 위쪽 두 줄을 차지했다 (DESIGN.md §6·§7.3).
    불투명 표면 — 유리 효과는 §3이 금지한다. --surface 위 --text-2 7.03:1. */
-.sm-concept-nav { z-index: 40; gap: var(--space-2); }
+.sm-concept-nav {
+  z-index: 40;
+  gap: var(--space-2);
+}
 .sm-jump-label {
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--text-2);   /* on --surface 7.03:1 */
+  color: var(--text-2);
+  /* on --surface 7.03:1 */
 }
 .sm-jump {
   flex: 1 1 180px;
@@ -64,16 +113,30 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   padding-block: 6px;
   font-size: var(--fs-caption);
 }
-
 /* 단원 머리 — 이모지 슬롯 + 제목 + 한 줄 메타. 눈썹 라벨을 두지 않는다. */
-.sm-concept-head { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-2); }
-.sm-concept-head > div { min-width: 0; }
-.sm-concept-meta { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
-
+.sm-concept-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+.sm-concept-head > div {
+  min-width: 0;
+}
+.sm-concept-meta {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  margin-top: 2px;
+}
 /* 개념 노트 본문 — 카드 스택도 아니고 섹션마다 두 줄짜리 제목을 얹지도 않는다.
    섹션 머리는 그룹 헤더 한 줄이고, 항상 볼 것과 접을 것을 나눈다 (DESIGN.md §6). */
-.sm-note-body { display: grid; gap: 0; }
-.sm-section { scroll-margin-top: calc(var(--topbar-h) + var(--space-6)); }
+.sm-note-body {
+  display: grid;
+  gap: 0;
+}
+.sm-section {
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-6));
+}
 /* 구분선 조판은 노트 본문 안에서만 적용한다 — 같은 클래스를 쓰는 학습 기록 화면의
    카드 섹션까지 건드리면 안 된다. */
 .sm-note-body > .sm-section {
@@ -82,28 +145,46 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   padding: var(--space-5) 0;
   border-top: 1px solid var(--line-faint);
 }
-.sm-note-body > .sm-section:first-child { padding-top: var(--space-4); border-top: 0; }
-
+.sm-note-body > .sm-section:first-child {
+  padding-top: var(--space-4);
+  border-top: 0;
+}
 /* 섹션 머리 — iOS 그룹 헤더 어법. 제목 한 줄, 오른쪽에 짧은 힌트. */
-.sm-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.sm-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
 .sm-sec-label {
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--text-2);   /* on --bg 8.16:1 */
+  color: var(--text-2);
+  /* on --bg 8.16:1 */
 }
-.sm-sec-hint { font-size: var(--fs-micro); color: var(--text-3); }  /* on --bg 5.80:1 */
-
+.sm-sec-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+/* on --bg 5.80:1 */
 /* ---- 접히는 부속 섹션 ----
    컨테이너·summary 행·chevron·본문은 system.css의 .disclosure* 프리미티브다.
    여기에는 노트 본문 안에서의 간격과 본문 리드 문장만 남긴다. */
-
-.sm-note-body > .disclosure { margin-top: var(--space-4); }
-.sm-note-body > .disclosure + .disclosure { margin-top: var(--space-2); }
-.sm-lead { font-size: var(--fs-body); color: var(--text); }
-.disclosure-body > .list-group-head { padding-bottom: 0; }
-
+.sm-note-body > .disclosure {
+  margin-top: var(--space-4);
+}
+.sm-note-body > .disclosure + .disclosure {
+  margin-top: var(--space-2);
+}
+.sm-lead {
+  font-size: var(--fs-body);
+  color: var(--text);
+}
+.disclosure-body > .list-group-head {
+  padding-bottom: 0;
+}
 /* 학습 기록 화면 전용 섹션 규칙 (M-2). 노트 본문 스코프 밖에 있는 기록 섹션들이
    여백·구분선을 잃지 않도록 같은 조판 언어를 여기서 따로 준다. 카드가 아닌 섹션에만
    적용하므로 카드 자신의 padding과 겹치지 않는다. */
@@ -111,7 +192,6 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   padding-top: var(--space-6);
   border-top: 1px solid var(--line-faint);
 }
-
 /* 헤드라인은 30자 이하 명사구 전용이고, 본문보다 한 단만 위다
    (DESIGN.md §2 — 글 양과 글자 크기는 반비례). */
 .sm-headline {
@@ -120,7 +200,6 @@ ul.sm-bullets { display: grid; gap: var(--space-2); padding-left: 1.1em; list-st
   letter-spacing: normal;
   font-weight: 600;
 }
-
 /* 요약은 문장이므로 본문 크기 목록으로 낸다. 강조용 세로 규칙선을 두지 않는다 —
    그 들여쓰기 때문에 이 블록만 형제 섹션보다 안쪽으로 밀려 보였다. */
 /* system.css의 `ul[class], ol[class] { padding: 0; list-style: none }` 리셋은 특이도가
@@ -132,9 +211,14 @@ ul.sm-summary {
   padding-left: 1.1em;
   list-style: disc;
 }
-ul.sm-summary li::marker { color: var(--text-3); }
-.sm-summary li { font-size: var(--fs-body); color: var(--text); line-height: var(--lh-body); }
-
+ul.sm-summary li::marker {
+  color: var(--text-3);
+}
+.sm-summary li {
+  font-size: var(--fs-body);
+  color: var(--text);
+  line-height: var(--lh-body);
+}
 /* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
 .sm-icon {
   width: 16px;
@@ -146,11 +230,12 @@ ul.sm-summary li::marker { color: var(--text-3); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
 /* 정적 집계(단원 평균 정답률)를 막대로 그리던 .sm-gauge는 제거했다 — 프로그레스 바는
    사용자의 진행 데이터에만 쓴다 (DESIGN.md §4). 같은 정보는 아래 .sm-hint 문장이 낸다. */
-
-.sm-callouts { display: grid; gap: var(--space-3); }
+.sm-callouts {
+  display: grid;
+  gap: var(--space-3);
+}
 .sm-callout {
   display: grid;
   gap: var(--space-1);
@@ -161,9 +246,14 @@ ul.sm-summary li::marker { color: var(--text-3); }
   font-size: var(--fs-caption);
 }
 /* 함정 칸은 색을 바꾸지 않고 아이콘과 라벨로 구분한다 — 강조색은 뷰당 1색이다 (DESIGN.md §3). */
-.sm-callout.is-trap { border-left-color: var(--line-strong); }
-.sm-callout .kicker { display: flex; align-items: center; gap: var(--space-2); }
-
+.sm-callout.is-trap {
+  border-left-color: var(--line-strong);
+}
+.sm-callout .kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 /* 출제 빈도는 순위만 낸다 — '3/6문항' 같은 집계 수치는 화면에서 걷어냈다.
    선별 수록 표본의 분수는 학습자에게 판단 근거가 아니라 잡음이었다 (사용자 피드백).
    남은 정보는 순서뿐이므로 참고서의 번호 목록 조판을 그대로 쓴다. */
@@ -178,21 +268,55 @@ ol.sm-freq {
   border-top: 1px solid var(--line-faint);
   font-size: var(--fs-caption);
 }
-.sm-freq-item::marker { color: var(--text-3); font-variant-numeric: tabular-nums; }
-.sm-freq-item:first-child { border-top: 0; }
-
+.sm-freq-item::marker {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.sm-freq-item:first-child {
+  border-top: 0;
+}
 /* 사용자의 정답률(실제 진행 데이터)에만 쓰는 막대다 — §4가 허용한 용도. */
-.sm-meter { height: 6px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
-.sm-meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
-
-.sm-matrix-wrap { max-height: 70dvh; }
-.sm-matrix th, .sm-matrix td { white-space: normal; min-width: 140px; vertical-align: top; }
-.sm-matrix tbody th { position: sticky; left: 0; background: var(--surface-2); z-index: 1; }
+.sm-meter {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.sm-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+.sm-matrix-wrap {
+  max-height: 70dvh;
+}
+.sm-matrix th, .sm-matrix td {
+  white-space: normal;
+  min-width: 140px;
+  vertical-align: top;
+}
+.sm-matrix tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--surface-2);
+  z-index: 1;
+}
 /* 가로 스크롤 안내는 실제로 스크롤이 생기는 좁은 화면에서만 낸다. */
-.sm-swipe { display: none; }
-
-.sm-steps { display: grid; gap: var(--space-3); counter-reset: step; }
-.sm-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+.sm-swipe {
+  display: none;
+}
+.sm-steps {
+  display: grid;
+  gap: var(--space-3);
+  counter-reset: step;
+}
+.sm-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+}
 /* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한) — 다이어그램의 .sm-d-n과 같은 처리. */
 .sm-steps li > span {
   min-width: 1.2em;
@@ -202,17 +326,44 @@ ol.sm-freq {
   font-variant-numeric: tabular-nums;
   line-height: var(--lh-body);
 }
-.sm-steps p { font-size: var(--fs-caption); }
-
-.sm-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: var(--space-3); }
-.sm-deep-item { padding: var(--space-3) var(--space-4); border-radius: var(--radius-m); background: var(--surface-2); display: grid; gap: var(--space-2); }
-ul.sm-deep-points { display: grid; gap: var(--space-1); padding-left: 1.1em; list-style: disc; }
-ul.sm-deep-points li::marker { color: var(--text-3); }
-.sm-deep-points li { font-size: var(--fs-caption); color: var(--text-2); }
-
-.sm-recall { display: grid; gap: var(--space-2); }
+.sm-steps p {
+  font-size: var(--fs-caption);
+}
+.sm-deep {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: var(--space-3);
+}
+.sm-deep-item {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  display: grid;
+  gap: var(--space-2);
+}
+ul.sm-deep-points {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: 1.1em;
+  list-style: disc;
+}
+ul.sm-deep-points li::marker {
+  color: var(--text-3);
+}
+.sm-deep-points li {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.sm-recall {
+  display: grid;
+  gap: var(--space-2);
+}
 /* --bg 위에 --surface-2를 바로 얹지 않는다 — 한 단씩 올린다 (DESIGN.md §4). */
-.sm-recall-item { border-radius: var(--radius-m); background: var(--surface); overflow: hidden; }
+.sm-recall-item {
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  overflow: hidden;
+}
 .sm-recall-item summary {
   display: flex;
   align-items: baseline;
@@ -222,13 +373,32 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   font-size: var(--fs-body-sm);
   list-style: none;
 }
-.sm-recall-item summary::-webkit-details-marker { display: none; }
+.sm-recall-item summary::-webkit-details-marker {
+  display: none;
+}
 /* 번호는 동그라미 뱃지가 아니라 숫자다 — .sm-d-n·.sm-steps와 같은 처리 (DESIGN.md §6).
    --accent on --surface 6.00:1. */
-.sm-recall-n { flex: none; min-width: 1.2em; color: var(--accent); font-size: var(--fs-micro); font-weight: 700; }
-.sm-recall-item > p { margin: 0; padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 1.2em + var(--space-3)); font-size: var(--fs-body-sm); color: var(--text-2); }
-
-.sm-flow { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.sm-recall-n {
+  flex: none;
+  min-width: 1.2em;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+.sm-recall-item > p {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 1.2em + var(--space-3));
+  font-size: var(--fs-body-sm);
+  color: var(--text-2);
+}
+.sm-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .sm-flow-step {
   display: flex;
   align-items: center;
@@ -238,9 +408,16 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   background: var(--surface-2);
   font-size: var(--fs-caption);
 }
-.sm-flow-step > span { color: var(--accent); font-weight: 700; font-size: var(--fs-micro); }
-
-.sm-concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: var(--space-3); }
+.sm-flow-step > span {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--fs-micro);
+}
+.sm-concept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: var(--space-3);
+}
 .sm-concept-card {
   display: grid;
   gap: var(--space-2);
@@ -269,15 +446,21 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   text-transform: uppercase;
   margin-bottom: 2px;
 }
-
 /* 마무리 줄 — 떠 있지 않으므로 그림자를 두지 않는다.
    --shadow-*는 시트·토스트 전용이다 (DESIGN.md §4). 상단 툴바가 이미 sticky다. */
-.sm-concept-finish { margin-top: var(--space-5); }
-.sm-source { font-size: var(--fs-micro); line-height: 1.7; color: var(--text-3); }
-
+.sm-concept-finish {
+  margin-top: var(--space-5);
+}
+.sm-source {
+  font-size: var(--fs-micro);
+  line-height: 1.7;
+  color: var(--text-3);
+}
 /* ---- 퀴즈 ---- */
-
-.sm-progress { display: grid; gap: var(--space-2); }
+.sm-progress {
+  display: grid;
+  gap: var(--space-2);
+}
 .sm-progress-meta {
   display: flex;
   justify-content: space-between;
@@ -285,17 +468,46 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.sm-track { height: 4px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
-.sm-fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width var(--dur-med) var(--ease-swift); }
-
-.sm-question { gap: var(--space-5); }
-
-.sm-media { display: grid; gap: var(--space-2); margin: 0; }
-.sm-media-link { display: block; border-radius: var(--radius-m); overflow: hidden; background: #fff; }
-.sm-media-link.is-failed { display: none; }
-.sm-media-img { width: 100%; height: auto; }
-.sm-media figcaption { font-size: var(--fs-micro); color: var(--text-3); }
-.sm-media.is-failed figcaption { display: none; }
+.sm-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.sm-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-med) var(--ease-swift);
+}
+.sm-question {
+  gap: var(--space-5);
+}
+.sm-media {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+.sm-media-link {
+  display: block;
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: #fff;
+}
+.sm-media-link.is-failed {
+  display: none;
+}
+.sm-media-img {
+  width: 100%;
+  height: auto;
+}
+.sm-media figcaption {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+.sm-media.is-failed figcaption {
+  display: none;
+}
 .sm-media-fallback {
   display: none;
   gap: var(--space-2);
@@ -304,13 +516,29 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-m);
 }
-.sm-media.is-failed .sm-media-fallback { display: grid; }
-.sm-media-fallback[hidden] { display: none; }
-.sm-media-fallback p { font-size: var(--fs-caption); color: var(--text-2); }
-.sm-media.is-review .sm-media-link { max-height: 520px; overflow: auto; }
-
-.sm-answer { display: grid; gap: var(--space-3); }
-.sm-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+.sm-media.is-failed .sm-media-fallback {
+  display: grid;
+}
+.sm-media-fallback[hidden] {
+  display: none;
+}
+.sm-media-fallback p {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.sm-media.is-review .sm-media-link {
+  max-height: 520px;
+  overflow: auto;
+}
+.sm-answer {
+  display: grid;
+  gap: var(--space-3);
+}
+.sm-choices {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
 .sm-choice {
   display: grid;
   place-items: center;
@@ -323,14 +551,30 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   font-weight: 700;
   transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
-.sm-choice:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-strong); }
-.sm-choice:active:not(:disabled) { transform: scale(.96); }
-.sm-choice:disabled { cursor: default; opacity: .55; }
-.sm-choice.is-correct { background: var(--green); border-color: var(--green); color: #000; opacity: 1; }
-.sm-choice.is-wrong { background: var(--red); border-color: var(--red); color: #fff; opacity: 1; }
-
+.sm-choice:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+}
+.sm-choice:active:not(:disabled) {
+  transform: scale(.96);
+}
+.sm-choice:disabled {
+  cursor: default;
+  opacity: .55;
+}
+.sm-choice.is-correct {
+  background: var(--green);
+  border-color: var(--green);
+  color: #000;
+  opacity: 1;
+}
+.sm-choice.is-wrong {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  opacity: 1;
+}
 /* ---- 채점 피드백 ---- */
-
 .sm-feedback {
   display: grid;
   gap: var(--space-4);
@@ -339,20 +583,44 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   border-radius: var(--radius-l);
   background: var(--surface-2);
 }
-.sm-feedback.is-correct { border-color: rgba(48,209,88,.45); }
-.sm-feedback.is-wrong { border-color: rgba(255,69,58,.45); }
-.sm-feedback-head { font-size: var(--fs-title-3); font-weight: 700; }
-.sm-feedback.is-correct .sm-feedback-head { color: var(--green); }
-.sm-feedback.is-wrong .sm-feedback-head { color: var(--red); }
-.sm-feedback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: var(--space-3); }
-.sm-feedback-cell { display: grid; gap: 2px; }
-.sm-feedback-cell small { font-size: var(--fs-micro); color: var(--text-2); }
-.sm-feedback-cell strong { font-size: var(--fs-body); }
-
-.sm-links { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-
+.sm-feedback.is-correct {
+  border-color: rgba(48,209,88,.45);
+}
+.sm-feedback.is-wrong {
+  border-color: rgba(255,69,58,.45);
+}
+.sm-feedback-head {
+  font-size: var(--fs-title-3);
+  font-weight: 700;
+}
+.sm-feedback.is-correct .sm-feedback-head {
+  color: var(--green);
+}
+.sm-feedback.is-wrong .sm-feedback-head {
+  color: var(--red);
+}
+.sm-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: var(--space-3);
+}
+.sm-feedback-cell {
+  display: grid;
+  gap: 2px;
+}
+.sm-feedback-cell small {
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.sm-feedback-cell strong {
+  font-size: var(--fs-body);
+}
+.sm-links {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
 /* ---- 해설 ---- */
-
 .sm-solution {
   display: grid;
   gap: var(--space-3);
@@ -361,31 +629,88 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   background: var(--bg-alt);
   border: 1px solid var(--line-faint);
 }
-.sm-solution.is-compact { background: transparent; }
-.sm-solution-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.sm-solution-head small { font-size: var(--fs-micro); color: var(--text-2); }
-.sm-reason { display: grid; gap: var(--space-1); padding-left: var(--space-3); border-left: 3px solid var(--line-strong); }
-.sm-reason.is-correct { border-left-color: var(--green); }
-.sm-reason.is-wrong { border-left-color: var(--red); }
-.sm-reason p { font-size: var(--fs-caption); color: var(--text); }
-.sm-solution-checks { display: grid; gap: var(--space-2); }
-.sm-solution-checks strong { font-size: var(--fs-micro); color: var(--text-2); letter-spacing: var(--ls-caps); text-transform: uppercase; }
-.sm-solution-source { display: grid; gap: var(--space-1); font-size: var(--fs-micro); color: var(--text-3); }
-
+.sm-solution.is-compact {
+  background: transparent;
+}
+.sm-solution-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sm-solution-head small {
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.sm-reason {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--line-strong);
+}
+.sm-reason.is-correct {
+  border-left-color: var(--green);
+}
+.sm-reason.is-wrong {
+  border-left-color: var(--red);
+}
+.sm-reason p {
+  font-size: var(--fs-caption);
+  color: var(--text);
+}
+.sm-solution-checks {
+  display: grid;
+  gap: var(--space-2);
+}
+.sm-solution-checks strong {
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+.sm-solution-source {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
 /* ---- 오답 진단 ---- */
-
-.sm-diagnosis { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-m); background: var(--red-soft); }
-.sm-diagnosis p { font-size: var(--fs-caption); color: var(--text); }
-.sm-diagnosis small { font-size: var(--fs-micro); color: var(--text-2); }
-.sm-reasons { flex-wrap: wrap; justify-self: start; }
-
+.sm-diagnosis {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--red-soft);
+}
+.sm-diagnosis p {
+  font-size: var(--fs-caption);
+  color: var(--text);
+}
+.sm-diagnosis small {
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.sm-reasons {
+  flex-wrap: wrap;
+  justify-self: start;
+}
 /* ---- 결과 · 오답 노트 ---- */
-
-.sm-result { gap: var(--space-5); }
-.sm-score { font-size: var(--fs-display); line-height: 1; font-weight: 800; letter-spacing: var(--ls-display); }
-
-.sm-mistakes { display: grid; gap: var(--space-4); }
-.sm-mistake { background: var(--surface); }
+.sm-result {
+  gap: var(--space-5);
+}
+.sm-score {
+  font-size: var(--fs-display);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: var(--ls-display);
+}
+.sm-mistakes {
+  display: grid;
+  gap: var(--space-4);
+}
+.sm-mistake {
+  background: var(--surface);
+}
 .sm-compare {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -395,17 +720,27 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   border-radius: var(--radius-m);
   background: var(--surface-2);
 }
-.sm-compare small { display: block; font-size: var(--fs-micro); color: var(--text-2); }
-.sm-answer-wrong { color: var(--red); }
-.sm-answer-correct { color: var(--green); }
-
+.sm-compare small {
+  display: block;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.sm-answer-wrong {
+  color: var(--red);
+}
+.sm-answer-correct {
+  color: var(--green);
+}
 /* ---- 통계 ---- */
-
 /* 정확도 행 — 그룹 리스트 행에 진행 막대를 액세서리로 붙인다.
    막대는 사용자의 실제 풀이 기록에만 쓴다 (DESIGN.md §6). */
-.sm-rate .sm-meter { flex: 0 1 110px; min-width: 60px; }
-.sm-rate .list-row-value { min-width: 3.2em; }
-
+.sm-rate .sm-meter {
+  flex: 0 1 110px;
+  min-width: 60px;
+}
+.sm-rate .list-row-value {
+  min-width: 3.2em;
+}
 /* ---- 개념 다이어그램 (diagram.js) ----
    색은 여기서만 정한다. diagram.js는 클래스와 currentColor만 쓴다.
    조판도 여기서 한다 — 렌더러는 좌표를 계산하지 않고 의미 있는 마크업만 낸다.
@@ -421,7 +756,6 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
      --text-2 #a1a1a6 on --surface-2 #1d1d1f 6.54:1   (캡션 하한 4.5:1 충족)
      --text   #f5f5f7 on --surface-2 #1d1d1f 15.46:1  (.sm-d-head strong, .sm-d-mark)
    ---------------------------------------------------------------------- */
-
 .sm-diagrams {
   display: grid;
   gap: var(--space-5);
@@ -438,7 +772,10 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   word-break: keep-all;
   overflow-wrap: break-word;
 }
-.sm-diagram-head strong { font-size: var(--fs-body); font-weight: 600; }
+.sm-diagram-head strong {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
 /* 형식 이름표 칩('대립 저울' 등)은 제거했다 — 학습자에게 필요 없는 메타 정보였다.
    설명 캡션도 제목과 조판이 이미 말하는 내용이라 **화면에서는 감추고** 보조 기술에만 남긴다
    (figure의 접근 가능한 이름은 여전히 이 문장이다). display:none이면 읽히지 않으므로 쓰지 않는다. */
@@ -453,9 +790,7 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   white-space: nowrap;
   border: 0;
 }
-
 /* ---- 노드 공통 (모든 형식이 같은 제목 줄·항목 목록을 쓴다) ---- */
-
 .sm-d-head {
   display: flex;
   align-items: baseline;
@@ -463,7 +798,10 @@ ul.sm-deep-points li::marker { color: var(--text-3); }
   font-size: var(--fs-caption);
   line-height: 1.4;
 }
-.sm-d-head strong { color: var(--text); font-weight: 600; }
+.sm-d-head strong {
+  color: var(--text);
+  font-weight: 600;
+}
 /* 번호는 동그라미 뱃지가 아니라 숫자다 (DESIGN.md §4 장식 상한). */
 .sm-d-n {
   flex: none;
@@ -487,15 +825,15 @@ ul.sm-d-items {
   line-height: 1.5;
   color: var(--text-2);
 }
-.sm-d-items li::marker { color: var(--line-strong); }
-
+.sm-d-items li::marker {
+  color: var(--line-strong);
+}
 /* ---- flow — 판별 절차 스테퍼 (번호 거터 + 연결선) ----
    이전 조판(왼쪽 라벨 / 오른쪽 결과의 두 열 grid)은 넓은 카드에서 두 열 사이가 빈
    벌판이 되고, 라벨 caption·항목 micro가 전부 잿빛이라 와이어프레임처럼 보였다.
    번호를 고정 폭 거터(--space-5)에 세우고 그 아래로 얇은 연결선을 내려 "위에서
    아래로 차례로 판정한다"를 조판이 직접 말하게 한다. 항목은 라벨 바로 아래
    들여쓰기로 붙인다. 화살표·뱃지·상자는 여전히 쓰지 않는다 (DESIGN.md §4). */
-
 .sm-d-flow {
   display: grid;
   gap: 0;
@@ -507,7 +845,9 @@ ul.sm-d-items {
   position: relative;
   padding: 0 0 var(--space-4);
 }
-.sm-d-flow > .sm-d-node:last-child { padding-bottom: 0; }
+.sm-d-flow > .sm-d-node:last-child {
+  padding-bottom: 0;
+}
 /* 단계를 잇는 연결선 — 번호 밑에서 다음 번호 직전까지, 번호 거터 중앙을 지난다. */
 .sm-d-flow > .sm-d-node::before {
   content: '';
@@ -518,7 +858,9 @@ ul.sm-d-items {
   width: 1px;
   background: var(--line-strong);
 }
-.sm-d-flow > .sm-d-node:last-child::before { content: none; }
+.sm-d-flow > .sm-d-node:last-child::before {
+  content: none;
+}
 .sm-d-flow .sm-d-head {
   gap: var(--space-2);
   font-size: var(--fs-body-sm);
@@ -534,10 +876,10 @@ ul.sm-d-items {
   margin-top: var(--space-1);
   margin-left: calc(var(--space-5) + var(--space-2));
 }
-.sm-d-flow .sm-d-items li { font-size: var(--fs-caption); }
-
+.sm-d-flow .sm-d-items li {
+  font-size: var(--fs-caption);
+}
 /* ---- timeline — 그리드 열 (교대 배치 없음) ---- */
-
 .sm-d-timeline {
   display: grid;
   grid-auto-flow: column;
@@ -552,10 +894,11 @@ ul.sm-d-items {
   border-left: 1px solid var(--line-faint);
   padding-left: var(--space-3);
 }
-.sm-d-timeline > .sm-d-node:first-child { border-left: 0; padding-left: 0; }
-
+.sm-d-timeline > .sm-d-node:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
 /* ---- pyramid — 폭이 줄어드는 가로 막대 스택 ---- */
-
 .sm-d-pyramid {
   display: grid;
   gap: var(--space-2);
@@ -574,16 +917,29 @@ ul.sm-d-items {
   text-align: center;
 }
 /* 폭은 아래에서부터 센다 — 층 수를 마크업이 알려 주지 않아도 위가 좁아진다. */
-.sm-d-pyramid > .sm-d-node:nth-last-child(2) { width: 84%; }
-.sm-d-pyramid > .sm-d-node:nth-last-child(3) { width: 68%; }
-.sm-d-pyramid > .sm-d-node:nth-last-child(4) { width: 54%; }
-.sm-d-pyramid > .sm-d-node:nth-last-child(5) { width: 42%; }
-.sm-d-pyramid .sm-d-head { justify-content: center; }
-.sm-d-pyramid ul.sm-d-items { padding-left: 0; list-style: none; }
-.sm-d-pyramid .sm-d-items li { text-align: center; }
-
+.sm-d-pyramid > .sm-d-node:nth-last-child(2) {
+  width: 84%;
+}
+.sm-d-pyramid > .sm-d-node:nth-last-child(3) {
+  width: 68%;
+}
+.sm-d-pyramid > .sm-d-node:nth-last-child(4) {
+  width: 54%;
+}
+.sm-d-pyramid > .sm-d-node:nth-last-child(5) {
+  width: 42%;
+}
+.sm-d-pyramid .sm-d-head {
+  justify-content: center;
+}
+.sm-d-pyramid ul.sm-d-items {
+  padding-left: 0;
+  list-style: none;
+}
+.sm-d-pyramid .sm-d-items li {
+  text-align: center;
+}
 /* ---- matrix2x2 — 2×2 그리드. 칸 사이 실선이 교차하는 두 기준을 말한다. ---- */
-
 .sm-d-quads {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -596,10 +952,11 @@ ul.sm-d-items {
   overflow: hidden;
   list-style: none;
 }
-.sm-d-quads > .sm-d-node { padding: var(--space-3) var(--space-4); background: var(--surface); }
-
+.sm-d-quads > .sm-d-node {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
 /* ---- radial — 중심 개념은 제목 줄, 갈래는 카드 그리드 ---- */
-
 .sm-d-center {
   display: flex;
   align-items: center;
@@ -608,7 +965,9 @@ ul.sm-d-items {
   border-bottom: 1px solid var(--line);
   font-size: var(--fs-caption);
 }
-.sm-d-center strong { font-weight: 600; }
+.sm-d-center strong {
+  font-weight: 600;
+}
 .sm-d-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
@@ -623,9 +982,7 @@ ul.sm-d-items {
   border-radius: var(--radius-s);
   background: var(--surface);
 }
-
 /* ---- venn — 원은 SVG, 이름과 세부는 아래 범례 ---- */
-
 .sm-d-legend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
@@ -634,9 +991,7 @@ ul.sm-d-items {
   padding: 0;
   list-style: none;
 }
-
 /* ---- scale — 대립 2열. 저울 그림 없이 두 극을 나란히 놓는다 ---- */
-
 .sm-d-poles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
@@ -645,63 +1000,138 @@ ul.sm-d-items {
   padding: 0;
   list-style: none;
 }
-.sm-d-poles > .sm-d-node { padding-top: var(--space-2); border-top: 1px solid var(--line); }
-
+.sm-d-poles > .sm-d-node {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
 /* ---- 장식 SVG (venn 전용) ---- */
-
-.sm-d-art { display: block; margin-inline: auto; width: min(100%, 460px); }
-.sm-d-svg { display: block; width: 100%; height: auto; color: var(--accent); }
-.sm-d-venn { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
-.sm-d-mark { fill: var(--text); font-size: 22px; font-weight: 700; }
-
+.sm-d-art {
+  display: block;
+  margin-inline: auto;
+  width: min(100%, 460px);
+}
+.sm-d-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--accent);
+}
+.sm-d-venn {
+  fill: var(--accent);
+  fill-opacity: .13;
+  stroke: var(--accent);
+  stroke-opacity: .55;
+  stroke-width: 1.5;
+}
+.sm-d-mark {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+}
 /* 좁은 컨테이너·좁은 뷰포트에서 같은 조판으로 접는다. 장식 SVG는 숨기고, 열은 행으로 편다. */
 @container smdiagram (max-width: 420px) {
-  .sm-d-art { display: none; }
-  .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
-  .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
-  .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
-  .sm-d-quads { grid-template-columns: minmax(0, 1fr); }
-  .sm-d-pyramid > .sm-d-node { width: 100%; }
+  .sm-d-art {
+    display: none;
+  }
+  .sm-d-timeline {
+    grid-auto-flow: row;
+    border-top: 0;
+  }
+  .sm-d-timeline > .sm-d-node {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--line-faint);
+  }
+  .sm-d-timeline > .sm-d-node:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .sm-d-quads {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sm-d-pyramid > .sm-d-node {
+    width: 100%;
+  }
 }
-
 /* 컨테이너 쿼리를 못 쓰는 환경을 위한 뷰포트 기준 안전망 (같은 조판). */
 @media (max-width: 460px) {
-  .sm-d-art { display: none; }
-  .sm-d-timeline { grid-auto-flow: row; border-top: 0; }
-  .sm-d-timeline > .sm-d-node { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-faint); }
-  .sm-d-timeline > .sm-d-node:first-child { border-top: 0; padding-top: 0; }
-  .sm-d-quads { grid-template-columns: minmax(0, 1fr); }
-  .sm-d-pyramid > .sm-d-node { width: 100%; }
+  .sm-d-art {
+    display: none;
+  }
+  .sm-d-timeline {
+    grid-auto-flow: row;
+    border-top: 0;
+  }
+  .sm-d-timeline > .sm-d-node {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--line-faint);
+  }
+  .sm-d-timeline > .sm-d-node:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .sm-d-quads {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sm-d-pyramid > .sm-d-node {
+    width: 100%;
+  }
 }
-
-
 /* ---- 반응형 ---- */
-
 @media (max-width: 1024px) {
-  .sm-layout { grid-template-columns: minmax(0, 1fr); }
-  .sm-panel { position: static; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+  .sm-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sm-panel {
+    position: static;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  }
 }
-
 @media (max-width: 640px) {
-  .sm-swipe { display: inline; }
-  .sm-choices { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); }
-  .sm-choice { padding: var(--space-3) 0; font-size: var(--fs-title-3); }
-  .sm-compare { grid-template-columns: minmax(0, 1fr); }
-  .sm-compare > span { display: none; }
+  .sm-swipe {
+    display: inline;
+  }
+  .sm-choices {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+  .sm-choice {
+    padding: var(--space-3) 0;
+    font-size: var(--fs-title-3);
+  }
+  .sm-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sm-compare > span {
+    display: none;
+  }
   /* 좁은 폭에서는 막대를 접는다 — 제목과 수치가 먼저다. */
-  .sm-rate .sm-meter { display: none; }
+  .sm-rate .sm-meter {
+    display: none;
+  }
   /* 좁은 폭에서는 select 앞의 라벨을 접는다 — 선택값 자체가 라벨 역할을 한다.
      접근 가능한 이름은 aria-label로 유지한다. */
-  .sm-jump-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .sm-jump { flex: 1 1 110px; max-width: none; }
-  .sm-concept-nav .toolbar-spacer { display: none; }
+  .sm-jump-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .sm-jump {
+    flex: 1 1 110px;
+    max-width: none;
+  }
+  .sm-concept-nav .toolbar-spacer {
+    display: none;
+  }
 }
-
 /* ==========================================================================
    인쇄 — 개념 노트를 종이로 출력할 때만 라이트 팔레트로 전환한다.
    :root가 아니라 html에 재정의해 토큰 단일 원본 규칙(C-3)을 유지한다.
    ========================================================================== */
-
 @media print {
   html {
     color-scheme: light;
@@ -734,39 +1164,56 @@ ul.sm-d-items {
     --accent-strong: #0e5570;
     --red-bright: #8c1e17;
   }
-
-  body { background: #fff; color: #101418; }
-
-  .topbar,
-  .topbar-spacer,
-  .sidebar,
-  .app-footer,
-  .sm-concept-nav,
-  .sm-concept-finish,
-  .list-row-accessory,
-  .view-head .btn,
-  .toast { display: none !important; }
-
-  .app-shell { grid-template-columns: minmax(0, 1fr); }
-  .app-page { padding: 0; }
-
+  body {
+    background: #fff;
+    color: #101418;
+  }
+  .topbar, .topbar-spacer, .sidebar, .app-footer, .sm-concept-nav, .sm-concept-finish, .list-row-accessory, .view-head .btn, .toast {
+    display: none !important;
+  }
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-page {
+    padding: 0;
+  }
   /* 접힌 섹션은 인쇄물에서 통째로 사라진다. app.js의 beforeprint 처리가 details를
      실제로 펼치고, 여기서는 펼침 표시자만 지운다(종이에는 조작 대상이 없다). */
-  .disclosure-head::after { display: none; }
-
-  .card,
-  .sm-section,
-  .disclosure,
-  .sm-mistake { break-inside: avoid; box-shadow: none; border-color: #c9d0d5; }
-
-  .sm-choice.is-correct { background: #187341; color: #fff; }
-  .sm-choice.is-wrong { background: #a3231b; color: #fff; }
-
-  .sm-d-art { display: block; }
-  .sm-diagram { break-inside: avoid; }
-
-  .sm-matrix-wrap { overflow: visible; max-height: none; }
-  .sm-matrix { font-size: 9px; }
-  .sm-matrix th, .sm-matrix td { min-width: 0; }
-  .sm-matrix tbody th { position: static; background: #f6f7f8; color: #101418; }
+  .disclosure-head::after {
+    display: none;
+  }
+  .card, .sm-section, .disclosure, .sm-mistake {
+    break-inside: avoid;
+    box-shadow: none;
+    border-color: #c9d0d5;
+  }
+  .sm-choice.is-correct {
+    background: #187341;
+    color: #fff;
+  }
+  .sm-choice.is-wrong {
+    background: #a3231b;
+    color: #fff;
+  }
+  .sm-d-art {
+    display: block;
+  }
+  .sm-diagram {
+    break-inside: avoid;
+  }
+  .sm-matrix-wrap {
+    overflow: visible;
+    max-height: none;
+  }
+  .sm-matrix {
+    font-size: 9px;
+  }
+  .sm-matrix th, .sm-matrix td {
+    min-width: 0;
+  }
+  .sm-matrix tbody th {
+    position: static;
+    background: #f6f7f8;
+    color: #101418;
+  }
 }

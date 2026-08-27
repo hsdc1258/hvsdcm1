@@ -25,66 +25,97 @@
      --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
      --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
    ========================================================================== */
-
-.hidden { display: none !important; }
-
+.hidden {
+  display: none !important;
+}
 /* ---- 로그인 ---- */
-
-.ad-login { display: grid; place-items: center; min-height: 60dvh; }
-
+.ad-login {
+  display: grid;
+  place-items: center;
+  min-height: 60dvh;
+}
 .ad-login-card {
   display: grid;
   gap: var(--space-4);
   width: min(360px, 100%);
 }
-.ad-login-sub { font-size: var(--fs-caption); color: var(--text-2); margin-top: 2px; }
-
+.ad-login-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  margin-top: 2px;
+}
 /* ---- 패널 ---- */
-
-.ad-panel { display: grid; gap: var(--space-5); }
-
+.ad-panel {
+  display: grid;
+  gap: var(--space-5);
+}
 /* 뷰 컨테이너 — 한 번에 하나만 보인다. hidden 속성으로 감추므로 여기서 display를 주면
    UA의 [hidden] 규칙을 이겨 버린다. 그래서 :not([hidden])에만 display를 건다. */
-.ad-view { display: none; }
-.ad-view:not([hidden]) { display: grid; gap: var(--space-3); }
+.ad-view {
+  display: none;
+}
+.ad-view:not([hidden]) {
+  display: grid;
+  gap: var(--space-3);
+}
 /* 그리드 자식의 기본 min-width는 auto다. 그래서 넓은 표를 감싼 .table-wrap이 자기
    가로 스크롤 폭 아래로 줄지 못하고 페이지 전체를 밀어냈다(768px에서 140px 넘침).
    여기서 축소를 허용해야 스크롤이 .table-wrap 안에서 일어난다. */
-.ad-panel > *, .ad-view > * { min-width: 0; }
-
+.ad-panel > *, .ad-view > * {
+  min-width: 0;
+}
 .ad-filter-label {
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--text-3);   /* on --bg 5.80:1 */
+  color: var(--text-3);
+  /* on --bg 5.80:1 */
 }
-
 /* ---- 툴바 ---- */
-
-.ad-add-fields { flex: 1 1 320px; gap: var(--space-2); }
-.ad-add-fields .field-input { flex: 1 1 150px; min-width: 0; }
-
-.ad-note { font-size: var(--fs-micro); color: var(--text-3); flex: 1 1 240px; }
-
+.ad-add-fields {
+  flex: 1 1 320px;
+  gap: var(--space-2);
+}
+.ad-add-fields .field-input {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.ad-note {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  flex: 1 1 240px;
+}
 /* ---- 표 ---- */
-
 .ad-caption {
   padding: 9px 14px;
   text-align: left;
   font-size: var(--fs-micro);
-  color: var(--text-3);   /* on --surface 4.99:1 */
+  color: var(--text-3);
+  /* on --surface 4.99:1 */
   border-bottom: 1px solid var(--line-faint);
 }
-
 /* 수치 열 — 자릿수가 흔들리지 않게 우측 정렬 + 고정폭 숫자 (HIG의 표 정렬). */
-.ad-n { text-align: right; font-variant-numeric: tabular-nums; }
-.table th.ad-n { text-align: right; }
-
-.ad-ip { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-2); }
-
-.ad-device { display: grid; gap: 1px; max-width: 260px; }
-.ad-device strong { font-weight: 600; }
+.ad-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table th.ad-n {
+  text-align: right;
+}
+.ad-ip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.ad-device {
+  display: grid;
+  gap: 1px;
+  max-width: 260px;
+}
+.ad-device strong {
+  font-weight: 600;
+}
 .ad-device small {
   font-size: var(--fs-micro);
   color: var(--text-3);
@@ -92,13 +123,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.ad-row-actions { display: flex; gap: var(--space-2); }
-
-.ad-empty { padding: var(--space-6); text-align: center; color: var(--text-2); }
-
+.ad-row-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.ad-empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-2);
+}
 /* ---- 반응형 ---- */
-
 @media (max-width: 860px) {
-  .ad-panel { gap: var(--space-4); }
+  .ad-panel {
+    gap: var(--space-4);
+  }
 }

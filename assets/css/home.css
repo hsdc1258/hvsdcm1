@@ -5,9 +5,7 @@
    토큰은 system.css만 소비한다(:root 정의 금지). 프리미티브를 다시 만들지 않는다 —
    그룹 리스트·카드·뱃지·버튼은 system.css의 것을 그대로 쓴다.
    ========================================================================== */
-
 /* ---- 상단바: 랜딩 전용 요소 ---- */
-
 .menu-button {
   width: 36px;
   height: 36px;
@@ -20,7 +18,9 @@
   background: transparent;
   transition: background var(--dur-fast) var(--ease-out);
 }
-.menu-button:hover { background: var(--line-faint); }
+.menu-button:hover {
+  background: var(--line-faint);
+}
 .menu-button span {
   grid-area: 1 / 1;
   width: 17px;
@@ -29,16 +29,22 @@
   background: var(--text);
   transition: transform var(--dur-med) var(--ease-swift);
 }
-.menu-button span:first-child { transform: translateY(-3.5px); }
-.menu-button span:last-child { transform: translateY(3.5px); }
-.menu-button.open span:first-child { transform: rotate(45deg); }
-.menu-button.open span:last-child { transform: rotate(-45deg); }
-
-
-body.logged .topbar-login { display: none; }
-
+.menu-button span:first-child {
+  transform: translateY(-3.5px);
+}
+.menu-button span:last-child {
+  transform: translateY(3.5px);
+}
+.menu-button.open span:first-child {
+  transform: rotate(45deg);
+}
+.menu-button.open span:last-child {
+  transform: rotate(-45deg);
+}
+body.logged .topbar-login {
+  display: none;
+}
 /* ---- 드로어 ---- */
-
 .shade {
   position: fixed;
   inset: 0;
@@ -54,7 +60,6 @@ body.logged .topbar-login { display: none; }
   visibility: visible;
   transition: opacity var(--dur-med) var(--ease-out);
 }
-
 .drawer {
   position: fixed;
   top: 0;
@@ -80,20 +85,26 @@ body.logged .topbar-login { display: none; }
   visibility: visible;
   transition: transform var(--dur-med) var(--ease-swift);
 }
-
-.drawer-head { padding: var(--space-1) var(--space-2) 0; }
-.drawer-head .brand { font-size: 1.1875rem; }
-
+.drawer-head {
+  padding: var(--space-1) var(--space-2) 0;
+}
+.drawer-head .brand {
+  font-size: 1.1875rem;
+}
 /* 드로어의 로그인-후 그룹. 노드 자체가 로그인 시에만 주입되므로(home.js) 이 규칙은
    이중 안전장치다 — .drawer-owner는 소유자에게만 주입된다 (review WP1 M-5). */
-.drawer-study,
-.drawer-owner { display: none; }
-.drawer.logged .drawer-study,
-.drawer.logged .drawer-owner { display: grid; gap: var(--space-2); }
+.drawer-study, .drawer-owner {
+  display: none;
+}
+.drawer.logged .drawer-study, .drawer.logged .drawer-owner {
+  display: grid;
+  gap: var(--space-2);
+}
 /* 드로어 안의 그룹은 --surface 위에 놓이므로 한 단 올려 경계를 만든다. */
-.drawer-study .list-group,
-.drawer-owner .list-group { background: var(--surface-2); border-color: transparent; }
-
+.drawer-study .list-group, .drawer-owner .list-group {
+  background: var(--surface-2);
+  border-color: transparent;
+}
 .drawer-bottom {
   margin-top: auto;
   display: grid;
@@ -101,40 +112,56 @@ body.logged .topbar-login { display: none; }
   border-top: 1px solid var(--line-faint);
   padding-top: var(--space-3);
 }
-.drawer-social { display: flex; gap: var(--space-1); }
-.drawer-logout { display: none; color: var(--red); }
-.drawer-logout:hover { color: var(--red); background: var(--red-soft); }
-.drawer.logged .drawer-logout { display: flex; }
-
+.drawer-social {
+  display: flex;
+  gap: var(--space-1);
+}
+.drawer-logout {
+  display: none;
+  color: var(--red);
+}
+.drawer-logout:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.drawer.logged .drawer-logout {
+  display: flex;
+}
 /* ---- 히어로 ---- */
-
 .hero {
   padding: calc(var(--topbar-h) + clamp(56px, 3rem + 6vw, 120px)) 0 var(--section-gap);
 }
-
 .hero-inner {
   display: grid;
   justify-items: center;
   text-align: center;
   gap: var(--space-3);
 }
-
 /* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠한다. */
 .hero-title {
   max-width: 14ch;
   color: var(--text);
 }
-
 /* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
 /* 로그인 후에는 "Welcome," + 사용자명 두 줄이 된다 — 행간을 한 단 더 연다. */
-.hero-title[data-user] { font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem); line-height: 1.2; max-width: 18ch; }
-.hero-title .welcome-user { display: block; }
-.hero-title a.welcome-user { color: var(--accent); }
-.hero-title a.welcome-user:hover { text-decoration: underline; }
-
+.hero-title[data-user] {
+  font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem);
+  line-height: 1.2;
+  max-width: 18ch;
+}
+.hero-title .welcome-user {
+  display: block;
+}
+.hero-title a.welcome-user {
+  color: var(--accent);
+}
+.hero-title a.welcome-user:hover {
+  text-decoration: underline;
+}
 /* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
-.hero-sub { max-width: 26em; }
-
+.hero-sub {
+  max-width: 26em;
+}
 .hero-actions {
   margin-top: var(--space-4);
   display: flex;
@@ -143,20 +170,20 @@ body.logged .topbar-login { display: none; }
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-5);
 }
-
 /* 로그인하면 히어로의 로그인 버튼이 빠지고 "프로필 보기"만 남는다.
    학습 진입은 본문이 아니라 좌상단 드로어가 전담한다 (plan.md §1-1). */
-.account.logged #loginBtn { display: none; }
-
+.account.logged #loginBtn {
+  display: none;
+}
 /* ---- 섹션 리듬 ---- */
-
 .section {
   /* #contact 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
   scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
   padding-bottom: var(--section-gap);
 }
-.section-last { padding-bottom: var(--space-9); }
-
+.section-last {
+  padding-bottom: var(--space-9);
+}
 /* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
 .section-head {
   display: grid;
@@ -164,15 +191,19 @@ body.logged .topbar-login { display: none; }
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-.section-head h2 { max-width: 16em; }
-
+.section-head h2 {
+  max-width: 16em;
+}
 /* ---- 연락 리스트: 브랜드 마크를 이모지 슬롯에 담는다 ---- */
-
-.emoji-box svg { width: 17px; height: 17px; color: var(--text-2); }
-.list-row:hover .emoji-box svg { color: var(--text); }
-
+.emoji-box svg {
+  width: 17px;
+  height: 17px;
+  color: var(--text-2);
+}
+.list-row:hover .emoji-box svg {
+  color: var(--text);
+}
 /* ---- 푸터 ---- */
-
 .footer {
   border-top: 1px solid var(--line-faint);
   padding: var(--space-5) 0;
@@ -183,11 +214,21 @@ body.logged .topbar-login { display: none; }
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-.footer-brand { font-size: var(--fs-caption); }
-.footer-copy { margin-left: auto; font-size: var(--fs-caption); }
-
+.footer-brand {
+  font-size: var(--fs-caption);
+}
+.footer-copy {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+}
 /* ---- 로그인 시트 ---- */
-
-.login-sheet { display: grid; gap: var(--space-4); }
-.login-sheet .sheet-sub { margin: calc(var(--space-2) * -1) 0 var(--space-1); }
-.login-submit { margin-top: var(--space-1); }
+.login-sheet {
+  display: grid;
+  gap: var(--space-4);
+}
+.login-sheet .sheet-sub {
+  margin: calc(var(--space-2) * -1) 0 var(--space-1);
+}
+.login-submit {
+  margin-top: var(--space-1);
+}

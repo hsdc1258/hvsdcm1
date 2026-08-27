@@ -1,4 +1,11 @@
+// CSS 포매터. 인자를 주지 않으면 **대상을 저장소에서 도출한다** — 손으로 적은 목록은
+// 새 화면의 CSS를 빠뜨리고, 그러면 "명령은 있는데 저장소와 어긋난" 상태로 되돌아간다
+// (review WP1 M-4 / M-3, LESSONS "파생 가능한 것을 손으로 적지 않는다").
+// `--check`는 쓰지 않고 어긋난 파일만 알린다 — npm test가 이 모드로 포맷을 잠근다.
+import { readdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function formatCss(source) {
   let output = '';
@@ -92,13 +99,40 @@ function formatCss(source) {
   return `${output.trim()}\n`;
 }
 
-const files = process.argv.slice(2);
-if (files.length === 0) {
-  console.error('Usage: node scripts/format-css.mjs <file...>');
-  process.exitCode = 1;
-} else {
-  for (const file of files) {
-    const source = await readFile(file, 'utf8');
-    await writeFile(file, formatCss(source));
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// 벤더 CSS는 남의 파일이라 손대지 않는다. 그 밖의 저장소 CSS는 전부 대상이다.
+function repoStylesheets(directory = ROOT) {
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.wrangler') continue;
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'vendor') continue;
+      files.push(...repoStylesheets(absolute));
+    } else if (entry.name.endsWith('.css')) {
+      files.push(absolute);
+    }
   }
+  return files;
+}
+
+const args = process.argv.slice(2);
+const checkOnly = args.includes('--check');
+const named = args.filter((argument) => argument !== '--check');
+const files = named.length > 0 ? named : repoStylesheets();
+
+const unformatted = [];
+for (const file of files) {
+  const source = await readFile(file, 'utf8');
+  const formatted = formatCss(source);
+  if (source === formatted) continue;
+  if (checkOnly) unformatted.push(path.relative(ROOT, path.resolve(file)).split(path.sep).join('/'));
+  else await writeFile(file, formatted);
+}
+
+if (checkOnly && unformatted.length > 0) {
+  console.error(`format:css — ${unformatted.length} stylesheet(s) are not formatted: ${unformatted.join(', ')}`);
+  console.error('run: npm run format:css');
+  process.exitCode = 1;
 }

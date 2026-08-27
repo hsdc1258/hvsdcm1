@@ -296,7 +296,8 @@ function validateUiContracts() {
 
   // 3c에서 앱 셸 보조 규칙(.app-main / .view-head / .side-* / .app-footer / .app-page)을
   // system.css로 승격했다. 화면마다 같은 규칙을 다시 두지 않으므로 단일 원본에서 확인한다.
-  check(systemCss.includes('.app-main:focus { outline: none; }'), 'system.css: programmatic main focus must not paint an outline');
+  // 조판이 아니라 규칙을 본다 — 포매터가 한 줄 규칙을 펼쳐도 계약은 그대로다 (review WP1 M-4).
+  check(/\.app-main:focus\s*\{\s*outline:\s*none;?\s*\}/u.test(systemCss), 'system.css: programmatic main focus must not paint an outline');
   for (const primitive of ['.app-page', '.app-main', '.view-head', '.view-head-main', '.side-facts', '.side-note', '.app-footer', '.sr-only', '.list-row-stretch', '.list-row-accessory', '.disclosure', '.disclosure-head', '.disclosure-body', '.list-group-head-row',
     // 사이클5 — 콘솔 대시보드 프리미티브 (plan.md §3.4). admin과 usage가 공유한다.
     '.sidebar-label', '.summary-strip', '.summary-cell', '.status-dot', '.gauge-track', '.gauge-fill']) {
@@ -375,7 +376,9 @@ function validateUiContracts() {
   check(adminHtml.includes('content="noindex, nofollow"'), 'admin: dashboard must stay unindexed');
   check(/<table class="table">/u.test(adminHtml), 'admin: tables must use the shared table primitive');
   check(/id="panel"[^>]*\bhidden\b/u.test(adminHtml), 'admin: dashboard panel must start hidden');
-  check(adminCss.includes('.hidden { display: none !important; }'), 'admin: hidden-state utility is missing');
+  // 조판이 아니라 규칙을 본다 — `npm run format:css`가 한 줄 규칙을 펼쳐도 계약은 그대로다 (review WP1 M-4).
+  check(/\.hidden\s*\{\s*display:\s*none\s*!important;?\s*\}/u.test(adminCss),
+    'admin: hidden-state utility (.hidden { display: none !important }) is missing');
   check(adminJs.includes('btn btn-danger btn-sm delete-user'), 'admin: destructive user action must use the danger button primitive');
 
   // ---- 어드민 카테고리 뷰 (plan.md §3 요구사항 3 / §3.4) ----
