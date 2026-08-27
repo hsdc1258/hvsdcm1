@@ -666,8 +666,15 @@ test('harness report keeps the merged actor total within twenty', async () => {
 
 // review M-A1 — SELECT→merge→UPSERT는 버전 검사가 없으면 늦게 도착한 과거 보고가
 // 끝난 태스크를 되살리고 최신 상태를 덮어쓴다. 저장 자체를 막는지 확인한다.
+// 가짜 D1은 UPSERT를 무조건 적용하지 않고 WHERE 절의 의미를 그대로 흉내 낸다 —
+// 그러지 않으면 "조건부 UPSERT"를 고쳐도 테스트가 아무것도 검증하지 못한다.
+// datetime()은 오프셋 표기와 Z를 모두 UTC로 환산하고 읽을 수 없는 값은 NULL이 되는데,
+// Date.parse가 정확히 같은 순서를 본다(실측 확인: sqlite 3.53.3).
+// state.readOverride를 채우면 SELECT만 옛 스냅샷을 보게 되어 동시 보고를 재현할 수 있다.
 function harnessStoreEnv() {
-  const state = { payload: '', status: '', updatedAt: '', upserts: 0 };
+  const state = {
+    payload: '', status: '', updatedAt: '', upserts: 0, rejected: 0, readOverride: null,
+  };
   return {
     state,
     env: {
@@ -676,21 +683,43 @@ function harnessStoreEnv() {
       DB: {
         prepare(sql) {
           if (sql.includes('SELECT payload FROM harness_tasks')) {
-            return { bind() { return { async first() { return state.payload ? { payload: state.payload } : null; } }; } };
+            return {
+              bind() {
+                return {
+                  async first() {
+                    const stored = state.readOverride ?? state.payload;
+                    return stored ? { payload: stored } : null;
+                  },
+                };
+              },
+            };
           }
           if (sql.includes('INSERT INTO harness_tasks')) {
             // 동시 보고 방어는 D1 쪽 조건부 UPSERT도 함께 쓴다 — 마이그레이션 없이
-            // 기존 컬럼(updated_at)만 비교한다.
-            assert.match(sql, /WHERE excluded\.updated_at >= harness_tasks\.updated_at/u);
+            // 기존 컬럼(updated_at, status)만 비교한다. 시각 비교는 사전순이 아니라
+            // datetime() 기반이어야 오프셋 표기가 섞여도 순서가 뒤집히지 않는다.
+            assert.match(
+              sql,
+              /WHERE \(datetime\(excluded\.updated_at\) >= datetime\(harness_tasks\.updated_at\)\s*\n?\s*OR datetime\(harness_tasks\.updated_at\) IS NULL\)/u,
+            );
+            const guardsTerminal = sql.includes("harness_tasks.status != 'complete'");
             return {
               bind(taskId, status, updatedAt, payload) {
                 return {
                   async run() {
+                    if (state.updatedAt) {
+                      const storedAt = Date.parse(state.updatedAt);
+                      const orderOk = !Number.isFinite(storedAt) || Date.parse(updatedAt) >= storedAt;
+                      if (!orderOk || (guardsTerminal && state.status === 'complete')) {
+                        state.rejected += 1;
+                        return { success: true, meta: { changes: 0 } };
+                      }
+                    }
                     state.upserts += 1;
                     state.status = status;
                     state.updatedAt = updatedAt;
                     state.payload = payload;
-                    return { success: true };
+                    return { success: true, meta: { changes: 1 } };
                   },
                 };
               },
@@ -788,6 +817,106 @@ test('two reports from separate harnesses keep both actors on the shared task', 
     JSON.parse(state.payload).actors.map((entry) => entry.id),
     ['usage-harness:codex-side', 'usage-harness:claude-side'],
   );
+});
+
+// 위 가짜 D1은 "SQLite datetime()이 Date.parse와 같은 순서를 본다"는 전제 위에 서 있다.
+// 그 전제를 실제 SQLite로 잠근다 — node:sqlite가 없는 런타임(Node 20)에서는 건너뛴다.
+test('SQLite datetime() converts +09:00 offsets to UTC for the UPSERT ordering guard', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) return t.skip('node:sqlite unavailable');
+  const db = new DatabaseSync(':memory:');
+  const value = (expression) => db.prepare(`SELECT ${expression} AS v`).get().v;
+  const offset = "'2026-08-27T10:00:00+09:00'";
+  const utc = "'2026-08-27T01:30:00.000Z'";
+
+  // 사전순 비교는 뒤집히고, datetime() 비교는 바로 선다.
+  assert.equal(value(`(${utc} >= ${offset})`), 0);
+  assert.equal(value(`(datetime(${utc}) >= datetime(${offset}))`), 1);
+  assert.equal(value(`(datetime('2026-08-27T00:30:00.000Z') >= datetime(${offset}))`), 0);
+  // 같은 순간은 통과한다(재전송 멱등).
+  assert.equal(value(`(datetime('2026-08-27T01:00:00.000Z') >= datetime(${offset}))`), 1);
+  // 읽을 수 없는 값은 NULL이므로 IS NULL 폴백이 필요하다.
+  assert.equal(value("datetime('not-a-time') IS NULL"), 1);
+  db.close();
+});
+
+// review 2R Major-2 — 정규화 이전에 저장된 행은 오프셋 표기라 사전순으로는 UTC 표기보다
+// 항상 뒤에 온다. 시각으로 비교하지 않으면 더 최신인 보고가 조용히 무시된다.
+test('a newer UTC report still updates a row whose stored time uses a +09:00 offset', async () => {
+  const { state, env } = harnessStoreEnv();
+  const storedTime = '2026-08-27T10:00:00+09:00'; // 실제로는 01:00Z
+  const incomingTime = '2026-08-27T01:30:00.000Z'; // 30분 뒤인데 사전순으로는 과거
+
+  // 사전순 비교는 이 쌍에서 순서를 뒤집는다 — 이 테스트가 지키려는 결함 그 자체다.
+  assert.equal(incomingTime >= storedTime, false);
+  assert.equal(Date.parse(incomingTime) >= Date.parse(storedTime), true);
+
+  state.status = 'active';
+  state.updatedAt = storedTime;
+  state.payload = JSON.stringify({
+    version: 1,
+    id: 'usage-harness',
+    status: 'active',
+    phase: 'work',
+    progress: 40,
+    created_at: storedTime,
+    updated_at: storedTime,
+    actors: [{ id: 'usage-harness:legacy', name: '이전 실행자', kind: 'codex', status: 'working' }],
+    modules: [],
+    artifacts: [],
+  });
+
+  const response = await worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(harnessInput({ occurred_at: incomingTime })),
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, task_id: 'usage-harness' });
+  assert.equal(state.upserts, 1);
+  assert.equal(state.rejected, 0);
+  assert.equal(state.updatedAt, incomingTime);
+  const saved = JSON.parse(state.payload);
+  assert.equal(saved.updated_at, incomingTime);
+  assert.deepEqual(
+    saved.actors.map((entry) => entry.id),
+    ['usage-harness:legacy', 'usage-harness:main'],
+  );
+});
+
+// review 2R Major-1 — SELECT→merge→UPSERT는 원자적이지 않다. 계약(단일 보고자)이 깨져
+// 두 보고가 겹쳤을 때, 그 사이에 complete가 된 행을 늦은 active 보고가 강등하지 못하게
+// UPSERT WHERE 절이 DB 수준에서 한 겹 더 막는지 확인한다.
+test('a concurrent active report cannot demote a task that completed after its read', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  assert.equal((await post(harnessInput({ occurred_at: '2026-08-27T09:00:00.000Z' }))).status, 200);
+  const readBeforeCompletion = state.payload; // 두 번째 보고자가 이 시점에 읽었다고 본다
+
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T10:00:00.000Z',
+    task: { ...harnessInput().task, status: 'complete', phase: 'done', progress: 100 },
+  }))).status, 200);
+  assert.equal(state.status, 'complete');
+  const upsertsAfterComplete = state.upserts;
+
+  // 겹친 보고: 아직 active이던 payload를 읽었으므로 병합 결과도 active다.
+  state.readOverride = readBeforeCompletion;
+  const racing = await post(harnessInput({ occurred_at: '2026-08-27T11:00:00.000Z' }));
+  state.readOverride = null;
+
+  assert.equal(racing.status, 200);
+  assert.equal(state.upserts, upsertsAfterComplete);
+  assert.equal(state.rejected, 1);
+  assert.equal(state.status, 'complete');
+  assert.equal(JSON.parse(state.payload).status, 'complete');
 });
 
 test('harness report rejects every bounded or non-allowlisted shape before database access', async () => {

@@ -232,8 +232,9 @@ function normalizeHarnessReport(input) {
   return {
     version: 1,
     task_id: taskId,
-    // 시각은 정규 ISO(UTC)로 통일한다. updated_at은 payload 비교(JS)와 D1 컬럼 비교(문자열)
-    // 양쪽에서 순서 판정에 쓰이므로, 오프셋 표기가 섞이면 사전순 비교가 뒤집힌다.
+    // 새로 들어오는 시각은 정규 ISO(UTC)로 통일한다. 다만 정규화 이전에 저장된 행에는
+    // 오프셋 표기('2026-08-27T10:00:00+09:00')가 그대로 남아 있으므로, 순서 판정은
+    // 양쪽 모두 시각으로 한다 — JS는 Date.parse, SQL은 datetime() (사전순 비교 금지).
     occurred_at: new Date(occurredAt).toISOString(),
     resume: input.resume === true,
     task: normalizedTask,
@@ -312,6 +313,8 @@ async function reportHarness(request, env) {
   // 늦게 도착한 과거 보고는 저장하지 않는다 — SELECT→merge→UPSERT 사이에 더 새로운
   // 보고가 들어왔다면 그 위에 옛 상태를 덮어쓰는 셈이 된다 (review M-A1).
   // 같은 시각(재전송·동시 보고)은 통과시킨다: 병합이 멱등이라 손실이 없다.
+  // Date.parse는 오프셋 표기를 UTC로 환산하므로 아래 SQL의 datetime() 비교와 같은
+  // 순서를 본다. 읽을 수 없는 옛 값은 양쪽 모두 순서 판정을 포기하고 통과시킨다.
   const storedAt = Date.parse(previous?.updated_at ?? '');
   if (Number.isFinite(storedAt) && Date.parse(incoming.occurred_at) < storedAt) {
     return json({ ok: true, task_id: incoming.task_id, stale: true });
@@ -331,12 +334,29 @@ async function reportHarness(request, env) {
     return json({ error: '하네스 모듈이 너무 많습니다.' }, 400);
   }
   const merged = mergeHarnessReport(previous, incoming);
+  // 순서 비교는 문자열이 아니라 시각으로 한다. 정규화 이전에 저장된 행은 오프셋 표기라
+  // 사전순으로는 UTC 표기보다 항상 뒤에 오고, 그래서 더 최신인 보고가 조용히 무시됐다.
+  // SQLite datetime()은 '+09:00'과 'Z'를 모두 UTC로 환산한다(실측: sqlite 3.53.3에서
+  // datetime('2026-08-27T01:30:00.000Z') >= datetime('2026-08-27T10:00:00+09:00') → 1,
+  // 같은 값의 사전순 비교는 0). 읽을 수 없는 옛 값은 datetime()이 NULL이 되어 조건 전체가
+  // NULL(거짓)로 굳으므로, JS stale 검사와 같이 그 경우엔 순서 판정을 포기하고 통과시킨다.
+  //
+  // 잔여 경쟁 조건(Major-1): SELECT→merge→UPSERT는 원자적이지 않다. 같은 task_id에 두
+  // 보고자가 동시에 쓰면 나중 UPSERT의 payload(JSON 전문)가 앞선 병합 결과를 덮어 actor가
+  // 유실될 수 있다. 완전한 원자화(버전 CAS·트랜잭션)는 스키마 변경을 요구하므로 하지 않는다 —
+  // 상호운용 계약이 "task_id는 하네스별로 분리한다(단일 보고자 원칙)"를 이미 못박고 있어
+  // 동시 다중 보고자 자체가 계약 밖이다: C:\Users\won\Desktop\Codex\docs\CLAUDE-INTEROP.md.
+  // 계약이 깨졌을 때의 최악(끝난 태스크가 되살아남)만 DB 조건으로 한 겹 더 막는다: 우리가
+  // 읽은 뒤 행이 complete가 됐다면, resume 없는 active 보고는 그 강등을 적용하지 못한다.
+  const guardsTerminal = merged.status !== 'complete' && incoming.resume !== true;
   await env.DB.prepare(`
     INSERT INTO harness_tasks(task_id, status, updated_at, payload)
     VALUES (?1, ?2, ?3, ?4)
     ON CONFLICT(task_id)
     DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload
-    WHERE excluded.updated_at >= harness_tasks.updated_at
+    WHERE (datetime(excluded.updated_at) >= datetime(harness_tasks.updated_at)
+        OR datetime(harness_tasks.updated_at) IS NULL)
+      ${guardsTerminal ? "AND harness_tasks.status != 'complete'" : ''}
   `).bind(incoming.task_id, merged.status, merged.updated_at, JSON.stringify(merged)).run();
   return json({ ok: true, task_id: incoming.task_id });
 }
@@ -368,7 +388,7 @@ async function usage(request, env) {
   const taskRows = await env.DB.prepare(`
     SELECT task_id, status, updated_at, payload
     FROM harness_tasks
-    ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at DESC
+    ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, datetime(updated_at) DESC
   `).all();
   return json({
     snapshots: rows.results.filter((row) => VALID_USAGE_SOURCES.has(row.source)).map((row) => {
