@@ -60,6 +60,7 @@ const USAGE_FIXTURE = {
     captured_at: '2026-08-27T11:48:00Z',
     payload: {
       model: 'gpt-5.6-sol',
+      plan_type: 'pro',
       rate_limits: {
         primary: { used_percent: 41.5, resets_at: '2026-08-27T15:10:00Z', window_minutes: 300 },
         secondary: { used_percent: 78.2, resets_at: '2026-08-31T09:00:00Z', window_minutes: 10_080 },
@@ -133,23 +134,28 @@ const USAGE_FIXTURE = {
     deadline: '20:10 KST',
     created_at: '2026-08-27T09:00:00Z',
     updated_at: '2026-08-27T11:54:00Z',
+    modules: [
+      { id: 'verification', name: '검증 단계', progress: 80, status: 'reviewing', owner: '독립 검토' },
+      { id: 'css', name: 'CSS 구현', progress: 88, status: 'working', owner: 'Main Codex' },
+      { id: 'quota', name: '한도 수집', progress: 72, status: 'working', owner: 'Main Codex' },
+    ],
     actors: [
       {
         id: 'usage-harness:main', parent_id: '', name: 'Main Codex', kind: 'codex',
         model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '기획 · 통합 · 최종 판정', status: 'reviewing',
-        assignment: '전체 계약과 최종 판정',
+        assignment: '전체 계약과 최종 판정', progress: 86,
       },
       {
         id: 'usage-harness:writer', parent_id: 'usage-harness:main', name: '구현 컨텍스트', kind: 'codex',
-        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '구현자', status: 'done', assignment: 'Worker와 사용량 화면 구현',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '구현자', status: 'done', assignment: 'Worker와 사용량 화면 구현', progress: 100,
       },
       {
         id: 'usage-harness:reviewer', parent_id: 'usage-harness:main', name: '독립 검토', kind: 'codex',
-        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '검토자', status: 'reviewing', assignment: 'diff와 실제 artifact 반증',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '검토자', status: 'reviewing', assignment: 'diff와 실제 artifact 반증', progress: 80,
       },
       {
         id: 'usage-harness:webgpt', parent_id: 'usage-harness:main', name: 'WebGPT 실행자', kind: 'webgpt',
-        model: 'WebGPT PRO', role: '보조 실행', status: 'waiting', assignment: '경계가 명확한 저위험 작업 대기',
+        model: 'WebGPT PRO', role: '보조 실행', status: 'waiting', assignment: '경계가 명확한 저위험 작업 대기', progress: 37,
       },
     ],
     artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],

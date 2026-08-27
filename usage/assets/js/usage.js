@@ -3,7 +3,7 @@
 
   const DEFAULT_API_URL = 'https://hvsdcm-api.hvsdcm1.workers.dev';
   const API_URL = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
-  const STALE_MS = 24 * 60 * 60 * 1000;
+  const STALE_MS = 15 * 60 * 1000;
   const WARN_PERCENT = 75;
   const OVER_PERCENT = 95;
   const PHASES = [
@@ -12,7 +12,6 @@
     { key: 'review', label: '검토', detail: '독립 반증 · 수정' },
     { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
-  const BUCKET_LABELS = { primary: '5시간', secondary: '주간' };
   const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT' };
   const ACTOR_STATUS_LABELS = {
     working: '작업 중', reviewing: '검토 중', waiting: '대기',
@@ -23,6 +22,7 @@
     body: document.getElementById('usageBody'),
     error: document.getElementById('usageError'),
     reload: document.getElementById('reload'),
+    refreshStatus: document.getElementById('usageRefreshStatus'),
   };
   let selectedTaskId = '';
 
@@ -44,7 +44,9 @@
   );
 
   async function api(path) {
-    const response = await fetch(`${API_URL}${path}`, {
+    const separator = path.includes('?') ? '&' : '?';
+    const response = await fetch(`${API_URL}${path}${separator}_=${Date.now()}`, {
+      cache: 'no-store',
       headers: { authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}` },
     });
     if (response.status === 401) {
@@ -88,6 +90,13 @@
   }
 
   function parseTime(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value < 10_000_000_000 ? value * 1000 : value;
+    }
+    if (/^\d+(?:\.\d+)?$/u.test(String(value ?? '').trim())) {
+      const numeric = Number(value);
+      return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+    }
     const time = Date.parse(String(value ?? ''));
     return Number.isFinite(time) ? time : null;
   }
@@ -101,20 +110,39 @@
   function groupsOf(payload) {
     if (!payload || typeof payload !== 'object') return [];
     if (!payload.rate_limits || typeof payload.rate_limits !== 'object') return [];
-    return [{ label: payload.model || null, buckets: payload.rate_limits }];
+    const plan = String(payload.plan_type || '').trim().toLowerCase();
+    const planLabels = {
+      pro: 'ChatGPT Pro', plus: 'ChatGPT Plus', business: 'ChatGPT Business',
+      team: 'ChatGPT Team', enterprise: 'ChatGPT Enterprise', free: 'ChatGPT Free',
+    };
+    return [{ label: planLabels[plan] || 'Codex 계정', buckets: payload.rate_limits }];
+  }
+
+  function bucketLabel(key, windowMinutes) {
+    if (windowMinutes === 300) return '5시간 사용량';
+    if (windowMinutes === 10_080) return '주간 사용량';
+    if (Number.isFinite(windowMinutes) && windowMinutes > 0) {
+      return `${formatDuration(windowMinutes * 60_000)} 사용량`;
+    }
+    if (key === 'primary') return '기본 사용량';
+    if (key === 'secondary') return '추가 사용량';
+    return key;
   }
 
   function bucketsOf(group) {
     if (!group.buckets || typeof group.buckets !== 'object') return [];
     return Object.entries(group.buckets)
       .filter(([, bucket]) => bucket && typeof bucket === 'object')
-      .map(([key, bucket]) => ({
-        key,
-        label: BUCKET_LABELS[key] || key,
-        percent: readPercent(bucket),
-        resetsAt: bucket.resets_at,
-        windowMinutes: Number.isFinite(bucket.window_minutes) ? bucket.window_minutes : null,
-      }));
+      .map(([key, bucket]) => {
+        const windowMinutes = Number(bucket.window_minutes);
+        return {
+          key,
+          label: bucketLabel(key, Number.isFinite(windowMinutes) ? windowMinutes : null),
+          percent: readPercent(bucket),
+          resetsAt: bucket.resets_at,
+          windowMinutes: Number.isFinite(windowMinutes) ? windowMinutes : null,
+        };
+      });
   }
 
   function renderQuotaRow(bucket, now) {
@@ -157,7 +185,7 @@
       <article class="us-limit-widget">
         <header class="us-card-head">
           <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">Codex 한도</h3></div>
-          <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 오래된 데이터' : ''}</span>
+          <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 수집 지연' : ''}</span>
         </header>
         ${groups || '<p class="us-empty">읽을 수 있는 Codex 한도 정보가 없습니다.</p>'}
       </article>`;
@@ -199,6 +227,9 @@
       actor.role ? ['역할', actor.role] : null,
       actor.assignment ? ['현재 작업', actor.assignment] : null,
     ].filter(Boolean);
+    const progress = actor.progress;
+    const hasProgress = Number.isFinite(progress);
+    const safeProgress = clampPercent(hasProgress ? progress : 0);
     return `
       <article class="h-actor${isMain ? ' is-main' : ''}${actor.kind === 'webgpt' ? ' is-webgpt' : ''}">
         <header class="h-actor-head">
@@ -209,6 +240,7 @@
         <dl class="h-actor-details">
           ${details.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
         </dl>
+        ${hasProgress ? `<div class="h-actor-progress"><span><span>진행도</span><strong>${Math.round(safeProgress)}%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${safeProgress.toFixed(1)}%"></span></span></div>` : ''}
       </article>`;
   }
 
@@ -218,7 +250,7 @@
     return `
       <section class="h-flow" aria-label="실제 하네스 작업 흐름">
         <header class="h-flow-head">
-          <div><p class="us-eyebrow">PIPELINE</p><h4>작업 흐름</h4></div>
+          <div><p class="us-eyebrow">OVERALL</p><h4>전체 진행률</h4></div>
           <strong>${Math.round(clampPercent(Number(task.progress) || 0))}%</strong>
         </header>
         <ol class="h-phase-rail">
@@ -231,6 +263,34 @@
     return `<li class="h-phase${state}"><span class="h-phase-index">${index + 1}</span><span class="h-phase-copy"><strong>${phase.label}</strong><small>${phase.detail}</small></span></li>`;
   }).join('')}
         </ol>
+      </section>`;
+  }
+
+  function taskModules(task) {
+    return Array.isArray(task?.modules)
+      ? task.modules.filter((module) => module && typeof module === 'object')
+      : [];
+  }
+
+  function renderModules(task) {
+    const modules = taskModules(task);
+    if (modules.length === 0) return '';
+    return `
+      <section class="h-modules" aria-label="모듈별 진행도">
+        <header class="h-modules-head">
+          <div><p class="us-eyebrow">MODULES</p><h4>모듈별 진행도</h4></div>
+          <span>보고된 작업 ${modules.length}개</span>
+        </header>
+        <div class="h-module-list">
+          ${modules.map((module) => {
+    const progress = clampPercent(Number(module.progress) || 0);
+    return `<article class="h-module">
+            <div class="h-module-copy"><strong>${escapeHtml(module.name || '이름 미기록')}</strong><span>${escapeHtml(module.owner || actorStatus(module))}</span></div>
+            <strong class="h-module-value">${Math.round(progress)}%</strong>
+            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>
+          </article>`;
+  }).join('')}
+        </div>
       </section>`;
   }
 
@@ -334,6 +394,7 @@
         </header>
         ${renderPhaseRail(task)}
         ${renderGate(task)}
+        ${renderModules(task)}
         ${renderActorTree(task, mainActor)}
         ${renderArtifacts(task)}
       </article>`;
@@ -451,23 +512,30 @@
     });
   }
 
-  async function load() {
+  async function load({ announce = false } = {}) {
     elements.error.textContent = '';
     elements.reload.disabled = true;
+    elements.reload.textContent = '불러오는 중…';
+    if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '최신 정보를 확인하고 있습니다.';
     try {
       const data = await api('/api/usage');
       elements.body.innerHTML = buildDashboard(data, Date.now());
       wireTaskTabs(elements.body);
+      if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
+      if (announce) elements.reload.textContent = '업데이트됨';
     } catch (error) {
       if (error.message === 'unauthorized') return;
-      elements.body.innerHTML = '';
+      if (!announce) elements.body.innerHTML = '';
       elements.error.textContent = error.message || '사용량을 불러오지 못했습니다.';
+      if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '업데이트하지 못했습니다.';
+      if (announce) elements.reload.textContent = '새로고침';
     } finally {
       elements.reload.disabled = false;
+      if (!announce) elements.reload.textContent = '새로고침';
     }
   }
 
-  elements.reload.addEventListener('click', load);
+  elements.reload.addEventListener('click', () => load({ announce: true }));
   load();
-  window.USAGE_RENDER = { buildDashboard, activateTaskTab, wireTaskTabs };
+  window.USAGE_RENDER = { buildDashboard, activateTaskTab, wireTaskTabs, load };
 })();

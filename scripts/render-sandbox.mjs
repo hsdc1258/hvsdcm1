@@ -133,8 +133,9 @@ function stubElement(store, id) {
     style: {},
     files: [],
     classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-    addEventListener() {},
-    removeEventListener() {},
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    removeEventListener(type) { delete this.listeners[type]; },
     setAttribute() {},
     removeAttribute() {},
     getAttribute() { return null; },
@@ -319,6 +320,40 @@ export function createUsageRenderers() {
     throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
   }
   return renderers;
+}
+
+export async function createUsageAppSandbox(responses = []) {
+  const store = new Map();
+  const requests = [];
+  const queue = [...responses];
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = {
+    href: 'https://hvsdcm1.xyz/usage/', pathname: '/usage/', search: '', hash: '',
+    replace() { throw new Error(`${USAGE_APP_SOURCE}: login gate fired`); },
+  };
+  context.localStorage = {
+    store: new Map([['hvsdcm.token', 'gate-token']]),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  context.fetch = async (url, options) => {
+    requests.push({ url: String(url), options });
+    const next = queue.shift();
+    if (next instanceof Error) throw next;
+    const data = next || { snapshots: [], tasks: [] };
+    return { ok: true, status: 200, json: async () => data };
+  };
+  context.setTimeout = (callback) => { void callback; return 0; };
+  context.clearTimeout = () => {};
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
+  await new Promise((resolve) => setImmediate(resolve));
+  return { context, store, requests, renderers: context.USAGE_RENDER };
 }
 
 export function renderUsageDashboard(input, now) {
