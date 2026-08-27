@@ -361,17 +361,6 @@
     location.reload();
   });
 
-  // 사이드바 아이콘은 마크업이 아니라 site-emoji.js 매핑에서 온다 (DESIGN.md §5).
-  // 매핑이 없거나 키가 빠지면 슬롯은 빈 채로 남는다 — 아이콘은 aria-hidden이라
-  // 항목은 텍스트만으로도 그대로 읽힌다.
-  function paintEmoji(root) {
-    const map = window.SITE_EMOJI || {};
-    for (const slot of root.querySelectorAll('[data-emoji]')) {
-      slot.textContent = map[slot.dataset.emoji] || '';
-    }
-  }
-
-  paintEmoji(document);
   setView(DEFAULT_VIEW);
 
   if (adminToken) {

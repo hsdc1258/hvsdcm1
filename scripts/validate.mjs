@@ -207,9 +207,28 @@ function validateUiContracts() {
   check(!/id="loginModal"[^>]*(?:role="dialog"|aria-modal=)/u.test(homeHtml),
     'home: sheet backdrop must not carry dialog semantics — they belong on the .sheet form');
   check(/id="loginTitle"/u.test(homeHtml), 'home: login dialog label target #loginTitle is missing');
-  // 랜딩 3곳(상단바·드로어·푸터)은 텍스트 앞에 .brand-mark 인라인 로고가 온다(DESIGN.md §8) —
-  // 마크는 선택이고, "hvsdcm" 자신은 여전히 분리·삽입 없이 한 덩어리여야 한다.
-  check(/class="brand"[^>]*>(?:<svg\b[^>]*class="brand-mark"[^>]*>[\s\S]*?<\/svg>)?hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
+  // 랜딩 3곳(상단바·드로어·푸터)은 텍스트 앞에 .brand-mark 인라인 로고가 온다(DESIGN.md §8).
+  // 예전 검사는 마크를 선택(`?`)으로 두고 `.test()` 한 번만 돌려, 로고를 전부 지워도
+  // 통과했다 — review M-1이 변이 실험으로 실증. 로고의 단일 원본은 assets/logo.svg
+  // 하나뿐이므로(DESIGN.md §8 "단일 원본") 사각형 3개의 좌표를 거기서 뽑아 쓴다 —
+  // 좌표를 여기 다시 적으면 원본이 바뀌어도 검사만 따로 남는다 (LESSONS 단일 원본 자동 도출).
+  const logoSvg = readFileSync(path.join(ROOT, 'assets/logo.svg'), 'utf8');
+  const logoRects = [...logoSvg.matchAll(/<rect\b[^>]*\/>/gu)].map(([rect]) => rect);
+  check(logoRects.length === 3, `assets/logo.svg: expected exactly 3 <rect> shapes but found ${logoRects.length} — the brand-mark contract cannot be derived`);
+  // .brand는 정확히 3개여야 하고(상단바·드로어·푸터), 그 셋 모두가 원본과 같은 사각형 3개를
+  // 품은 완전한 brand-mark SVG를 "hvsdcm" 바로 앞에 가지고 있어야 한다 — 개수가 모자라거나
+  // 넘쳐도, 마크가 비었거나 원본과 달라져도 실패한다. 클래스는 토큰으로 비교한다
+  // (`footer-brand`처럼 하이픈으로 이어진 이름이 `\bbrand\b`에 걸려 오탐하지 않도록).
+  const brandContainers = [...homeHtml.matchAll(/<(a|span)\b[^>]*\sclass="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/gu)]
+    .filter(([, , classValue]) => classValue.split(/\s+/u).includes('brand'));
+  check(brandContainers.length === 3,
+    `home: expected exactly 3 .brand containers (topbar·drawer·footer) but found ${brandContainers.length}`);
+  const intactBrandMarks = brandContainers.filter(([, , , inner]) => {
+    const svgMatch = /^<svg\b[^>]*class="brand-mark"[^>]*>([\s\S]*?)<\/svg>hvsdcm$/u.exec(inner.trim());
+    return Boolean(svgMatch) && logoRects.every((rect) => svgMatch[1].includes(rect));
+  }).length;
+  check(intactBrandMarks === brandContainers.length,
+    `home: ${brandContainers.length - intactBrandMarks} of ${brandContainers.length} .brand containers are missing an intact brand-mark logo (matching assets/logo.svg) directly before "hvsdcm"`);
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
   check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
   check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
@@ -1841,7 +1860,7 @@ function validateGlobalsAndOrder() {
     'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
-    'admin/index.html': ['/assets/js/site-emoji.js', '/admin/assets/js/admin.js'],
+    'admin/index.html': ['/admin/assets/js/admin.js'],
     'usage/index.html': ['/usage/assets/js/usage.js'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
