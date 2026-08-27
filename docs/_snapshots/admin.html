@@ -7,6 +7,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex, nofollow">
   <title>hvsdcm admin</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
@@ -506,6 +507,9 @@ hr {
 }
 /* 브랜드 워드마크 — hvsdcm은 한 덩어리(R-5). 자간 분리 연출 금지. */
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .35em;
   font-weight: 700;
   letter-spacing: normal;
   color: var(--text);
@@ -514,6 +518,13 @@ hr {
 }
 .brand:hover {
   text-decoration: none;
+}
+/* 인라인 로고 마크 — assets/logo.svg의 사각형 3개를 좌표 그대로 복제한다(DESIGN.md §8).
+   좌표·비율은 고정이고, 색은 currentColor라 얹히는 자리의 텍스트색을 그대로 따른다. */
+.brand-mark {
+  width: .8em;
+  height: .8em;
+  flex: none;
 }
 /* ==========================================================================
    이모지 슬롯 (DESIGN.md §5)
@@ -1254,6 +1265,22 @@ label.list-row {
   max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
   overflow-y: auto;
 }
+/* 사이드바 최상단 엠블럼 — 흰 헤어라인 박스 + 흰 로고 마크(DESIGN.md §8, plan.md §3.4).
+   그라디언트·그림자 없음(§3·§4). 보더는 --line-strong(기존 토큰 중 가장 강한 헤어라인)로
+   "하얀 테두리" 요청을 만족시킨다 — 더 강한 토큰이 필요해지면 system.css에 추가한다. */
+.sidebar-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  color: var(--text);
+}
+.sidebar-emblem .brand-mark {
+  width: 20px;
+  height: 20px;
+}
 .sidebar-group {
   display: grid;
   gap: 1px;
@@ -1607,26 +1634,30 @@ label.list-row {
 
   <div class="container-wide app-page">
     <div class="app-shell">
-      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 작은 아이콘 + 텍스트다
-           (plan.md §3.4 / DESIGN.md §1.1). 아이콘 글리프는 마크업에 없다 —
-           data-emoji 슬롯을 site-emoji.js 매핑이 채운다 (DESIGN.md §5).
+      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 텍스트 행이다
+           (plan.md §3.4 / DESIGN.md §1.1). 항목 아이콘은 로고 엠블럼(.sidebar-emblem)으로
+           대체했다 — 개별 항목에는 더 이상 아이콘 슬롯을 두지 않는다.
            각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
            admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
+        <div class="sidebar-emblem" aria-hidden="true">
+          <svg class="brand-mark" viewBox="0 0 200 200" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>
+        </div>
+
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약" aria-current="page"><span class="emoji" data-emoji="adminOverview" aria-hidden="true">🧭</span><span class="sidebar-item-text">개요</span></button>
+          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약" aria-current="page"><span class="sidebar-item-text">개요</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
           <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><span class="emoji" data-emoji="adminUsers" aria-hidden="true">🧑</span><span class="sidebar-item-text">사용자</span></button>
-          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><span class="emoji" data-emoji="adminSessions" aria-hidden="true">💻</span><span class="sidebar-item-text">접속 기기</span></button>
+          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><span class="sidebar-item-text">사용자</span></button>
+          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><span class="sidebar-item-text">접속 기기</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="학습 데이터">
           <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><span class="emoji" data-emoji="adminAnswers" aria-hidden="true">📋</span><span class="sidebar-item-text">공용 답안</span></button>
+          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><span class="sidebar-item-text">공용 답안</span></button>
         </nav>
 
         <div class="sidebar-group">

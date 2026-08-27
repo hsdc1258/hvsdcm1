@@ -158,10 +158,6 @@ body.logged .topbar-login {
 .hero-title a.welcome-user:hover {
   text-decoration: underline;
 }
-/* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
-.hero-sub {
-  max-width: 26em;
-}
 .hero-actions {
   margin-top: var(--space-4);
   display: flex;

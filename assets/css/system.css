@@ -496,6 +496,9 @@ hr {
 }
 /* 브랜드 워드마크 — hvsdcm은 한 덩어리(R-5). 자간 분리 연출 금지. */
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .35em;
   font-weight: 700;
   letter-spacing: normal;
   color: var(--text);
@@ -504,6 +507,13 @@ hr {
 }
 .brand:hover {
   text-decoration: none;
+}
+/* 인라인 로고 마크 — assets/logo.svg의 사각형 3개를 좌표 그대로 복제한다(DESIGN.md §8).
+   좌표·비율은 고정이고, 색은 currentColor라 얹히는 자리의 텍스트색을 그대로 따른다. */
+.brand-mark {
+  width: .8em;
+  height: .8em;
+  flex: none;
 }
 /* ==========================================================================
    이모지 슬롯 (DESIGN.md §5)
@@ -1243,6 +1253,22 @@ label.list-row {
   gap: var(--space-5);
   max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
   overflow-y: auto;
+}
+/* 사이드바 최상단 엠블럼 — 흰 헤어라인 박스 + 흰 로고 마크(DESIGN.md §8, plan.md §3.4).
+   그라디언트·그림자 없음(§3·§4). 보더는 --line-strong(기존 토큰 중 가장 강한 헤어라인)로
+   "하얀 테두리" 요청을 만족시킨다 — 더 강한 토큰이 필요해지면 system.css에 추가한다. */
+.sidebar-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  color: var(--text);
+}
+.sidebar-emblem .brand-mark {
+  width: 20px;
+  height: 20px;
 }
 .sidebar-group {
   display: grid;

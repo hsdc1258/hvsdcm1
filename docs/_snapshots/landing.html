@@ -15,6 +15,7 @@
   <meta name="twitter:description" content="hvsdcm의 개인 웹사이트.">
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>hvsdcm</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
@@ -514,6 +515,9 @@ hr {
 }
 /* 브랜드 워드마크 — hvsdcm은 한 덩어리(R-5). 자간 분리 연출 금지. */
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .35em;
   font-weight: 700;
   letter-spacing: normal;
   color: var(--text);
@@ -522,6 +526,13 @@ hr {
 }
 .brand:hover {
   text-decoration: none;
+}
+/* 인라인 로고 마크 — assets/logo.svg의 사각형 3개를 좌표 그대로 복제한다(DESIGN.md §8).
+   좌표·비율은 고정이고, 색은 currentColor라 얹히는 자리의 텍스트색을 그대로 따른다. */
+.brand-mark {
+  width: .8em;
+  height: .8em;
+  flex: none;
 }
 /* ==========================================================================
    이모지 슬롯 (DESIGN.md §5)
@@ -1262,6 +1273,22 @@ label.list-row {
   max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
   overflow-y: auto;
 }
+/* 사이드바 최상단 엠블럼 — 흰 헤어라인 박스 + 흰 로고 마크(DESIGN.md §8, plan.md §3.4).
+   그라디언트·그림자 없음(§3·§4). 보더는 --line-strong(기존 토큰 중 가장 강한 헤어라인)로
+   "하얀 테두리" 요청을 만족시킨다 — 더 강한 토큰이 필요해지면 system.css에 추가한다. */
+.sidebar-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  color: var(--text);
+}
+.sidebar-emblem .brand-mark {
+  width: 20px;
+  height: 20px;
+}
 .sidebar-group {
   display: grid;
   gap: 1px;
@@ -1606,10 +1633,6 @@ body.logged .topbar-login {
 .hero-title a.welcome-user:hover {
   text-decoration: underline;
 }
-/* 한글 본문의 줄 수는 em으로 잡는다 — ch는 숫자 0의 폭이라 한글에서 어긋난다 (§2). */
-.hero-sub {
-  max-width: 26em;
-}
 .hero-actions {
   margin-top: var(--space-4);
   display: flex;
@@ -1700,7 +1723,7 @@ body.logged .topbar-login {
       <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
         <span aria-hidden="true"></span><span aria-hidden="true"></span>
       </button>
-      <a class="brand" href="/" aria-label="hvsdcm 홈">hvsdcm</a>
+      <a class="brand" href="/" aria-label="hvsdcm 홈"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</a>
       <div class="topbar-nav">
         <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
       </div>
@@ -1711,7 +1734,7 @@ body.logged .topbar-login {
 
   <aside id="drawer" class="drawer logged" aria-label="주 메뉴">
     <div class="drawer-head">
-      <span class="brand">hvsdcm</span>
+      <span class="brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
     </div>
 
       <div class="drawer-study">
@@ -1768,7 +1791,6 @@ body.logged .topbar-login {
     <section class="hero" aria-labelledby="welcomeTitle">
       <div class="container hero-inner">
         <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
-        <p class="hero-sub text-body-lg text-secondary">개인 웹사이트입니다.</p>
         <div id="account" class="account hero-actions logged">
           <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
           <a class="link-arrow" href="#contact"><span>프로필 보기</span></a>
@@ -1805,14 +1827,13 @@ body.logged .topbar-login {
             </span>
           </a>
         </div>
-        <p class="list-group-foot">두 링크 모두 새 창으로 열립니다.</p>
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <div class="container footer-inner">
-      <span class="brand footer-brand">hvsdcm</span>
+      <span class="brand footer-brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
       <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
     </div>
   </footer>

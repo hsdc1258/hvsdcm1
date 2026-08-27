@@ -207,7 +207,9 @@ function validateUiContracts() {
   check(!/id="loginModal"[^>]*(?:role="dialog"|aria-modal=)/u.test(homeHtml),
     'home: sheet backdrop must not carry dialog semantics — they belong on the .sheet form');
   check(/id="loginTitle"/u.test(homeHtml), 'home: login dialog label target #loginTitle is missing');
-  check(/class="brand"[^>]*>hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
+  // 랜딩 3곳(상단바·드로어·푸터)은 텍스트 앞에 .brand-mark 인라인 로고가 온다(DESIGN.md §8) —
+  // 마크는 선택이고, "hvsdcm" 자신은 여전히 분리·삽입 없이 한 덩어리여야 한다.
+  check(/class="brand"[^>]*>(?:<svg\b[^>]*class="brand-mark"[^>]*>[\s\S]*?<\/svg>)?hvsdcm</u.test(homeHtml), 'home: topbar wordmark must render "hvsdcm" in one piece');
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
   check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
   check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
@@ -1879,7 +1881,9 @@ function validateOgImageLock() {
     sha256: '4d702de6f212f303c88a51d99eb63344ed0503bce69bb255ddb490fe61dcf6ad',
   };
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  check(new RegExp(`class="brand"[^>]*>${OG_LOCK.brand}<`, 'u').test(homeHtml),
+  // .brand-mark 인라인 로고(DESIGN.md §8)가 텍스트 앞에 올 수 있다 — og.png가 잠그는 것은
+  // 브랜드 문자열 자체이지 마크업 구조가 아니다.
+  check(new RegExp(`class="brand"[^>]*>(?:<svg\\b[^>]*class="brand-mark"[^>]*>[\\s\\S]*?<\\/svg>)?${OG_LOCK.brand}<`, 'u').test(homeHtml),
     'og lock: index.html wordmark != OG_LOCK.brand — regenerate assets/og.png with the new brand, then update OG_LOCK (brand + sha256) together');
   check(/property="og:image"[^>]*assets\/og\.png/u.test(homeHtml) && /name="twitter:image"[^>]*assets\/og\.png/u.test(homeHtml),
     'og lock: index.html og:image/twitter:image must reference assets/og.png');
