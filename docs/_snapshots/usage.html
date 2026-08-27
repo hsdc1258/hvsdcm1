@@ -2156,6 +2156,11 @@ label.list-row {
   .us-quota-list {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   }
+  /* 가로로 나란히 놓이면 위쪽 구분선은 칸막이가 아니라 어긋난 선이 된다. */
+  .us-limit-widget + .us-limit-widget {
+    padding-top: 0;
+    border-top: 0;
+  }
 }
 @media (max-width: 900px) {
   .h-org-scroll {
@@ -2277,7 +2282,7 @@ label.list-row {
         <div class="view-head-main">
           <div>
             <h1 class="title-1">AI 실행 현황</h1>
-            <p>세션별 파이프라인, 투입 에이전트, Codex 한도</p>
+            <p>세션별 파이프라인, 투입 에이전트, Codex · Claude 한도</p>
           </div>
         </div>
         <div class="toolbar-group">
@@ -2289,7 +2294,7 @@ label.list-row {
 
       <p id="usageError" class="field-error" role="alert"></p>
 
-      <!-- 소유자 전용 GET /api/usage의 Codex 한도와 하네스 작업을 같은 화면에 그린다. -->
+      <!-- 소유자 전용 GET /api/usage의 Codex · Claude 한도와 하네스 작업을 같은 화면에 그린다. -->
       <div id="usageBody" class="us-body">
       <div class="us-command-layout">
         <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
@@ -2405,7 +2410,7 @@ label.list-row {
       <section class="h-org-chart" aria-label="사용량 하네스 시각화 (08-27) 보고 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ACTUAL TEAM</p><h4>실행 조직</h4></div>
-          <span>실제 보고 4명</span>
+          <span>실제 보고 5명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree">
@@ -2465,6 +2470,21 @@ label.list-row {
           <div><dt>모델</dt><dd>WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>현재 작업</dt><dd>경계가 명확한 저위험 작업 대기</dd></div>
         </dl>
         <div class="h-actor-progress"><span><span>진행도</span><strong>37%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span></div>
+      </article>
+
+      </li>
+      <li class="h-org-node">
+
+      <article class="h-actor" data-actor-id="usage-harness:claude">
+        <header class="h-actor-head">
+          <span class="h-kind">CLAUDE</span>
+          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>작업 중</span>
+        </header>
+        <h4>Fable 5 오케스트레이터</h4>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>claude-fable-5 · high</dd></div><div><dt>역할</dt><dd>기획 · 총괄</dd></div><div><dt>현재 작업</dt><dd>Claude 한도 복원 통합</dd></div>
+        </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>62%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 62.0%"></span></span></div>
       </article>
 
       </li></ul>
@@ -2652,7 +2672,7 @@ label.list-row {
       <section class="h-org-chart h-portfolio-org" aria-label="전체 세션과 실제 에이전트 조직도">
         <header class="h-org-chart-head">
           <div><p class="us-eyebrow">ALL SESSIONS</p><h3>전체 실행 조직</h3></div>
-          <span>세션 3개 · 실제 에이전트 6명</span>
+          <span>세션 3개 · 실제 에이전트 7명</span>
         </header>
         <div class="h-org-scroll">
           <ul class="h-org-tree h-portfolio-tree">
@@ -2660,7 +2680,7 @@ label.list-row {
               <article class="h-harness-root">
                 <p class="h-kind">AI HARNESS</p>
                 <h4>전체 파이프라인</h4>
-                <dl><div><dt>진행 중</dt><dd>2</dd></div><div><dt>완료</dt><dd>1</dd></div><div><dt>실제 에이전트</dt><dd>6</dd></div></dl>
+                <dl><div><dt>진행 중</dt><dd>2</dd></div><div><dt>완료</dt><dd>1</dd></div><div><dt>실제 에이전트</dt><dd>7</dd></div></dl>
               </article>
               <ul>
       <li class="h-org-node h-portfolio-task-node" data-portfolio-task="usage-harness-visualization">
@@ -2672,7 +2692,7 @@ label.list-row {
         </header>
         <h4>사용량 하네스 시각화 (08-27)</h4>
         <p>파이프라인 시각화 · 검토 86%</p>
-        <span>6분 전 동기화 · 실제 보고 4명</span>
+        <span>6분 전 동기화 · 실제 보고 5명</span>
       </article>
         <ul>
       <li class="h-org-node is-root">
@@ -2731,6 +2751,21 @@ label.list-row {
           <div><dt>모델</dt><dd>WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>현재 작업</dt><dd>경계가 명확한 저위험 작업 대기</dd></div>
         </dl>
         <div class="h-actor-progress"><span><span>진행도</span><strong>37%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span></div>
+      </article>
+
+      </li>
+      <li class="h-org-node">
+
+      <article class="h-actor" data-actor-id="usage-harness:claude">
+        <header class="h-actor-head">
+          <span class="h-kind">CLAUDE</span>
+          <span class="h-actor-state"><span class="status-dot" aria-hidden="true"></span>작업 중</span>
+        </header>
+        <h4>Fable 5 오케스트레이터</h4>
+        <dl class="h-actor-details">
+          <div><dt>모델</dt><dd>claude-fable-5 · high</dd></div><div><dt>역할</dt><dd>기획 · 총괄</dd></div><div><dt>현재 작업</dt><dd>Claude 한도 복원 통합</dd></div>
+        </dl>
+        <div class="h-actor-progress"><span><span>진행도</span><strong>62%</strong></span><span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 62.0%"></span></span></div>
       </article>
 
       </li></ul>
@@ -2802,7 +2837,7 @@ label.list-row {
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
-            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex 사용 한도</h2></div>
+            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex · Claude 한도</h2></div>
             <p>실제 계정 보고</p>
           </header>
           <div class="us-quota-list">
@@ -2838,6 +2873,33 @@ label.list-row {
 
         </span>
         <span class="list-row-value">96%</span>
+      </div></div>
+        </div>
+      </article>
+      <article class="us-limit-widget">
+        <header class="us-card-head">
+          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">Claude 한도</h3></div>
+          <span class="us-card-meta">8분 전 수집</span>
+        </header>
+
+        <div class="us-group">
+          <p class="list-group-head">claude-opus-5</p>
+          <div class="list-group is-inset">
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">5시간 사용량</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 33.4%"></span></span>
+          <span class="list-row-sub">2시간 후 초기화</span>
+        </span>
+        <span class="list-row-value">33%</span>
+      </div>
+      <div class="list-row">
+        <span class="list-row-body">
+          <span class="list-row-title">주간 사용량</span>
+          <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 57.9%"></span></span>
+          <span class="list-row-sub">4일 12시간 후 초기화</span>
+        </span>
+        <span class="list-row-value">58%</span>
       </div></div>
         </div>
       </article></div>

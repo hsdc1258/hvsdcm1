@@ -28,6 +28,16 @@ const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
   payload: { model: 'gpt-5.6-codex', plan_type: 'pro', rate_limits: buckets },
 });
 
+// claude 수집기는 모델별로 창을 담는다 (scripts/usage-push.mjs buildClaudeReport).
+const claudeSnapshot = (models, capturedAt = iso(HOUR)) => ({
+  source: 'claude',
+  captured_at: capturedAt,
+  payload: {
+    models: Object.fromEntries(Object.entries(models)
+      .map(([id, rateLimits]) => [id, { captured_at: capturedAt, rate_limits: rateLimits }])),
+  },
+});
+
 const harnessTask = (overrides = {}) => ({
   version: 1,
   id: 'usage-harness',
@@ -419,17 +429,64 @@ test('failed manual refresh keeps the last good dashboard and restores the butto
   assert.equal(sandbox.store.get('usageError').textContent, 'network down');
 });
 
-test('Claude snapshots are ignored and actor text is escaped', () => {
+// 2026-08-27 사용자 지시로 Claude 한도가 복원됐다. 이전 "Claude 스냅샷은 무시한다"
+// 회귀 테스트를 수용 케이스로 뒤집는다.
+test('Claude snapshots render beside Codex and actor text is escaped', () => {
   const markup = dashboard({
     snapshots: [
       codexSnapshot({ primary: { used_percent: 12 } }),
-      { source: 'claude', captured_at: iso(HOUR), payload: { model: 'Claude' } },
+      claudeSnapshot({
+        'claude-opus-5': { five_hour: { used_percentage: 44 }, seven_day: { used_percentage: 61 } },
+      }),
     ],
     tasks: [harnessTask({ name: '<img src=x onerror=alert(1)>' })],
   });
-  assert.doesNotMatch(markup, /Claude/u);
+  assert.match(markup, /Claude 한도/u);
+  assert.match(markup, /claude-opus-5/u);
+  assert.match(markup, /5시간 사용량/u);
+  assert.match(markup, /주간 사용량/u);
+  assert.match(markup, />44%</u);
+  // 카드 제목 기준으로 Codex가 먼저 온다 (SOURCE_LABELS 키 순서). rail 헤더의
+  // "Codex · Claude 한도"와 섞이지 않게 태그 경계까지 붙여 찾는다.
+  assert.ok(markup.includes('>Claude 한도<'));
+  assert.ok(markup.indexOf('>Codex 한도<') < markup.indexOf('>Claude 한도<'));
   assert.doesNotMatch(markup, /<img/u);
   assert.match(markup, /&lt;img/u);
+});
+
+// 한쪽 원본이 아직 보고하지 않아도 rail에서 사라지지 않는다 — 빈 상태로 자리를 지킨다.
+test('a source with no snapshot keeps its slot as a waiting empty state', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
+    tasks: [harnessTask()],
+  });
+  assert.match(markup, /Claude 한도/u);
+  assert.match(markup, /수집 대기/u);
+  assert.match(markup, /아직 Claude 스냅샷이 없습니다/u);
+});
+
+// 조직도는 Claude 파이프라인 액터도 그린다 (worker의 kind 허용 목록과 짝이다).
+test('claude actors render in the reporting tree', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
+    tasks: [harnessTask({
+      actors: [
+        {
+          id: 'wp-a:main', parent_id: '', name: 'Main Codex', kind: 'codex',
+          model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '총괄', status: 'working',
+          assignment: '통합', progress: 50,
+        },
+        {
+          id: 'wp-a:claude', parent_id: 'wp-a:main', name: 'Fable 5 오케스트레이터', kind: 'claude',
+          model: 'claude-fable-5', reasoning: 'high', role: '기획', status: 'working',
+          assignment: '한도 복원', progress: 70,
+        },
+      ],
+    })],
+  });
+  assert.match(markup, /CLAUDE</u);
+  assert.match(markup, /Fable 5 오케스트레이터/u);
+  assert.match(markup, /claude-fable-5 · high/u);
 });
 
 test('an empty snapshot list and a payload without buckets render an empty state', async () => {

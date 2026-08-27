@@ -12,7 +12,19 @@
     { key: 'review', label: '검토', detail: '독립 반증 · 수정' },
     { key: 'done', label: '완료', detail: '배포 · 기록' },
   ];
-  const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT' };
+  const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT', claude: 'CLAUDE' };
+  // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
+  // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
+  const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
+  // 알려진 버킷 키의 한국어 라벨. 렌더 대상 목록이 아니라 사전이다 — payload에 실제로
+  // 들어 있는 키를 전부 그리고, 여기 없는 키는 키 문자열 그대로 나간다.
+  const BUCKET_LABELS = {
+    primary: '기본 사용량',
+    secondary: '추가 사용량',
+    five_hour: '5시간 사용량',
+    seven_day: '주간 사용량',
+    seven_day_opus: '주간 사용량 (Opus)',
+  };
   const ACTOR_STATUS_LABELS = {
     working: '작업 중', reviewing: '검토 중', waiting: '대기',
     done: '완료', blocked: '막힘', unavailable: '사용 불가',
@@ -108,8 +120,16 @@
     return time <= now ? `${formatDuration(now - time)} 전` : `${formatDuration(time - now)} 후`;
   }
 
+  // 수집 원본마다 payload 모양이 다르다: codex는 rate_limits 하나, claude는 모델별
+  // models[<id>].rate_limits다. 어느 쪽인지는 **모양으로** 판정한다 — source 이름으로
+  // 분기하면 세 번째 원본이 생길 때 UI가 조용히 빈 화면을 낸다.
   function groupsOf(payload) {
     if (!payload || typeof payload !== 'object') return [];
+    if (payload.models && typeof payload.models === 'object') {
+      return Object.entries(payload.models)
+        .filter(([, model]) => model && typeof model === 'object')
+        .map(([id, model]) => ({ label: id, buckets: model.rate_limits }));
+    }
     if (!payload.rate_limits || typeof payload.rate_limits !== 'object') return [];
     const plan = String(payload.plan_type || '').trim().toLowerCase();
     const planLabels = {
@@ -125,9 +145,7 @@
     if (Number.isFinite(windowMinutes) && windowMinutes > 0) {
       return `${formatDuration(windowMinutes * 60_000)} 사용량`;
     }
-    if (key === 'primary') return '기본 사용량';
-    if (key === 'secondary') return '추가 사용량';
-    return key;
+    return BUCKET_LABELS[key] || key;
   }
 
   function bucketsOf(group) {
@@ -170,6 +188,7 @@
   }
 
   function renderQuota(snapshot, now) {
+    const label = SOURCE_LABELS[snapshot.source] || snapshot.source;
     const capturedTime = parseTime(snapshot.captured_at);
     const captured = relativeTime(snapshot.captured_at, now);
     const stale = capturedTime !== null && now - capturedTime > STALE_MS;
@@ -185,10 +204,24 @@
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">Codex 한도</h3></div>
+          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
           <span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 수집 지연' : ''}</span>
         </header>
-        ${groups || '<p class="us-empty">읽을 수 있는 Codex 한도 정보가 없습니다.</p>'}
+        ${groups || `<p class="us-empty">읽을 수 있는 ${escapeHtml(label)} 한도 정보가 없습니다.</p>`}
+      </article>`;
+  }
+
+  // 원본 하나가 아직 한 번도 보고하지 않은 상태. 카드를 통째로 빼면 rail에서 그 원본이
+  // 사라져 "한도가 0"인지 "수집이 멈췄는지" 구분되지 않으므로, 같은 골격의 빈 상태로 둔다.
+  function renderQuotaPlaceholder(source) {
+    const label = SOURCE_LABELS[source] || source;
+    return `
+      <article class="us-limit-widget">
+        <header class="us-card-head">
+          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
+          <span class="us-card-meta">수집 대기</span>
+        </header>
+        <p class="us-empty">아직 ${escapeHtml(label)} 스냅샷이 없습니다.</p>
       </article>`;
   }
 
@@ -549,8 +582,15 @@
   function buildDashboard(input, now) {
     const rawSnapshots = Array.isArray(input) ? input : input?.snapshots;
     const rawTasks = Array.isArray(input?.tasks) ? input.tasks : [];
-    const snapshots = (Array.isArray(rawSnapshots) ? rawSnapshots : [])
-      .filter((snapshot) => snapshot?.source === 'codex');
+    const bySource = new Map((Array.isArray(rawSnapshots) ? rawSnapshots : [])
+      .filter((snapshot) => snapshot && SOURCE_LABELS[snapshot.source])
+      .map((snapshot) => [snapshot.source, snapshot]));
+    // 한 번도 수집된 적이 없으면 빈 카드를 두 장 세우지 않고 한 줄로 말한다.
+    const quotas = bySource.size === 0
+      ? '<p class="us-empty">아직 수집된 한도 기록이 없습니다.</p>'
+      : Object.keys(SOURCE_LABELS).map((source) => (bySource.has(source)
+        ? renderQuota(bySource.get(source), now)
+        : renderQuotaPlaceholder(source))).join('');
     const tasks = sortTasks(rawTasks);
     return `
       <div class="us-command-layout">
@@ -563,12 +603,10 @@
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
-            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex 사용 한도</h2></div>
+            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-2">Codex · Claude 한도</h2></div>
             <p>실제 계정 보고</p>
           </header>
-          <div class="us-quota-list">${snapshots.length > 0
-    ? snapshots.map((snapshot) => renderQuota(snapshot, now)).join('')
-    : '<p class="us-empty">아직 수집된 한도 기록이 없습니다.</p>'}</div>
+          <div class="us-quota-list">${quotas}</div>
         </aside>
       </div>`;
   }
