@@ -17,7 +17,7 @@
     return;
   }
 
-  const { SORT_MODES, escapeHtml, sortStudyItems } = studyUtils;
+  const { SORT_MODES, escapeHtml, matchesStudySearch, sortStudyItems } = studyUtils;
 
   // 이모지는 words.js의 WORDMASTER_EMOJI 매핑에서만 나온다 (DESIGN.md §5).
   // 마크업에는 슬롯만 두고 글리프 리터럴을 박지 않는다. 키는 항상 리터럴로 넘긴다 —
@@ -43,6 +43,7 @@
       order: 'random',
     },
     wrongOrder: 'recent',
+    wrongSearch: '',
   };
 
   let db = loadDb();
@@ -309,6 +310,39 @@
     return options.map(([value, label]) => (
       `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`
     )).join('');
+  }
+
+  function filterWrongEntries(entries, query) {
+    return entries.filter(({ item }) => matchesStudySearch(query, [item.word, item.meaning]));
+  }
+
+  function renderWrongEntryRows(entries, hasWrongItems) {
+    if (!entries.length) {
+      return `<p class="wm-empty">${hasWrongItems ? '검색 결과가 없습니다.' : '아직 오답이 없습니다.'}</p>`;
+    }
+    return entries.slice(0, 200).map(({ item, info }) => `
+      <div class="list-row wm-mistake">
+        <span class="list-row-body">
+          <span class="list-row-title wm-term">${escapeHtml(item.word)}</span>
+          <span class="list-row-sub">${escapeHtml(item.meaning)}</span>
+        </span>
+        <span class="list-row-value wm-meta">
+          <span>DAY ${pad2(item.day)} · 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</span>
+          <small>최근 답 · ${escapeHtml(info.lastAnswer || '(빈 답)')}</small>
+        </span>
+      </div>
+    `).join('');
+  }
+
+  function updateWrongNoteResults(entries) {
+    const filteredEntries = filterWrongEntries(entries, state.wrongSearch);
+    const title = document.getElementById('wrongNoteTitle');
+    const list = document.getElementById('wrongEntriesList');
+    const reviewButton = document.getElementById('statsReviewBtn');
+    if (title) title.textContent = `오답 암기 노트 · 검색 결과 ${filteredEntries.length.toLocaleString()}개`;
+    if (list) list.innerHTML = renderWrongEntryRows(filteredEntries, entries.length > 0);
+    if (reviewButton) reviewButton.disabled = filteredEntries.length === 0;
+    return filteredEntries;
   }
 
   function sessionLabel(session) {
@@ -707,6 +741,7 @@
       .filter(Boolean);
     const wrongEntries = sortWords(wrongItems, state.wrongOrder)
       .map((item) => ({ item, info: db.wrongBank[item.id] }));
+    const filteredWrongEntries = filterWrongEntries(wrongEntries, state.wrongSearch);
 
     app.innerHTML = `
       <header class="view-head">
@@ -722,27 +757,20 @@
 
       <div class="wm-layout">
         <section class="wm-col" aria-labelledby="wrongNoteTitle">
-          <div class="list-group-head-row">
-            <h2 class="list-group-head" id="wrongNoteTitle">오답 암기 노트 · ${wrongEntries.length}개</h2>
-            <div class="wm-sort">
-              <label class="wm-sort-label" for="wrongSortMode">정렬</label>
-              <select id="wrongSortMode" class="field-input-inline">${renderSortOptions(state.wrongOrder)}</select>
-              <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>재시험</button>
+          <div class="wm-wrong-head">
+            <h2 class="list-group-head" id="wrongNoteTitle" aria-live="polite">오답 암기 노트 · 검색 결과 ${filteredWrongEntries.length.toLocaleString()}개</h2>
+            <div class="wm-wrong-controls">
+              <label class="sr-only" for="wrongSearchInput">영어 단어 또는 한국어 뜻 검색</label>
+              <input id="wrongSearchInput" class="field-input field-input-sm wm-search-input" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="영단어 또는 뜻 검색" aria-controls="wrongEntriesList" value="${escapeHtml(state.wrongSearch)}">
+              <div class="wm-sort">
+                <label class="wm-sort-label" for="wrongSortMode">정렬</label>
+                <select id="wrongSortMode" class="field-input-inline">${renderSortOptions(state.wrongOrder)}</select>
+                <button id="statsReviewBtn" class="btn btn-primary btn-sm" type="button" ${filteredWrongEntries.length ? '' : 'disabled'}>재시험</button>
+              </div>
             </div>
           </div>
-          <div class="list-group">
-            ${wrongEntries.length ? wrongEntries.slice(0, 200).map(({ item, info }) => `
-              <div class="list-row wm-mistake">
-                <span class="list-row-body">
-                  <span class="list-row-title wm-term">${escapeHtml(item.word)}</span>
-                  <span class="list-row-sub">${escapeHtml(item.meaning)}</span>
-                </span>
-                <span class="list-row-value wm-meta">
-                  <span>DAY ${pad2(item.day)} · 오답률 ${Math.round(personalWrongRate(item) || 0)}% · 누적 ${info.count || 1}회</span>
-                  <small>최근 답 · ${escapeHtml(info.lastAnswer || '(빈 답)')}</small>
-                </span>
-              </div>
-            `).join('') : '<p class="wm-empty">아직 오답이 없습니다.</p>'}
+          <div id="wrongEntriesList" class="list-group">
+            ${renderWrongEntryRows(filteredWrongEntries, wrongEntries.length > 0)}
           </div>
         </section>
 
@@ -788,13 +816,18 @@
     `;
 
     document.getElementById('statsBackBtn').addEventListener('click', renderHome);
+    document.getElementById('wrongSearchInput').addEventListener('input', (event) => {
+      state.wrongSearch = event.target.value;
+      updateWrongNoteResults(wrongEntries);
+    });
     document.getElementById('wrongSortMode').addEventListener('change', (event) => {
       state.wrongOrder = event.target.value;
       renderStatsPage();
     });
-    document.getElementById('statsReviewBtn').addEventListener('click', () => (
-      startReviewQuiz(wrongEntries.map(({ item }) => item.id), state.wrongOrder)
-    ));
+    document.getElementById('statsReviewBtn').addEventListener('click', () => {
+      const currentResults = filterWrongEntries(wrongEntries, state.wrongSearch);
+      startReviewQuiz(currentResults.map(({ item }) => item.id), state.wrongOrder);
+    });
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('importFile').addEventListener('change', importData);
     document.getElementById('resetBtn').addEventListener('click', resetData);
