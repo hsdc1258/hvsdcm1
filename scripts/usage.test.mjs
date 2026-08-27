@@ -245,6 +245,25 @@ test('parallel project, protocol, and visualization reports render as session ta
   assert.doesNotMatch(markup, /작업 카테고리<\/span>/u);
 });
 
+// 수정 라운드 M-2: 2차 세션 탭의 상태는 1차 탭(진행중/완료)이 이미 전달한다 — 탭에는
+// 점을 두지 않고, 화면에 남는 모든 상태 점은 aria-hidden 점 + 텍스트 라벨 짝이어야 한다.
+test('session tabs carry no status dot and every remaining dot pairs with a text label', () => {
+  const markup = dashboard({
+    snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
+    tasks: [
+      harnessTask(),
+      harnessTask({ id: 'done-one', name: '완료 세션', status: 'complete', phase: 'done', progress: 100 }),
+    ],
+  });
+  const tabs = markup.match(/<button class="h-session-tab[\s\S]*?<\/button>/gu) || [];
+  assert.ok(tabs.length >= 2);
+  for (const tab of tabs) assert.doesNotMatch(tab, /status-dot/u);
+  // 점 자체는 계속 쓰인다(조직도·액터 상태 등) — 전부 사라져서 통과하는 일은 막는다.
+  assert.ok((markup.match(/status-dot/gu) || []).length > 0);
+  // 라벨 짝 규칙: 점을 닫은 직후에 태그가 아니라 텍스트가 와야 한다.
+  assert.equal((markup.match(/status-dot[^"]*"[^>]*><\/(?:span|i)>\s*</gu) || []).length, 0);
+});
+
 test('active and completed tabs separate session state while the portfolio includes every reported actor', () => {
   const renderers = createUsageRenderers();
   const active = harnessTask({ id: 'active-one', name: '진행 세션' });

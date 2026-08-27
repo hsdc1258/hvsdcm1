@@ -1879,6 +1879,35 @@ function validateGlobalsAndOrder() {
       `${screen}: no script load order is declared — add it to expectedOrders in scripts/validate.mjs (load order is the deployment contract)`);
   }
 
+  // 수정 라운드 M-1: 상태 계약이 CSS에만 있는 경우(.is-accent/.is-idle 등)는 구캐시
+  // 스타일시트만으로도 화면이 어긋난다 — 스크립트처럼 스타일시트 href(버전 쿼리 포함)도
+  // 표면별로 고정한다. usage는 JS와 같은 ?v= 토큰을 CSS 두 장 모두에 싣는다.
+  const stylesheetSources = (file) =>
+    [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
+  const PRETENDARD_CDN = 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css';
+  const expectedStylesheets = {
+    'index.html': [PRETENDARD_CDN, '/assets/css/system.css', '/assets/css/home.css'],
+    'WordMaster/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
+    'smstudy/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
+    'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
+    'usage/index.html': ['/assets/css/system.css?v=20260828-usage-front-refit', '/usage/assets/css/usage.css?v=20260828-usage-front-refit'],
+  };
+  for (const [file, order] of Object.entries(expectedStylesheets)) {
+    check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
+  }
+  for (const screen of publishedHtml().map(relative).filter((file) => file === 'index.html' || file.endsWith('/index.html'))) {
+    check(Object.prototype.hasOwnProperty.call(expectedStylesheets, screen),
+      `${screen}: no stylesheet contract is declared — add it to expectedStylesheets in scripts/validate.mjs (href + version query is the cache contract)`);
+  }
+  // usage의 JS·CSS 버전 토큰이 서로 어긋나면 절반만 새로 실리는 배포가 된다 — 같은 토큰인지 잠근다.
+  {
+    const versionOf = (src) => (src.split('?v=')[1] || '');
+    const usageJsVersion = versionOf(expectedOrders['usage/index.html'][0]);
+    const usageCssVersions = expectedStylesheets['usage/index.html'].map(versionOf);
+    check(usageJsVersion && usageCssVersions.every((token) => token === usageJsVersion),
+      'usage/index.html: JS and CSS cache-buster tokens must be one identical ?v= value');
+  }
+
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   check(/<script\b[^>]*src="\/assets\/js\/home\.js"[^>]*\bdefer\b/u.test(homeHtml), 'index.html: home.js must load with defer');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-app="wordmaster"'), 'WordMaster: account.js must declare data-app="wordmaster"');

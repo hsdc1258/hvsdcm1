@@ -590,7 +590,6 @@
             <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
               id="hSessionTab-${status}-${index}" aria-controls="hSessionPanel-${status}-${index}" aria-selected="${selected}"
               tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
-              <span class="h-session-tab-state status-dot${task.status === 'complete' ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>${escapeHtml(presentation.name)}</strong>
                 <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(phase)} ${progress}%</span>${renderTaskDate(task)}</small>

@@ -1563,9 +1563,6 @@ label.list-row {
   padding-top: var(--space-4);
   border-top: 1px solid var(--line-faint);
 }
-.us-card-head {
-  align-items: center;
-}
 .us-card-head h3 {
   margin-top: 2px;
   font-size: var(--fs-caption);
@@ -1655,10 +1652,9 @@ label.list-row {
 .h-session-tab {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   flex: 0 0 clamp(200px, 24vw, 280px);
-  gap: var(--space-2);
   min-width: 0;
   min-height: 48px;
   padding: 8px 12px;
@@ -1687,10 +1683,6 @@ label.list-row {
 .h-session-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-.h-session-tab-state {
-  align-self: start;
-  margin-top: 6px;
 }
 .h-session-tab-copy {
   display: grid;
@@ -2703,7 +2695,6 @@ label.list-row {
             <button class="h-session-tab is-selected" type="button" role="tab"
               id="hSessionTab-active-0" aria-controls="hSessionPanel-active-0" aria-selected="true"
               tabindex="0" data-task-tab="0" data-task-id="usage-harness-visualization" data-task-status="active">
-              <span class="h-session-tab-state status-dot is-accent" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>사용량 하네스 시각화</strong>
                 <small class="h-session-tab-meta"><span>파이프라인 시각화 · 검토 86%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
@@ -2712,7 +2703,6 @@ label.list-row {
             <button class="h-session-tab" type="button" role="tab"
               id="hSessionTab-active-1" aria-controls="hSessionPanel-active-1" aria-selected="false"
               tabindex="-1" data-task-tab="1" data-task-id="pipeline-hardening" data-task-status="active">
-              <span class="h-session-tab-state status-dot is-accent" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>Pipeline 개선 프로토콜</strong>
                 <small class="h-session-tab-meta"><span>자체 pipeline 개선 프로토콜 · 검토 82%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
@@ -2956,7 +2946,6 @@ label.list-row {
             <button class="h-session-tab is-selected" type="button" role="tab"
               id="hSessionTab-complete-0" aria-controls="hSessionPanel-complete-0" aria-selected="true"
               tabindex="0" data-task-tab="0" data-task-id="jimunhanjang-project" data-task-status="complete">
-              <span class="h-session-tab-state status-dot is-idle" aria-hidden="true"></span>
               <span class="h-session-tab-copy">
                 <strong>프로젝트 지문한장</strong>
                 <small class="h-session-tab-meta"><span>지문한장 프로젝트 · 완료 100%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
