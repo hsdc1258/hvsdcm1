@@ -1389,6 +1389,7 @@ test('harness report keeps the merged actor total within twenty', async () => {
 function harnessStoreEnv() {
   const state = {
     payload: '', status: '', updatedAt: '', upserts: 0, rejected: 0, readOverride: null,
+    usageSnapshots: [],
   };
   return {
     state,
@@ -1398,6 +1399,13 @@ function harnessStoreEnv() {
       DB: {
         batch: runFakeBatch,
         prepare(sql) {
+          if (sql.includes('FROM usage_snapshots')) {
+            return {
+              bind() {
+                return { async all() { return { results: state.usageSnapshots }; } };
+              },
+            };
+          }
           if (sql.includes('SELECT payload FROM harness_tasks')) {
             return {
               bind() {
@@ -1452,6 +1460,25 @@ function harnessStoreEnv() {
 
 test('a late or unresumed report never revives a completed harness task', async () => {
   const { state, env } = harnessStoreEnv();
+  const setRemaining = (codex, claude) => {
+    state.usageSnapshots = [
+      {
+        source: 'codex',
+        payload: JSON.stringify({ rate_limits: { secondary: { remaining_percent: codex } } }),
+      },
+      {
+        source: 'claude',
+        payload: JSON.stringify({
+          models: {
+            'claude-opus-5': {
+              captured_at: '2026-08-27T09:00:00.000Z',
+              rate_limits: { seven_day: { remaining_percent: claude } },
+            },
+          },
+        }),
+      },
+    ];
+  };
   const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
     method: 'POST',
     headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
@@ -1462,6 +1489,7 @@ test('a late or unresumed report never revives a completed harness task', async 
     task: { ...harnessInput().task, status: 'complete', phase: 'done', progress: 100 },
   });
 
+  setRemaining(70, 60);
   assert.equal((await post(completed)).status, 200);
   assert.equal(state.status, 'complete');
   const upsertsAfterComplete = state.upserts;
@@ -1475,6 +1503,7 @@ test('a late or unresumed report never revives a completed harness task', async 
   assert.equal(state.updatedAt, '2026-08-27T10:00:00.000Z');
 
   // ② 최신 보고라도 명시적 재개 없이는 complete를 active로 강등하지 못한다.
+  setRemaining(68, 58);
   const newer = await post(harnessInput({
     occurred_at: '2026-08-27T11:00:00.000Z',
     actors: [{
@@ -1497,13 +1526,26 @@ test('a late or unresumed report never revives a completed harness task', async 
   assert.equal(held.status, 'complete');
   assert.equal(held.phase, 'done');
   assert.equal(held.progress, 100);
+  assert.equal(held.completed_at, '2026-08-27T10:00:00.000Z');
   assert.deepEqual(held.actors.map((actor) => actor.status), ['done', 'done']);
+  const heldStraggler = held.actors.find((actor) => actor.id === 'usage-harness:straggler');
+  assert.equal(heldStraggler.finished_at, '2026-08-27T11:00:00.000Z');
+  assert.deepEqual(heldStraggler.usage_at_end, { codex: 68, claude: 58 });
 
   // ③ resume:true를 담은 보고만 태스크를 다시 연다.
+  setRemaining(65, 55);
   const resumed = await post(harnessInput({ occurred_at: '2026-08-27T12:00:00.000Z', resume: true }));
   assert.equal(resumed.status, 200);
   assert.equal(state.status, 'active');
-  assert.equal(JSON.parse(state.payload).phase, 'work');
+  const resumedPayload = JSON.parse(state.payload);
+  assert.equal(resumedPayload.phase, 'work');
+  assert.equal(resumedPayload.completed_at, undefined);
+  const resumedMain = resumedPayload.actors.find((actor) => actor.id === 'usage-harness:main');
+  assert.equal(resumedMain.status, 'working');
+  assert.equal(resumedMain.started_at, '2026-08-27T12:00:00.000Z');
+  assert.deepEqual(resumedMain.usage_at_start, { codex: 65, claude: 55 });
+  assert.equal(resumedMain.finished_at, undefined);
+  assert.equal(resumedMain.usage_at_end, undefined);
 
   // resume은 boolean만 받는다 — 문자열 'true'는 재개 신호로 통하지 않는다.
   const bogusResume = await post(harnessInput({ occurred_at: '2026-08-27T13:00:00.000Z', resume: 'true' }));
@@ -1665,6 +1707,175 @@ test('the harness accepts all eight pipeline phases and stores each one verbatim
   assert.equal(state.upserts, HARNESS_PHASE_CHAIN.length);
 });
 
+// WP1 fixture ownership: identifiers and actor shapes come from the owner-provided production D1
+// sample in work/real-harness-task-sample.json; timestamps and quota values are deterministic.
+test('real-payload-derived actors receive stable lifecycle, phase, quota, and completion stamps', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+  const setRemaining = (codex, claude, capturedAt) => {
+    state.usageSnapshots = [
+      {
+        source: 'codex',
+        payload: JSON.stringify({ rate_limits: { secondary: { remaining_percent: codex } } }),
+      },
+      {
+        source: 'claude',
+        payload: JSON.stringify({
+          models: {
+            'claude-fable-5': {
+              captured_at: capturedAt,
+              rate_limits: { seven_day: { remaining_percent: claude } },
+            },
+            // A newer unrelated model proves each actor is stamped against its own exact model,
+            // rather than whichever actor happened to be last in this multi-actor report.
+            'claude-newest': {
+              captured_at: '2026-08-28T23:59:00.000Z',
+              rate_limits: { seven_day: { remaining_percent: 12 } },
+            },
+          },
+        }),
+      },
+    ];
+  };
+  const task = {
+    ...harnessInput().task,
+    name: 'usage 조직도 개선 (08-28)',
+    model: 'claude-fable-5',
+    reasoning: 'xhigh',
+    category_key: 'pipeline-visualization',
+    category: '파이프라인 시각화',
+  };
+  const main = {
+    id: '2026-08-28-usage-조직도-개선:main',
+    parent_id: '',
+    name: 'Fable 5',
+    kind: 'claude',
+    model: 'claude-fable-5',
+    reasoning: 'xhigh',
+    role: '오케스트레이션·기획',
+    status: 'working',
+    assignment: '기획 착수',
+  };
+  const investigator = {
+    id: 'codex-investigate',
+    parent_id: '2026-08-28-usage-조직도-개선:main',
+    name: 'GPT-5.2-Codex',
+    kind: 'codex',
+    model: 'gpt-5.2-codex',
+    reasoning: 'xhigh',
+    role: '조사(read-only)',
+    status: 'working',
+    assignment: '배정 작업 수행',
+    phase: 'work',
+  };
+
+  const startedAt = '2026-08-28T05:20:14.683Z';
+  setRemaining(88, 61, startedAt);
+  const started = await post(harnessInput({
+    task_id: '2026-08-28-usage-조직도-개선',
+    occurred_at: startedAt,
+    task: { ...task, phase: 'plan', progress: 5, status: 'active' },
+    actors: [main, investigator],
+    modules: [],
+    artifacts: [],
+  }));
+  assert.equal(started.status, 200);
+  let saved = JSON.parse(state.payload);
+  let savedMain = saved.actors.find((actor) => actor.id === main.id);
+  let savedInvestigator = saved.actors.find((actor) => actor.id === investigator.id);
+  assert.deepEqual(
+    {
+      phase: savedMain.phase,
+      started_at: savedMain.started_at,
+      usage_at_start: savedMain.usage_at_start,
+    },
+    { phase: 'plan', started_at: startedAt, usage_at_start: { codex: 88, claude: 61 } },
+  );
+  assert.equal(savedInvestigator.phase, 'work');
+  assert.equal(savedInvestigator.started_at, startedAt);
+
+  const blockedAt = '2026-08-28T05:35:00.000Z';
+  setRemaining(82.5, 57, blockedAt);
+  const blocked = await post(harnessInput({
+    task_id: '2026-08-28-usage-조직도-개선',
+    occurred_at: blockedAt,
+    task: { ...task, phase: 'work', progress: 45, status: 'active' },
+    actors: [{ ...investigator, status: 'blocked', phase: undefined }],
+    modules: [],
+    artifacts: ['조사-결론.md'],
+  }));
+  assert.equal(blocked.status, 200);
+  saved = JSON.parse(state.payload);
+  savedInvestigator = saved.actors.find((actor) => actor.id === investigator.id);
+  assert.equal(savedInvestigator.phase, 'work');
+  assert.equal(savedInvestigator.started_at, startedAt);
+  assert.equal(savedInvestigator.finished_at, blockedAt);
+  assert.deepEqual(savedInvestigator.usage_at_end, { codex: 82.5, claude: 12 });
+
+  const completedAt = '2026-08-28T06:00:00.000Z';
+  setRemaining(79, 54, completedAt);
+  const completed = await post(harnessInput({
+    task_id: '2026-08-28-usage-조직도-개선',
+    occurred_at: completedAt,
+    task: { ...task, phase: 'done', progress: 100, status: 'complete' },
+    actors: [main],
+    modules: [],
+    artifacts: ['npm test'],
+  }));
+  assert.equal(completed.status, 200);
+  saved = JSON.parse(state.payload);
+  savedMain = saved.actors.find((actor) => actor.id === main.id);
+  savedInvestigator = saved.actors.find((actor) => actor.id === investigator.id);
+  assert.equal(saved.completed_at, completedAt);
+  assert.deepEqual(saved.actors.map((actor) => [actor.status, actor.progress]), [
+    ['done', 100], ['done', 100],
+  ]);
+  assert.equal(savedMain.finished_at, completedAt);
+  assert.deepEqual(savedMain.usage_at_end, { codex: 79, claude: 54 });
+  assert.equal(savedInvestigator.finished_at, blockedAt, 'an earlier terminal stamp must stay stable');
+});
+
+test('a later completion never backfills quota that was unavailable at the actor terminal transition', async () => {
+  const { state, env } = harnessStoreEnv();
+  const post = (body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+  const actor = {
+    ...harnessInput().actors[0],
+    id: 'usage-harness:no-quota-at-end',
+    parent_id: 'usage-harness:main',
+    progress: undefined,
+  };
+  assert.equal((await post(harnessInput({ actors: [harnessInput().actors[0], actor] }))).status, 200);
+
+  const blockedAt = '2026-08-27T10:00:00.000Z';
+  assert.equal((await post(harnessInput({
+    occurred_at: blockedAt,
+    actors: [{ ...actor, status: 'blocked' }],
+  }))).status, 200);
+  let savedActor = JSON.parse(state.payload).actors.find((entry) => entry.id === actor.id);
+  assert.equal(savedActor.finished_at, blockedAt);
+  assert.equal(savedActor.usage_at_end, undefined);
+
+  state.usageSnapshots = [{
+    source: 'codex',
+    payload: JSON.stringify({ rate_limits: { secondary: { remaining_percent: 50 } } }),
+  }];
+  assert.equal((await post(harnessInput({
+    occurred_at: '2026-08-27T12:00:00.000Z',
+    task: { ...harnessInput().task, status: 'complete', phase: 'done', progress: 100 },
+  }))).status, 200);
+  savedActor = JSON.parse(state.payload).actors.find((entry) => entry.id === actor.id);
+  assert.equal(savedActor.finished_at, blockedAt);
+  assert.equal(savedActor.usage_at_end, undefined);
+});
+
 // 하위호환: 구 4단계는 새 사슬의 **부분집합**이다. 옛 보고자가 그대로 계속 보고해도
 // 거절되지 않아야 하며, 사슬 밖의 값은 예전처럼 400이다.
 test('legacy four-phase reporters keep working while off-chain phases stay rejected', async () => {
@@ -1735,6 +1946,7 @@ test('harness report rejects every bounded or non-allowlisted shape before datab
   }), env);
   const invalidCases = [
     ['phase allowlist', (input) => { input.task.phase = 'ship'; }],
+    ['actor phase allowlist', (input) => { input.actors[0].phase = 'ship'; }],
     ['task status allowlist', (input) => { input.task.status = 'paused'; }],
     ['actor kind allowlist', (input) => { input.actors[0].kind = 'gemini'; }],
     ['actor status allowlist', (input) => { input.actors[0].status = 'idle'; }],
@@ -1991,6 +2203,85 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
     ],
     tasks: [{ ...storedTask, events: [] }],
   });
+});
+
+test('usage completed_limit keeps every active task and returns newest completions by completion time', async () => {
+  const taskRow = (id, status, updatedAt, completedAt = '') => ({
+    task_id: id,
+    status,
+    updated_at: updatedAt,
+    payload: JSON.stringify({
+      version: 1,
+      id,
+      name: id,
+      phase: status === 'complete' ? 'done' : 'work',
+      progress: status === 'complete' ? 100 : 50,
+      status,
+      actors: [],
+      modules: [],
+      artifacts: [],
+      updated_at: updatedAt,
+      ...(completedAt ? { completed_at: completedAt } : {}),
+    }),
+  });
+  // The old completion has the newest updated_at on purpose: completed_at must win when present.
+  const storedRows = [
+    taskRow('active-one', 'active', '2026-08-28T13:00:00.000Z'),
+    taskRow('done-old', 'complete', '2026-08-28T15:00:00.000Z', '2026-08-28T10:00:00.000Z'),
+    taskRow('done-new', 'complete', '2026-08-28T12:00:00.000Z', '2026-08-28T12:00:00.000Z'),
+    taskRow('done-fallback', 'complete', '2026-08-28T11:00:00.000Z'),
+  ];
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM usage_snapshots')) {
+          return { bind() { return { async all() { return { results: [] }; } }; } };
+        }
+        if (sql.includes('FROM harness_tasks')) {
+          return { async all() { return { results: storedRows }; } };
+        }
+        if (sql.includes('FROM harness_events')) {
+          return { async all() { return { results: [] }; } };
+        }
+        throw new Error(`Unexpected SQL in completed limit test: ${sql}`);
+      },
+    },
+  };
+  const get = (query = '') => worker.fetch(new Request(`https://api.test/api/usage${query}`, {
+    headers: { authorization: 'Bearer user-token' },
+  }), env);
+
+  const legacy = await get();
+  assert.equal(legacy.status, 200);
+  assert.deepEqual((await legacy.json()).tasks.map((task) => task.id), storedRows.map((row) => row.task_id));
+
+  const limited = await get('?completed_limit=2');
+  assert.equal(limited.status, 200);
+  assert.deepEqual((await limited.json()).tasks.map((task) => task.id), [
+    'active-one', 'done-new', 'done-fallback',
+  ]);
+
+  const activeOnly = await get('?completed_limit=0');
+  assert.equal(activeOnly.status, 200);
+  assert.deepEqual((await activeOnly.json()).tasks.map((task) => task.id), ['active-one']);
+
+  for (const query of ['?completed_limit=-1', '?completed_limit=1.5', '?completed_limit=1001']) {
+    const invalid = await get(query);
+    assert.equal(invalid.status, 400, query);
+    assert.deepEqual(await invalid.json(), { error: '잘못된 완료 작업 제한입니다.' });
+  }
 });
 
 test('usage lookup returns each task latest three hundred events in ascending order', async () => {

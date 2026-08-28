@@ -310,6 +310,9 @@ function normalizeHarnessReport(input) {
   const ids = new Set();
   for (const actor of actors) {
     if (!actor || typeof actor !== 'object' || Array.isArray(actor)) return null;
+    const actorPhase = actor.phase === undefined
+      ? undefined
+      : harnessText(actor.phase, 16, true);
     const normalized = {
       id: harnessText(actor.id, 120, true),
       parent_id: harnessText(actor.parent_id, 120),
@@ -320,6 +323,7 @@ function normalizeHarnessReport(input) {
       role: harnessText(actor.role, 120),
       status: harnessText(actor.status, 20, true),
       assignment: harnessText(actor.assignment, 240),
+      ...(actorPhase === undefined ? {} : { phase: actorPhase }),
       ...(actor.progress === undefined ? {} : { progress: Number(actor.progress) }),
     };
     if (Object.values(normalized).some((value) => value === null)
@@ -327,6 +331,7 @@ function normalizeHarnessReport(input) {
       || !VALID_HARNESS_ACTOR_KINDS.has(normalized.kind)
       || !VALID_HARNESS_REASONING.has(normalized.reasoning)
       || !VALID_HARNESS_ACTOR_STATES.has(normalized.status)
+      || (normalized.phase !== undefined && !VALID_HARNESS_PHASES.has(normalized.phase))
       || (normalized.progress !== undefined
         && (!Number.isFinite(normalized.progress) || normalized.progress < 0 || normalized.progress > 100))) return null;
     ids.add(normalized.id);
@@ -374,13 +379,50 @@ function normalizeHarnessReport(input) {
   };
 }
 
-export function mergeHarnessReport(previous, incoming) {
+const TERMINAL_HARNESS_ACTOR_STATES = new Set(['done', 'blocked']);
+
+function harnessUsageStamp(usage) {
+  const stamp = {};
+  for (const source of ['codex', 'claude']) {
+    const remaining = usage?.[source];
+    if (Number.isFinite(remaining) && remaining >= 0 && remaining <= 100) stamp[source] = remaining;
+  }
+  return Object.keys(stamp).length > 0 ? stamp : null;
+}
+
+function harnessActorUsageStamp(usage, actor) {
+  return harnessUsageStamp(typeof usage === 'function' ? usage(actor) : usage);
+}
+
+export function mergeHarnessReport(previous, incoming, usage = null) {
   const current = previous && typeof previous === 'object' ? previous : {};
   const actorMap = new Map(
     Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
   );
-  for (const actor of incoming.actors) {
-    actorMap.set(actor.id, { ...actorMap.get(actor.id), ...actor, updated_at: incoming.occurred_at });
+  for (const incomingActor of incoming.actors) {
+    const existing = actorMap.get(incomingActor.id);
+    const actor = { ...existing, ...incomingActor, updated_at: incoming.occurred_at };
+    const usageStamp = harnessActorUsageStamp(usage, actor);
+    if (!existing) {
+      actor.started_at = incoming.occurred_at;
+      if (!actor.phase) actor.phase = incoming.task.phase;
+      if (usageStamp) actor.usage_at_start = { ...usageStamp };
+    }
+    if (incoming.resume === true
+      && TERMINAL_HARNESS_ACTOR_STATES.has(existing?.status)
+      && !TERMINAL_HARNESS_ACTOR_STATES.has(actor.status)) {
+      actor.started_at = incoming.occurred_at;
+      if (usageStamp) actor.usage_at_start = { ...usageStamp };
+      else delete actor.usage_at_start;
+      delete actor.finished_at;
+      delete actor.usage_at_end;
+    }
+    if (TERMINAL_HARNESS_ACTOR_STATES.has(actor.status)
+      && !TERMINAL_HARNESS_ACTOR_STATES.has(existing?.status)) {
+      actor.finished_at = incoming.occurred_at;
+      if (usageStamp) actor.usage_at_end = { ...usageStamp };
+    }
+    actorMap.set(actor.id, actor);
   }
   const moduleMap = new Map(
     Array.isArray(current.modules) ? current.modules.map((module) => [module.id, module]) : [],
@@ -396,14 +438,22 @@ export function mergeHarnessReport(previous, incoming) {
     && incoming.task.status !== 'complete'
     && incoming.resume !== true;
   if (terminalHold || incoming.task.status === 'complete') {
-    actors = actors.map((actor) => ({
-      ...actor,
-      status: actor.status === 'unavailable' ? actor.status : 'done',
-      ...(actor.progress === undefined || actor.status === 'unavailable' ? {} : { progress: 100 }),
-    }));
+    actors = actors.map((actor) => {
+      const usageStamp = harnessActorUsageStamp(usage, actor);
+      const finishesNow = (incoming.task.status === 'complete' || terminalHold)
+        && actor.status !== 'unavailable'
+        && !actor.finished_at;
+      return {
+        ...actor,
+        status: actor.status === 'unavailable' ? actor.status : 'done',
+        ...(actor.status === 'unavailable' ? {} : { progress: 100 }),
+        ...(finishesNow ? { finished_at: incoming.occurred_at } : {}),
+        ...(finishesNow && usageStamp ? { usage_at_end: { ...usageStamp } } : {}),
+      };
+    });
     modules = modules.map((module) => ({ ...module, status: 'done', progress: 100 }));
   }
-  return {
+  const merged = {
     version: 1,
     ...current,
     ...incoming.task,
@@ -420,6 +470,14 @@ export function mergeHarnessReport(previous, incoming) {
     modules,
     artifacts: [...new Set([...(current.artifacts || []), ...incoming.artifacts])].slice(-10),
   };
+  if (incoming.task.status === 'complete') {
+    merged.completed_at = current.status === 'complete' && current.completed_at
+      ? current.completed_at
+      : incoming.occurred_at;
+  } else if (incoming.resume === true) {
+    delete merged.completed_at;
+  }
+  return merged;
 }
 
 function remainingUsagePercent(bucket) {
@@ -472,21 +530,26 @@ function claudeRemainingPercent(payload, subjectModel) {
   return remainingUsagePercent(selected);
 }
 
-async function harnessEventUsage(env, subjectModel) {
+async function harnessUsageContext(env) {
   const snapshots = await env.DB.prepare(`
     SELECT source, payload
     FROM usage_snapshots
     WHERE source IN (?1, ?2)
   `).bind('codex', 'claude').all();
-  let codex = null;
-  let claude = null;
+  const context = { codex: null, claude: null };
   for (const row of snapshots.results || []) {
     let payload = null;
     try { payload = JSON.parse(row.payload); } catch { payload = null; }
-    if (row.source === 'codex') codex = codexRemainingPercent(payload);
-    if (row.source === 'claude') claude = claudeRemainingPercent(payload, subjectModel);
+    if (row.source === 'codex' || row.source === 'claude') context[row.source] = payload;
   }
-  return { codex, claude };
+  return context;
+}
+
+function harnessUsageForModel(context, subjectModel) {
+  return {
+    codex: codexRemainingPercent(context.codex),
+    claude: claudeRemainingPercent(context.claude, subjectModel),
+  };
 }
 
 function optionalEventText(value) {
@@ -534,7 +597,21 @@ async function reportHarness(request, env) {
   if (mergedModuleIds.size > 20) {
     return json({ error: '하네스 모듈이 너무 많습니다.' }, 400);
   }
-  const merged = mergeHarnessReport(previous, incoming);
+  // notify.mjs always emits `${task_id}:main` first and appends an --actor-* report last.
+  // Only that distinct final actor changes the event subject; ordinary reports use task fields.
+  const mainActorId = `${incoming.task_id}:main`;
+  const lastActor = incoming.actors.at(-1);
+  const isActorReport = Boolean(lastActor?.id && lastActor.id !== mainActorId);
+  const subjectModel = optionalEventText(isActorReport ? lastActor.model : incoming.task.model);
+  // The same server-side quota observation drives both the immutable actor lifecycle stamp and
+  // the append-only event. Reporters cannot forge timing or quota metadata in their JSON body.
+  const usageContext = await harnessUsageContext(env);
+  const eventUsage = harnessUsageForModel(usageContext, subjectModel);
+  const merged = mergeHarnessReport(
+    previous,
+    incoming,
+    (actor) => harnessUsageForModel(usageContext, actor.model),
+  );
   // 순서 비교는 문자열이 아니라 시각으로 한다. 정규화 이전에 저장된 행은 오프셋 표기라
   // 사전순으로는 UTC 표기보다 항상 뒤에 오고, 그래서 더 최신인 보고가 조용히 무시됐다.
   // SQLite datetime()은 '+09:00'과 'Z'를 모두 UTC로 환산한다(실측: sqlite 3.53.3에서
@@ -551,14 +628,7 @@ async function reportHarness(request, env) {
   // 읽은 뒤 행이 complete가 됐다면, resume 없는 active 보고는 그 강등을 적용하지 못한다.
   const guardsTerminal = merged.status !== 'complete' && incoming.resume !== true;
   const serialized = JSON.stringify(merged);
-  // notify.mjs always emits `${task_id}:main` first and appends an --actor-* report last.
-  // Only that distinct final actor changes the event subject; ordinary reports use task fields.
-  const mainActorId = `${incoming.task_id}:main`;
-  const lastActor = incoming.actors.at(-1);
-  const isActorReport = Boolean(lastActor?.id && lastActor.id !== mainActorId);
   const subject = isActorReport ? lastActor : merged;
-  const subjectModel = optionalEventText(subject.model);
-  const eventUsage = await harnessEventUsage(env, subjectModel);
   const kind = previous && previous.phase !== merged.phase ? 'phase-change' : 'report';
   const upsertStatement = env.DB.prepare(`
     INSERT INTO harness_tasks(task_id, status, updated_at, payload)
@@ -617,12 +687,22 @@ function isOwnerSession(session, env) {
   return owner.length > 0 && username === owner;
 }
 
+function completedTaskLimit(request) {
+  const values = new URL(request.url).searchParams.getAll('completed_limit');
+  if (values.length === 0) return { ok: true, value: null };
+  if (values.length !== 1 || !/^(?:0|[1-9]\d{0,3})$/u.test(values[0])) return { ok: false };
+  const value = Number(values[0]);
+  return value <= 1_000 ? { ok: true, value } : { ok: false };
+}
+
 async function usage(request, env) {
   const session = await authenticate(request, env);
   if (!session) return json({ error: '로그인이 필요합니다.' }, 401);
   // 비소유자에게는 **존재를 숨긴다** — 라우트가 없을 때와 같은 404를 준다.
   // 403이면 "여기 뭔가 있다"는 사실이 새어 나간다 (review WP1 M-5).
   if (!isOwnerSession(session, env)) return json({ error: 'Not found' }, 404);
+  const completedLimit = completedTaskLimit(request);
+  if (!completedLimit.ok) return json({ error: '잘못된 완료 작업 제한입니다.' }, 400);
 
   // 필터 목록을 손으로 적지 않는다 — ingest 허용 집합에서 그대로 도출한다.
   const sources = [...VALID_USAGE_SOURCES];
@@ -666,6 +746,32 @@ async function usage(request, env) {
     });
     eventsByTask.set(row.task_id, events);
   }
+  const parsedTasks = taskRows.results.flatMap((row) => {
+    try {
+      const payload = JSON.parse(row.payload);
+      return payload && typeof payload === 'object'
+        ? [{
+          row,
+          payload: { ...payload, events: eventsByTask.get(row.task_id) || [] },
+        }]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const limitedTasks = completedLimit.value === null
+    ? parsedTasks
+    : [
+      ...parsedTasks.filter(({ row }) => row.status !== 'complete'),
+      ...parsedTasks
+        .filter(({ row }) => row.status === 'complete')
+        .sort((left, right) => {
+          const leftTime = Date.parse(left.payload.completed_at || left.row.updated_at || '') || 0;
+          const rightTime = Date.parse(right.payload.completed_at || right.row.updated_at || '') || 0;
+          return rightTime - leftTime || String(left.row.task_id).localeCompare(String(right.row.task_id));
+        })
+        .slice(0, completedLimit.value),
+    ];
   return json({
     snapshots: rows.results.filter((row) => VALID_USAGE_SOURCES.has(row.source)).map((row) => {
       // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
@@ -673,16 +779,7 @@ async function usage(request, env) {
       try { payload = JSON.parse(row.payload); } catch { payload = null; }
       return { source: row.source, captured_at: row.captured_at, payload };
     }),
-    tasks: taskRows.results.flatMap((row) => {
-      try {
-        const payload = JSON.parse(row.payload);
-        return payload && typeof payload === 'object'
-          ? [{ ...payload, events: eventsByTask.get(row.task_id) || [] }]
-          : [];
-      } catch {
-        return [];
-      }
-    }),
+    tasks: limitedTasks.map(({ payload }) => payload),
   });
 }
 
