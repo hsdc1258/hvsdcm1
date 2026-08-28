@@ -55,11 +55,13 @@ assert.equal(typeof renderers.renderSessionView, 'function', '상태별 세션 r
 assert.equal(typeof renderers.renderPortfolioBoard, 'function', '관제탑 renderer가 공개되어야 합니다.');
 
 const views = renderers.renderSessionViews(tasks, NOW);
+// 상위 탭은 진행 중 · 완료 둘뿐이다 (계약 §A). 관제탑은 상위 탭이 아니라 진행 중
+// 패널 안의 보기 모드가 됐다 — 아래 보드 검사가 그 모드를 직접 렌더해 본다.
 assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="2"/u);
 assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="2"/u);
-assert.match(views, /data-session-view="org"[^>]*>[\s\S]*?data-view-count="4"/u);
+assert.equal((views.match(/data-session-view="/gu) || []).length, 2);
 
-const active = renderers.renderSessionView(tasks, NOW, 'active');
+const active = renderers.renderSessionView(tasks, NOW, 'active', 'org');
 assert.match(active, /진행 Alpha/u);
 assert.match(active, /진행 Beta/u);
 assert.doesNotMatch(active, /완료 Gamma|완료 Delta/u);
@@ -69,27 +71,30 @@ assert.match(complete, /완료 Gamma/u);
 assert.match(complete, /완료 Delta/u);
 assert.doesNotMatch(complete, /진행 Alpha|진행 Beta/u);
 
-// 관제탑 기본값은 '진행 중만'이고(요구 6), 전체는 토글로 연다. 아래 계약 검사는
-// 전부 '전체' 범위에서 본다 — 접기는 표시 규칙이지 데이터 손실이 아니어야 하기 때문이다.
-const activeOnlyBoard = renderers.renderPortfolioBoard(tasks, NOW);
-assert.equal((activeOnlyBoard.match(/data-portfolio-task=/gu) || []).length, 2,
-  '기본 범위는 진행 중인 세션 2개만 그려야 합니다.');
-assert.match(activeOnlyBoard, /완료 2개 접힘/u);
-assert.match(activeOnlyBoard, /data-board-scope="all"/u);
+// 관제탑은 **진행 중인 세션만** 그린다 (계약 §A). 완료 세션은 사라진 것이 아니라 완료
+// 탭으로 옮겨 갔을 뿐이므로, "데이터가 없어지지 않는다"는 계약은 두 화면을 합쳐 본다.
+const board = renderers.renderPortfolioBoard(tasks, NOW);
+assert.equal((board.match(/data-portfolio-task=/gu) || []).length, 2,
+  '관제탑은 진행 중인 세션 2개만 그려야 합니다.');
+assert.doesNotMatch(board, /data-board-scope|완료 Gamma|완료 Delta/u);
+// 보드 안에 범위 토글이 없다 — 같은 선택지가 상위 탭과 보드 양쪽에 있으면 축이 뒤섞인다.
+assert.doesNotMatch(board, /접힘/u);
 
-const org = renderers.renderPortfolioBoard(tasks, NOW, 'all');
+// 진행 중 세션의 액터는 관제탑 칩으로, 완료 세션의 액터는 완료 탭의 조직도로 나온다.
+for (const expected of ['진행 Alpha', '진행 Beta', 'Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main']) {
+  assert.equal((board.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected}는 관제탑에 한 번만 있어야 합니다.`);
+}
+assert.equal((board.match(/data-actor-id=/gu) || []).length, 3);
+assert.match(board, /세션 2개 · 에이전트 3명/u);
+
 for (const expected of [
-  '진행 Alpha', '진행 Beta', '완료 Gamma', '완료 Delta',
-  'Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main',
+  '완료 Gamma', '완료 Delta',
   'Gamma Main', 'Gamma 검토 서브에이전트', 'Gamma WebGPT',
 ]) {
-  assert.equal((org.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected}는 관제탑에 한 번만 있어야 합니다.`);
+  assert.ok(complete.includes(expected), `${expected}는 완료 탭에 있어야 합니다.`);
 }
-assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 4);
-assert.equal((org.match(/data-actor-id=/gu) || []).length, 6);
-assert.match(org, /완료 Delta[\s\S]*?에이전트 보고 없음/u);
-// 하네스 노드는 보고된 것만 센다 — 세션 수·진행 수·실제 액터 수.
-assert.match(org, /세션 4개 · 진행 2개 · 에이전트 6명/u);
+assert.equal((complete.match(/data-actor-id=/gu) || []).length, 3);
+assert.match(complete, /완료 Delta[\s\S]*?에이전트 보고 없음/u);
 
 // 실제 owner API가 12개에서 자르지 않고 보존된 전체 task를 renderer까지 넘기는지 확인한다.
 const retainedTasks = Array.from({ length: 13 }, (_, index) => {
@@ -144,10 +149,16 @@ const apiResponse = await worker.fetch(new Request('https://api.test/api/usage',
 assert.equal(apiResponse.status, 200);
 const apiPayload = await apiResponse.json();
 assert.equal(apiPayload.tasks.length, 13);
-const retainedOrg = renderers.renderPortfolioBoard(apiPayload.tasks, NOW, 'all');
-assert.equal((retainedOrg.match(/data-portfolio-task=/gu) || []).length, 13);
-assert.equal((retainedOrg.match(/data-actor-id=/gu) || []).length, 13);
-assert.match(retainedOrg, /보존 세션 01/u);
-assert.match(retainedOrg, /보존 세션 13/u);
+// 진행 2 + 완료 11이 두 화면에 나뉘어 서고, **어느 쪽에서도 잘리지 않는다.**
+// 완료 탭은 기본 10개만 펴므로(요구 6) 남은 1개는 '더 보기'가 개수로 밝힌다 —
+// 접힌 것과 사라진 것을 구별하는 것이 이 검사의 요지다.
+const retainedBoard = renderers.renderPortfolioBoard(apiPayload.tasks, NOW);
+assert.equal((retainedBoard.match(/data-portfolio-task=/gu) || []).length, 2);
+assert.match(retainedBoard, /보존 세션 01/u);
+
+const retainedComplete = renderers.renderSessionView(apiPayload.tasks, NOW, 'complete');
+assert.equal((retainedComplete.match(/data-task-tab=/gu) || []).length, 10);
+assert.match(retainedComplete, /남은 1개/u);
+assert.match(retainedComplete, /보존 세션 03/u);
 
 console.log('SESSION STATE + PORTFOLIO ORG E2E: PASS');

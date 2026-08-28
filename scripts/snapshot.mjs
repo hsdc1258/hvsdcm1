@@ -274,7 +274,12 @@ const DOCUMENT_SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ----
 // 않았다 (WP3 리뷰 major 1이 지적한 사각지대). 실제 규칙과 같은 높이를 두고 스크롤만
 // 허용하면, 사람이 보는 사본에도 상자 대 트리의 실제 크기 비가 그대로 남는다.
 // 배율 계산 자체(가로 우선 · 판독 바닥 · 넘침 표시)는 scripts/usage.test.mjs가 잠근다.
-export const USAGE_SNAPSHOT_CSS = '.h-org-viewport { overflow: auto; }';
+// usage 스냅샷에는 **전용 CSS가 없다.** 예전에는 확대·이동 캔버스를 사본에서 볼 수 있게
+// `.h-org-viewport { overflow: auto; }` 한 줄을 끼워 넣었고, 그 한 줄이 실제 화면과 사본을
+// 갈라놓아 리뷰가 사각지대라고 지적했다. 캔버스를 걷어낸 지금(usage.css `.h-org-scroll`)은
+// 배포되는 CSS 그대로가 사본에서도 옳다 — **사본과 실화면이 같은 규칙을 쓴다**는 것이
+// 이 상수를 빈 값으로 두는 이유이고, 다시 채우려면 그 사각지대를 다시 여는 셈이다.
+export const USAGE_SNAPSHOT_CSS = '';
 
 // 생성물이므로 줄 끝 공백을 남기지 않는다 (git diff --check).
 function normalize(html) {
@@ -435,24 +440,20 @@ export function buildSnapshots() {
       note: '<strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
-        + '\n  <br><strong>여기서 확인할 것</strong> — 진행 중/완료/전체 조직도 탭의 수치가 각각 2/1/3이고, 진행 중 병렬 task 중 선택된 한 panel만 보이는지,'
-        + ' 선택된 세션의 조직도가 사용자 입력 → 총괄 → 입력/기획/구현/게이트/리뷰/수정/승인/완료 <strong>여덟 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지,'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 상위 탭이 <strong>진행 중 · 완료 둘뿐</strong>이고 수치가 각각 2/1인지,'
+        + ' 진행 중 패널 머리의 <strong>관제탑 | 조직도</strong> 모드 토글에서 기본값(관제탑)이 눌려 있는지,'
+        + ' 관제탑 카드의 칩이 이름 · 역할 · 모델 · 상태 · 진행률 · 소요를 각자 슬롯으로 내고 위임 깊이가 들여쓰기로 남는지,'
+        + ' (조직도 모드로 바꿔 보면) 사용자 입력 → 총괄 → 입력/기획/구현/게이트/리뷰/수정/승인/완료 <strong>여덟 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지,'
         + ' 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지,'
         + ' 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
-        + ' 조직도는 실제 화면에서 <strong>휠 확대 · 끌어 이동</strong>하는 캔버스이고, 열리는 순간 <code>fitOrgView()</code>가 배율을 맞춘다 —'
-        + ' 가로는 반드시 넣고, 세로는 글자가 읽히는 배율(<code>FIT_READABLE_MIN</code>) 위에서만 줄이며, 그래도 넘치면 넘친다고 머리말이 말한다.'
-        + ' 이 사본은 스크립트가 없어 그 변환이 돌지 않는다. 그렇다고 캔버스 높이를 풀면 <strong>뷰포트와 트리의 실제 크기 차이가 사라져</strong>'
-        + ' 모바일 폭에서 배율이 어디까지 내려가는지가 사본에서 보이지 않는다 (WP3 리뷰가 지적한 사각지대다).'
-        + ' 그래서 높이는 실제 규칙 그대로 두고 <strong>스크롤만 허용</strong>했다 — 상자 안을 밀어 보면 실제 화면에서 끌어 이동했을 때와 같은 것이 보이고,'
-        + ' 상자 크기 대비 트리 크기도 그대로 보인다. 배율 계산 자체는 <code>scripts/usage.test.mjs</code>가 기계로 잠근다.'
+        + ' 조직도의 확대·이동 캔버스는 <strong>제거됐다</strong>: 트리는 일반 문서 흐름으로 원본 크기로 서고, 넘치면 조직도 상자만 가로로 스크롤한다.'
+        + ' 그래서 이 사본에는 <strong>스냅샷 전용 CSS가 한 줄도 없다</strong> — 배포되는 CSS 그대로이므로 사본에서 본 조판이 곧 실화면의 조판이다.'
+        + ' 예전 사본은 캔버스 변환을 우회하는 전용 CSS 때문에 실제 초기 배율을 가렸고, 그것이 직전 리뷰가 지적한 사각지대였다.'
         + `\n  ${GENERATED_NOTE}`,
+      // 스냅샷 전용 CSS를 끼우지 않는다 (USAGE_SNAPSHOT_CSS는 빈 값이다). 확대·이동이
+      // 사라졌으므로 사본이 실화면과 달라질 이유가 없다 — 배포되는 CSS 그대로 렌더한다.
       mutate: (html) => html
-        // 확대·이동은 JS가 하는 일이다. 정적 사본에서 뷰포트를 그대로 두면 트리의
-        // 왼쪽 위 모서리만 보여 시각 확인(DESIGN.md §10)에 쓸 수 없다. 그래서 스크롤을
-        // 허용한다 — **높이는 풀지 않는다**: 높이를 풀면 "이 상자에 이 트리가 들어가는가"
-        // 라는 물음 자체가 사본에서 사라진다 (WP3 리뷰 major 1의 사각지대).
-        .replace('</head>', `<style>\n/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */\n${USAGE_SNAPSHOT_CSS}\n</style>\n</head>`)
         .replace(
           '<div id="usageBody" class="us-body"></div>',
           `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,

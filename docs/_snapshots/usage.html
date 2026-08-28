@@ -1868,7 +1868,7 @@ label.list-row {
   font-size: var(--fs-caption);
   font-weight: 600;
 }
-.h-modules-head > span, .h-org-hint {
+.h-modules-head > span {
   color: var(--text-3);
   font-size: var(--fs-micro);
 }
@@ -1935,45 +1935,31 @@ label.list-row {
   font-size: var(--fs-caption);
   font-weight: 600;
 }
-.h-org-tools {
-  display: flex;
-  align-items: center;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-.h-org-hint {
-  align-self: center;
-}
-/* 캔버스 — 확대·이동은 여기 안에서만 일어난다. overflow: hidden이라 페이지
-   스크롤을 빼앗지 않고, touch-action: none이라 손가락 끌기가 팬이 된다. */
-.h-org-viewport {
-  position: relative;
-  height: clamp(320px, 54vh, 640px);
-  /* 캔버스가 max-content라 자동 최소 크기가 살아 있으면 그리드 칸을 밀어낸다.
-     overflow: hidden만으로도 0이 되지만, 스냅샷처럼 overflow를 푸는 경우까지 잠근다. */
+/* 조직도 컨테이너 — 확대·이동 캔버스를 걷어낸 자리다 (계약 §C).
+   `transform: scale`이 없으므로 글자는 어느 폭에서도 원본 크기다. 트리가 컨테이너보다
+   넓으면 **이 상자만** 가로로 스크롤한다: min-width: 0이 그리드 칸의 자동 최소 크기를
+   풀어 주고(그러지 않으면 max-content 트리가 칸을 밀어내 페이지 body가 가로로 흔들린다),
+   overscroll-behavior가 가로 스크롤 끝에서 페이지로 넘어가는 것을 막는다.
+   키보드로도 스크롤할 수 있도록 tabindex를 받는 상자라 초점 링을 그린다. */
+.h-org-scroll {
   min-width: 0;
-  overflow: hidden;
+  padding: var(--space-4);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   background: var(--surface-2);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
-  cursor: grab;
-  touch-action: none;
-  overscroll-behavior: contain;
-  user-select: none;
 }
-.h-org-viewport:focus-visible {
+.h-org-scroll:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.h-org-viewport.is-panning {
-  cursor: grabbing;
-}
-.h-org-canvas {
-  width: max-content;
-  padding: var(--space-4);
-  transform-origin: 0 0;
+/* 보기 모드 토글(관제탑 · 조직도). 모양은 system.css의 `.segmented`가 그린다 —
+   여기서는 진행 중 패널 머리에서의 자리만 잡는다. 좁은 화면에서는 두 칸이 폭을
+   나눠 가지므로 터치 타깃이 줄지 않는다. */
+.h-mode-toggle {
+  align-self: flex-start;
+  margin-bottom: var(--space-3);
 }
 /* ---- 축(세로) ----
    단(step)마다 위아래를 관통하는 헤어라인이 축이 된다. 단 사이 간격을 margin이 아니라
@@ -2213,9 +2199,12 @@ label.list-row {
   font-size: var(--fs-micro);
 }
 /* ==========================================================================
-   반응형 — 1100(rail 아래로) / 700(도구 줄바꿈 · **조직도 분기를 축 아래로**) / 430(여백 압축)
-   좁은 화면에서는 트리를 다시 조판한다. 확대·이동만으로는 부족하기 때문이다: 좌→우
-   분기가 만드는 900px대 폭을 300px대 화면에 "맞추면" 글자가 읽히지 않는다 (WP3 major 1).
+   반응형 — 1100(rail 아래로) / 768(**조직도 분기를 축 아래로**) / 700(여백·탭) / 430(여백 압축)
+   좁은 화면에서는 트리를 **다시 조판한다**. 축소하지 않는다 (계약 §C).
+   좌→우 분기는 트리 폭을 900px대로 부풀리는데, 그 폭을 300px대 화면에 넣는 방법은 둘뿐이다:
+   ① 배율을 0.35 아래로 떨어뜨려 12px 글자를 4px로 만들거나(직전 리뷰 major 1이 잡은 결함),
+   ② 분기를 축 아래로 내려 폭 자체를 '노드 하나 + 들여쓰기'로 줄이거나.
+   여기서는 ②만 쓴다 — 이 화면에 `transform: scale`은 존재하지 않는다.
    ========================================================================== */
 @media (max-width: 1100px) {
   .us-command-layout {
@@ -2234,41 +2223,13 @@ label.list-row {
     border-top: 0;
   }
 }
-@media (max-width: 700px) {
-  .h-task, .h-portfolio {
-    padding: var(--space-3);
-  }
-  .h-task-head, .h-org-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .h-task-badges, .h-org-tools {
-    justify-content: flex-start;
-  }
-  .h-task-facts {
-    grid-template-columns: minmax(0, 1fr);
-    padding: var(--space-3);
-  }
-  .h-task-facts > div {
-    padding: var(--space-2) 0;
-  }
-  .h-task-facts > div + div {
-    border-top: 1px solid var(--line-faint);
-    border-left: 0;
-  }
-  /* 모바일에서 트리는 가로보다 세로로 길다. 뷰포트가 낮으면 "맞춤" 배율이 그만큼
-     더 내려가 글자가 읽히지 않는다 — 세로를 넉넉히 줘서 맞춤 배율을 끌어올린다. */
-  .h-org-viewport {
-    height: clamp(320px, 68vh, 560px);
-  }
-  /* ---- 모바일 전용 배치: 분기를 오른쪽이 아니라 **축 아래로** 내린다 ----
-     근거(review WP3 major 1): 좌→우 분기는 트리 폭을 908px까지 부풀렸고, 그 폭을
-     317px 화면에 맞추면 배율이 0.35 아래로 떨어져 12px 글자가 4px가 됐다. 폭을 줄이는
-     것 말고 판독을 되찾을 방법이 없다 — 그래서 좁은 화면에서만 조판을 바꾼다.
-     아래로 내리면 트리 폭은 '노드 하나 + 들여쓰기'가 되어 가로가 그대로 들어가고,
-     길어진 세로는 usage.js의 판독 바닥(FIT_READABLE_MIN)이 지킨 채 끌어서 본다.
-     새 선을 만들지 않는다: 축 헤어라인(left: 106px)이 그대로 분기의 세로 척추가 되고,
-     분기의 들여쓰기는 그 x에 스텁 22px을 더한 값이다. */
+/* ---- 모바일 배치(≤768px): 분기를 오른쪽이 아니라 **축 아래로** 내린다 ----
+   좌→우 분기는 깊이 한 단마다 232px씩 폭을 더한다. 세로로 내리면 트리 폭은
+   '노드 하나 + 들여쓰기'로 고정되고, 길어진 세로는 페이지가 그냥 스크롤한다.
+   새 선을 만들지 않는다: 축 헤어라인(left: 106px)이 그대로 분기의 세로 척추가 되고,
+   분기의 들여쓰기는 그 x에 스텁 22px을 더한 값(128px)이다. 폭 값을 바꾸면 이 둘을
+   함께 바꾼다 — 430px 블록이 같은 계산을 94 + 22 = 116으로 되풀이한다. */
+@media (max-width: 768px) {
   .h-flow-step {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -2284,8 +2245,7 @@ label.list-row {
   .h-flow-step:last-child:has(.h-branch)::before {
     bottom: 0;
   }
-  /* 손자도 부모 카드 아래로 내린다 — 오른쪽으로 이어 붙이면 깊이 한 단마다 232px씩
-     늘어 다시 화면을 넘는다. 척추는 부모 카드의 왼쪽 모서리를 따라 내려간다. */
+  /* 손자도 부모 카드 아래로 내린다. 척추는 부모 카드의 왼쪽 모서리를 따라 내려간다. */
   .h-node-slot {
     flex-direction: column;
     align-items: flex-start;
@@ -2304,23 +2264,43 @@ label.list-row {
     top: -9px;
     bottom: 50%;
   }
+}
+@media (max-width: 700px) {
+  .h-task, .h-portfolio {
+    padding: var(--space-3);
+  }
+  .h-task-head, .h-org-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .h-task-badges {
+    justify-content: flex-start;
+  }
+  .h-task-facts {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3);
+  }
+  .h-task-facts > div {
+    padding: var(--space-2) 0;
+  }
+  .h-task-facts > div + div {
+    border-top: 1px solid var(--line-faint);
+    border-left: 0;
+  }
   .h-session-tab {
     flex-basis: 74vw;
   }
 }
 @media (max-width: 430px) {
-  .h-org-canvas {
+  .h-org-scroll {
     padding: var(--space-3);
   }
   .h-node {
     width: 188px;
   }
   /* 노드가 좁아지면 축 커넥터의 x좌표(= 폭의 절반)도 함께 내려간다.
-     이 폭에서는 분기가 이미 축 아래로 내려가 있으므로(700px 블록), 열은 한 줄이고
+     이 폭에서는 분기가 이미 축 아래로 내려가 있으므로(768px 블록), 열은 한 줄이고
      분기 들여쓰기는 축의 새 x(94) + 스텁(22)이다. */
-  .h-flow-step {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .h-flow-step::before {
     left: 94px;
   }
@@ -2377,6 +2357,13 @@ label.list-row {
        #9A9CAC on #272B44 (칩 상태)          5.10:1
        #8B9AF2 on #272B44 (칩 역할)          5.28:1  ← 위 표에 이미 있던 값
      셋 다 본문 하한 4.5:1을 넘는다. 칩 글자는 10.5px라 큰 글자 예외를 쓰지 않는다.
+
+   칩 필드 확장에서 더한 것 (2026-08-28, 계약 §B — 모델·소요시간을 칩에도 싣는다):
+     새 색을 만들지 않았고 **새 조합도 생기지 않았다**. 두 슬롯은 위에서 이미 실측한
+     같은 배경(#272B44) 위 같은 두 색을 재사용한다:
+       #8B9AF2 on #272B44 (칩 모델 · .pl-chip-model)  5.28:1  ← 칩 역할과 같은 조합
+       #9A9CAC on #272B44 (칩 소요 · .pl-chip-time)   5.10:1  ← 칩 상태와 같은 조합
+     그래서 전수 검산의 대상 집합은 그대로이고, 둘 다 본문 하한 4.5:1을 넘는다.
    ========================================================================== */
 .pl-board {
   font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -2634,6 +2621,18 @@ label.list-row {
 .pl-chip-state {
   color: #9a9cac;
 }
+/* 액터의 모델 + 추론 강도. 단계의 모노 라벨(.pl-who)과 **같은 강조색**을 쓴다 —
+   둘 다 "누가 돌렸는가"를 말하는 같은 종류의 사실이기 때문이다.
+   #8B9AF2 on #272B44 = 5.28:1 ✓ (아래 표에 이미 실측된 조합). */
+.pl-chip-model {
+  color: #8b9af2;
+}
+/* 액터 소요시간. 상태와 같은 보조색을 쓴다 — 둘 다 진행 상황의 부가 사실이다.
+   #9A9CAC on #272B44 = 5.10:1 ✓ (아래 표에 이미 실측된 조합). */
+.pl-chip-time {
+  color: #9a9cac;
+  font-variant-numeric: tabular-nums;
+}
 /* 측정된 진행도. 보고가 없는 칩에는 이 요소 자체가 없다 (0%로 그리지 않는다). */
 .pl-chip-percent {
   margin-left: auto;
@@ -2641,13 +2640,6 @@ label.list-row {
   color: #e8e9ee;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-}
-/* 보드 범위 토글(진행 중 / 전체). 모양은 system.css의 .segmented가 그린다 —
-   이 블록의 이식 팔레트가 아니라 사이트 토큰을 쓰는 유일한 자리이고, 그래서
-   --text on --surface-4 10.42 ✓ / --text-2 on --surface-2 6.54 ✓ 가 그대로 적용된다. */
-.pl-scope {
-  margin-left: auto;
-  align-self: center;
 }
 .pl-meta {
   padding-top: 8px;
@@ -2682,16 +2674,12 @@ label.list-row {
 .snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
 .snap-note code { color: var(--text); }
 </style>
-<style>
-/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
-.h-org-viewport { overflow: auto; }
-</style>
 </head>
 <body>
   <div class="snap-note"><strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
   <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.
-  <br><strong>여기서 확인할 것</strong> — 진행 중/완료/전체 조직도 탭의 수치가 각각 2/1/3이고, 진행 중 병렬 task 중 선택된 한 panel만 보이는지, 선택된 세션의 조직도가 사용자 입력 → 총괄 → 입력/기획/구현/게이트/리뷰/수정/승인/완료 <strong>여덟 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지, 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지, 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.
-  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다. 조직도는 실제 화면에서 <strong>휠 확대 · 끌어 이동</strong>하는 캔버스이고, 열리는 순간 <code>fitOrgView()</code>가 배율을 맞춘다 — 가로는 반드시 넣고, 세로는 글자가 읽히는 배율(<code>FIT_READABLE_MIN</code>) 위에서만 줄이며, 그래도 넘치면 넘친다고 머리말이 말한다. 이 사본은 스크립트가 없어 그 변환이 돌지 않는다. 그렇다고 캔버스 높이를 풀면 <strong>뷰포트와 트리의 실제 크기 차이가 사라져</strong> 모바일 폭에서 배율이 어디까지 내려가는지가 사본에서 보이지 않는다 (WP3 리뷰가 지적한 사각지대다). 그래서 높이는 실제 규칙 그대로 두고 <strong>스크롤만 허용</strong>했다 — 상자 안을 밀어 보면 실제 화면에서 끌어 이동했을 때와 같은 것이 보이고, 상자 크기 대비 트리 크기도 그대로 보인다. 배율 계산 자체는 <code>scripts/usage.test.mjs</code>가 기계로 잠근다.
+  <br><strong>여기서 확인할 것</strong> — 상위 탭이 <strong>진행 중 · 완료 둘뿐</strong>이고 수치가 각각 2/1인지, 진행 중 패널 머리의 <strong>관제탑 | 조직도</strong> 모드 토글에서 기본값(관제탑)이 눌려 있는지, 관제탑 카드의 칩이 이름 · 역할 · 모델 · 상태 · 진행률 · 소요를 각자 슬롯으로 내고 위임 깊이가 들여쓰기로 남는지, (조직도 모드로 바꿔 보면) 사용자 입력 → 총괄 → 입력/기획/구현/게이트/리뷰/수정/승인/완료 <strong>여덟 단계 전부</strong>로 뻗고 그 아래 실제 actor가 갈라지는지, 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지, 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.
+  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다. 조직도의 확대·이동 캔버스는 <strong>제거됐다</strong>: 트리는 일반 문서 흐름으로 원본 크기로 서고, 넘치면 조직도 상자만 가로로 스크롤한다. 그래서 이 사본에는 <strong>스냅샷 전용 CSS가 한 줄도 없다</strong> — 배포되는 CSS 그대로이므로 사본에서 본 조판이 곧 실화면의 조판이다. 예전 사본은 캔버스 변환을 우회하는 전용 CSS 때문에 실제 초기 배율을 가렸고, 그것이 직전 리뷰가 지적한 사각지대였다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
 
@@ -2743,10 +2731,6 @@ label.list-row {
               id="hSessionViewTab-complete" aria-controls="hSessionViewPanel-complete" aria-selected="false"
               tabindex="-1" data-session-view="complete">
               <span>완료</span><strong data-view-count="1">1</strong>
-            </button><button class="segmented-btn h-session-view-tab" type="button" role="tab"
-              id="hSessionViewTab-org" aria-controls="hSessionViewPanel-org" aria-selected="false"
-              tabindex="-1" data-session-view="org">
-              <span>관제탑</span><strong data-view-count="3">3</strong>
             </button>
         </div>
         <div class="h-session-view-panels">
@@ -2754,449 +2738,209 @@ label.list-row {
             <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-active"
               aria-labelledby="hSessionViewTab-active" data-session-view-panel="active">
 
-      <div class="h-session-switcher" data-session-switcher="active">
+      <div class="segmented h-mode-toggle" role="group" aria-label="진행 중 세션을 보는 방식">
+        <button class="segmented-btn is-selected" type="button"
+          aria-pressed="true" data-active-mode="board">관제탑</button><button class="segmented-btn" type="button"
+          aria-pressed="false" data-active-mode="org">조직도</button>
+      </div>
+      <div class="pl-board">
+        <div class="pl-head">
+          <h2 class="pl-title">파이프라인 관제탑</h2>
 
-
-          <div class="h-session-tabs" role="tablist" aria-label="진행 중인 Codex 세션" data-task-tablist>
-
-            <button class="h-session-tab is-selected" type="button" role="tab"
-              id="hSessionTab-active-0" aria-controls="hSessionPanel-active-0" aria-selected="true"
-              tabindex="0" data-task-tab="0" data-task-id="usage-harness-visualization" data-task-status="active">
-              <span class="h-session-tab-copy">
-                <strong>사용량 하네스 시각화</strong>
-                <small class="h-session-tab-meta"><span>파이프라인 시각화 · 리뷰 86%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
-              </span>
-            </button>
-            <button class="h-session-tab" type="button" role="tab"
-              id="hSessionTab-active-1" aria-controls="hSessionPanel-active-1" aria-selected="false"
-              tabindex="-1" data-task-tab="1" data-task-id="pipeline-hardening" data-task-status="active">
-              <span class="h-session-tab-copy">
-                <strong>Pipeline 개선 프로토콜</strong>
-                <small class="h-session-tab-meta"><span>자체 pipeline 개선 프로토콜 · 게이트 82%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
-              </span>
-            </button>
-          </div>
-
-        <div class="h-session-panels">
-
-            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-active-0"
-              aria-labelledby="hSessionTab-active-0" data-task-panel="0">
-
-      <article class="h-task">
-        <header class="h-task-head">
+        </div>
+        <p class="pl-sub">세션 2개 · 에이전트 6명 · 하네스 실시간 보고</p>
+        <div class="pl-legend">
+          <span><span class="pl-dot is-ok" aria-hidden="true"></span>완료</span>
+          <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
+          <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
+          <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
+          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 모델 · 상태 · 진행률 · 소요)</span>
+        </div>
+        <div class="pl-grid">
+      <article class="pl-card" data-portfolio-task="usage-harness-visualization" data-session-active="true">
+        <div class="pl-card-head">
           <div>
-            <p class="us-eyebrow">선택한 세션</p>
-            <h3>사용량 하네스 시각화</h3>
-            <p class="h-task-meta">마지막 보고 6분 전 · 파이프라인 시각화 · 진행 86% · 마감 20:10 KST</p>
-            <p class="h-task-usage">이 세션 소모 · Codex 23.1%p · Claude 12.4%p</p>
+            <h3 class="pl-card-title">사용량 하네스 시각화</h3>
+            <p class="pl-task">파이프라인 시각화 · 08.27</p>
           </div>
-          <div class="h-task-badges">
-            <span class="h-task-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중</span>
-          </div>
-        </header>
-
-      <dl class="h-task-facts">
-        <div><dt>현재</dt><dd>독립 검토와 반응형 확인</dd></div>
-        <div><dt>완료</dt><dd>Worker 연결 · 렌더 구현 · 결정적 gate</dd></div>
-        <div><dt>다음</dt><dd>라이브 배포</dd></div>
-      </dl>
-
-      <section class="h-modules" aria-label="모듈별 진행도">
-        <header class="h-modules-head">
-          <div><p class="us-eyebrow">모듈</p><h4>모듈별 진행도</h4></div>
-          <span>보고된 작업 3개</span>
-        </header>
-        <div class="h-module-list">
-          <article class="h-module">
-            <div class="h-module-copy"><strong>검증 단계</strong><span>독립 검토</span></div>
-            <strong class="h-module-value">80%</strong>
-            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 80.0%"></span></span>
-          </article><article class="h-module">
-            <div class="h-module-copy"><strong>CSS 구현</strong><span>Main Codex</span></div>
-            <strong class="h-module-value">88%</strong>
-            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 88.0%"></span></span>
-          </article><article class="h-module">
-            <div class="h-module-copy"><strong>한도 수집</strong><span>Main Codex</span></div>
-            <strong class="h-module-value">72%</strong>
-            <span class="gauge-track h-module-track" aria-hidden="true"><span class="gauge-fill" style="width: 72.0%"></span></span>
-          </article>
+          <span class="pl-badge is-run">진행 중 2/8</span>
         </div>
-      </section>
+        <div class="pl-orch" data-actor-id="usage-harness:main">오케스트레이터 <b>Main Codex</b><span class="pl-who">gpt-5.6-sol · xhigh</span></div>
 
-      <section class="h-org" aria-label="사용량 하네스 시각화 실행 조직도">
-        <header class="h-org-head">
-          <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
-          <div class="h-org-tools">
-            <span class="h-org-hint" data-org-hint>휠 확대 · 끌어 이동</span>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
-          </div>
-        </header>
-        <div class="h-org-viewport" data-org-view="session:usage-harness-visualization" tabindex="0" role="group"
-          aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
-        <div class="h-flow-step">
-
-      <article class="h-node is-request">
-        <p class="h-node-kind">사용자 요청</p>
-        <h5 class="h-node-name">사용자 입력</h5>
-        <p class="h-node-detail">사용량 하네스 시각화</p>
+      <div class="pl-stage is-skip" data-org-phase="input" data-phase-state="skipped">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">입력</div>
+          <div class="pl-note">요청 접수 · 범위 확인</div>
+          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
 
 
+        </div>
+        <span class="pl-state is-skip">기록 없음</span>
+      </div>
+      <div class="pl-stage is-ok" data-org-phase="plan" data-phase-state="done">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">기획<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
+          <div class="pl-note">계약 · 증거 고정</div>
+
+          <div class="pl-cost">35분</div>
+
+        </div>
+        <span class="pl-state is-ok">완료</span>
+      </div>
+      <div class="pl-stage is-ok" data-org-phase="work" data-phase-state="done">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">구현<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
+          <div class="pl-note">격리 구현 · 검증</div>
+
+          <div class="pl-cost">1시간 30분</div>
+          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:writer" data-depth="0" title="담당 · Worker와 사용량 화면 구현"><b class="pl-chip-name">구현 컨텍스트</b><span class="pl-chip-role">구현자</span><span class="pl-chip-model">gpt-5.6-sol · xhigh</span><span class="pl-chip-state">완료</span><strong class="pl-chip-percent">100%</strong></span></div>
+        </div>
+        <span class="pl-state is-ok">완료</span>
+      </div>
+      <div class="pl-stage is-skip" data-org-phase="gate" data-phase-state="skipped">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">게이트</div>
+          <div class="pl-note">빌드 · 린트 · 테스트</div>
+          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
 
 
+        </div>
+        <span class="pl-state is-skip">기록 없음</span>
+      </div>
+      <div class="pl-stage is-run" data-org-phase="review" data-phase-state="current">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">리뷰<span class="pl-who">claude-opus-5 · high</span></div>
+          <div class="pl-note">독립 반증 · 지적</div>
+
+          <div class="pl-cost">55분</div>
+          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:reviewer" data-depth="0" title="담당 · diff와 실제 artifact 반증"><b class="pl-chip-name">독립 검토</b><span class="pl-chip-role">검토자</span><span class="pl-chip-model">gpt-5.6-sol · xhigh</span><span class="pl-chip-state">검토 중</span><strong class="pl-chip-percent">80%</strong></span><span class="pl-chip" data-actor-id="usage-harness:webgpt" data-depth="0" title="담당 · 경계가 명확한 저위험 작업 대기"><b class="pl-chip-name">WebGPT 실행자</b><span class="pl-chip-role">보조 실행</span><span class="pl-chip-model">WebGPT PRO</span><span class="pl-chip-state">대기</span><strong class="pl-chip-percent">37%</strong></span><span class="pl-chip" data-actor-id="usage-harness:claude" data-depth="0" title="담당 · Claude 한도 복원 통합"><b class="pl-chip-name">Fable 5 오케스트레이터</b><span class="pl-chip-role">기획 · 총괄</span><span class="pl-chip-model">claude-fable-5 · high</span><span class="pl-chip-state">작업 중</span><strong class="pl-chip-percent">62%</strong></span></div>
+        </div>
+        <span class="pl-state is-run">진행 중</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="revise" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">수정</div>
+          <div class="pl-note">지적 반영 · 재검증</div>
+
+
+
+        </div>
+        <span class="pl-state is-wait">대기</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="approve" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">승인</div>
+          <div class="pl-note">판정 · 릴리스 결정</div>
+
+
+
+        </div>
+        <span class="pl-state is-wait">대기</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="done" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">완료</div>
+          <div class="pl-note">배포 · 기록</div>
+
+
+
+        </div>
+        <span class="pl-state is-wait">대기</span>
+      </div>
+        <div class="pl-meta">마지막 보고 6분 전<br>진행 86%<br>마감 20:10 KST<br>한도 소모 Codex 23.1%p · Claude 12.4%p</div>
       </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-lead is-current" data-actor-id="usage-harness:main">
-        <p class="h-node-kind">총괄<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">Main Codex</h5>
-
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>기획 · 통합 · 최종 판정</dd></div><div><dt>담당</dt><dd>전체 계약과 최종 판정</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
-        <p class="h-node-progress"><span>진행도</span><strong>86%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span>
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">입력</h5>
-        <p class="h-node-detail">요청 접수 · 범위 확인</p>
-
-        <p class="h-node-note">이 단계는 보고가 전송되지 않았습니다</p>
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">기획</h5>
-        <p class="h-node-detail">계약 · 증거 고정</p>
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료<span class="h-node-time">35분</span></p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="work" data-phase-state="done">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">구현</h5>
-        <p class="h-node-detail">격리 구현 · 검증</p>
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료<span class="h-node-time">1시간 30분</span></p>
-
-      </article>
-          <div class="h-branch"><ul class="h-tree"><li class="h-node-slot">
-      <article class="h-node is-agent" data-actor-id="usage-harness:writer">
-        <p class="h-node-kind">Codex</p>
-        <h5 class="h-node-name">구현 컨텍스트</h5>
-
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>구현자</dd></div><div><dt>담당</dt><dd>Worker와 사용량 화면 구현</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
-        <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
-      </article></li></ul></div>
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">게이트</h5>
-        <p class="h-node-detail">빌드 · 린트 · 테스트</p>
-
-        <p class="h-node-note">이 단계는 보고가 전송되지 않았습니다</p>
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase is-current" data-org-phase="review" data-phase-state="current">
-        <p class="h-node-kind">단계<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">리뷰</h5>
-        <p class="h-node-detail">독립 반증 · 지적</p>
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">claude-opus-5 · high</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중<span class="h-node-time">55분</span></p>
-
-      </article>
-          <div class="h-branch"><ul class="h-tree"><li class="h-node-slot">
-      <article class="h-node is-agent is-current" data-actor-id="usage-harness:reviewer">
-        <p class="h-node-kind">Codex<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">독립 검토</h5>
-
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>검토자</dd></div><div><dt>담당</dt><dd>diff와 실제 artifact 반증</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
-        <p class="h-node-progress"><span>진행도</span><strong>80%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 80.0%"></span></span>
-      </article></li><li class="h-node-slot">
-      <article class="h-node is-agent" data-actor-id="usage-harness:webgpt">
-        <p class="h-node-kind">WebGPT</p>
-        <h5 class="h-node-name">WebGPT 실행자</h5>
-
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>담당</dt><dd>경계가 명확한 저위험 작업 대기</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-        <p class="h-node-progress"><span>진행도</span><strong>37%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span>
-      </article></li><li class="h-node-slot">
-      <article class="h-node is-agent is-current" data-actor-id="usage-harness:claude">
-        <p class="h-node-kind">Claude<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">Fable 5 오케스트레이터</h5>
-
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">claude-fable-5 · high</dd></div><div><dt>역할</dt><dd>기획 · 총괄</dd></div><div><dt>담당</dt><dd>Claude 한도 복원 통합</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>작업 중</p>
-        <p class="h-node-progress"><span>진행도</span><strong>62%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 62.0%"></span></span>
-      </article></li></ul></div>
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">수정</h5>
-        <p class="h-node-detail">지적 반영 · 재검증</p>
-
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">승인</h5>
-        <p class="h-node-detail">판정 · 릴리스 결정</p>
-
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="done" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">완료</h5>
-        <p class="h-node-detail">배포 · 기록</p>
-
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
-
-        </div></div></div>
-        </div>
-      </section>
-
-      <footer class="h-evidence">
-        <span class="h-evidence-label">검증 자료</span>
-        <div class="h-evidence-list">
-          <span>npm test</span><span>HARNESS E2E: PASS</span><span>PC · 태블릿 · 모바일 캡처</span>
-        </div>
-      </footer>
-      </article>
-            </section>
-            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-active-1"
-              aria-labelledby="hSessionTab-active-1" data-task-panel="1" hidden>
-
-      <article class="h-task">
-        <header class="h-task-head">
+      <article class="pl-card" data-portfolio-task="pipeline-hardening" data-session-active="true">
+        <div class="pl-card-head">
           <div>
-            <p class="us-eyebrow">선택한 세션</p>
-            <h3>Pipeline 개선 프로토콜</h3>
-            <p class="h-task-meta">마지막 보고 8분 전 · 자체 pipeline 개선 프로토콜 · 진행 82% · 마감 20:15 KST</p>
-
+            <h3 class="pl-card-title">Pipeline 개선 프로토콜</h3>
+            <p class="pl-task">자체 pipeline 개선 프로토콜 · 08.27</p>
           </div>
-          <div class="h-task-badges">
-            <span class="h-task-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중</span>
-          </div>
-        </header>
+          <span class="pl-badge is-run">진행 중 2/8</span>
+        </div>
+        <div class="pl-orch" data-actor-id="pipeline-hardening:main">오케스트레이터 <b>Main Codex</b><span class="pl-who">gpt-5.6-sol · xhigh</span></div>
 
-      <dl class="h-task-facts">
-        <div><dt>현재</dt><dd>독립 gate 검토</dd></div>
-        <div><dt>완료</dt><dd>WIP와 실패 복구 규칙 고정</dd></div>
-        <div><dt>다음</dt><dd>하네스 회귀 확인</dd></div>
-      </dl>
+      <div class="pl-stage is-skip" data-org-phase="input" data-phase-state="skipped">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">입력</div>
+          <div class="pl-note">요청 접수 · 범위 확인</div>
+          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
 
-
-      <section class="h-org" aria-label="Pipeline 개선 프로토콜 실행 조직도">
-        <header class="h-org-head">
-          <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
-          <div class="h-org-tools">
-            <span class="h-org-hint" data-org-hint>휠 확대 · 끌어 이동</span>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
-          </div>
-        </header>
-        <div class="h-org-viewport" data-org-view="session:pipeline-hardening" tabindex="0" role="group"
-          aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
-        <div class="h-flow-step">
-
-      <article class="h-node is-request">
-        <p class="h-node-kind">사용자 요청</p>
-        <h5 class="h-node-name">사용자 입력</h5>
-        <p class="h-node-detail">Pipeline 개선 프로토콜</p>
-
-
-
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-skip">기록 없음</span>
+      </div>
+      <div class="pl-stage is-ok" data-org-phase="plan" data-phase-state="done">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">기획</div>
+          <div class="pl-note">계약 · 증거 고정</div>
 
-      <article class="h-node is-lead is-current" data-actor-id="pipeline-hardening:main">
-        <p class="h-node-kind">총괄<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">Main Codex</h5>
 
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>프로토콜 소유자</dd></div><div><dt>담당</dt><dd>결정적 gate와 최종 판정</dd></div></dl>
-
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
-        <p class="h-node-progress"><span>진행도</span><strong>82%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 82.0%"></span></span>
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-ok">완료</span>
+      </div>
+      <div class="pl-stage is-ok" data-org-phase="work" data-phase-state="done">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">구현</div>
+          <div class="pl-note">격리 구현 · 검증</div>
 
-      <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">입력</h5>
-        <p class="h-node-detail">요청 접수 · 범위 확인</p>
 
-        <p class="h-node-note">이 단계는 보고가 전송되지 않았습니다</p>
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-ok">완료</span>
+      </div>
+      <div class="pl-stage is-run" data-org-phase="gate" data-phase-state="current">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">게이트<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
+          <div class="pl-note">빌드 · 린트 · 테스트</div>
 
-      <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">기획</h5>
-        <p class="h-node-detail">계약 · 증거 고정</p>
 
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-run">진행 중</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="review" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">리뷰</div>
+          <div class="pl-note">독립 반증 · 지적</div>
 
-      <article class="h-node is-phase" data-org-phase="work" data-phase-state="done">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">구현</h5>
-        <p class="h-node-detail">격리 구현 · 검증</p>
 
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-wait">대기</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="revise" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">수정</div>
+          <div class="pl-note">지적 반영 · 재검증</div>
 
-      <article class="h-node is-phase is-current" data-org-phase="gate" data-phase-state="current">
-        <p class="h-node-kind">단계<span class="h-node-flag">작업중</span></p>
-        <h5 class="h-node-name">게이트</h5>
-        <p class="h-node-detail">빌드 · 린트 · 테스트</p>
-        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
 
-        <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-wait">대기</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="approve" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">승인</div>
+          <div class="pl-note">판정 · 릴리스 결정</div>
 
-      <article class="h-node is-phase" data-org-phase="review" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">리뷰</h5>
-        <p class="h-node-detail">독립 반증 · 지적</p>
 
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
+        <span class="pl-state is-wait">대기</span>
+      </div>
+      <div class="pl-stage is-wait" data-org-phase="done" data-phase-state="pending">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">완료</div>
+          <div class="pl-note">배포 · 기록</div>
 
-      <article class="h-node is-phase" data-org-phase="revise" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">수정</h5>
-        <p class="h-node-detail">지적 반영 · 재검증</p>
 
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
 
         </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="approve" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">승인</h5>
-        <p class="h-node-detail">판정 · 릴리스 결정</p>
-
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
-
-        </div>
-        <div class="h-flow-step">
-
-      <article class="h-node is-phase" data-org-phase="done" data-phase-state="pending">
-        <p class="h-node-kind">단계</p>
-        <h5 class="h-node-name">완료</h5>
-        <p class="h-node-detail">배포 · 기록</p>
-
-
-        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
-
-      </article>
-
-        </div></div></div>
-        </div>
-      </section>
-
-      <footer class="h-evidence">
-        <span class="h-evidence-label">검증 자료</span>
-        <div class="h-evidence-list">
-          <span>control npm test</span>
-        </div>
-      </footer>
-      </article>
-            </section>
-        </div>
+        <span class="pl-state is-wait">대기</span>
+      </div>
+        <div class="pl-meta">마지막 보고 8분 전<br>진행 82%<br>마감 20:15 KST</div>
+      </article></div>
       </div>
             </section>
             <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-complete"
@@ -3245,16 +2989,9 @@ label.list-row {
       <section class="h-org" aria-label="프로젝트 지문한장 실행 조직도">
         <header class="h-org-head">
           <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
-          <div class="h-org-tools">
-            <span class="h-org-hint" data-org-hint>휠 확대 · 끌어 이동</span>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
-          </div>
         </header>
-        <div class="h-org-viewport" data-org-view="session:jimunhanjang-project" tabindex="0" role="group"
-          aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
+        <div class="h-org-scroll" data-org-scroll tabindex="0" role="group"
+          aria-label="실행 조직도. 내용이 넓으면 가로로 스크롤합니다"><div class="h-flow">
         <div class="h-flow-step">
 
       <article class="h-node is-request">
@@ -3386,7 +3123,6 @@ label.list-row {
       </article>
 
         </div></div></div>
-        </div>
       </section>
 
       <footer class="h-evidence">
@@ -3398,215 +3134,6 @@ label.list-row {
       </article>
             </section>
         </div>
-      </div>
-            </section>
-            <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-org"
-              aria-labelledby="hSessionViewTab-org" data-session-view-panel="org" hidden>
-
-      <div class="pl-board">
-        <div class="pl-head">
-          <h2 class="pl-title">파이프라인 관제탑</h2>
-
-
-      <div class="segmented pl-scope" role="group" aria-label="관제탑에 표시할 세션 범위">
-        <button class="segmented-btn" type="button"
-          aria-pressed="true" data-board-scope="active">진행 중</button><button class="segmented-btn" type="button"
-          aria-pressed="false" data-board-scope="all">전체</button>
-      </div>
-        </div>
-        <p class="pl-sub">세션 2개 · 진행 2개 · 에이전트 6명 · 완료 1개 접힘 · 하네스 실시간 보고</p>
-        <div class="pl-legend">
-          <span><span class="pl-dot is-ok" aria-hidden="true"></span>완료</span>
-          <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
-          <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
-          <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
-          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 상태 · 진행률)</span>
-        </div>
-        <div class="pl-grid">
-      <article class="pl-card" data-portfolio-task="usage-harness-visualization" data-session-active="true">
-        <div class="pl-card-head">
-          <div>
-            <h3 class="pl-card-title">사용량 하네스 시각화</h3>
-            <p class="pl-task">파이프라인 시각화 · 08.27</p>
-          </div>
-          <span class="pl-badge is-run">진행 중 2/8</span>
-        </div>
-        <div class="pl-orch" data-actor-id="usage-harness:main">오케스트레이터 <b>Main Codex</b><span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-
-      <div class="pl-stage is-skip" data-org-phase="input" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">입력</div>
-          <div class="pl-note">요청 접수 · 범위 확인</div>
-          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="plan" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">기획<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-          <div class="pl-note">계약 · 증거 고정</div>
-
-          <div class="pl-cost">35분</div>
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="work" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">구현<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-          <div class="pl-note">격리 구현 · 검증</div>
-
-          <div class="pl-cost">1시간 30분</div>
-          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:writer" data-depth="0"><b class="pl-chip-name">구현 컨텍스트</b><span class="pl-chip-role">구현자</span><span class="pl-chip-state">완료</span><strong class="pl-chip-percent">100%</strong></span></div>
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-skip" data-org-phase="gate" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">게이트</div>
-          <div class="pl-note">빌드 · 린트 · 테스트</div>
-          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-run" data-org-phase="review" data-phase-state="current">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">리뷰<span class="pl-who">claude-opus-5 · high</span></div>
-          <div class="pl-note">독립 반증 · 지적</div>
-
-          <div class="pl-cost">55분</div>
-          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:reviewer" data-depth="0"><b class="pl-chip-name">독립 검토</b><span class="pl-chip-role">검토자</span><span class="pl-chip-state">검토 중</span><strong class="pl-chip-percent">80%</strong></span><span class="pl-chip" data-actor-id="usage-harness:webgpt" data-depth="0"><b class="pl-chip-name">WebGPT 실행자</b><span class="pl-chip-role">보조 실행</span><span class="pl-chip-state">대기</span><strong class="pl-chip-percent">37%</strong></span><span class="pl-chip" data-actor-id="usage-harness:claude" data-depth="0"><b class="pl-chip-name">Fable 5 오케스트레이터</b><span class="pl-chip-role">기획 · 총괄</span><span class="pl-chip-state">작업 중</span><strong class="pl-chip-percent">62%</strong></span></div>
-        </div>
-        <span class="pl-state is-run">진행 중</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="revise" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">수정</div>
-          <div class="pl-note">지적 반영 · 재검증</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="approve" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">승인</div>
-          <div class="pl-note">판정 · 릴리스 결정</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="done" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">완료</div>
-          <div class="pl-note">배포 · 기록</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-        <div class="pl-meta">마지막 보고 6분 전<br>진행 86%<br>마감 20:10 KST<br>한도 소모 Codex 23.1%p · Claude 12.4%p</div>
-      </article>
-      <article class="pl-card" data-portfolio-task="pipeline-hardening" data-session-active="true">
-        <div class="pl-card-head">
-          <div>
-            <h3 class="pl-card-title">Pipeline 개선 프로토콜</h3>
-            <p class="pl-task">자체 pipeline 개선 프로토콜 · 08.27</p>
-          </div>
-          <span class="pl-badge is-run">진행 중 2/8</span>
-        </div>
-        <div class="pl-orch" data-actor-id="pipeline-hardening:main">오케스트레이터 <b>Main Codex</b><span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-
-      <div class="pl-stage is-skip" data-org-phase="input" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">입력</div>
-          <div class="pl-note">요청 접수 · 범위 확인</div>
-          <div class="pl-note pl-reason">이 단계는 보고가 전송되지 않았습니다</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="plan" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">기획</div>
-          <div class="pl-note">계약 · 증거 고정</div>
-
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="work" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">구현</div>
-          <div class="pl-note">격리 구현 · 검증</div>
-
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-run" data-org-phase="gate" data-phase-state="current">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">게이트<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-          <div class="pl-note">빌드 · 린트 · 테스트</div>
-
-
-
-        </div>
-        <span class="pl-state is-run">진행 중</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="review" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">리뷰</div>
-          <div class="pl-note">독립 반증 · 지적</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="revise" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">수정</div>
-          <div class="pl-note">지적 반영 · 재검증</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="approve" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">승인</div>
-          <div class="pl-note">판정 · 릴리스 결정</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-      <div class="pl-stage is-wait" data-org-phase="done" data-phase-state="pending">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">완료</div>
-          <div class="pl-note">배포 · 기록</div>
-
-
-
-        </div>
-        <span class="pl-state is-wait">대기</span>
-      </div>
-        <div class="pl-meta">마지막 보고 8분 전<br>진행 82%<br>마감 20:15 KST</div>
-      </article></div>
       </div>
             </section>
         </div>

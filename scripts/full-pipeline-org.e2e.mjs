@@ -70,19 +70,23 @@ const tasks = [
 ];
 
 const renderers = createUsageRenderers();
-// 관제탑 기본 범위는 '진행 중만'이다(요구 6). 아래 계약(전 단계 상시 표시 · 액터 누락
-// 없음)은 **전체** 범위에서 본다 — 접기는 표시 규칙일 뿐, 데이터가 사라지면 안 된다.
-const org = renderers.renderPortfolioBoard(tasks, NOW, 'all');
+// 관제탑은 **진행 중인 세션만** 그린다 (계약 §A) — 완료는 완료 탭이 맡는다.
+// 그래서 보드 쪽 계약(전 단계 상시 표시 · 액터 누락 없음)은 진행 중 세션 집합에서 보고,
+// 완료 세션의 같은 계약은 아래 (1-b)에서 완료 탭의 조직도로 확인한다.
+const activeTasks = tasks.filter((item) => item.status !== 'complete');
+const org = renderers.renderPortfolioBoard(tasks, NOW);
 
 // ---- (1) 세션마다 전 단계가 상시 선다 -------------------------------------
 assert.match(org, /파이프라인 관제탑[\s\S]*입력[\s\S]*기획[\s\S]*구현[\s\S]*게이트[\s\S]*리뷰[\s\S]*수정[\s\S]*승인[\s\S]*완료/u);
 for (const phase of PHASE_CHAIN) {
-  assert.equal((org.match(new RegExp(`data-org-phase="${phase}"`, 'gu')) || []).length, tasks.length,
-    `${phase} 단계 노드는 세션마다 하나씩, 총 ${tasks.length}개여야 합니다.`);
+  assert.equal((org.match(new RegExp(`data-org-phase="${phase}"`, 'gu')) || []).length, activeTasks.length,
+    `${phase} 단계 노드는 세션마다 하나씩, 총 ${activeTasks.length}개여야 합니다.`);
 }
-for (const id of tasks.map((item) => item.id)) {
+for (const id of activeTasks.map((item) => item.id)) {
   assert.equal((org.match(new RegExp(`data-portfolio-task="${id}"`, 'gu')) || []).length, 1);
 }
+// 완료 세션은 보드에서 빠지되 **사라지지 않는다** — 완료 탭에 자기 카드가 있다.
+assert.doesNotMatch(org, /data-portfolio-task="done-task"/u);
 
 // 세션 하나를 떼어내 단계 상태의 진행 방향을 확인한다: 지난 단계 done → 현재 current
 // → 남은 단계 pending. 이것이 "현 단계만 강조"와 갈리는 지점이다.
@@ -103,25 +107,29 @@ assert.match(approveOnly, /data-org-phase="approve" data-phase-state="current"/u
 assert.match(approveOnly, /data-org-phase="review" data-phase-state="done"/u);
 assert.match(approveOnly, /data-org-phase="revise" data-phase-state="skipped"/u);
 assert.match(approveOnly, /data-org-phase="done" data-phase-state="pending"/u);
+// ---- (1-b) 완료 세션도 같은 판정을 받는다 (완료 탭의 조직도) ---------------
 // 완료 세션은 pending으로 되돌아가는 단계가 없다. 다만 "완료"는 실제로 지나온 단계에만
-// 붙고(구 4단계), 보고된 적 없는 신설 단계는 skipped로 남는다.
-const doneOnly = renderers.renderPortfolioBoard([tasks[5]], NOW, 'all');
+// 붙고(구 4단계), 보고된 적 없는 신설 단계는 skipped로 남는다. 보드에서 빠졌다고 이
+// 판정이 사라지면 안 되므로, 같은 상태 어휘를 완료 탭에서 그대로 확인한다.
+const doneOnly = renderers.renderSessionView([tasks[5]], NOW, 'complete');
 assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, 4);
 assert.equal((doneOnly.match(/data-phase-state="skipped"/gu) || []).length, 4);
 assert.doesNotMatch(doneOnly, /data-phase-state="(?:current|pending)"/u);
+assert.match(doneOnly, /data-actor-id="done:main"/u);
 
 // ---- (2) 보고된 액터가 하나도 빠지지 않는다 --------------------------------
-const allActors = tasks.flatMap((item) => item.actors);
-assert.equal((org.match(/data-actor-id=/gu) || []).length, allActors.length);
-for (const item of allActors) {
+const activeActors = activeTasks.flatMap((item) => item.actors);
+assert.equal((org.match(/data-actor-id=/gu) || []).length, activeActors.length);
+for (const item of activeActors) {
   assert.equal((org.match(new RegExp(item.name, 'gu')) || []).length, 1,
     `${item.name}는 관제탑에 한 번만 있어야 합니다.`);
 }
 // 서브에이전트는 총괄과 같은 카드 안, 자기 단계의 칩으로 붙는다 (총괄 줄이 먼저 온다).
 assert.match(org, /data-actor-id="work:main"[\s\S]*?data-actor-id="work:calc"/u);
 // 칩은 이름·역할·상태를 **각각** 낸다 (요구 2). 하나의 문자열로 이어 붙이지 않는다.
-assert.match(org, /class="pl-chip" data-actor-id="work:calc" data-depth="0">/u);
-assert.match(org, /data-actor-id="work:calc"[\s\S]*?class="pl-chip-name">계산 서브에이전트<[\s\S]*?class="pl-chip-role">서브에이전트<[\s\S]*?class="pl-chip-state">작업 중</u);
+assert.match(org, /class="pl-chip" data-actor-id="work:calc" data-depth="0" title="담당 · 고정 fixture 작업">/u);
+// 이름 · 역할 · 모델 · 상태가 각자 슬롯으로 선다 (계약 §B — 조직도의 사실을 칩에도).
+assert.match(org, /data-actor-id="work:calc"[\s\S]*?class="pl-chip-name">계산 서브에이전트<[\s\S]*?class="pl-chip-role">서브에이전트<[\s\S]*?class="pl-chip-model">gpt-5\.6-sol · xhigh<[\s\S]*?class="pl-chip-state">작업 중</u);
 // 날짜 접미사는 카드 제목에서 떨어져 나온다.
 assert.doesNotMatch(org, /\(08-27\)/u);
 
@@ -160,7 +168,7 @@ assert.doesNotMatch(timed, /한도 초기화/u);
 assert.match(timed, /data-actor-id="work:calc"[\s\S]*?<strong class="pl-chip-percent">41%<\/strong>/u);
 
 // ---- 세션 탭 쪽 표기 ------------------------------------------------------
-const activeView = renderers.renderSessionView(tasks, NOW, 'active');
+const activeView = renderers.renderSessionView(tasks, NOW, 'active', 'org');
 assert.doesNotMatch(activeView, /\(08-27\)/u);
 assert.match(activeView, /구현 60%[\s\S]*<time class="h-task-date" datetime="2026-08-27">08\.27<\/time>/u);
 

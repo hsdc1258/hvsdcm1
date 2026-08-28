@@ -32,25 +32,14 @@
   // 자동 갱신을 통째로 멈춘다** — inFlight가 안 풀리고 다음 타이머도 걸리지 않기
   // 때문이다 (review WPA2 M2). 그래서 성공·거절·시간초과 셋 다 반드시 정착시킨다.
   const REQUEST_TIMEOUT_MS = 15_000;
-  // 조직도 확대 범위 (계약 §4-3).
-  // ZOOM_MIN은 **사람이 휠·버튼으로 축소할 때의 바닥**이다. 자동 "맞춤"은 이 바닥
-  // 아래로 내려갈 수 있다 — 잘린 화면을 "맞춤"이라 부르지 않기 위해서다(review M3).
-  const ZOOM_MIN = 0.3;
-  const FIT_MIN = 0.12;
-  const ZOOM_MAX = 2.5;
-  const ZOOM_STEP = 1.2;
-  const PAN_STEP = 48;
-  // **판독 바닥** (review WP3 major 1). 두 축을 모두 넣으려다 배율이 0.232까지 떨어지면
-  // 노드의 12px(--fs-micro) 글자가 2.8px가 되어 "맞췄다"고 말할 뿐 아무것도 읽히지 않았다.
-  // 그래서 맞춤에는 순서가 있다:
-  //   1) 가로는 **반드시** 들어간다 — 좌우로 끌어야 첫 글자가 보이는 화면은 못 읽는다.
-  //   2) 세로는 글자가 이 바닥 위에 있는 동안에만 줄인다.
-  //   3) 그래도 넘치면 넘친다고 화면이 말하고(끌어서 이동), 전체 조망은 축소 버튼이 맡는다.
-  // 0.75인 이유: 노드 최소 글자가 12px이므로 12 × 0.75 = 9px — 본문은 아니지만 사람이
-  // 읽어낼 수 있는 하한이다. 이보다 낮추면 다시 "보이기만 하는 축소"가 된다.
-  const FIT_READABLE_MIN = 0.75;
-  const ORG_HINT_DEFAULT = '휠 확대 · 끌어 이동';
-  const ORG_HINT_OVERFLOW = '화면보다 큼 · 끌어서 이동 · 축소로 전체 보기';
+  // 조직도의 확대·이동(휠 줌·드래그 팬·"맞춤" 변환)은 **전부 걷어냈다** (계약 §C).
+  // 사용자 판정: "현 조직도 UI가 불편하다 · 줌인아웃 등 기능은 제거해도 된다."
+  // 직전 리뷰(major 1)도 같은 곳을 가리켰다 — 두 축을 맞추려는 배율이 0.23까지 떨어져
+  // 12px 글자가 2.8px가 됐다. 배율을 손보는 대신 **배율 자체를 없앤다**: 트리는 일반
+  // 문서 흐름으로 원본 크기로 서고, 넘치면 조직도 컨테이너만 가로로 스크롤한다.
+  // 그래서 이 화면에는 배율 변환을 거는 코드가 한 줄도 없다 — 어떤 뷰포트에서도
+  // 글자는 CSS가 정한 크기 그대로다. (게이트가 이 사실을 소스에서 직접 검사한다:
+  // scripts/usage.test.mjs "the usage source carries no zoom, pan, or fit machinery".)
 
   // 단계는 제어면과 report schema가 함께 보장하는 여덟 개다 (DESIGN.md §1.1).
   // 이 배열이 화면의 단일 원본이다 — 트리·상태·소요시간 계산이 모두 여기서 도출된다.
@@ -132,9 +121,19 @@
   // 완료 목록은 기본 최근 10개만 세운다 (요구 6). 서버가 completed_limit로 잘라 주지
   // 않아도 화면이 스스로 접는다 — 클라이언트 접기가 1차 방어다.
   const COMPLETED_PAGE_SIZE = 10;
-  // 관제탑 기본값은 '진행 중만'이다. 완료 세션은 영구 누적되므로 전부 그리면 보드가
-  // 몇 달 치 카드 벽이 된다. 전체는 토글로 연다.
-  const BOARD_SCOPES = [{ key: 'active', label: '진행 중' }, { key: 'all', label: '전체' }];
+  // 상위 탭은 **진행 중 / 완료** 둘뿐이다 (계약 §A). '관제탑'은 상위 탭이 아니라
+  // 진행 중 패널 안의 **보기 모드**가 됐다 — 같은 세션 집합을 두 어법으로 볼 뿐이고,
+  // 세션의 상태(진행/완료)와는 다른 축이기 때문이다. 예전처럼 셋을 한 줄에 늘어놓으면
+  // "관제탑에는 완료도 들어 있다"는 세 번째 범위가 생겨 축이 뒤섞인다.
+  const SESSION_VIEWS = [{ key: 'active', label: '진행 중' }, { key: 'complete', label: '완료' }];
+  const SESSION_VIEW_KEYS = new Set(SESSION_VIEWS.map((view) => view.key));
+  // 진행 중 패널의 보기 모드. 관제탑이 기본이다 — "지금 무엇이 도는가"를 한눈에 보는
+  // 것이 이 화면의 첫 질문이고, 세션 하나를 파고드는 조직도는 그 다음이다.
+  const ACTIVE_MODES = [{ key: 'board', label: '관제탑' }, { key: 'org', label: '조직도' }];
+  const ACTIVE_MODE_KEYS = new Set(ACTIVE_MODES.map((mode) => mode.key));
+  // 모드는 새로고침을 넘어 유지된다 (계약 §A). 조직도를 골라 둔 사람에게 5초 폴링마다
+  // 관제탑이 돌아오면 그 토글은 없는 것과 같다.
+  const ACTIVE_MODE_KEY = 'hvsdcm.usage.activeMode';
 
   const elements = {
     body: document.getElementById('usageBody'),
@@ -147,7 +146,28 @@
   const selectedTaskIds = { active: '', complete: '' };
   // 화면-로컬 상태. 폴링이 DOM을 갈아 끼워도 유지돼야 하므로 모듈 변수로 둔다.
   let completedVisible = COMPLETED_PAGE_SIZE;
-  let selectedBoardScope = 'active';
+
+  // 저장된 모드를 읽는다. localStorage는 사파리 프라이빗 모드처럼 **접근 자체가 던지는**
+  // 환경이 있으므로 읽기·쓰기를 모두 감싼다 — 저장이 안 되는 브라우저에서 화면이 통째로
+  // 죽는 것보다 모드가 기본값으로 돌아가는 편이 낫다.
+  function readActiveMode() {
+    try {
+      const stored = localStorage.getItem(ACTIVE_MODE_KEY);
+      return ACTIVE_MODE_KEYS.has(stored) ? stored : 'board';
+    } catch {
+      return 'board';
+    }
+  }
+
+  function writeActiveMode(mode) {
+    selectedActiveMode = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
+    try {
+      localStorage.setItem(ACTIVE_MODE_KEY, selectedActiveMode);
+    } catch { /* 저장 실패는 이번 세션의 모드만 잃는다 — 화면은 계속 돈다. */ }
+    return selectedActiveMode;
+  }
+
+  let selectedActiveMode = readActiveMode();
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -859,6 +879,10 @@
       const progress = progressOf.has(String(actor.id))
         ? progressOf.get(String(actor.id))
         : finiteNumber(actor.progress);
+      // 파생값은 여기서 한 번만 계산하고, 조직도의 facts와 관제탑의 칩이 **같은 값**을
+      // 나눠 쓴다. 두 조판이 각자 다시 계산하면 같은 액터의 소요시간이 화면마다
+      // 달라진다 (LESSONS "파생 가능한 것을 손으로 적지 않는다").
+      const duration = actorDuration(actor, task, now);
       return {
         kind: 'agent',
         kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || NODE_KIND_LABELS.agent,
@@ -869,10 +893,12 @@
           { label: NODE_FACT_LABELS.role, value: actor.role || '' },
           { label: NODE_FACT_LABELS.assignment, value: actor.assignment || '' },
           { label: NODE_FACT_LABELS.parent, value: detachedParent.get(actor.id) || '' },
-          { label: NODE_FACT_LABELS.duration, value: actorDuration(actor, task, now) },
+          { label: NODE_FACT_LABELS.duration, value: duration },
           { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(actor) },
         ],
         role: actor.role || '',
+        assignment: actor.assignment || '',
+        duration,
         parent: detachedParent.get(actor.id) || '',
         status: actorStatus(actor),
         tone: statusDotClass(actor.status),
@@ -970,206 +996,21 @@
     }, ...phases];
   }
 
-  // ---- 조직도 캔버스(확대·이동) --------------------------------------------
-
-  function renderOrgCanvas(key, label, treeMarkup) {
+  // ---- 조직도 껍데기 ------------------------------------------------------
+  //
+  // 예전에는 여기에 확대·이동 캔버스가 있었다. 지금은 **아무 변환도 하지 않는 컨테이너**
+  // 하나뿐이다 (계약 §C). 트리는 일반 문서 흐름으로 원본 크기로 서고, 내용이 화면보다
+  // 넓으면 이 컨테이너만 가로로 스크롤한다 — 페이지 본문이 좌우로 흔들리지 않는다.
+  // 도구 줄(축소·확대·맞춤)과 힌트도 함께 사라졌다: 조작할 것이 없으므로 조작 UI도 없다.
+  function renderOrgSection(label, treeMarkup) {
     return `
       <section class="h-org" aria-label="${escapeHtml(label)}">
         <header class="h-org-head">
           <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
-          <div class="h-org-tools">
-            <span class="h-org-hint" data-org-hint>${ORG_HINT_DEFAULT}</span>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
-          </div>
         </header>
-        <div class="h-org-viewport" data-org-view="${escapeHtml(key)}" tabindex="0" role="group"
-          aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas>${treeMarkup}</div>
-        </div>
+        <div class="h-org-scroll" data-org-scroll tabindex="0" role="group"
+          aria-label="실행 조직도. 내용이 넓으면 가로로 스크롤합니다">${treeMarkup}</div>
       </section>`;
-  }
-
-  // 확대·이동 상태는 뷰 키마다 남긴다 — 자동 갱신으로 DOM을 다시 그려도 시점이 튀지 않는다.
-  const orgViewState = new Map();
-  let orgPanning = false;
-
-  function orgCanvasOf(viewport) {
-    return viewport?.querySelector?.('[data-org-canvas]') || null;
-  }
-
-  function applyOrgTransform(viewport, state) {
-    const canvas = orgCanvasOf(viewport);
-    if (!canvas || !canvas.style) return;
-    canvas.style.transform = `translate(${Math.round(state.x)}px, ${Math.round(state.y)}px) scale(${state.scale.toFixed(3)})`;
-  }
-
-  // "맞춤"은 **읽을 수 있는 상태로** 맞추는 것이다.
-  //
-  // 종전 규칙("두 축 모두 들어가야 맞춤이다", review WPA2 M3)은 잘림은 없앴지만 대신
-  // 판독을 없앴다: 317×480 뷰포트에 908×2065 트리를 넣으면 배율이 0.232가 되고 노드
-  // 글자는 2.8px가 된다 (review WP3 major 1의 실측). 잘리지 않았을 뿐 아무것도 읽히지
-  // 않는 화면을 "맞춤"이라 부를 수는 없다.
-  //
-  // 그래서 우선순위를 명시한다:
-  //   1) **가로는 언제나 들어간다.** 좌우로 끌어야 문장의 첫 글자가 보이는 화면은 못 읽는다.
-  //   2) 세로는 배율이 FIT_READABLE_MIN 위에 있는 동안에만 줄인다.
-  //   3) 그래도 넘치면 **넘친다고 말한다** — 뷰포트에 data-org-overflow를 세우고 머리말
-  //      힌트를 바꾼다. 전체 조망이 필요하면 축소 버튼이 ZOOM_MIN까지 데려간다.
-  // 넘칠 때 가운데 정렬 대신 왼쪽 위에서 시작하는 것도 같은 이유다(아래 Math.max(0, …)):
-  // 트리는 위에서 아래로 읽으므로 시작점이 화면 밖에 있으면 안 된다.
-  function fitOrgView(viewport, state) {
-    const canvas = orgCanvasOf(viewport);
-    if (!canvas) return;
-    const contentWidth = canvas.scrollWidth || canvas.offsetWidth || 0;
-    const contentHeight = canvas.scrollHeight || canvas.offsetHeight || 0;
-    const viewWidth = viewport.clientWidth || 0;
-    const viewHeight = viewport.clientHeight || 0;
-    const measurable = contentWidth > 0 && viewWidth > 0;
-    const widthRatio = measurable ? viewWidth / contentWidth : 1;
-    const heightRatio = contentHeight > 0 && viewHeight > 0 ? viewHeight / contentHeight : 1;
-    // 두 축을 다 넣는 이상적인 배율과, 판독을 지키는 바닥. 바닥은 가로 맞춤을 넘지
-    // 않는다 — 판독을 지키려다 트리가 화면 옆으로 빠져나가면 규칙 1이 깨진다.
-    const ideal = Math.min(1, widthRatio, heightRatio);
-    const readableFloor = Math.min(1, widthRatio, FIT_READABLE_MIN);
-    const scale = measurable
-      ? Math.min(1, Math.max(FIT_MIN, ideal, readableFloor))
-      : 1;
-    state.scale = scale;
-    state.x = Math.max(0, (viewWidth - (contentWidth * scale)) / 2);
-    state.y = Math.max(0, (viewHeight - (contentHeight * scale)) / 2);
-    applyOrgTransform(viewport, state);
-    const clipped = measurable && (
-      (contentWidth * scale) > viewWidth + 0.5 || (contentHeight * scale) > viewHeight + 0.5
-    );
-    if (viewport.dataset) viewport.dataset.orgOverflow = clipped ? 'true' : 'false';
-    const hint = viewport.closest?.('.h-org')?.querySelector?.('[data-org-hint]');
-    if (hint) hint.textContent = clipped ? ORG_HINT_OVERFLOW : ORG_HINT_DEFAULT;
-  }
-
-  // 커서(또는 뷰포트 중앙)를 고정점으로 두고 확대한다 — 그래야 보고 있던 노드가 안 달아난다.
-  function zoomOrgView(viewport, state, factor, originX, originY) {
-    // 축소 바닥은 0.3이되, 맞춤이 이미 그 아래로 내려가 있으면 그 배율이 바닥이다 —
-    // 축소 버튼이 화면을 도로 **확대**해 버리는 역전을 막는다.
-    const floor = Math.min(ZOOM_MIN, state.scale);
-    const next = Math.min(ZOOM_MAX, Math.max(floor, state.scale * factor));
-    if (next === state.scale) return;
-    const ratio = next / state.scale;
-    state.x = originX - ((originX - state.x) * ratio);
-    state.y = originY - ((originY - state.y) * ratio);
-    state.scale = next;
-    applyOrgTransform(viewport, state);
-  }
-
-  function orgStateFor(key) {
-    if (!orgViewState.has(key)) orgViewState.set(key, { scale: 1, x: 0, y: 0, fitted: false });
-    return orgViewState.get(key);
-  }
-
-  function wireOrgView(viewport) {
-    if (!viewport || typeof viewport.addEventListener !== 'function') return;
-    const key = viewport.dataset?.orgView || '';
-    const state = orgStateFor(key);
-    if (state.fitted) applyOrgTransform(viewport, state);
-    else {
-      fitOrgView(viewport, state);
-      state.fitted = true;
-    }
-
-    const centerOf = () => [(viewport.clientWidth || 0) / 2, (viewport.clientHeight || 0) / 2];
-
-    // 조직도 위의 휠은 확대에 쓴다. 컨테이너 밖 페이지 스크롤은 건드리지 않는다(계약 §4-3).
-    viewport.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      const rect = viewport.getBoundingClientRect?.() || { left: 0, top: 0 };
-      const factor = Math.exp(-(event.deltaY || 0) * 0.0015);
-      zoomOrgView(viewport, state, factor, event.clientX - rect.left, event.clientY - rect.top);
-    }, { passive: false });
-
-    let pointerId = null;
-    let originX = 0;
-    let originY = 0;
-    viewport.addEventListener('pointerdown', (event) => {
-      if (event.button !== undefined && event.button !== 0) return;
-      if (event.target?.closest?.('button')) return;
-      pointerId = event.pointerId;
-      originX = event.clientX - state.x;
-      originY = event.clientY - state.y;
-      orgPanning = true;
-      viewport.classList?.add('is-panning');
-      viewport.setPointerCapture?.(event.pointerId);
-    });
-    viewport.addEventListener('pointermove', (event) => {
-      if (pointerId === null || event.pointerId !== pointerId) return;
-      state.x = event.clientX - originX;
-      state.y = event.clientY - originY;
-      applyOrgTransform(viewport, state);
-    });
-    const endPan = (event) => {
-      if (pointerId === null) return;
-      viewport.releasePointerCapture?.(event.pointerId);
-      pointerId = null;
-      orgPanning = false;
-      viewport.classList?.remove('is-panning');
-    };
-    viewport.addEventListener('pointerup', endPan);
-    viewport.addEventListener('pointercancel', endPan);
-
-    // 휠·드래그를 못 쓰는 입력(키보드)에도 같은 조작을 준다.
-    viewport.addEventListener('keydown', (event) => {
-      const [centerX, centerY] = centerOf();
-      const moves = {
-        ArrowLeft: [PAN_STEP, 0], ArrowRight: [-PAN_STEP, 0],
-        ArrowUp: [0, PAN_STEP], ArrowDown: [0, -PAN_STEP],
-      };
-      if (moves[event.key]) {
-        event.preventDefault();
-        state.x += moves[event.key][0];
-        state.y += moves[event.key][1];
-        applyOrgTransform(viewport, state);
-        return;
-      }
-      if (event.key === '+' || event.key === '=') {
-        event.preventDefault();
-        zoomOrgView(viewport, state, ZOOM_STEP, centerX, centerY);
-      } else if (event.key === '-' || event.key === '_') {
-        event.preventDefault();
-        zoomOrgView(viewport, state, 1 / ZOOM_STEP, centerX, centerY);
-      } else if (event.key === '0') {
-        event.preventDefault();
-        fitOrgView(viewport, state);
-      }
-    });
-  }
-
-  function wireOrgViews(root) {
-    for (const viewport of [...(root?.querySelectorAll?.('[data-org-view]') || [])]) {
-      wireOrgView(viewport);
-    }
-    for (const button of [...(root?.querySelectorAll?.('[data-org-action]') || [])]) {
-      if (typeof button.addEventListener !== 'function') continue;
-      button.addEventListener('click', () => {
-        const viewport = button.closest?.('.h-org')?.querySelector?.('[data-org-view]');
-        if (!viewport) return;
-        const state = orgStateFor(viewport.dataset?.orgView || '');
-        const centerX = (viewport.clientWidth || 0) / 2;
-        const centerY = (viewport.clientHeight || 0) / 2;
-        if (button.dataset.orgAction === 'in') zoomOrgView(viewport, state, ZOOM_STEP, centerX, centerY);
-        else if (button.dataset.orgAction === 'out') zoomOrgView(viewport, state, 1 / ZOOM_STEP, centerX, centerY);
-        else fitOrgView(viewport, state);
-      });
-    }
-  }
-
-  // 탭을 바꾸면 그때 처음 보이는 조직도가 있다 — 아직 맞춰지지 않은 것만 화면에 맞춘다.
-  function fitPendingOrgViews(root) {
-    for (const viewport of [...(root?.querySelectorAll?.('[data-org-view]') || [])]) {
-      const state = orgStateFor(viewport.dataset?.orgView || '');
-      if (state.fitted && (viewport.clientWidth || 0) > 0 && state.scale > 0) continue;
-      fitOrgView(viewport, state);
-      state.fitted = true;
-    }
   }
 
   // ---- 세션 본문 -----------------------------------------------------------
@@ -1245,7 +1086,7 @@
         </header>
         ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${renderOrgCanvas(`session:${task.id || presentation.name}`, `${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
+        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
         ${renderArtifacts(task)}
       </article>`;
   }
@@ -1337,13 +1178,19 @@
           // 같은 노드와 **한 상수**를 공유하므로 두 화면이 다른 말을 하지 않는다.
           reason: state === 'skipped' ? PHASE_SKIPPED_REASON : '',
           cost: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
-          // 칩은 이름·역할·상태·진행률을 **각각** 낸다 (요구 2). 예전처럼 `이름:역할`
-          // 한 문자열로 이어 붙이면 역할이 없는 액터에서 상태가 역할 자리에 들어앉아
-          // 두 사실이 뒤섞였다. 모델로 이름을 대신하지도 않는다 — 그 단계의 모델은 위
-          // 모노 라벨(who)이 이미 말한다.
+          // 칩은 조직도가 노드 카드로 내던 사실을 **그대로** 싣는다 (계약 §B):
+          // 이름 · 역할 · 모델+추론강도 · 상태 · 진행률 · 소요시간. 각자 자기 슬롯을
+          // 가지므로 `이름:역할`처럼 한 문자열로 이어 붙지 않고, 값이 없는 항목은 슬롯
+          // 자체가 생기지 않는다(빈 값을 '없음'으로 채우면 미보고와 구별되지 않는다).
+          // 모델을 칩에도 싣는 이유: 단계의 모노 라벨(who)은 **그 단계를 보고한 모델**이지
+          // 이 서브에이전트의 모델이 아니다 — 둘이 다를 때 예전 칩은 아무 말도 못 했다.
+          // assignment(지금 무슨 일을 하는가)은 칩을 3줄로 만들지 않도록 title에 담는다.
           chips: flattenAgentNodes(byPhase.get(phase.key)).map(({ node, depth }) => ({
             name: node.name,
             role: node.role || '',
+            model: node.model || '',
+            duration: node.duration || '',
+            assignment: node.assignment || '',
             // 부모와 단계가 달라 중첩되지 못한 액터는 부모를 이름으로 밝힌다 —
             // 들여쓰기로 말하던 계층을 글자로 대신한다 (major 2).
             parent: node.parent || '',
@@ -1359,16 +1206,24 @@
     };
   }
 
-  // 칩 하나 = 그 단계에 붙은 액터 하나. 이름·역할·상태·진행률이 각자 자기 슬롯을 갖고,
+  // 칩 하나 = 그 단계에 붙은 액터 하나. 여섯 사실이 각자 자기 슬롯을 갖고,
   // parent_id 계층은 depth 들여쓰기로 남는다 (깊이는 3단에서 시각적으로 멈춘다).
+  // 종료된 액터도 자기 단계의 칩으로 남는다 — 사라지면 "그 단계에 아무도 없었다"가 된다.
   function renderBoardChip(chip) {
     const depth = Math.min(3, Math.max(0, Number(chip.depth) || 0));
     const percent = finiteNumber(chip.percent);
-    return `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}" data-depth="${depth}">`
+    // 담당(assignment)은 줄을 더 만들지 않고 툴팁으로만 붙는다. 역할과 담당은 다른
+    // 사실이므로 합치지 않되, 칩 한 줄의 밀도(DESIGN.md §6)를 지키기 위한 분리다.
+    const title = chip.assignment
+      ? ` title="${escapeHtml(`${NODE_FACT_LABELS.assignment} · ${chip.assignment}`)}"`
+      : '';
+    return `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}" data-depth="${depth}"${title}>`
       + `<b class="pl-chip-name">${escapeHtml(chip.name || '이름 미기록')}</b>`
       + `${chip.role ? `<span class="pl-chip-role">${escapeHtml(chip.role)}</span>` : ''}`
       + `${chip.parent ? `<span class="pl-chip-role">${escapeHtml(`${NODE_FACT_LABELS.parent} ${chip.parent}`)}</span>` : ''}`
+      + `${chip.model ? `<span class="pl-chip-model">${escapeHtml(chip.model)}</span>` : ''}`
       + `${chip.status ? `<span class="pl-chip-state">${escapeHtml(chip.status)}</span>` : ''}`
+      + `${chip.duration ? `<span class="pl-chip-time">${escapeHtml(chip.duration)}</span>` : ''}`
       + `${percent === null ? '' : `<strong class="pl-chip-percent">${Math.round(clampPercent(percent))}%</strong>`}`
       + '</span>';
   }
@@ -1414,11 +1269,10 @@
   // 왔든 같은 조판이 나온다.
   function renderBoard(pipelines, meta = {}) {
     const cards = Array.isArray(pipelines) ? pipelines : [];
-    // 범위 토글이 없는 화면(정적 사본)에서 카드가 비면 예전처럼 한 줄만 남는다. 토글이
-    // 있는 화면에서는 보드 골격을 유지한다 — 그러지 않으면 '진행 중'이 비었을 때
-    // 사용자가 '전체'로 돌아갈 버튼조차 사라진다.
-    if (cards.length === 0 && !meta.scope) {
-      return '<p class="pl-empty">아직 동기화된 파이프라인이 없습니다.</p>';
+    if (cards.length === 0) {
+      // 보드 안에서 범위를 넓힐 수단이 없어졌으므로(완료는 완료 탭이 맡는다), 빈 상태는
+      // 한 줄이면 충분하다. 예전의 '전체를 누르면…' 안내는 가리킬 버튼이 없는 거짓말이 된다.
+      return `<p class="pl-empty">${escapeHtml(meta.empty || '아직 동기화된 파이프라인이 없습니다.')}</p>`;
     }
     const sub = [meta.summary, meta.source].filter(Boolean).join(' · ');
     return `
@@ -1426,7 +1280,6 @@
         <div class="pl-head">
           <h2 class="pl-title">파이프라인 관제탑</h2>
           ${meta.window ? `<span class="pl-window">${escapeHtml(meta.window)}</span>` : ''}
-          ${meta.scope ? renderBoardScope(meta.scope) : ''}
         </div>
         ${sub ? `<p class="pl-sub">${escapeHtml(sub)}</p>` : ''}
         <div class="pl-legend">
@@ -1434,20 +1287,9 @@
           <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
           <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
           <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
-          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 상태 · 진행률)</span>
+          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 모델 · 상태 · 진행률 · 소요)</span>
         </div>
-        ${cards.length === 0
-    ? '<p class="pl-empty">진행 중인 파이프라인이 없습니다. 전체를 누르면 완료된 세션까지 봅니다.</p>'
-    : `<div class="pl-grid">${cards.map(renderBoardCard).join('')}</div>`}
-      </div>`;
-  }
-
-  // 보드 범위 토글. 기본은 '진행 중'이고 '전체'를 누르면 완료 세션까지 편다 (요구 6).
-  function renderBoardScope(scope) {
-    return `
-      <div class="segmented pl-scope" role="group" aria-label="관제탑에 표시할 세션 범위">
-        ${BOARD_SCOPES.map((item) => `<button class="segmented-btn" type="button"
-          aria-pressed="${item.key === scope}" data-board-scope="${item.key}">${item.label}</button>`).join('')}
+        <div class="pl-grid">${cards.map(renderBoardCard).join('')}</div>
       </div>`;
   }
 
@@ -1508,13 +1350,17 @@
           stage?.pct === null || stage?.pct === undefined ? null : `${stage.pct}%`,
         ].filter(Boolean).join(' · '),
         // 사본의 chips는 예전부터 **문자열 배열**이다. 그 형식을 계속 읽으면서, 새로
-        // 구조화된 객체({name, role, status, percent})도 함께 받는다 — 사본을 손보지
-        // 않아도 화면이 깨지지 않는 것이 이 폴백의 존재 이유다.
+        // 구조화된 객체({name, role, model, status, percent, duration})도 함께 받는다 —
+        // 사본을 손보지 않아도 화면이 깨지지 않는 것이 이 폴백의 존재 이유다.
+        // 사본에 없는 필드는 빈 문자열이고, 빈 슬롯은 렌더러가 아예 만들지 않는다.
         chips: (Array.isArray(stage?.chips) ? stage.chips : []).map((chip) => (
           chip && typeof chip === 'object'
             ? {
               name: String(chip.name || chip.label || '이름 미기록'),
               role: chip.role ? String(chip.role) : '',
+              model: chip.model ? String(chip.model) : '',
+              duration: chip.duration ? String(chip.duration) : '',
+              assignment: chip.assignment ? String(chip.assignment) : '',
               status: chip.status ? String(chip.status) : '',
               percent: finiteNumber(chip.percent),
               depth: Number(chip.depth) || 0,
@@ -1524,6 +1370,9 @@
             : {
               name: String(chip),
               role: '',
+              model: '',
+              duration: '',
+              assignment: '',
               status: '',
               percent: null,
               depth: 0,
@@ -1544,21 +1393,17 @@
     });
   }
 
-  // 관제탑. **기본은 진행 중인 세션만** 그리고, 전체는 토글로 연다 (요구 6) — 완료 세션은
-  // 영구 누적되므로 전부 세우면 지금 도는 일이 카드 벽에 묻힌다. 감춘 개수는 요약 줄이
-  // 밝히므로 "사라진 것"과 "접힌 것"이 구별된다.
-  function renderPortfolioBoard(inputTasks, now, scope = selectedBoardScope) {
+  // 관제탑은 **진행 중인 세션만** 그린다 (계약 §A). 예전에는 보드 안에 '진행 중 / 전체'
+  // 범위 토글이 있었지만, 이제 완료는 완료 탭이 통째로 맡으므로 같은 선택지가 화면에
+  // 두 곳(상위 탭 · 보드 토글)에 생기는 셈이었다. 축을 하나로 줄인다:
+  // **무엇을 보는가 = 상위 탭 / 어떻게 보는가 = 모드 토글.**
+  function renderPortfolioBoard(inputTasks, now) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const current = BOARD_SCOPES.some((item) => item.key === scope) ? scope : 'active';
-    const shown = current === 'all' ? tasks : tasks.filter((task) => task.status !== 'complete');
+    const shown = tasks.filter((task) => task.status !== 'complete');
     const actorCount = shown.reduce((total, task) => total + taskActors(task).length, 0);
-    const hidden = tasks.length - shown.length;
     return renderBoard(shown.map((task) => pipelineFromTask(task, now)), {
-      // 보고된 세션이 하나도 없으면 범위 토글도 내지 않는다 — 접을 것이 없는데 토글만
-      // 남으면 "무언가 감춰져 있다"고 화면이 거짓말한다. 그때는 한 줄 빈 상태로 돌아간다.
-      scope: tasks.length === 0 ? '' : current,
-      summary: `세션 ${shown.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명${hidden > 0 ? ` · 완료 ${hidden}개 접힘` : ''}`,
+      empty: '진행 중인 파이프라인이 없습니다.',
+      summary: `세션 ${shown.length}개 · 에이전트 ${actorCount}명`,
       source: '하네스 실시간 보고',
     });
   }
@@ -1621,18 +1466,41 @@
       </div>`;
   }
 
-  function renderSessionView(inputTasks, now, view) {
+  // 진행 중 패널의 보기 모드 토글. system.css의 `.segmented`가 모양을 그리고, 여기서는
+  // 어느 모드가 눌려 있는지만 말한다. 상위 탭(tablist/tab)과 **다른 역할**을 쓴다 —
+  // 같은 패널을 두 어법으로 그리는 것이지 다른 패널로 가는 것이 아니므로, 탭이 아니라
+  // 눌림 상태를 가진 버튼 묶음이다.
+  function renderActiveModes(mode) {
+    const current = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
+    return `
+      <div class="segmented h-mode-toggle" role="group" aria-label="진행 중 세션을 보는 방식">
+        ${ACTIVE_MODES.map((item) => `<button class="segmented-btn${item.key === current ? ' is-selected' : ''}" type="button"
+          aria-pressed="${item.key === current}" data-active-mode="${item.key}">${item.label}</button>`).join('')}
+      </div>`;
+  }
+
+  // view는 상위 탭('active' | 'complete')이고, mode는 진행 중 패널 안의 보기 방식이다.
+  // mode를 인자로 받는 이유는 게이트가 두 모드를 **각각** 렌더해 검사할 수 있어야 하기
+  // 때문이다 — 화면 상태(selectedActiveMode)에만 의존하면 검사가 기본값 하나만 본다.
+  function renderSessionView(inputTasks, now, view, mode = selectedActiveMode) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    if (view === 'org') return renderPortfolioBoard(tasks, now);
     const status = view === 'complete' ? 'complete' : 'active';
     const filtered = tasks.filter((task) => (status === 'complete'
       ? task.status === 'complete'
       : task.status !== 'complete'));
-    if (filtered.length === 0) {
-      return `<p class="us-empty card">${status === 'complete' ? '완료된 작업이 없습니다.' : '현재 진행 중인 작업이 없습니다.'}</p>`;
-    }
     if (status !== 'complete') {
-      return renderTaskTabs([{ label: '', ariaLabel: '진행 중인 Codex 세션', tasks: filtered }], now, status);
+      // 토글은 세션이 없어도 남는다 — 모드는 세션의 유무가 아니라 사람의 선택이고,
+      // 빈 화면에서 토글이 사라지면 다음 세션이 뜰 때 모드가 어디로 갔는지 알 수 없다.
+      const current = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
+      const body = current === 'org'
+        ? (filtered.length === 0
+          ? '<p class="us-empty card">현재 진행 중인 작업이 없습니다.</p>'
+          : renderTaskTabs([{ label: '', ariaLabel: '진행 중인 Codex 세션', tasks: filtered }], now, status))
+        : renderPortfolioBoard(tasks, now);
+      return `${renderActiveModes(current)}${body}`;
+    }
+    if (filtered.length === 0) {
+      return '<p class="us-empty card">완료된 작업이 없습니다.</p>';
     }
     // 완료는 최근 완료순으로 세우고 기본 10개만 편다. 나머지는 '더 보기'로 열린다 —
     // 목록을 지우는 것이 아니라 접는 것이므로 감춘 개수를 버튼이 그대로 말한다.
@@ -1653,12 +1521,10 @@
   function renderSessionViews(inputTasks, now) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
     const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const completeCount = tasks.length - activeCount;
-    const views = [
-      { key: 'active', label: '진행 중', count: activeCount },
-      { key: 'complete', label: '완료', count: completeCount },
-      { key: 'org', label: '관제탑', count: tasks.length },
-    ];
+    const counts = { active: activeCount, complete: tasks.length - activeCount };
+    // 탭 목록은 SESSION_VIEWS 하나에서 도출한다 — 라벨·키를 여기 다시 적으면 상위 탭이
+    // 바뀔 때 두 곳이 어긋난다 (LESSONS "파생 가능한 것을 손으로 적지 않는다").
+    const views = SESSION_VIEWS.map((view) => ({ ...view, count: counts[view.key] ?? 0 }));
     return `
       <div class="h-session-views">
         <div class="h-session-view-tabs segmented" role="tablist" aria-label="작업 상태별 보기" data-session-view-tablist>
@@ -1736,7 +1602,6 @@
     for (const panel of panels) panel.hidden = panel.dataset.taskPanel !== tab.dataset.taskTab;
     const status = tab.dataset.taskStatus === 'complete' ? 'complete' : 'active';
     selectedTaskIds[status] = tab.dataset.taskId || '';
-    fitPendingOrgViews(root);
     if (moveFocus) tab.focus();
   }
 
@@ -1751,7 +1616,13 @@
         if (tab && tablist.contains(tab)) activateTaskTab(root, tab);
       });
       tablist.addEventListener('keydown', (event) => {
-        const tabs = [...tablist.querySelectorAll('[data-task-tab]')];
+        // 방향키는 **그룹 경계를 넘는다** (review WP3 major 3). 완료 탭은 날짜마다
+        // tablist가 하나씩이므로, 이동 범위를 tablist 안으로 묶으면 첫 날짜 그룹에서
+        // 오른쪽 끝에 닿은 사람이 둘째 날짜로 갈 방법이 없다 — 스위처 전체가 한 줄의
+        // roving 범위다. 스위처를 찾지 못하는 환경에서는 예전처럼 tablist로 떨어진다.
+        const switcher = tablist.closest?.('[data-session-switcher]');
+        const scope = switcher && typeof switcher.querySelectorAll === 'function' ? switcher : tablist;
+        const tabs = [...scope.querySelectorAll('[data-task-tab]')];
         const current = event.target.closest('[data-task-tab]');
         const index = tabs.indexOf(current);
         if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -1777,10 +1648,9 @@
       item.tabIndex = selected ? 0 : -1;
     }
     for (const panel of panels) panel.hidden = panel.dataset.sessionViewPanel !== tab.dataset.sessionView;
-    selectedSessionView = ['active', 'complete', 'org'].includes(tab.dataset.sessionView)
+    selectedSessionView = SESSION_VIEW_KEYS.has(tab.dataset.sessionView)
       ? tab.dataset.sessionView
       : 'active';
-    fitPendingOrgViews(root);
     if (moveFocus) tab.focus();
   }
 
@@ -1806,8 +1676,8 @@
     });
   }
 
-  // 화면-로컬 상태(완료 더 보기·관제탑 범위)를 바꾸는 컨트롤. 서버를 다시 부르지 않고
-  // 마지막 응답으로 다시 그린다 — 접기/펴기 때문에 한도를 쓰지 않는다.
+  // 화면-로컬 상태(완료 더 보기·보기 모드)를 바꾸는 컨트롤. 서버를 다시 부르지 않고
+  // 마지막 응답으로 다시 그린다 — 접기/펴기와 모드 전환 때문에 한도를 쓰지 않는다.
   function wireLocalControls(root) {
     const more = root?.querySelector?.('[data-completed-more]');
     if (more && typeof more.addEventListener === 'function') {
@@ -1816,10 +1686,10 @@
         rerenderDashboard();
       });
     }
-    for (const button of [...(root?.querySelectorAll?.('[data-board-scope]') || [])]) {
+    for (const button of [...(root?.querySelectorAll?.('[data-active-mode]') || [])]) {
       if (typeof button.addEventListener !== 'function') continue;
       button.addEventListener('click', () => {
-        selectedBoardScope = button.dataset.boardScope === 'all' ? 'all' : 'active';
+        writeActiveMode(button.dataset.activeMode);
         rerenderDashboard();
       });
     }
@@ -1828,7 +1698,6 @@
   function wireDashboard(root) {
     wireSessionViews(root);
     wireTaskTabs(root);
-    wireOrgViews(root);
     wireLocalControls(root);
   }
 
@@ -1884,10 +1753,10 @@
   function renderDashboard(data, { announce }) {
     const tasks = sortTasks(Array.isArray(data?.tasks) ? data.tasks : []);
     activeSessionCount = tasks.filter((task) => task.status !== 'complete').length;
-    // 조직도를 끌고 있는 중이면 DOM을 갈아 끼우지 않는다 — 다음 주기에 반영된다.
-    if (orgPanning && !announce) return;
     const signature = JSON.stringify(data ?? null);
-    // 바뀐 것이 없으면 다시 그리지 않는다: 초점·선택·확대 상태를 흔들지 않기 위해서다.
+    // 바뀐 것이 없으면 다시 그리지 않는다: 초점·선택 상태를 흔들지 않기 위해서다.
+    // (예전에는 여기에 "조직도를 끌고 있는 중이면 건너뛴다"는 예외가 있었다. 끌기가
+    //  사라졌으므로 예외도 사라졌다 — 이제 스크롤은 브라우저가 알아서 보존한다.)
     if (!announce && signature === lastSignature && elements.body.innerHTML) return;
     lastSignature = signature;
     lastData = data;
@@ -1970,6 +1839,6 @@
     sessionFlowNodes, renderFlow, pipelineFromTask, renderBoard, buildFallbackBoard,
     phaseTimeline, sessionUsageDeltas, actorNodes,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
-    wireOrgViews, fitPendingOrgViews, fitOrgView, zoomOrgView, orgViewState, load,
+    wireLocalControls, renderActiveModes, readActiveMode, writeActiveMode, load,
   };
 })();

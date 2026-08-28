@@ -387,7 +387,7 @@
   font-size: var(--fs-caption);
   font-weight: 600;
 }
-.h-modules-head > span, .h-org-hint {
+.h-modules-head > span {
   color: var(--text-3);
   font-size: var(--fs-micro);
 }
@@ -454,45 +454,31 @@
   font-size: var(--fs-caption);
   font-weight: 600;
 }
-.h-org-tools {
-  display: flex;
-  align-items: center;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-.h-org-hint {
-  align-self: center;
-}
-/* 캔버스 — 확대·이동은 여기 안에서만 일어난다. overflow: hidden이라 페이지
-   스크롤을 빼앗지 않고, touch-action: none이라 손가락 끌기가 팬이 된다. */
-.h-org-viewport {
-  position: relative;
-  height: clamp(320px, 54vh, 640px);
-  /* 캔버스가 max-content라 자동 최소 크기가 살아 있으면 그리드 칸을 밀어낸다.
-     overflow: hidden만으로도 0이 되지만, 스냅샷처럼 overflow를 푸는 경우까지 잠근다. */
+/* 조직도 컨테이너 — 확대·이동 캔버스를 걷어낸 자리다 (계약 §C).
+   `transform: scale`이 없으므로 글자는 어느 폭에서도 원본 크기다. 트리가 컨테이너보다
+   넓으면 **이 상자만** 가로로 스크롤한다: min-width: 0이 그리드 칸의 자동 최소 크기를
+   풀어 주고(그러지 않으면 max-content 트리가 칸을 밀어내 페이지 body가 가로로 흔들린다),
+   overscroll-behavior가 가로 스크롤 끝에서 페이지로 넘어가는 것을 막는다.
+   키보드로도 스크롤할 수 있도록 tabindex를 받는 상자라 초점 링을 그린다. */
+.h-org-scroll {
   min-width: 0;
-  overflow: hidden;
+  padding: var(--space-4);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   background: var(--surface-2);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
-  cursor: grab;
-  touch-action: none;
-  overscroll-behavior: contain;
-  user-select: none;
 }
-.h-org-viewport:focus-visible {
+.h-org-scroll:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.h-org-viewport.is-panning {
-  cursor: grabbing;
-}
-.h-org-canvas {
-  width: max-content;
-  padding: var(--space-4);
-  transform-origin: 0 0;
+/* 보기 모드 토글(관제탑 · 조직도). 모양은 system.css의 `.segmented`가 그린다 —
+   여기서는 진행 중 패널 머리에서의 자리만 잡는다. 좁은 화면에서는 두 칸이 폭을
+   나눠 가지므로 터치 타깃이 줄지 않는다. */
+.h-mode-toggle {
+  align-self: flex-start;
+  margin-bottom: var(--space-3);
 }
 /* ---- 축(세로) ----
    단(step)마다 위아래를 관통하는 헤어라인이 축이 된다. 단 사이 간격을 margin이 아니라
@@ -732,9 +718,12 @@
   font-size: var(--fs-micro);
 }
 /* ==========================================================================
-   반응형 — 1100(rail 아래로) / 700(도구 줄바꿈 · **조직도 분기를 축 아래로**) / 430(여백 압축)
-   좁은 화면에서는 트리를 다시 조판한다. 확대·이동만으로는 부족하기 때문이다: 좌→우
-   분기가 만드는 900px대 폭을 300px대 화면에 "맞추면" 글자가 읽히지 않는다 (WP3 major 1).
+   반응형 — 1100(rail 아래로) / 768(**조직도 분기를 축 아래로**) / 700(여백·탭) / 430(여백 압축)
+   좁은 화면에서는 트리를 **다시 조판한다**. 축소하지 않는다 (계약 §C).
+   좌→우 분기는 트리 폭을 900px대로 부풀리는데, 그 폭을 300px대 화면에 넣는 방법은 둘뿐이다:
+   ① 배율을 0.35 아래로 떨어뜨려 12px 글자를 4px로 만들거나(직전 리뷰 major 1이 잡은 결함),
+   ② 분기를 축 아래로 내려 폭 자체를 '노드 하나 + 들여쓰기'로 줄이거나.
+   여기서는 ②만 쓴다 — 이 화면에 `transform: scale`은 존재하지 않는다.
    ========================================================================== */
 @media (max-width: 1100px) {
   .us-command-layout {
@@ -753,41 +742,13 @@
     border-top: 0;
   }
 }
-@media (max-width: 700px) {
-  .h-task, .h-portfolio {
-    padding: var(--space-3);
-  }
-  .h-task-head, .h-org-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .h-task-badges, .h-org-tools {
-    justify-content: flex-start;
-  }
-  .h-task-facts {
-    grid-template-columns: minmax(0, 1fr);
-    padding: var(--space-3);
-  }
-  .h-task-facts > div {
-    padding: var(--space-2) 0;
-  }
-  .h-task-facts > div + div {
-    border-top: 1px solid var(--line-faint);
-    border-left: 0;
-  }
-  /* 모바일에서 트리는 가로보다 세로로 길다. 뷰포트가 낮으면 "맞춤" 배율이 그만큼
-     더 내려가 글자가 읽히지 않는다 — 세로를 넉넉히 줘서 맞춤 배율을 끌어올린다. */
-  .h-org-viewport {
-    height: clamp(320px, 68vh, 560px);
-  }
-  /* ---- 모바일 전용 배치: 분기를 오른쪽이 아니라 **축 아래로** 내린다 ----
-     근거(review WP3 major 1): 좌→우 분기는 트리 폭을 908px까지 부풀렸고, 그 폭을
-     317px 화면에 맞추면 배율이 0.35 아래로 떨어져 12px 글자가 4px가 됐다. 폭을 줄이는
-     것 말고 판독을 되찾을 방법이 없다 — 그래서 좁은 화면에서만 조판을 바꾼다.
-     아래로 내리면 트리 폭은 '노드 하나 + 들여쓰기'가 되어 가로가 그대로 들어가고,
-     길어진 세로는 usage.js의 판독 바닥(FIT_READABLE_MIN)이 지킨 채 끌어서 본다.
-     새 선을 만들지 않는다: 축 헤어라인(left: 106px)이 그대로 분기의 세로 척추가 되고,
-     분기의 들여쓰기는 그 x에 스텁 22px을 더한 값이다. */
+/* ---- 모바일 배치(≤768px): 분기를 오른쪽이 아니라 **축 아래로** 내린다 ----
+   좌→우 분기는 깊이 한 단마다 232px씩 폭을 더한다. 세로로 내리면 트리 폭은
+   '노드 하나 + 들여쓰기'로 고정되고, 길어진 세로는 페이지가 그냥 스크롤한다.
+   새 선을 만들지 않는다: 축 헤어라인(left: 106px)이 그대로 분기의 세로 척추가 되고,
+   분기의 들여쓰기는 그 x에 스텁 22px을 더한 값(128px)이다. 폭 값을 바꾸면 이 둘을
+   함께 바꾼다 — 430px 블록이 같은 계산을 94 + 22 = 116으로 되풀이한다. */
+@media (max-width: 768px) {
   .h-flow-step {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -803,8 +764,7 @@
   .h-flow-step:last-child:has(.h-branch)::before {
     bottom: 0;
   }
-  /* 손자도 부모 카드 아래로 내린다 — 오른쪽으로 이어 붙이면 깊이 한 단마다 232px씩
-     늘어 다시 화면을 넘는다. 척추는 부모 카드의 왼쪽 모서리를 따라 내려간다. */
+  /* 손자도 부모 카드 아래로 내린다. 척추는 부모 카드의 왼쪽 모서리를 따라 내려간다. */
   .h-node-slot {
     flex-direction: column;
     align-items: flex-start;
@@ -823,23 +783,43 @@
     top: -9px;
     bottom: 50%;
   }
+}
+@media (max-width: 700px) {
+  .h-task, .h-portfolio {
+    padding: var(--space-3);
+  }
+  .h-task-head, .h-org-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .h-task-badges {
+    justify-content: flex-start;
+  }
+  .h-task-facts {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3);
+  }
+  .h-task-facts > div {
+    padding: var(--space-2) 0;
+  }
+  .h-task-facts > div + div {
+    border-top: 1px solid var(--line-faint);
+    border-left: 0;
+  }
   .h-session-tab {
     flex-basis: 74vw;
   }
 }
 @media (max-width: 430px) {
-  .h-org-canvas {
+  .h-org-scroll {
     padding: var(--space-3);
   }
   .h-node {
     width: 188px;
   }
   /* 노드가 좁아지면 축 커넥터의 x좌표(= 폭의 절반)도 함께 내려간다.
-     이 폭에서는 분기가 이미 축 아래로 내려가 있으므로(700px 블록), 열은 한 줄이고
+     이 폭에서는 분기가 이미 축 아래로 내려가 있으므로(768px 블록), 열은 한 줄이고
      분기 들여쓰기는 축의 새 x(94) + 스텁(22)이다. */
-  .h-flow-step {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .h-flow-step::before {
     left: 94px;
   }
@@ -896,6 +876,13 @@
        #9A9CAC on #272B44 (칩 상태)          5.10:1
        #8B9AF2 on #272B44 (칩 역할)          5.28:1  ← 위 표에 이미 있던 값
      셋 다 본문 하한 4.5:1을 넘는다. 칩 글자는 10.5px라 큰 글자 예외를 쓰지 않는다.
+
+   칩 필드 확장에서 더한 것 (2026-08-28, 계약 §B — 모델·소요시간을 칩에도 싣는다):
+     새 색을 만들지 않았고 **새 조합도 생기지 않았다**. 두 슬롯은 위에서 이미 실측한
+     같은 배경(#272B44) 위 같은 두 색을 재사용한다:
+       #8B9AF2 on #272B44 (칩 모델 · .pl-chip-model)  5.28:1  ← 칩 역할과 같은 조합
+       #9A9CAC on #272B44 (칩 소요 · .pl-chip-time)   5.10:1  ← 칩 상태와 같은 조합
+     그래서 전수 검산의 대상 집합은 그대로이고, 둘 다 본문 하한 4.5:1을 넘는다.
    ========================================================================== */
 .pl-board {
   font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -1153,6 +1140,18 @@
 .pl-chip-state {
   color: #9a9cac;
 }
+/* 액터의 모델 + 추론 강도. 단계의 모노 라벨(.pl-who)과 **같은 강조색**을 쓴다 —
+   둘 다 "누가 돌렸는가"를 말하는 같은 종류의 사실이기 때문이다.
+   #8B9AF2 on #272B44 = 5.28:1 ✓ (아래 표에 이미 실측된 조합). */
+.pl-chip-model {
+  color: #8b9af2;
+}
+/* 액터 소요시간. 상태와 같은 보조색을 쓴다 — 둘 다 진행 상황의 부가 사실이다.
+   #9A9CAC on #272B44 = 5.10:1 ✓ (아래 표에 이미 실측된 조합). */
+.pl-chip-time {
+  color: #9a9cac;
+  font-variant-numeric: tabular-nums;
+}
 /* 측정된 진행도. 보고가 없는 칩에는 이 요소 자체가 없다 (0%로 그리지 않는다). */
 .pl-chip-percent {
   margin-left: auto;
@@ -1160,13 +1159,6 @@
   color: #e8e9ee;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-}
-/* 보드 범위 토글(진행 중 / 전체). 모양은 system.css의 .segmented가 그린다 —
-   이 블록의 이식 팔레트가 아니라 사이트 토큰을 쓰는 유일한 자리이고, 그래서
-   --text on --surface-4 10.42 ✓ / --text-2 on --surface-2 6.54 ✓ 가 그대로 적용된다. */
-.pl-scope {
-  margin-left: auto;
-  align-self: center;
 }
 .pl-meta {
   padding-top: 8px;

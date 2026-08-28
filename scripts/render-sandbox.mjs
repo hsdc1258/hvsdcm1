@@ -458,9 +458,13 @@ export function renderGichulScreen(manifest, state) {
   return { filters, body };
 }
 
-export function renderUsageDashboard(input, now) {
-  const build = createUsageRenderers().buildDashboard;
-  const markup = build(input, now);
+// mode는 진행 중 패널의 보기 방식('board' | 'org')이다. 화면의 기본값은 관제탑이므로
+// 상세 조직도를 보려는 호출자(게이트·스냅샷)는 그것을 **명시해야** 한다 — 기본값에만
+// 기대면 검사가 한 모드만 보고 다른 모드는 영영 렌더되지 않는다.
+export function renderUsageDashboard(input, now, mode = 'board') {
+  const renderers = createUsageRenderers();
+  renderers.writeActiveMode(mode);
+  const markup = renderers.buildDashboard(input, now);
   if (!markup.includes('us-command-layout') || !markup.includes('us-quota-rail')) {
     throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without command-center contracts`);
   }
