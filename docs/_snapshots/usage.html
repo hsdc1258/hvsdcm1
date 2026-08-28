@@ -1517,7 +1517,11 @@ label.list-row {
   letter-spacing: var(--ls-caps);
   line-height: 1.3;
 }
+/* 종류 라벨 줄. 오른쪽 끝에 '작업중' 라벨이 붙을 자리를 만든다. */
 .h-node-kind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--text-2);
 }
 .us-empty {
@@ -1664,6 +1668,26 @@ label.list-row {
 }
 .h-session-switcher {
   gap: var(--space-3);
+}
+/* 완료 목록의 날짜 그룹 머리. 모양은 system.css의 .list-group-head가 그린다 —
+   여기서는 스위처 그리드 안의 여백만 조인다 (그룹 첫 줄은 위 여백을 지운다). */
+.h-session-group-head {
+  margin: var(--space-2) 0 calc(var(--space-3) * -1 + 2px);
+}
+.h-session-switcher > .h-session-group-head:first-child {
+  margin-top: 0;
+}
+/* '더 보기' 줄 — 목록을 지우는 것이 아니라 접는 것이므로 남은 개수를 옆에 적는다.
+   --text-3 on --bg 5.80 ✓ 캡션. */
+.h-session-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.h-session-more-rest {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
 }
 .h-session-tabs {
   display: flex;
@@ -1887,10 +1911,19 @@ label.list-row {
   margin: 2px 0 0;
 }
 /* ==========================================================================
-   조직도 — 캔버스(확대·이동) + 좌→우 트리
-   트리는 <ul>/<li> 조판이고 연결선만 의사요소가 그린다. 노드 폭이 고정이라
-   이름이 길어져도 겹침이 원리적으로 생기지 않는다 (DESIGN.md §9).
-   ========================================================================== */
+   조직도 — 캔버스(확대·이동) + 위→아래 중앙 축 + 우측 분기
+   ==========================================================================
+   조판 (2026-08-28 재작성, plan.md §3.3 / 사용자 첨부 레퍼런스)
+     · **축**: 사용자 입력 → 총괄 → 여덟 단계가 한 줄로 **위에서 아래로** 선다.
+       예전 좌→우 트리는 단계가 오른쪽으로 계단처럼 밀려 여덟 번째 단계가 화면 밖으로
+       나갔다. 이제 축은 세로 하나뿐이다.
+     · **분기**: 그 단계에 투입된 서브에이전트만 축 노드의 **오른쪽**으로 갈라진다.
+       parent_id 자식은 그 카드 아래로 한 단 더 들어간다(기존 좌→우 연결선 재사용).
+     · 연결선은 전부 의사요소 헤어라인이다. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §10).
+   노드 폭이 고정(212px, 좁은 화면 188px)이라 이름이 길어져도 겹침이 원리적으로 없다.
+   축 커넥터의 x좌표는 그 폭의 절반(106px / 94px)이다 — 폭을 바꾸면 함께 바꾼다.
+   커스텀 프로퍼티로 묶지 않는 이유는 토큰 *정의*가 system.css 단일 원본이기 때문이다
+   (DESIGN.md §3 마지막 줄, validate.mjs가 강제). */
 .h-org {
   gap: var(--space-3);
 }
@@ -1942,6 +1975,45 @@ label.list-row {
   padding: var(--space-4);
   transform-origin: 0 0;
 }
+/* ---- 축(세로) ----
+   단(step)마다 위아래를 관통하는 헤어라인이 축이 된다. 단 사이 간격을 margin이 아니라
+   padding으로 주므로 선이 이웃 단과 이어져 끊기지 않는다. 노드는 position: relative라
+   선 위에 얹히고, 선은 카드 뒤로 지나간다. 첫 단은 위 절반을, 마지막 단은 아래 절반을
+   지워 선이 축 밖으로 새지 않는다(관제탑 레일의 :first-of-type 규칙과 같은 원리). */
+.h-flow {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+}
+.h-flow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 212px minmax(0, auto);
+  align-items: center;
+  padding: 9px 0;
+}
+.h-flow-step::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 106px;
+  border-left: 1px solid var(--line);
+}
+.h-flow-step:first-child::before {
+  top: 50%;
+}
+.h-flow-step:last-child::before {
+  bottom: 50%;
+}
+.h-flow-step > .h-node {
+  position: relative;
+  margin: 0;
+}
+/* ---- 분기(좌→우) ----
+   축 노드의 오른쪽 44px 홈에 연결선이 들어간다: 축 stem(0→22) + 세로 척추(22)
+   + 카드 stem(22→44). 세 조각 모두 같은 --line 헤어라인이다. 자식 액터의 묶음도
+   같은 기하를 그대로 되쓴다 — 깊이가 늘어도 규칙이 하나뿐이다. */
 .h-tree, .h-tree ul {
   display: flex;
   flex-direction: column;
@@ -1954,13 +2026,11 @@ label.list-row {
   display: flex;
   align-items: center;
 }
-/* 자식 묶음. 왼쪽 44px 홈에 연결선이 들어간다: 부모 stem(0→22) + 세로 척추(22)
-   + 자식 stem(22→44). 세 조각 모두 같은 --line 헤어라인이다. */
-.h-node-slot > ul {
+.h-branch, .h-node-slot > ul {
   position: relative;
   padding-left: 44px;
 }
-.h-node-slot > ul::before {
+.h-branch::before, .h-node-slot > ul::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -1968,10 +2038,10 @@ label.list-row {
   width: 22px;
   border-top: 1px solid var(--line);
 }
-.h-node-slot > ul > .h-node-slot {
+.h-branch > .h-tree > .h-node-slot, .h-node-slot > ul > .h-node-slot {
   position: relative;
 }
-.h-node-slot > ul > .h-node-slot::before {
+.h-branch > .h-tree > .h-node-slot::before, .h-node-slot > ul > .h-node-slot::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -1979,7 +2049,7 @@ label.list-row {
   width: 22px;
   border-top: 1px solid var(--line);
 }
-.h-node-slot > ul > .h-node-slot::after {
+.h-branch > .h-tree > .h-node-slot::after, .h-node-slot > ul > .h-node-slot::after {
   content: '';
   position: absolute;
   top: 0;
@@ -1987,13 +2057,13 @@ label.list-row {
   left: -22px;
   border-left: 1px solid var(--line);
 }
-.h-node-slot > ul > .h-node-slot:first-child::after {
+.h-branch > .h-tree > .h-node-slot:first-child::after, .h-node-slot > ul > .h-node-slot:first-child::after {
   top: 50%;
 }
-.h-node-slot > ul > .h-node-slot:last-child::after {
+.h-branch > .h-tree > .h-node-slot:last-child::after, .h-node-slot > ul > .h-node-slot:last-child::after {
   bottom: 50%;
 }
-.h-node-slot > ul > .h-node-slot:only-child::after {
+.h-branch > .h-tree > .h-node-slot:only-child::after, .h-node-slot > ul > .h-node-slot:only-child::after {
   display: none;
 }
 /* ---- 노드 ----
@@ -2009,10 +2079,28 @@ label.list-row {
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
 }
-/* 강조색은 화면당 1색이고, 이 화면에서 강조가 뜻하는 것은 "지금 살아 있는 일"
-   하나뿐이다 (DESIGN.md §3). 채우지 않고 경계선만 올린다. */
+/* 진행 중 노드 — 첨부 레퍼런스의 "굵은 초록 테두리 + 작업중 라벨"과 **같은 시각 위계**를
+   이 화면의 강조 1색으로 낸다. 초록을 그대로 쓰지 않는 이유: 이 화면의 초록(#5FBF8A)은
+   이미 관제탑에서 '완료'다. 한 화면에서 같은 색이 '완료'와 '진행 중'을 동시에 뜻하면
+   색이 거짓말을 한다 (DESIGN.md §3 상태색 규칙 · 강조 1색). 대신 테두리를 2px로 올리고
+   글자 라벨을 붙인다 — 색을 못 보는 조건에서도 구별된다.
+   테두리가 1px 두꺼워지는 만큼 안쪽 여백을 1px 줄여 노드 기하가 흔들리지 않게 한다. */
 .h-node.is-current {
+  padding: 9px calc(var(--space-3) - 1px);
+  border-width: 2px;
   border-color: var(--accent);
+}
+/* '작업중' 라벨. 면을 채우지 않으므로 배경은 노드 면 하나뿐이다:
+   --accent on --surface-3 = 4.62:1 ✓ (본문 하한 4.5, system.css 전수표 인용).
+   12px(--fs-micro)라 큰 글자 예외를 쓰지 않는다. */
+.h-node-flag {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 /* 보고된 적 없는 앞 단계(= '기록 없음')는 완료와 눈으로 갈라져야 한다 — 실선 대신
    점선 테두리로 비우고, 이름을 본문 강조에서 보조 색으로 낮춘다. 새 색 토큰을 만들지
@@ -2037,15 +2125,40 @@ label.list-row {
   line-height: var(--lh-snug);
   text-overflow: ellipsis;
 }
-.h-node-detail, .h-node-model, .h-node-note, .h-node-state, .h-node-progress {
+.h-node-detail, .h-node-note, .h-node-state, .h-node-progress, .h-node-facts {
   color: var(--text-2);
   font-size: var(--fs-micro);
   line-height: 1.45;
 }
-/* 모델·추론은 한 줄 고정이다 — 노드 폭이 값에 따라 흔들리면 트리가 들쭉날쭉해진다. */
-.h-node-model {
-  font-family: var(--font-mono);
+/* 사실 목록 — 모델·역할·담당·소요·한도 소비가 각자 한 줄을 갖는다 (요구 2·4).
+   행(div)을 display: contents로 풀어 **목록 전체가 하나의 2열 그리드**가 된다. 그래야
+   라벨 열이 가장 긴 라벨에 맞춰 한 번에 잡히고, 값이 줄마다 같은 x에서 시작한다
+   (행마다 그리드를 만들면 열 폭을 손으로 고정해야 하고, 라벨이 길어지는 순간 어긋난다).
+   노드 면(surface-3) 위에서 --text-2 5.42 ✓ 캡션 / --text 12.80 ✓.
+   --text-3(3.85)는 이 면에서 캡션 하한 미달이라 쓰지 않는다. */
+.h-node-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px var(--space-2);
+  margin: 1px 0 0;
+  align-items: baseline;
+}
+.h-node-facts > div {
+  display: contents;
+}
+.h-node-facts dt {
+  font-weight: 500;
+}
+.h-node-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* 모델·추론은 한 줄 고정이다 — 노드 폭이 값에 따라 흔들리면 축이 들쭉날쭉해진다. */
+.h-node-fact-mono {
   overflow: hidden;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2158,6 +2271,13 @@ label.list-row {
   .h-node {
     width: 188px;
   }
+  /* 노드가 좁아지면 축 커넥터의 x좌표(= 폭의 절반)도 함께 내려간다. */
+  .h-flow-step {
+    grid-template-columns: 188px minmax(0, auto);
+  }
+  .h-flow-step::before {
+    left: 94px;
+  }
   .us-freshness {
     display: none;
   }
@@ -2200,6 +2320,14 @@ label.list-row {
        모든 단계가 `.pl-state` 글자 라벨을 함께 낸다. 색각·흑백 인쇄에서도 구분된다.
      - `.pl-state`는 새 색을 만들지 않는다. 위 표의 마디 색을 그대로 글자에 쓰므로
        대비는 이미 실측된 값이고, 셋 다 본문 하한 4.5:1을 넘는다.
+
+   서브에이전트 칩 구조화에서 더한 것 (2026-08-28, 요구 2 — 이름·역할·상태·%를 분리):
+     칩 배경 #272B44 위에 이식 팔레트의 두 색이 새로 얹힌다. 새 색은 만들지 않았고,
+     **새로 생긴 조합**만 WCAG 상대휘도로 실측해 적는다 (DESIGN.md §3.1 전수 검산):
+       #E8E9EE on #272B44 (칩 이름·진행률)  11.43:1
+       #9A9CAC on #272B44 (칩 상태)          5.10:1
+       #8B9AF2 on #272B44 (칩 역할)          5.28:1  ← 위 표에 이미 있던 값
+     셋 다 본문 하한 4.5:1을 넘는다. 칩 글자는 10.5px라 큰 글자 예외를 쓰지 않는다.
    ========================================================================== */
 .pl-board {
   font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -2411,13 +2539,22 @@ label.list-row {
   color: #9a9cac;
   font-variant-numeric: tabular-nums;
 }
+/* 칩 = 그 단계에 붙은 액터 하나. 가로로 흘리지 않고 **세로로 쌓는다** — parent_id
+   계층을 들여쓰기로 남기기 위해서다(가로 wrap에서는 들여쓰기가 줄바꿈에 씻긴다).
+   칩 하나 안에서 이름·역할·상태·진행률이 각자 자기 슬롯을 갖는다 (요구 2). */
 .pl-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
   margin-top: 4px;
 }
 .pl-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
   padding: 2px 7px;
   border-radius: 5px;
   font-family: "JetBrains Mono", Consolas, monospace;
@@ -2425,11 +2562,37 @@ label.list-row {
   background: #272b44;
   color: #8b9af2;
 }
+/* 위임 깊이. 3단에서 멈춘다 — 그보다 깊어지면 들여쓰기가 카드를 밀어낸다. */
+.pl-chip[data-depth="1"] {
+  margin-left: 12px;
+}
+.pl-chip[data-depth="2"] {
+  margin-left: 24px;
+}
+.pl-chip[data-depth="3"] {
+  margin-left: 36px;
+}
+.pl-chip-name {
+  font-weight: 600;
+  color: #e8e9ee;
+}
+.pl-chip-state {
+  color: #9a9cac;
+}
 /* 측정된 진행도. 보고가 없는 칩에는 이 요소 자체가 없다 (0%로 그리지 않는다). */
-.pl-chip strong {
-  margin-left: 5px;
+.pl-chip-percent {
+  margin-left: auto;
+  padding-left: 6px;
+  color: #e8e9ee;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+/* 보드 범위 토글(진행 중 / 전체). 모양은 system.css의 .segmented가 그린다 —
+   이 블록의 이식 팔레트가 아니라 사이트 토큰을 쓰는 유일한 자리이고, 그래서
+   --text on --surface-4 10.42 ✓ / --text-2 on --surface-2 6.54 ✓ 가 그대로 적용된다. */
+.pl-scope {
+  margin-left: auto;
+  align-self: center;
 }
 .pl-meta {
   padding-top: 8px;
@@ -2537,7 +2700,9 @@ label.list-row {
               aria-labelledby="hSessionViewTab-active" data-session-view-panel="active">
 
       <div class="h-session-switcher" data-session-switcher="active">
-        <div class="h-session-tabs" role="tablist" aria-label="진행 중인 Codex 세션" data-task-tablist>
+
+
+          <div class="h-session-tabs" role="tablist" aria-label="진행 중인 Codex 세션" data-task-tablist>
 
             <button class="h-session-tab is-selected" type="button" role="tab"
               id="hSessionTab-active-0" aria-controls="hSessionPanel-active-0" aria-selected="true"
@@ -2555,7 +2720,8 @@ label.list-row {
                 <small class="h-session-tab-meta"><span>자체 pipeline 개선 프로토콜 · 게이트 82%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
               </span>
             </button>
-        </div>
+          </div>
+
         <div class="h-session-panels">
 
             <section class="h-session-panel" role="tabpanel" id="hSessionPanel-active-0"
@@ -2614,7 +2780,9 @@ label.list-row {
         </header>
         <div class="h-org-viewport" data-org-view="session:usage-harness-visualization" tabindex="0" role="group"
           aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><ul class="h-tree"><li class="h-node-slot">
+          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
+        <div class="h-flow-step">
+
       <article class="h-node is-request">
         <p class="h-node-kind">REQUEST</p>
         <h5 class="h-node-name">사용자 입력</h5>
@@ -2623,17 +2791,25 @@ label.list-row {
 
 
 
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-lead is-current" data-actor-id="usage-harness:main">
-        <p class="h-node-kind">MAIN</p>
+        <p class="h-node-kind">MAIN<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">Main Codex</h5>
-        <p class="h-node-detail">기획 · 통합 · 최종 판정</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>기획 · 통합 · 최종 판정</dd></div><div><dt>담당</dt><dd>전체 계약과 최종 판정</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
         <p class="h-node-progress"><span>진행도</span><strong>86%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 86.0%"></span></span>
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
@@ -2642,35 +2818,47 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">기획</h5>
         <p class="h-node-detail">계약 · 증거 고정</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료<span class="h-node-time">35분</span></p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="work" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">구현</h5>
         <p class="h-node-detail">격리 구현 · 검증</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료<span class="h-node-time">1시간 30분</span></p>
 
-      </article><ul><li class="h-node-slot">
+      </article>
+          <div class="h-branch"><ul class="h-tree"><li class="h-node-slot">
       <article class="h-node is-agent" data-actor-id="usage-harness:writer">
         <p class="h-node-kind">CODEX</p>
         <h5 class="h-node-name">구현 컨텍스트</h5>
-        <p class="h-node-detail">구현자</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>구현자</dd></div><div><dt>담당</dt><dd>Worker와 사용량 화면 구현</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
         <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
-      </article></li></ul></li><li class="h-node-slot">
+      </article></li></ul></div>
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
@@ -2679,21 +2867,26 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase is-current" data-org-phase="review" data-phase-state="current">
-        <p class="h-node-kind">PHASE</p>
+        <p class="h-node-kind">PHASE<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">리뷰</h5>
         <p class="h-node-detail">독립 반증 · 지적</p>
-        <p class="h-node-model">claude-opus-5 · high</p>
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">claude-opus-5 · high</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중<span class="h-node-time">55분</span></p>
 
-      </article><ul><li class="h-node-slot">
+      </article>
+          <div class="h-branch"><ul class="h-tree"><li class="h-node-slot">
       <article class="h-node is-agent is-current" data-actor-id="usage-harness:reviewer">
-        <p class="h-node-kind">CODEX</p>
+        <p class="h-node-kind">CODEX<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">독립 검토</h5>
-        <p class="h-node-detail">검토자</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>검토자</dd></div><div><dt>담당</dt><dd>diff와 실제 artifact 반증</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
         <p class="h-node-progress"><span>진행도</span><strong>80%</strong></p>
@@ -2702,23 +2895,26 @@ label.list-row {
       <article class="h-node is-agent" data-actor-id="usage-harness:webgpt">
         <p class="h-node-kind">WEBGPT</p>
         <h5 class="h-node-name">WebGPT 실행자</h5>
-        <p class="h-node-detail">보조 실행</p>
-        <p class="h-node-model">WebGPT PRO</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">WebGPT PRO</dd></div><div><dt>역할</dt><dd>보조 실행</dd></div><div><dt>담당</dt><dd>경계가 명확한 저위험 작업 대기</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
         <p class="h-node-progress"><span>진행도</span><strong>37%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 37.0%"></span></span>
       </article></li><li class="h-node-slot">
       <article class="h-node is-agent is-current" data-actor-id="usage-harness:claude">
-        <p class="h-node-kind">CLAUDE</p>
+        <p class="h-node-kind">CLAUDE<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">Fable 5 오케스트레이터</h5>
-        <p class="h-node-detail">기획 · 총괄</p>
-        <p class="h-node-model">claude-fable-5 · high</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">claude-fable-5 · high</dd></div><div><dt>역할</dt><dd>기획 · 총괄</dd></div><div><dt>담당</dt><dd>Claude 한도 복원 통합</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>작업 중</p>
         <p class="h-node-progress"><span>진행도</span><strong>62%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 62.0%"></span></span>
-      </article></li></ul></li><li class="h-node-slot">
+      </article></li></ul></div>
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="revise" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">수정</h5>
@@ -2727,7 +2923,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="approve" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">승인</h5>
@@ -2736,7 +2936,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="done" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">완료</h5>
@@ -2745,7 +2949,9 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li></ul></li></ul></li></ul></div>
+      </article>
+
+        </div></div></div>
         </div>
       </section>
 
@@ -2792,7 +2998,9 @@ label.list-row {
         </header>
         <div class="h-org-viewport" data-org-view="session:pipeline-hardening" tabindex="0" role="group"
           aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><ul class="h-tree"><li class="h-node-slot">
+          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
+        <div class="h-flow-step">
+
       <article class="h-node is-request">
         <p class="h-node-kind">REQUEST</p>
         <h5 class="h-node-name">사용자 입력</h5>
@@ -2801,17 +3009,25 @@ label.list-row {
 
 
 
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-lead is-current" data-actor-id="pipeline-hardening:main">
-        <p class="h-node-kind">MAIN</p>
+        <p class="h-node-kind">MAIN<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">Main Codex</h5>
-        <p class="h-node-detail">프로토콜 소유자</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>프로토콜 소유자</dd></div><div><dt>담당</dt><dd>결정적 gate와 최종 판정</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>검토 중</p>
         <p class="h-node-progress"><span>진행도</span><strong>82%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 82.0%"></span></span>
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
@@ -2820,7 +3036,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">기획</h5>
@@ -2829,7 +3049,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="work" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">구현</h5>
@@ -2838,16 +3062,24 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase is-current" data-org-phase="gate" data-phase-state="current">
-        <p class="h-node-kind">PHASE</p>
+        <p class="h-node-kind">PHASE<span class="h-node-flag">작업중</span></p>
         <h5 class="h-node-name">게이트</h5>
         <p class="h-node-detail">빌드 · 린트 · 테스트</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-accent" aria-hidden="true"></span>진행 중</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="review" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">리뷰</h5>
@@ -2856,7 +3088,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="revise" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">수정</h5>
@@ -2865,7 +3101,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="approve" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">승인</h5>
@@ -2874,7 +3114,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="done" data-phase-state="pending">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">완료</h5>
@@ -2883,7 +3127,9 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>대기</p>
 
-      </article></li></ul></li></ul></li></ul></div>
+      </article>
+
+        </div></div></div>
         </div>
       </section>
 
@@ -2902,7 +3148,9 @@ label.list-row {
               aria-labelledby="hSessionViewTab-complete" data-session-view-panel="complete" hidden>
 
       <div class="h-session-switcher" data-session-switcher="complete">
-        <div class="h-session-tabs" role="tablist" aria-label="완료된 Codex 세션" data-task-tablist>
+
+          <p class="list-group-head h-session-group-head">2026.08.27</p>
+          <div class="h-session-tabs" role="tablist" aria-label="2026.08.27 완료 세션" data-task-tablist>
 
             <button class="h-session-tab is-selected" type="button" role="tab"
               id="hSessionTab-complete-0" aria-controls="hSessionPanel-complete-0" aria-selected="true"
@@ -2912,7 +3160,8 @@ label.list-row {
                 <small class="h-session-tab-meta"><span>지문한장 프로젝트 · 완료 100%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
               </span>
             </button>
-        </div>
+          </div>
+
         <div class="h-session-panels">
 
             <section class="h-session-panel" role="tabpanel" id="hSessionPanel-complete-0"
@@ -2950,7 +3199,9 @@ label.list-row {
         </header>
         <div class="h-org-viewport" data-org-view="session:jimunhanjang-project" tabindex="0" role="group"
           aria-label="조직도 확대·이동 영역. 방향키로 이동, +·- 로 확대, 0으로 맞춤">
-          <div class="h-org-canvas" data-org-canvas><ul class="h-tree"><li class="h-node-slot">
+          <div class="h-org-canvas" data-org-canvas><div class="h-flow">
+        <div class="h-flow-step">
+
       <article class="h-node is-request">
         <p class="h-node-kind">REQUEST</p>
         <h5 class="h-node-name">사용자 입력</h5>
@@ -2959,17 +3210,25 @@ label.list-row {
 
 
 
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-lead" data-actor-id="jimunhanjang:main">
         <p class="h-node-kind">MAIN</p>
         <h5 class="h-node-name">Main Codex</h5>
-        <p class="h-node-detail">제품 개선 총괄</p>
-        <p class="h-node-model">gpt-5.6-sol · xhigh</p>
+
+        <dl class="h-node-facts"><div><dt>모델</dt><dd class="h-node-fact-mono">gpt-5.6-sol · xhigh</dd></div><div><dt>역할</dt><dd>제품 개선 총괄</dd></div><div><dt>담당</dt><dd>배포와 최종 판정 완료</dd></div></dl>
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
         <p class="h-node-progress"><span>진행도</span><strong>100%</strong></p>
         <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: 100.0%"></span></span>
-      </article><ul><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="input" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">입력</h5>
@@ -2978,7 +3237,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="plan" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">기획</h5>
@@ -2987,7 +3250,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="work" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">구현</h5>
@@ -2996,7 +3263,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="gate" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">게이트</h5>
@@ -3005,7 +3276,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="review" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">리뷰</h5>
@@ -3014,7 +3289,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="revise" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">수정</h5>
@@ -3023,7 +3302,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="approve" data-phase-state="skipped">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">승인</h5>
@@ -3032,7 +3315,11 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
-      </article></li><li class="h-node-slot">
+      </article>
+
+        </div>
+        <div class="h-flow-step">
+
       <article class="h-node is-phase" data-org-phase="done" data-phase-state="done">
         <p class="h-node-kind">PHASE</p>
         <h5 class="h-node-name">완료</h5>
@@ -3041,7 +3328,9 @@ label.list-row {
 
         <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</p>
 
-      </article></li></ul></li></ul></li></ul></div>
+      </article>
+
+        </div></div></div>
         </div>
       </section>
 
@@ -3063,14 +3352,20 @@ label.list-row {
         <div class="pl-head">
           <h2 class="pl-title">파이프라인 관제탑</h2>
 
+
+      <div class="segmented pl-scope" role="group" aria-label="관제탑에 표시할 세션 범위">
+        <button class="segmented-btn" type="button"
+          aria-pressed="true" data-board-scope="active">진행 중</button><button class="segmented-btn" type="button"
+          aria-pressed="false" data-board-scope="all">전체</button>
+      </div>
         </div>
-        <p class="pl-sub">세션 3개 · 진행 2개 · 에이전트 7명 · 하네스 실시간 보고</p>
+        <p class="pl-sub">세션 2개 · 진행 2개 · 에이전트 6명 · 완료 1개 접힘 · 하네스 실시간 보고</p>
         <div class="pl-legend">
           <span><span class="pl-dot is-ok" aria-hidden="true"></span>완료</span>
           <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
           <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
           <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
-          <span>칩 = 단계에 붙은 서브에이전트(이름:역할)</span>
+          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 상태 · 진행률)</span>
         </div>
         <div class="pl-grid">
       <article class="pl-card" data-portfolio-task="usage-harness-visualization" data-session-active="true">
@@ -3106,7 +3401,7 @@ label.list-row {
           <div class="pl-stage-name">구현<span class="pl-who">gpt-5.6-sol · xhigh</span></div>
           <div class="pl-note">격리 구현 · 검증</div>
           <div class="pl-cost">1시간 30분</div>
-          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:writer">구현 컨텍스트:구현자<strong>100%</strong></span></div>
+          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:writer" data-depth="0"><b class="pl-chip-name">구현 컨텍스트</b><span class="pl-chip-role">구현자</span><span class="pl-chip-state">완료</span><strong class="pl-chip-percent">100%</strong></span></div>
         </div>
         <span class="pl-state is-ok">완료</span>
       </div>
@@ -3124,7 +3419,7 @@ label.list-row {
           <div class="pl-stage-name">리뷰<span class="pl-who">claude-opus-5 · high</span></div>
           <div class="pl-note">독립 반증 · 지적</div>
           <div class="pl-cost">55분</div>
-          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:reviewer">독립 검토:검토자<strong>80%</strong></span><span class="pl-chip" data-actor-id="usage-harness:webgpt">WebGPT 실행자:보조 실행<strong>37%</strong></span><span class="pl-chip" data-actor-id="usage-harness:claude">Fable 5 오케스트레이터:기획 · 총괄<strong>62%</strong></span></div>
+          <div class="pl-chips"><span class="pl-chip" data-actor-id="usage-harness:reviewer" data-depth="0"><b class="pl-chip-name">독립 검토</b><span class="pl-chip-role">검토자</span><span class="pl-chip-state">검토 중</span><strong class="pl-chip-percent">80%</strong></span><span class="pl-chip" data-actor-id="usage-harness:webgpt" data-depth="0"><b class="pl-chip-name">WebGPT 실행자</b><span class="pl-chip-role">보조 실행</span><span class="pl-chip-state">대기</span><strong class="pl-chip-percent">37%</strong></span><span class="pl-chip" data-actor-id="usage-harness:claude" data-depth="0"><b class="pl-chip-name">Fable 5 오케스트레이터</b><span class="pl-chip-role">기획 · 총괄</span><span class="pl-chip-state">작업 중</span><strong class="pl-chip-percent">62%</strong></span></div>
         </div>
         <span class="pl-state is-run">진행 중</span>
       </div>
@@ -3240,90 +3535,6 @@ label.list-row {
         <span class="pl-state is-wait">대기</span>
       </div>
         <div class="pl-meta">8분 전 동기화<br>진행 82%<br>마감 20:15 KST</div>
-      </article>
-      <article class="pl-card" data-portfolio-task="jimunhanjang-project" data-session-active="false">
-        <div class="pl-card-head">
-          <div>
-            <h3 class="pl-card-title">프로젝트 지문한장</h3>
-            <p class="pl-task">지문한장 프로젝트 · 08.27</p>
-          </div>
-          <span class="pl-badge is-ok">완료 4/8</span>
-        </div>
-        <div class="pl-orch" data-actor-id="jimunhanjang:main">오케스트레이터 <b>Main Codex</b><span class="pl-who">gpt-5.6-sol · xhigh</span></div>
-
-      <div class="pl-stage is-skip" data-org-phase="input" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">입력</div>
-          <div class="pl-note">요청 접수 · 범위 확인</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="plan" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">기획</div>
-          <div class="pl-note">계약 · 증거 고정</div>
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="work" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">구현</div>
-          <div class="pl-note">격리 구현 · 검증</div>
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-skip" data-org-phase="gate" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">게이트</div>
-          <div class="pl-note">빌드 · 린트 · 테스트</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="review" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">리뷰</div>
-          <div class="pl-note">독립 반증 · 지적</div>
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-      <div class="pl-stage is-skip" data-org-phase="revise" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">수정</div>
-          <div class="pl-note">지적 반영 · 재검증</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-skip" data-org-phase="approve" data-phase-state="skipped">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">승인</div>
-          <div class="pl-note">판정 · 릴리스 결정</div>
-
-
-        </div>
-        <span class="pl-state is-skip">기록 없음</span>
-      </div>
-      <div class="pl-stage is-ok" data-org-phase="done" data-phase-state="done">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">완료</div>
-          <div class="pl-note">배포 · 기록</div>
-
-
-        </div>
-        <span class="pl-state is-ok">완료</span>
-      </div>
-        <div class="pl-meta">10분 전 동기화<br>진행 100%<br>마감 20:20 KST</div>
       </article></div>
       </div>
             </section>

@@ -491,6 +491,86 @@ function validateMigrations() {
   );
 }
 
+function validateGichulBackend() {
+  const requiredFiles = [
+    'scripts/gichul/fetch-kice.mjs',
+    'scripts/gichul/build-manifest.mjs',
+    'scripts/gichul/upload-r2.mjs',
+    'scripts/gichul/overrides.json',
+    'scripts/gichul/gichul.test.mjs',
+  ];
+  for (const file of requiredFiles) {
+    check(existsSync(path.join(ROOT, file)), `${file}: gichul backend artifact is missing`);
+  }
+
+  const packageJson = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  check(Boolean(packageJson.devDependencies?.['pdfjs-dist']),
+    'package.json: pdfjs-dist must be declared as a devDependency for manifest extraction');
+  check(!packageJson.dependencies?.['pdfjs-dist'],
+    'package.json: pdfjs-dist must not be a production dependency');
+  check(String(packageJson.scripts?.test || '').includes('scripts/gichul/gichul.test.mjs'),
+    'package.json: npm test must include the gichul script tests');
+
+  const ignoreLines = readFileSync(path.join(ROOT, '.gitignore'), 'utf8')
+    .split('\n').map((line) => line.trim());
+  check(ignoreLines.includes('gichul-src/'), '.gitignore: gichul-src/ must stay outside Git');
+  check(!existsSync(path.join(ROOT, 'scripts/gichul/sources.json')),
+    'scripts/gichul/sources.json: hard-coded post seeds are forbidden; the KICE list page is the source');
+
+  const fetchSource = readFileSync(path.join(ROOT, 'scripts/gichul/fetch-kice.mjs'), 'utf8');
+  for (const marker of ['1500234', '1500236', 'C01', 'C02', 'C03', 'fileDown.do']) {
+    check(fetchSource.includes(marker), `scripts/gichul/fetch-kice.mjs: missing crawl-contract marker ${marker}`);
+  }
+  check(fetchSource.includes('2020 + index') && fetchSource.includes('length: 8'),
+    'scripts/gichul/fetch-kice.mjs: academic years 2020-2027 must be derived from one bounded range');
+  const fetchProduction = /export async function fetchKice\([^]*?\n\}\n\nfunction cliOptions/u.exec(fetchSource)?.[0] || '';
+  check(fetchSource.includes('crawl-inventory.json')
+    && fetchProduction.includes('validateAssignmentCoverage(attachments)')
+    && fetchSource.includes('previous?.fileSeq === attachment.fileSeq'),
+    'scripts/gichul/fetch-kice.mjs: current fileSeq inventory and complete-corpus gates are missing');
+  for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
+    check(fetchSource.includes(subject), `scripts/gichul/fetch-kice.mjs: target subject ${subject} is missing`);
+  }
+
+  const manifestSource = readFileSync(path.join(ROOT, 'scripts/gichul/build-manifest.mjs'), 'utf8');
+  check(manifestSource.includes("import('pdfjs-dist/legacy/build/pdf.mjs')"),
+    'scripts/gichul/build-manifest.mjs: pdfjs-dist must be loaded only by the real extractor');
+  check(manifestSource.includes('extractText = extractPdfText'),
+    'scripts/gichul/build-manifest.mjs: PDF text extraction must remain injectable for fixture tests');
+  const manifestProduction = /export async function buildManifest\([^]*?\n\}\n\nfunction cliOptions/u.exec(manifestSource)?.[0] || '';
+  check(manifestProduction.includes('validateManifest(exams)'),
+    'scripts/gichul/build-manifest.mjs: generated exams must pass range validation before write');
+  check(manifestProduction.includes('validateCrawlInventory(')
+    && manifestProduction.includes('validateCorpusManifest(')
+    && manifestProduction.includes('unusedOverrides'),
+    'scripts/gichul/build-manifest.mjs: crawl inventory, corpus, or exact override gate is missing');
+
+  const uploadSource = readFileSync(path.join(ROOT, 'scripts/gichul/upload-r2.mjs'), 'utf8');
+  check(uploadSource.includes('.r2-upload-state.json') && uploadSource.includes("'--remote'"),
+    'scripts/gichul/upload-r2.mjs: remote uploads must use a local content-hash checkpoint');
+  check(uploadSource.includes("left.key === 'manifest.json'")
+    && uploadSource.indexOf('await run(') < uploadSource.indexOf('await writeState('),
+    'scripts/gichul/upload-r2.mjs: manifest-last ordering or post-success checkpoint is missing');
+
+  const wrangler = readFileSync(path.join(ROOT, 'worker/wrangler.toml'), 'utf8');
+  check(/\[\[r2_buckets\]\][^]*?binding\s*=\s*"GICHUL"[^]*?bucket_name\s*=\s*"hvsdcm-gichul"/u.test(wrangler),
+    'worker/wrangler.toml: the GICHUL R2 binding is missing or incomplete');
+
+  const router = readFileSync(path.join(ROOT, 'worker/src/router.js'), 'utf8');
+  check(router.includes('/api/gichul/manifest'),
+    'worker/src/router.js: missing /api/gichul/manifest route');
+  check(router.includes('const gichulPdfMatch = path.match(') && router.includes('return gichulPdf('),
+    'worker/src/router.js: missing /api/gichul/pdf/:id route');
+  check(router.includes("'cache-control': 'no-store'"),
+    'worker/src/router.js: gichul responses must disable caching');
+
+  const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const architecture = readFileSync(path.join(ROOT, 'docs/ARCHITECTURE.md'), 'utf8');
+  check(readme.includes('/gichul/'), 'README.md: the gichul screen is missing from the application list');
+  check(architecture.includes('GET /api/gichul/manifest') && architecture.includes('GET /api/gichul/pdf/:id'),
+    'docs/ARCHITECTURE.md: the authenticated gichul API surface is incomplete');
+}
+
 function validateDesignHeadingSequence() {
   const errors = findDesignHeadingSequenceErrors(
     readFileSync(DESIGN_HEADING_PATH, 'utf8'),
@@ -1906,7 +1986,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/usage.js?v=20260828-usage-board'],
+    'usage/index.html': ['/usage/assets/js/usage.js?v=20260828-usage-flow'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -1929,7 +2009,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
     'smstudy/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260828-usage-board', '/usage/assets/css/usage.css?v=20260828-usage-board'],
+    'usage/index.html': ['/assets/css/system.css?v=20260828-usage-flow', '/usage/assets/css/usage.css?v=20260828-usage-flow'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2254,6 +2334,7 @@ validateEmojiCrossMaps();
 validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
+validateGichulBackend();
 validateWordMasterData();
 // M-6 — 스크린샷 대신 남긴 정적 스냅샷. 존재와 "파일 단독으로 열림"을 계약으로 건다.
 // 스냅샷이 조용히 사라지거나 외부 자산에 의존하게 되면 시각 확인 근거가 없어진다.

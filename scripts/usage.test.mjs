@@ -405,7 +405,7 @@ test('overall, module, and actor progress render only from reported artifacts', 
   // 관제탑 카드도 같은 두 수치만 낸다: 카드 메타의 총괄 진행도와, 진행도를 보고한
   // 액터의 칩 하나. 보고가 없는 액터의 칩에는 수치 자체가 붙지 않는다.
   assert.match(markup, /class="pl-meta">[\s\S]*?진행 64%/u);
-  assert.equal((markup.match(/class="pl-chip"[^>]*>[^<]*<strong>/gu) || []).length, 1);
+  assert.equal((markup.match(/class="pl-chip-percent"/gu) || []).length, 1);
   for (const expected of ['검증 단계', '80%', 'CSS 구현', '88%']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
@@ -482,7 +482,17 @@ test('active and completed tabs separate session state while the portfolio inclu
   assert.match(completeMarkup, /완료 세션/u);
   assert.doesNotMatch(completeMarkup, /진행 세션/u);
 
-  const org = renderers.renderPortfolioBoard(tasks, NOW);
+  // 관제탑 기본값은 '진행 중만'이다 (요구 6) — 완료 세션은 접히되 사라지지 않고,
+  // 접힌 개수를 요약 줄이 밝힌다.
+  const activeOnly = renderers.renderPortfolioBoard(tasks, NOW);
+  assert.match(activeOnly, /진행 세션/u);
+  assert.doesNotMatch(activeOnly, /완료 세션/u);
+  assert.match(activeOnly, /완료 1개 접힘/u);
+  assert.equal((activeOnly.match(/data-portfolio-task=/gu) || []).length, 1);
+  assert.match(activeOnly, /data-board-scope="all"/u);
+
+  // '전체'를 고르면 완료 세션과 그 액터가 전부 돌아온다.
+  const org = renderers.renderPortfolioBoard(tasks, NOW, 'all');
   assert.match(org, /진행 세션/u);
   assert.match(org, /완료 세션[\s\S]*에이전트 보고 없음/u);
   assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 2);
@@ -890,7 +900,7 @@ test('null usage snapshots and a null actor percent stay unmeasured instead of b
   // Codex는 측정값이 하나도 없다 — 0%p로 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Codex/u);
   assert.doesNotMatch(markup, /Claude 80\.0%p/u);
-  assert.match(markup, /data-actor-id="usage-harness:reviewer"[\s\S]*?<strong>55%<\/strong>/u);
+  assert.match(markup, /data-actor-id="usage-harness:reviewer"[\s\S]*?<strong class="pl-chip-percent">55%<\/strong>/u);
 });
 
 // 한도 창이 초기화되면 잔여가 도로 오른다. 그 상승은 소모가 아니므로 더하지 않고,
@@ -1140,6 +1150,179 @@ test('the board renders the approved vocabulary and names every stage state in t
   assert.doesNotMatch(markup, /h-node|h-org|data-org-canvas/u);
 });
 
+// ---- WP3: 상→하 축 · actor 고정 배치 · 개별 수치 (2026-08-28) --------------
+//
+// 계약(sessions/2026-08-28-usage-조직도-개선/plan.md §3.3)은 다섯이다:
+//   ① 상세 조직도의 축은 **위→아래**이고, 서브에이전트만 축 노드의 오른쪽으로 갈라진다.
+//   ② 위임된 서브에이전트는 손자까지 전부 보인다 (parent_id 계층 유지).
+//   ③ 역할·담당·소요시간·한도 소비 추정이 **각각 별도 줄**로 나온다 (겹쳐 쓰지 않는다).
+//   ④ actor 배치는 이벤트 추정이 아니라 **API가 준 actor.phase 고정 배치**다 —
+//      그래야 종료된 단계에도 그 단계에 투입됐던 actor가 영구히 남는다.
+//   ⑤ 신규 필드(phase·started_at·usage_at_*)가 하나도 없는 구 payload도 그대로 그려진다.
+//
+// 이 검사가 **못 보는 것**: 실제 CSS 조판(축이 정말 세로로 보이는지)은 docs/_snapshots가
+//   사람 눈에 보여 준다. 여기서는 조판을 지탱하는 **마크업 구조**만 잠근다.
+
+const wp3Task = () => harnessTask({
+  id: 'wp3',
+  phase: 'review',
+  status: 'active',
+  events: [],
+  actors: [
+    {
+      id: 'wp3:main', parent_id: '', name: '오케스트레이터', kind: 'claude',
+      model: 'claude-fable-5', reasoning: 'high', role: '기획 · 오케스트레이션',
+      assignment: 'WP 배정과 계약 고정', status: 'working', phase: 'plan',
+      started_at: iso(4 * HOUR),
+    },
+    {
+      id: 'wp3:server', parent_id: 'wp3:main', name: '서버 구현자', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'xhigh', role: '백엔드 구현',
+      assignment: 'worker 자동 스탬프', status: 'done', phase: 'work', progress: 100,
+      started_at: iso(3 * HOUR), finished_at: iso(2 * HOUR),
+      usage_at_start: { codex: 88, claude: 40 }, usage_at_end: { codex: 80.5, claude: 39 },
+    },
+    {
+      id: 'wp3:server-sub', parent_id: 'wp3:server', name: '테스트 서브에이전트', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'high', role: '검증', assignment: '픽스처 도출',
+      status: 'done', phase: 'work', started_at: iso(3 * HOUR), finished_at: iso(150 * 60_000),
+    },
+    {
+      id: 'wp3:front', parent_id: 'wp3:main', name: '프론트 구현자', kind: 'claude',
+      model: 'claude-opus-5', reasoning: 'high', role: '프론트 구현',
+      assignment: '조직도 재작성', status: 'working', phase: 'work',
+      started_at: iso(2 * HOUR), usage_at_start: { codex: 80, claude: 38 },
+    },
+    {
+      id: 'wp3:gate', parent_id: 'wp3:main', name: '게이트 러너', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'medium', role: '기계 게이트',
+      assignment: 'npm test', status: 'done', phase: 'gate',
+      started_at: iso(90 * 60_000), finished_at: iso(80 * 60_000),
+    },
+  ],
+});
+
+test('the detail org chart runs top-down on one axis and branches subagents to the right', () => {
+  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active');
+  // 축은 입력 + 총괄 + 여덟 단계 = 열 단이다. 좌→우 트리(h-tree 뿌리)가 축을 대신하지 않는다.
+  assert.match(markup, /<div class="h-flow">/u);
+  assert.equal((markup.match(/class="h-flow-step"/gu) || []).length, 2 + 8);
+  assert.deepEqual(
+    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]),
+    ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'],
+  );
+  // 분기는 액터가 있는 단계에만 생긴다 (구현·게이트 둘).
+  assert.equal((markup.match(/class="h-branch"/gu) || []).length, 2);
+  // 손계산 좌표가 아니라 CSS 조판이다 (DESIGN.md §10).
+  assert.doesNotMatch(markup, /<svg/u);
+});
+
+test('a delegated grandchild agent is drawn nested under its parent, not dropped', () => {
+  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active');
+  // 보고된 액터 5명이 전부 자기 노드를 갖는다 (총괄 1 + 서브 4).
+  assert.equal((markup.match(/data-actor-id=/gu) || []).length, 5);
+  // 손자(테스트 서브에이전트)는 부모 카드 아래 중첩 목록 안에 있다.
+  assert.match(
+    markup,
+    /data-actor-id="wp3:server"[\s\S]*?<ul><li class="h-node-slot">[\s\S]*?data-actor-id="wp3:server-sub"/u,
+  );
+});
+
+test('role, assignment, duration, and the quota estimate each get their own line', () => {
+  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active');
+  // 역할과 담당을 겹쳐 쓰지 않는다 — 둘 다 자기 라벨과 함께 나온다.
+  assert.match(markup, /<dt>역할<\/dt><dd>백엔드 구현<\/dd>/u);
+  assert.match(markup, /<dt>담당<\/dt><dd>worker 자동 스탬프<\/dd>/u);
+  // 소요시간: 끝난 액터는 시작~종료, 진행 중인 액터는 시작~지금.
+  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>소요<\/dt><dd>1시간<\/dd>/u);
+  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?<dt>소요<\/dt><dd>2시간<\/dd>/u);
+  // 한도 소비는 **추정**이다: 잔여의 감소분(88 → 80.5)이고, 라벨에 그렇게 적는다.
+  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>한도 소비<\/dt><dd>Codex 7\.5%p 추정<\/dd>/u);
+  // 종료 스냅샷이 없는 액터에는 소비 줄 자체가 없다 — 0%p로 지어내지 않는다.
+  assert.doesNotMatch(markup, /data-actor-id="wp3:front"[\s\S]*?한도 소비/u);
+  // 모델은 정확한 모델명 그대로, 같은 라벨-값 격자의 첫 줄로 낸다.
+  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.2-codex · xhigh<\/dd>/u);
+  // 진행 중 노드는 테두리만이 아니라 글자 라벨로도 구분된다 (색각 조건).
+  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?class="h-node-flag">작업중</u);
+});
+
+test('actors stay in the phase the API assigned even when the task has moved on', () => {
+  const renderers = createUsageRenderers();
+  // 이벤트 로그가 아예 없는 세션이다(보존 기간이 지나 사라진 상태를 흉내 낸다).
+  // 그래도 게이트 러너는 task의 현재 단계(review)로 끌려가지 않고 gate에 남아야 한다.
+  const markup = renderers.renderSessionView([wp3Task()], NOW, 'active');
+  const gateBlock = /data-org-phase="gate"[\s\S]*?data-org-phase="review"/u.exec(markup)[0];
+  assert.match(gateBlock, /data-actor-id="wp3:gate"/u);
+  const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
+  assert.match(workBlock, /data-actor-id="wp3:server"/u);
+  assert.match(workBlock, /data-actor-id="wp3:front"/u);
+  // 관제탑도 같은 배치를 쓴다 — 두 화면이 액터를 서로 다른 단계에 세우지 않는다.
+  const board = renderers.renderPortfolioBoard([wp3Task()], NOW);
+  assert.match(board, /data-org-phase="gate"[\s\S]*?data-actor-id="wp3:gate"/u);
+});
+
+test('a payload without any of the new fields still renders through the old inference', () => {
+  const renderers = createUsageRenderers();
+  // phase·started_at·usage_at_* 가 하나도 없는 구 보고. 이벤트가 액터의 단계를 말한다.
+  const legacy = harnessTask({
+    id: 'legacy-actor',
+    phase: 'review',
+    events: [
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'work' },
+      { ts: iso(2 * HOUR), kind: 'report', phase: 'work', actor_id: 'usage-harness:webgpt', percent: 30 },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'review' },
+    ],
+  });
+  const markup = renderers.renderSessionView([legacy], NOW, 'active');
+  // 이벤트가 말한 단계(work)에 그 액터가 선다 — 종전 추정 경로가 그대로 살아 있다.
+  const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
+  assert.match(workBlock, /data-actor-id="usage-harness:webgpt"/u);
+  // 잴 근거가 없는 값은 줄 자체가 없다: 소요·한도 소비를 지어내지 않는다.
+  assert.doesNotMatch(markup, /<dt>소요<\/dt>/u);
+  assert.doesNotMatch(markup, /<dt>한도 소비<\/dt>/u);
+  // 역할은 그대로 나온다 (구 payload에도 role은 있다).
+  assert.match(markup, /<dt>역할<\/dt><dd>위임 실행<\/dd>/u);
+  assert.doesNotMatch(markup, /undefined|NaN/u);
+});
+
+// ---- 완료 목록 정리 (요구 6) ----------------------------------------------
+// 완료 세션은 영구 누적된다. 목록을 지우지 않으면서 화면을 읽히게 하는 방법은 **접기**다:
+// 기본 최근 10개 + 날짜별 그룹 머리 + 남은 개수를 밝히는 '더 보기'.
+
+test('the completed view shows the ten most recent sessions, grouped by date, with a more button', () => {
+  const completed = Array.from({ length: 14 }, (_, index) => harnessTask({
+    id: `done-${index}`,
+    name: `완료 세션 ${index}`,
+    status: 'complete',
+    phase: 'done',
+    progress: 100,
+    // 이틀에 걸쳐 완료됐다. 최신 완료가 먼저 온다.
+    completed_at: iso(index * 6 * HOUR),
+    updated_at: iso(index * 6 * HOUR),
+  }));
+  const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
+  assert.equal((markup.match(/data-task-tab="/gu) || []).length, 10);
+  assert.equal((markup.match(/data-task-panel="/gu) || []).length, 10);
+  assert.match(markup, /data-completed-more/u);
+  assert.match(markup, /남은 4개/u);
+  // 날짜 그룹 머리가 tablist 밖에 서고, 그룹마다 자기 tablist를 갖는다 (역할 계약).
+  assert.match(markup, /class="list-group-head h-session-group-head">2026\.08\.27</u);
+  assert.ok((markup.match(/data-task-tablist/gu) || []).length >= 2);
+  // 가장 최근 완료가 첫 탭이다.
+  assert.ok(markup.indexOf('완료 세션 0') < markup.indexOf('완료 세션 9'));
+  // 열 개 안에 들지 못한 세션은 탭으로 서지 않는다 (지운 것이 아니라 접힌 것이다).
+  assert.doesNotMatch(markup, /완료 세션 13/u);
+});
+
+test('a completed list shorter than one page carries no more button', () => {
+  const completed = [harnessTask({
+    id: 'done-only', name: '하나뿐인 완료', status: 'complete', phase: 'done', progress: 100,
+  })];
+  const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
+  assert.doesNotMatch(markup, /data-completed-more/u);
+  assert.match(markup, /하나뿐인 완료/u);
+});
+
 // ---- 정적 폴백 (usage/pipeline-state.json) --------------------------------
 //
 // 하네스 피드에 닿지 못한 첫 화면은 빈 채로 두지 않고, 저장소에 함께 배포되는 사본으로
@@ -1185,7 +1368,8 @@ test('a first load that fails falls back to the shipped static copy and labels i
   assert.match(markup, /class="pl-board"/u);
   assert.match(markup, /P-C · 관제탑 이전/u);
   assert.match(markup, /진행 중 1\/3/u);
-  assert.match(markup, /class="pl-chip"[^>]*>GPT 5\.6 Sol:Worker/u);
+  // 사본의 chips는 문자열 배열이다 — 구조화된 칩 조판에서도 그 형식이 그대로 읽힌다.
+  assert.match(markup, /class="pl-chip-name">GPT 5\.6 Sol:Worker/u);
   assert.match(markup, /class="pl-cost">38m/u);
   // 사본임을 화면이 말한다 — 실시간처럼 보이게 두지 않는다.
   assert.match(markup, /정적 사본/u);

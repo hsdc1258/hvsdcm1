@@ -70,7 +70,9 @@ const tasks = [
 ];
 
 const renderers = createUsageRenderers();
-const org = renderers.renderPortfolioBoard(tasks, NOW);
+// 관제탑 기본 범위는 '진행 중만'이다(요구 6). 아래 계약(전 단계 상시 표시 · 액터 누락
+// 없음)은 **전체** 범위에서 본다 — 접기는 표시 규칙일 뿐, 데이터가 사라지면 안 된다.
+const org = renderers.renderPortfolioBoard(tasks, NOW, 'all');
 
 // ---- (1) 세션마다 전 단계가 상시 선다 -------------------------------------
 assert.match(org, /파이프라인 관제탑[\s\S]*입력[\s\S]*기획[\s\S]*구현[\s\S]*게이트[\s\S]*리뷰[\s\S]*수정[\s\S]*승인[\s\S]*완료/u);
@@ -103,7 +105,7 @@ assert.match(approveOnly, /data-org-phase="revise" data-phase-state="skipped"/u)
 assert.match(approveOnly, /data-org-phase="done" data-phase-state="pending"/u);
 // 완료 세션은 pending으로 되돌아가는 단계가 없다. 다만 "완료"는 실제로 지나온 단계에만
 // 붙고(구 4단계), 보고된 적 없는 신설 단계는 skipped로 남는다.
-const doneOnly = renderers.renderPortfolioBoard([tasks[5]], NOW);
+const doneOnly = renderers.renderPortfolioBoard([tasks[5]], NOW, 'all');
 assert.equal((doneOnly.match(/data-phase-state="done"/gu) || []).length, 4);
 assert.equal((doneOnly.match(/data-phase-state="skipped"/gu) || []).length, 4);
 assert.doesNotMatch(doneOnly, /data-phase-state="(?:current|pending)"/u);
@@ -117,7 +119,9 @@ for (const item of allActors) {
 }
 // 서브에이전트는 총괄과 같은 카드 안, 자기 단계의 칩으로 붙는다 (총괄 줄이 먼저 온다).
 assert.match(org, /data-actor-id="work:main"[\s\S]*?data-actor-id="work:calc"/u);
-assert.match(org, /class="pl-chip" data-actor-id="work:calc">계산 서브에이전트:서브에이전트/u);
+// 칩은 이름·역할·상태를 **각각** 낸다 (요구 2). 하나의 문자열로 이어 붙이지 않는다.
+assert.match(org, /class="pl-chip" data-actor-id="work:calc" data-depth="0">/u);
+assert.match(org, /data-actor-id="work:calc"[\s\S]*?class="pl-chip-name">계산 서브에이전트<[\s\S]*?class="pl-chip-role">서브에이전트<[\s\S]*?class="pl-chip-state">작업 중</u);
 // 날짜 접미사는 카드 제목에서 떨어져 나온다.
 assert.doesNotMatch(org, /\(08-27\)/u);
 
@@ -153,7 +157,7 @@ assert.match(timed, /소모 Codex 12\.5%p/u);
 assert.doesNotMatch(timed, /Claude \d/u);
 assert.doesNotMatch(timed, /한도 초기화/u);
 // 서브에이전트 진행도는 payload의 60%가 아니라 이벤트의 최신 41%다.
-assert.match(timed, /data-actor-id="work:calc"[\s\S]*?<strong>41%<\/strong>/u);
+assert.match(timed, /data-actor-id="work:calc"[\s\S]*?<strong class="pl-chip-percent">41%<\/strong>/u);
 
 // ---- 세션 탭 쪽 표기 ------------------------------------------------------
 const activeView = renderers.renderSessionView(tasks, NOW, 'active');

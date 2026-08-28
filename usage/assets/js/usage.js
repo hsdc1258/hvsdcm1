@@ -84,6 +84,30 @@
     working: '작업 중', reviewing: '검토 중', waiting: '대기',
     done: '완료', blocked: '막힘', unavailable: '사용 불가',
   };
+  // 노드가 내는 표시 항목의 **단일 원본**. 상세 조직도와 관제탑이 같은 사전을 소비한다 —
+  // 라벨을 마크업에 손으로 적으면 두 화면이 같은 값을 다른 이름으로 부르게 된다
+  // (LESSONS "파생 가능한 것을 손으로 적지 않는다").
+  //
+  // role과 assignment는 **겹쳐 쓰지 않는다**: 역할(무엇을 맡은 사람인가)과 담당(지금 무슨
+  // 일을 하는가)은 다른 사실이고, 예전처럼 `role || assignment`로 하나만 내면 둘 중 하나가
+  // 조용히 사라진다 (조사-결론 C-2).
+  const NODE_FACT_LABELS = {
+    role: '역할',
+    assignment: '담당',
+    duration: '소요',
+    usage: '한도 소비',
+    model: '모델',
+  };
+  // actor.kind ↔ 그 actor가 갉아먹는 계정 한도. usage_at_start·usage_at_end는 그 시점
+  // 계정의 **잔여(%)** 스냅샷이므로 소비는 `시작 − 종료`다(세션 소모와 같은 부호 계약).
+  // 여러 세션이 같은 계정을 함께 쓰므로 이 값은 측정이 아니라 **추정**이고, 화면도 그렇게 말한다.
+  const ACTOR_USAGE_SOURCE = { codex: 'codex', webgpt: 'codex', claude: 'claude' };
+  // 완료 목록은 기본 최근 10개만 세운다 (요구 6). 서버가 completed_limit로 잘라 주지
+  // 않아도 화면이 스스로 접는다 — 클라이언트 접기가 1차 방어다.
+  const COMPLETED_PAGE_SIZE = 10;
+  // 관제탑 기본값은 '진행 중만'이다. 완료 세션은 영구 누적되므로 전부 그리면 보드가
+  // 몇 달 치 카드 벽이 된다. 전체는 토글로 연다.
+  const BOARD_SCOPES = [{ key: 'active', label: '진행 중' }, { key: 'all', label: '전체' }];
 
   const elements = {
     body: document.getElementById('usageBody'),
@@ -94,6 +118,9 @@
   };
   let selectedSessionView = 'active';
   const selectedTaskIds = { active: '', complete: '' };
+  // 화면-로컬 상태. 폴링이 DOM을 갈아 끼워도 유지돼야 하므로 모듈 변수로 둔다.
+  let completedVisible = COMPLETED_PAGE_SIZE;
+  let selectedBoardScope = 'active';
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -506,6 +533,45 @@
     return map;
   }
 
+  // actor 하나가 어느 단계에 속하는가. **API가 준 actor.phase가 언제나 이긴다** —
+  // 이벤트 추정은 최근 300개·14일 보존에 걸려 사라지고, 사라지는 순간 그 actor가 task의
+  // 현재 단계(완료 세션이면 '완료')로 끌려가 **지나간 단계가 텅 비어 보인다**(조사-결론 C-5).
+  // 고정 배치로 바꾸면 종료된 단계에도 그 단계에 투입됐던 actor가 영구히 남는다.
+  // phase를 싣지 않는 구 보고는 종전 추정(이벤트 → task 단계)으로 그대로 떨어진다.
+  function actorPhaseKey(actor, phaseFromEvents, fallbackPhase) {
+    if (PHASE_KEYS.has(actor?.phase)) return actor.phase;
+    const inferred = phaseFromEvents.get(String(actor?.id));
+    return PHASE_KEYS.has(inferred) ? inferred : fallbackPhase;
+  }
+
+  // actor 하나의 소요시간. started_at이 없는 구 보고는 잴 근거가 없으므로 빈 문자열이다
+  // (0분으로 지어내지 않는다). 아직 끝나지 않았으면 지금까지를 세되, 세션이 이미 끝났으면
+  // 그 세션의 마지막 시각에서 시계를 멈춘다 — 끝난 세션의 시간이 계속 자라면 거짓이 된다.
+  function actorDuration(actor, task, now) {
+    const start = parseTime(actor?.started_at);
+    if (start === null) return '';
+    const finished = parseTime(actor?.finished_at);
+    const openEnd = task?.status === 'complete'
+      ? (parseTime(task?.completed_at) ?? parseTime(task?.updated_at) ?? now)
+      : now;
+    const end = finished === null ? openEnd : finished;
+    return formatDuration(Math.max(0, end - start));
+  }
+
+  // actor 하나가 쓴 **전체 한도 대비 소비 추정**. usage_at_start/usage_at_end는 그 actor가
+  // 시작·종료하던 두 시점의 계정 잔여(%)라, 그 사이 다른 세션이 함께 쓴 몫이 섞인다.
+  // 그래서 값이 아니라 추정이고, 화면도 '추정'이라고 적는다. 두 스냅샷 중 하나라도
+  // 없으면 아무것도 내지 않는다 (결측은 0이 아니다).
+  function actorUsageEstimate(actor) {
+    const field = ACTOR_USAGE_SOURCE[actor?.kind] || 'codex';
+    const start = finiteNumber(actor?.usage_at_start?.[field]);
+    const end = finiteNumber(actor?.usage_at_end?.[field]);
+    if (start === null || end === null) return '';
+    const consumed = start - end;
+    if (!(consumed >= 0.1)) return '';
+    return `${SOURCE_LABELS[field] || field} ${consumed.toFixed(1)}%p 추정`;
+  }
+
   // 세션 한도 소모.
   //
   // **필드 계약**: events의 `usage_codex`·`usage_claude`는 그 시점의 **잔여 한도(%)**다.
@@ -566,6 +632,28 @@
     };
   }
 
+  // 완료 시각. WP1이 붙이는 completed_at이 원본이고, 없으면 마지막 동기화 시각으로
+  // 떨어진다 — 구 payload도 같은 축에서 정렬·묶기 된다.
+  function completedTime(task) {
+    return parseTime(task?.completed_at) ?? parseTime(task?.updated_at) ?? 0;
+  }
+
+  // 완료 목록을 날짜별로 묶는다. 키는 완료 시각의 ISO 날짜이고, 순서는 최신 날짜부터다.
+  function groupTasksByDate(tasks) {
+    const groups = new Map();
+    for (const task of tasks) {
+      const time = completedTime(task);
+      const key = time ? new Date(time).toISOString().slice(0, 10) : '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(task);
+    }
+    return [...groups].map(([key, items]) => ({
+      key,
+      label: key ? `${key.slice(0, 4)}.${key.slice(5, 7)}.${key.slice(8, 10)}` : '날짜 기록 없음',
+      tasks: items,
+    }));
+  }
+
   function sortTasks(tasks) {
     return tasks.filter((task) => task && typeof task === 'object')
       .sort((left, right) => {
@@ -578,10 +666,12 @@
 
   // ---- 조직도 노드 ---------------------------------------------------------
   //
-  // 노드 하나의 표시 계약은 아래 한 형태뿐이고, 세션 트리와 전체 조직도가 같은
-  // 렌더러를 공유한다. 종류마다 다른 마크업을 만들면 두 화면의 톤이 갈라진다.
-  //   { kind, kindLabel, name, detail, model, note, status, tone, time, progress, attributes, children }
-  // model은 한 줄 고정(모노·말줄임)이고, note는 길어지면 줄바꿈하는 자유 문장이다.
+  // 노드 하나의 표시 계약은 아래 한 형태뿐이고, 축 노드(입력·총괄·단계)와 분기 노드
+  // (서브에이전트)가 같은 렌더러를 공유한다. 종류마다 다른 마크업을 만들면 톤이 갈라진다.
+  //   { kind, kindLabel, name, detail, model, note, status, tone, time,
+  //     progress, facts, current, attributes, children }
+  // model은 한 줄 고정(모노·말줄임)이고, facts는 라벨·값이 짝을 이루는 사실 목록이다.
+  // **facts의 라벨은 NODE_FACT_LABELS에서만 나온다** — 마크업에 손으로 적지 않는다.
 
   function renderNodeAttributes(attributes) {
     return Object.entries(attributes || {})
@@ -590,14 +680,26 @@
       .join('');
   }
 
+  // 라벨-값 한 줄씩. 값이 없는 항목은 줄 자체를 만들지 않는다 — 빈 값을 '없음'으로
+  // 채우면 보고되지 않은 것과 보고된 빈 값이 구별되지 않는다.
+  // 모델은 언제나 첫 줄이고 모노다(정확한 모델명이 한 줄에 고정되게).
+  function renderNodeFacts(node) {
+    const rows = [
+      node.model ? { label: NODE_FACT_LABELS.model, value: node.model, mono: true } : null,
+      ...(node.facts || []),
+    ].filter((fact) => fact && fact.label && fact.value);
+    if (rows.length === 0) return '';
+    return `<dl class="h-node-facts">${rows.map((fact) => `<div><dt>${escapeHtml(fact.label)}</dt><dd${fact.mono ? ' class="h-node-fact-mono"' : ''}>${escapeHtml(fact.value)}</dd></div>`).join('')}</dl>`;
+  }
+
   function renderNode(node) {
     const progress = Number.isFinite(node.progress) ? clampPercent(node.progress) : null;
     return `
       <article class="h-node is-${escapeHtml(node.kind)}${node.current ? ' is-current' : ''}"${renderNodeAttributes(node.attributes)}>
-        <p class="h-node-kind">${escapeHtml(node.kindLabel || 'NODE')}</p>
+        <p class="h-node-kind">${escapeHtml(node.kindLabel || 'NODE')}${node.current ? '<span class="h-node-flag">작업중</span>' : ''}</p>
         <h5 class="h-node-name">${escapeHtml(node.name || '이름 미기록')}</h5>
         ${node.detail ? `<p class="h-node-detail">${escapeHtml(node.detail)}</p>` : ''}
-        ${node.model ? `<p class="h-node-model">${escapeHtml(node.model)}</p>` : ''}
+        ${renderNodeFacts(node)}
         ${node.note ? `<p class="h-node-note">${escapeHtml(node.note)}</p>` : ''}
         ${node.status
     ? `<p class="h-node-state"><span class="status-dot${node.tone || ' is-idle'}" aria-hidden="true"></span>${escapeHtml(node.status)}${node.time ? `<span class="h-node-time">${escapeHtml(node.time)}</span>` : ''}</p>`
@@ -609,20 +711,38 @@
       </article>`;
   }
 
+  // 분기(서브에이전트) 가지. 부모 카드의 **오른쪽**으로 갈라지고, parent_id 자식은 그
+  // 아래로 한 단 더 들어간다. 좌→우 연결선은 CSS 헤어라인이 그린다(DESIGN.md §10).
   function renderBranch(node) {
     const children = (node.children || []).filter(Boolean);
     return `<li class="h-node-slot">${renderNode(node)}${children.length ? `<ul>${children.map(renderBranch).join('')}</ul>` : ''}</li>`;
   }
 
-  function renderTree(nodes) {
-    return `<ul class="h-tree">${nodes.map(renderBranch).join('')}</ul>`;
+  function renderBranchList(nodes) {
+    const list = (nodes || []).filter(Boolean);
+    if (list.length === 0) return '';
+    return `<div class="h-branch"><ul class="h-tree">${list.map(renderBranch).join('')}</ul></div>`;
+  }
+
+  // 조직도의 뼈대는 **위 → 아래 중앙 축**이다 (사용자 첨부 레퍼런스, plan §3.3).
+  // 축 노드는 입력 → 총괄 → 여덟 단계 순서로 한 줄로 서고, 각 단계에 투입된
+  // 서브에이전트만 그 축 노드의 오른쪽으로 갈라진다. 세로 커넥터는 축 노드 사이를 잇는
+  // CSS 헤어라인이고, 첫·마지막 노드에서는 카드 바깥으로 새지 않게 끊긴다.
+  function renderFlow(nodes) {
+    return `<div class="h-flow">${nodes.map((node) => `
+        <div class="h-flow-step">
+          ${renderNode(node)}
+          ${renderBranchList(node.children)}
+        </div>`).join('')}</div>`;
   }
 
   // ---- 트리 구성 -----------------------------------------------------------
 
-  // 서브에이전트 숲: 부모가 다른 actor면 그 아래에, 아니면 자기 단계 노드 아래에 붙는다.
+  // 서브에이전트 숲: 부모가 다른 actor면 그 아래에, 아니면 자기 단계 노드 옆에 붙는다.
+  // **위임된 서브에이전트는 한 명도 빠지지 않는다** — parent_id가 가리키는 부모가 실제로
+  // 보고된 actor면 그 아래로 중첩되고(손자·증손자까지), 아니면 자기 단계로 올라온다.
   // 순환 parent_id가 들어와도 visited로 끊는다 (보고자가 잘못 보내도 화면이 멈추지 않게).
-  function actorNodes(task) {
+  function actorNodes(task, now = Date.now()) {
     const actors = taskActors(task);
     const main = mainActorOf(task);
     const byId = new Map(actors.map((actor) => [actor.id, actor]));
@@ -642,7 +762,7 @@
         childrenOf.get(parentId).push(actor);
         continue;
       }
-      const phaseKey = phaseOf.get(String(actor.id)) || fallbackPhase;
+      const phaseKey = actorPhaseKey(actor, phaseOf, fallbackPhase);
       (byPhase.get(phaseKey) || byPhase.get(fallbackPhase)).push(actor);
     }
 
@@ -655,8 +775,15 @@
         kind: 'agent',
         kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT',
         name: actor.name || '이름 미기록',
-        detail: actor.role || actor.assignment || '',
         model: modelAndReasoning(actor.model, actor.reasoning),
+        // 역할·담당·소요·한도를 **각각** 낸다 (요구 2·4). 하나로 합치지 않는다.
+        facts: [
+          { label: NODE_FACT_LABELS.role, value: actor.role || '' },
+          { label: NODE_FACT_LABELS.assignment, value: actor.assignment || '' },
+          { label: NODE_FACT_LABELS.duration, value: actorDuration(actor, task, now) },
+          { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(actor) },
+        ],
+        role: actor.role || '',
         status: actorStatus(actor),
         tone: statusDotClass(actor.status),
         progress,
@@ -678,7 +805,7 @@
   function phaseNodesOf(task, now) {
     const timeline = phaseTimeline(task, now);
     const states = phaseStates(task, timeline);
-    const { byPhase } = actorNodes(task);
+    const { byPhase } = actorNodes(task, now);
     return PHASES.map((phase) => {
       const stat = timeline.stats.get(phase.key);
       const state = states.get(phase.key);
@@ -703,49 +830,45 @@
     });
   }
 
-  // 세션 하나의 아래쪽 절반 — 총괄 → 단계 전부 → 서브에이전트.
-  // 세션 탭과 전체 조직도가 **같은 함수**를 쓴다. 두 화면이 각자 트리를 조립하면
-  // 한쪽에서만 액터가 빠지는 일이 생긴다 (실제로 그렇게 총괄 노드가 빠졌다).
-  function sessionSubtreeNodes(task, now, { leadProgress = true } = {}) {
+  // 세션 하나의 **중앙 축** — 사용자 입력 → 총괄 → 여덟 단계. 예전에는 이 셋이 서로의
+  // 자식으로 중첩된 좌→우 트리였고, 그래서 단계가 오른쪽으로 계단처럼 밀렸다. 이제는
+  // 한 축 위에 순서대로 서고(요구 3), 갈라지는 것은 서브에이전트뿐이다.
+  function sessionFlowNodes(task, now) {
     const phases = phaseNodesOf(task, now);
     const main = mainActorOf(task);
-    // 액터를 하나도 보고하지 않은 세션도 자리를 비우지 않는다 — 트리 모양을 같게 두고
-    // "보고가 없다"를 말한다. 노드를 지우면 단계만 남아 원인이 보이지 않는다.
-    if (!main) {
-      return [{
-        kind: 'lead',
-        kindLabel: 'MAIN',
-        name: '에이전트 보고 없음',
-        detail: '이 세션은 실행자를 보고하지 않았습니다',
-        children: phases,
-      }];
-    }
-    const progress = finiteNumber(task.progress);
-    return [{
-      kind: 'lead',
-      kindLabel: 'MAIN',
-      name: main.name || '이름 미기록',
-      detail: main.role || '',
-      model: modelAndReasoning(main.model, main.reasoning),
-      status: actorStatus(main),
-      tone: statusDotClass(main.status),
-      // 전체 조직도에서는 바로 위 세션 노드가 같은 수치를 이미 들고 있다 — 두 번 그리지 않는다.
-      progress: leadProgress ? progress : null,
-      current: main.status === 'working' || main.status === 'reviewing',
-      attributes: { 'data-actor-id': main.id || '' },
-      children: phases,
-    }];
-  }
-
-  // 세션 트리 — 사용자 입력 → 총괄 → 단계 전부 → 서브에이전트.
-  function sessionTreeNodes(task, now) {
-    return [{
+    const request = {
       kind: 'request',
       kindLabel: 'REQUEST',
       name: '사용자 입력',
       detail: taskPresentation(task).name,
-      children: sessionSubtreeNodes(task, now),
-    }];
+    };
+    // 액터를 하나도 보고하지 않은 세션도 자리를 비우지 않는다 — 축 모양을 같게 두고
+    // "보고가 없다"를 말한다. 노드를 지우면 단계만 남아 원인이 보이지 않는다.
+    if (!main) {
+      return [request, {
+        kind: 'lead',
+        kindLabel: 'MAIN',
+        name: '에이전트 보고 없음',
+        detail: '이 세션은 실행자를 보고하지 않았습니다',
+      }, ...phases];
+    }
+    return [request, {
+      kind: 'lead',
+      kindLabel: 'MAIN',
+      name: main.name || '이름 미기록',
+      model: modelAndReasoning(main.model, main.reasoning),
+      facts: [
+        { label: NODE_FACT_LABELS.role, value: main.role || '' },
+        { label: NODE_FACT_LABELS.assignment, value: main.assignment || '' },
+        { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now) },
+        { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(main) },
+      ],
+      status: actorStatus(main),
+      tone: statusDotClass(main.status),
+      progress: finiteNumber(task.progress),
+      current: main.status === 'working' || main.status === 'reviewing',
+      attributes: { 'data-actor-id': main.id || '' },
+    }, ...phases];
   }
 
   // ---- 조직도 캔버스(확대·이동) --------------------------------------------
@@ -999,7 +1122,7 @@
         </header>
         ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${renderOrgCanvas(`session:${task.id || presentation.name}`, `${presentation.name} 실행 조직도`, renderTree(sessionTreeNodes(task, now)))}
+        ${renderOrgCanvas(`session:${task.id || presentation.name}`, `${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
         ${renderArtifacts(task)}
       </article>`;
   }
@@ -1023,15 +1146,20 @@
 
   // 액터 노드 숲을 평평하게 편다 — 손자 액터까지 칩 하나씩 받는다. 트리에서 접혀 있던
   // 서브에이전트가 보드에서 사라지면 "누가 붙어 있는지"를 화면이 거짓말하게 된다.
-  function flattenAgentNodes(nodes) {
-    return (nodes || []).flatMap((node) => [node, ...flattenAgentNodes(node.children)]);
+  // 액터 노드 숲을 평평하게 편다 — 손자 액터까지 칩 하나씩 받는다. 다만 **계층은 버리지
+  // 않는다**: 깊이를 함께 실어 칩이 들여쓰기로 부모-자식을 말한다 (요구 1·plan §3.3).
+  function flattenAgentNodes(nodes, depth = 0) {
+    return (nodes || []).flatMap((node) => [
+      { node, depth },
+      ...flattenAgentNodes(node.children, depth + 1),
+    ]);
   }
 
   // 하네스 세션 하나 → 관제탑 카드 하나.
   function pipelineFromTask(task, now) {
     const timeline = phaseTimeline(task, now);
     const states = phaseStates(task, timeline);
-    const { main, byPhase } = actorNodes(task);
+    const { main, byPhase } = actorNodes(task, now);
     const presentation = taskPresentation(task);
     const complete = task.status === 'complete';
     const progress = finiteNumber(task.progress);
@@ -1079,11 +1207,15 @@
           ),
           note: phase.detail,
           cost: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
-          // 칩은 **이름:역할**이다. 모델로 이름을 대신하지 않는다 — 같은 모델을 쓰는
-          // 서브에이전트가 둘이면 화면에서 구분이 사라지고, 보고된 액터가 사라진 것처럼
-          // 보인다. 그 단계의 모델은 위 모노 라벨(who)이 이미 말한다.
-          chips: flattenAgentNodes(byPhase.get(phase.key)).map((node) => ({
-            label: [node.name, node.detail || node.status].filter(Boolean).join(':'),
+          // 칩은 이름·역할·상태·진행률을 **각각** 낸다 (요구 2). 예전처럼 `이름:역할`
+          // 한 문자열로 이어 붙이면 역할이 없는 액터에서 상태가 역할 자리에 들어앉아
+          // 두 사실이 뒤섞였다. 모델로 이름을 대신하지도 않는다 — 그 단계의 모델은 위
+          // 모노 라벨(who)이 이미 말한다.
+          chips: flattenAgentNodes(byPhase.get(phase.key)).map(({ node, depth }) => ({
+            name: node.name,
+            role: node.role || '',
+            status: node.status || '',
+            depth,
             actorId: node.attributes?.['data-actor-id'] || '',
             // 측정된 진행도만 싣는다. 보고가 없으면 칩에 수치가 아예 붙지 않는다 —
             // 없는 값을 0%로 그리면 "아직 시작 못 했다"는 거짓말이 된다.
@@ -1092,6 +1224,19 @@
         };
       }),
     };
+  }
+
+  // 칩 하나 = 그 단계에 붙은 액터 하나. 이름·역할·상태·진행률이 각자 자기 슬롯을 갖고,
+  // parent_id 계층은 depth 들여쓰기로 남는다 (깊이는 3단에서 시각적으로 멈춘다).
+  function renderBoardChip(chip) {
+    const depth = Math.min(3, Math.max(0, Number(chip.depth) || 0));
+    const percent = finiteNumber(chip.percent);
+    return `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}" data-depth="${depth}">`
+      + `<b class="pl-chip-name">${escapeHtml(chip.name || '이름 미기록')}</b>`
+      + `${chip.role ? `<span class="pl-chip-role">${escapeHtml(chip.role)}</span>` : ''}`
+      + `${chip.status ? `<span class="pl-chip-state">${escapeHtml(chip.status)}</span>` : ''}`
+      + `${percent === null ? '' : `<strong class="pl-chip-percent">${Math.round(clampPercent(percent))}%</strong>`}`
+      + '</span>';
   }
 
   function renderBoardStage(stage) {
@@ -1103,9 +1248,7 @@
           <div class="pl-stage-name">${escapeHtml(stage.n)}${stage.who ? `<span class="pl-who">${escapeHtml(stage.who)}</span>` : ''}</div>
           ${stage.note ? `<div class="pl-note">${escapeHtml(stage.note)}</div>` : ''}
           ${stage.cost ? `<div class="pl-cost">${escapeHtml(stage.cost)}</div>` : ''}
-          ${chips.length > 0
-    ? `<div class="pl-chips">${chips.map((chip) => `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}">${escapeHtml(chip.label)}${chip.percent === null || chip.percent === undefined ? '' : `<strong>${Math.round(chip.percent)}%</strong>`}</span>`).join('')}</div>`
-    : ''}
+          ${chips.length > 0 ? `<div class="pl-chips">${chips.map(renderBoardChip).join('')}</div>` : ''}
         </div>
         <span class="pl-state is-${escapeHtml(state)}">${escapeHtml(BOARD_STATE_LABELS[state])}</span>
       </div>`;
@@ -1135,7 +1278,11 @@
   // 보드 전체. 입력은 이미 정규화된 파이프라인 배열이라, 하네스 피드에서 왔든 정적 사본에서
   // 왔든 같은 조판이 나온다.
   function renderBoard(pipelines, meta = {}) {
-    if (!Array.isArray(pipelines) || pipelines.length === 0) {
+    const cards = Array.isArray(pipelines) ? pipelines : [];
+    // 범위 토글이 없는 화면(정적 사본)에서 카드가 비면 예전처럼 한 줄만 남는다. 토글이
+    // 있는 화면에서는 보드 골격을 유지한다 — 그러지 않으면 '진행 중'이 비었을 때
+    // 사용자가 '전체'로 돌아갈 버튼조차 사라진다.
+    if (cards.length === 0 && !meta.scope) {
       return '<p class="pl-empty">아직 동기화된 파이프라인이 없습니다.</p>';
     }
     const sub = [meta.summary, meta.source].filter(Boolean).join(' · ');
@@ -1144,6 +1291,7 @@
         <div class="pl-head">
           <h2 class="pl-title">파이프라인 관제탑</h2>
           ${meta.window ? `<span class="pl-window">${escapeHtml(meta.window)}</span>` : ''}
+          ${meta.scope ? renderBoardScope(meta.scope) : ''}
         </div>
         ${sub ? `<p class="pl-sub">${escapeHtml(sub)}</p>` : ''}
         <div class="pl-legend">
@@ -1151,9 +1299,20 @@
           <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
           <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
           <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
-          <span>칩 = 단계에 붙은 서브에이전트(이름:역할)</span>
+          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 상태 · 진행률)</span>
         </div>
-        <div class="pl-grid">${pipelines.map(renderBoardCard).join('')}</div>
+        ${cards.length === 0
+    ? '<p class="pl-empty">진행 중인 파이프라인이 없습니다. 전체를 누르면 완료된 세션까지 봅니다.</p>'
+    : `<div class="pl-grid">${cards.map(renderBoardCard).join('')}</div>`}
+      </div>`;
+  }
+
+  // 보드 범위 토글. 기본은 '진행 중'이고 '전체'를 누르면 완료 세션까지 편다 (요구 6).
+  function renderBoardScope(scope) {
+    return `
+      <div class="segmented pl-scope" role="group" aria-label="관제탑에 표시할 세션 범위">
+        ${BOARD_SCOPES.map((item) => `<button class="segmented-btn" type="button"
+          aria-pressed="${item.key === scope}" data-board-scope="${item.key}">${item.label}</button>`).join('')}
       </div>`;
   }
 
@@ -1211,8 +1370,22 @@
           stage?.tok,
           stage?.pct === null || stage?.pct === undefined ? null : `${stage.pct}%`,
         ].filter(Boolean).join(' · '),
-        chips: (Array.isArray(stage?.chips) ? stage.chips : [])
-          .map((chip) => ({ label: String(chip), actorId: '', percent: null })),
+        // 사본의 chips는 예전부터 **문자열 배열**이다. 그 형식을 계속 읽으면서, 새로
+        // 구조화된 객체({name, role, status, percent})도 함께 받는다 — 사본을 손보지
+        // 않아도 화면이 깨지지 않는 것이 이 폴백의 존재 이유다.
+        chips: (Array.isArray(stage?.chips) ? stage.chips : []).map((chip) => (
+          chip && typeof chip === 'object'
+            ? {
+              name: String(chip.name || chip.label || '이름 미기록'),
+              role: chip.role ? String(chip.role) : '',
+              status: chip.status ? String(chip.status) : '',
+              percent: finiteNumber(chip.percent),
+              depth: Number(chip.depth) || 0,
+              actorId: '',
+            }
+            : {
+              name: String(chip), role: '', status: '', percent: null, depth: 0, actorId: '',
+            })),
       })),
     };
   }
@@ -1227,23 +1400,26 @@
     });
   }
 
-  function renderPortfolioBoard(inputTasks, now) {
+  // 관제탑. **기본은 진행 중인 세션만** 그리고, 전체는 토글로 연다 (요구 6) — 완료 세션은
+  // 영구 누적되므로 전부 세우면 지금 도는 일이 카드 벽에 묻힌다. 감춘 개수는 요약 줄이
+  // 밝히므로 "사라진 것"과 "접힌 것"이 구별된다.
+  function renderPortfolioBoard(inputTasks, now, scope = selectedBoardScope) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
     const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
-    return renderBoard(tasks.map((task) => pipelineFromTask(task, now)), {
-      summary: `세션 ${tasks.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명`,
+    const current = BOARD_SCOPES.some((item) => item.key === scope) ? scope : 'active';
+    const shown = current === 'all' ? tasks : tasks.filter((task) => task.status !== 'complete');
+    const actorCount = shown.reduce((total, task) => total + taskActors(task).length, 0);
+    const hidden = tasks.length - shown.length;
+    return renderBoard(shown.map((task) => pipelineFromTask(task, now)), {
+      // 보고된 세션이 하나도 없으면 범위 토글도 내지 않는다 — 접을 것이 없는데 토글만
+      // 남으면 "무언가 감춰져 있다"고 화면이 거짓말한다. 그때는 한 줄 빈 상태로 돌아간다.
+      scope: tasks.length === 0 ? '' : current,
+      summary: `세션 ${shown.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명${hidden > 0 ? ` · 완료 ${hidden}개 접힘` : ''}`,
       source: '하네스 실시간 보고',
     });
   }
 
-  function renderTaskTabs(tasks, now, status) {
-    const selectedIndex = Math.max(0, tasks.findIndex((task) => task.id === selectedTaskIds[status]));
-    return `
-      <div class="h-session-switcher" data-session-switcher="${status}">
-        <div class="h-session-tabs" role="tablist" aria-label="${status === 'complete' ? '완료된' : '진행 중인'} Codex 세션" data-task-tablist>
-          ${tasks.map((task, index) => {
-    const selected = index === selectedIndex;
+  function renderTaskTab(task, index, selected, status, now) {
     const category = taskCategory(task);
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const presentation = taskPresentation(task);
@@ -1256,17 +1432,32 @@
                 <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(currentPhaseLabel(task, now))} ${progress}%</span>${renderTaskDate(task)}</small>
               </span>
             </button>`;
-  }).join('')}
-        </div>
-        <div class="h-session-panels">
-          ${tasks.map((task, index) => {
-    const selected = index === selectedIndex;
+  }
+
+  // 세션 탭 묶음. 진행 중은 한 줄이고, 완료는 **날짜별 그룹**이 각자 tablist를 갖는다
+  // (요구 6). 그룹 머리를 tablist 안에 끼우면 tab이 아닌 자식이 생겨 역할 계약이 깨지므로,
+  // 그룹마다 tablist를 하나씩 둔다 — 패널은 스위처 하나가 공유한다.
+  function renderTaskTabs(groups, now, status, footer = '') {
+    const flat = groups.flatMap((group) => group.tasks);
+    const selectedIndex = Math.max(0, flat.findIndex((task) => task.id === selectedTaskIds[status]));
+    let cursor = -1;
     return `
-            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-${status}-${index}"
-              aria-labelledby="hSessionTab-${status}-${index}" data-task-panel="${index}"${selected ? '' : ' hidden'}>
-              ${renderTask(task, now)}
-            </section>`;
+      <div class="h-session-switcher" data-session-switcher="${status}">
+        ${groups.map((group) => `
+          ${group.label ? `<p class="list-group-head h-session-group-head">${escapeHtml(group.label)}</p>` : ''}
+          <div class="h-session-tabs" role="tablist" aria-label="${escapeHtml(group.ariaLabel)}" data-task-tablist>
+            ${group.tasks.map((task) => {
+    cursor += 1;
+    return renderTaskTab(task, cursor, cursor === selectedIndex, status, now);
   }).join('')}
+          </div>`).join('')}
+        ${footer}
+        <div class="h-session-panels">
+          ${flat.map((task, index) => `
+            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-${status}-${index}"
+              aria-labelledby="hSessionTab-${status}-${index}" data-task-panel="${index}"${index === selectedIndex ? '' : ' hidden'}>
+              ${renderTask(task, now)}
+            </section>`).join('')}
         </div>
       </div>`;
   }
@@ -1281,7 +1472,23 @@
     if (filtered.length === 0) {
       return `<p class="us-empty card">${status === 'complete' ? '완료된 작업이 없습니다.' : '현재 진행 중인 작업이 없습니다.'}</p>`;
     }
-    return renderTaskTabs(filtered, now, status);
+    if (status !== 'complete') {
+      return renderTaskTabs([{ label: '', ariaLabel: '진행 중인 Codex 세션', tasks: filtered }], now, status);
+    }
+    // 완료는 최근 완료순으로 세우고 기본 10개만 편다. 나머지는 '더 보기'로 열린다 —
+    // 목록을 지우는 것이 아니라 접는 것이므로 감춘 개수를 버튼이 그대로 말한다.
+    const ordered = [...filtered].sort((left, right) => completedTime(right) - completedTime(left));
+    const visible = ordered.slice(0, Math.max(COMPLETED_PAGE_SIZE, completedVisible));
+    const rest = ordered.length - visible.length;
+    const groups = groupTasksByDate(visible).map((group) => ({
+      label: group.label,
+      ariaLabel: `${group.label} 완료 세션`,
+      tasks: group.tasks,
+    }));
+    const footer = rest > 0
+      ? `<div class="h-session-more"><button class="btn btn-secondary btn-sm" type="button" data-completed-more>완료 세션 ${Math.min(COMPLETED_PAGE_SIZE, rest)}개 더 보기</button><span class="h-session-more-rest">남은 ${rest}개</span></div>`
+      : '';
+    return renderTaskTabs(groups, now, status, footer);
   }
 
   function renderSessionViews(inputTasks, now) {
@@ -1431,10 +1638,30 @@
     });
   }
 
+  // 화면-로컬 상태(완료 더 보기·관제탑 범위)를 바꾸는 컨트롤. 서버를 다시 부르지 않고
+  // 마지막 응답으로 다시 그린다 — 접기/펴기 때문에 한도를 쓰지 않는다.
+  function wireLocalControls(root) {
+    const more = root?.querySelector?.('[data-completed-more]');
+    if (more && typeof more.addEventListener === 'function') {
+      more.addEventListener('click', () => {
+        completedVisible += COMPLETED_PAGE_SIZE;
+        rerenderDashboard();
+      });
+    }
+    for (const button of [...(root?.querySelectorAll?.('[data-board-scope]') || [])]) {
+      if (typeof button.addEventListener !== 'function') continue;
+      button.addEventListener('click', () => {
+        selectedBoardScope = button.dataset.boardScope === 'all' ? 'all' : 'active';
+        rerenderDashboard();
+      });
+    }
+  }
+
   function wireDashboard(root) {
     wireSessionViews(root);
     wireTaskTabs(root);
     wireOrgViews(root);
+    wireLocalControls(root);
   }
 
   // ---- 자동 갱신 -----------------------------------------------------------
@@ -1445,6 +1672,8 @@
   let lastSignature = '';
   let activeSessionCount = 0;
   let inFlight = false;
+  // 마지막으로 받은 응답. 화면-로컬 컨트롤이 서버를 다시 부르지 않고 다시 그릴 때 쓴다.
+  let lastData = null;
 
   function isHidden() {
     return document.visibilityState === 'hidden' || document.hidden === true;
@@ -1491,7 +1720,16 @@
     // 바뀐 것이 없으면 다시 그리지 않는다: 초점·선택·확대 상태를 흔들지 않기 위해서다.
     if (!announce && signature === lastSignature && elements.body.innerHTML) return;
     lastSignature = signature;
+    lastData = data;
     elements.body.innerHTML = buildDashboard(data, Date.now());
+    wireDashboard(elements.body);
+  }
+
+  // 서버를 다시 부르지 않는 재렌더. 마지막 응답이 없으면(첫 화면이 정적 사본이었던 경우)
+  // 아무것도 하지 않는다 — 사본 화면을 빈 대시보드로 갈아 끼우지 않기 위해서다.
+  function rerenderDashboard() {
+    if (!lastData || !elements.body) return;
+    elements.body.innerHTML = buildDashboard(lastData, Date.now());
     wireDashboard(elements.body);
   }
 
@@ -1559,7 +1797,8 @@
 
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
-    sessionTreeNodes, pipelineFromTask, renderBoard, buildFallbackBoard, phaseTimeline, sessionUsageDeltas,
+    sessionFlowNodes, renderFlow, pipelineFromTask, renderBoard, buildFallbackBoard,
+    phaseTimeline, sessionUsageDeltas, actorNodes,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
     wireOrgViews, fitPendingOrgViews, fitOrgView, zoomOrgView, orgViewState, load,
   };

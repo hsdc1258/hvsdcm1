@@ -69,7 +69,15 @@ assert.match(complete, /완료 Gamma/u);
 assert.match(complete, /완료 Delta/u);
 assert.doesNotMatch(complete, /진행 Alpha|진행 Beta/u);
 
-const org = renderers.renderPortfolioBoard(tasks, NOW);
+// 관제탑 기본값은 '진행 중만'이고(요구 6), 전체는 토글로 연다. 아래 계약 검사는
+// 전부 '전체' 범위에서 본다 — 접기는 표시 규칙이지 데이터 손실이 아니어야 하기 때문이다.
+const activeOnlyBoard = renderers.renderPortfolioBoard(tasks, NOW);
+assert.equal((activeOnlyBoard.match(/data-portfolio-task=/gu) || []).length, 2,
+  '기본 범위는 진행 중인 세션 2개만 그려야 합니다.');
+assert.match(activeOnlyBoard, /완료 2개 접힘/u);
+assert.match(activeOnlyBoard, /data-board-scope="all"/u);
+
+const org = renderers.renderPortfolioBoard(tasks, NOW, 'all');
 for (const expected of [
   '진행 Alpha', '진행 Beta', '완료 Gamma', '완료 Delta',
   'Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main',
@@ -136,7 +144,7 @@ const apiResponse = await worker.fetch(new Request('https://api.test/api/usage',
 assert.equal(apiResponse.status, 200);
 const apiPayload = await apiResponse.json();
 assert.equal(apiPayload.tasks.length, 13);
-const retainedOrg = renderers.renderPortfolioBoard(apiPayload.tasks, NOW);
+const retainedOrg = renderers.renderPortfolioBoard(apiPayload.tasks, NOW, 'all');
 assert.equal((retainedOrg.match(/data-portfolio-task=/gu) || []).length, 13);
 assert.equal((retainedOrg.match(/data-actor-id=/gu) || []).length, 13);
 assert.match(retainedOrg, /보존 세션 01/u);
