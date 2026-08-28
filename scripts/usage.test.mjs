@@ -1171,11 +1171,15 @@ test('consumption rendered in the browser matches what the Worker actually recor
       },
     }),
   }), env);
-  const postReport = (occurredAt) => worker.fetch(new Request('https://api.test/api/harness/report', {
-    method: 'POST',
-    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
-    body: JSON.stringify(harnessReportBody({ occurred_at: occurredAt })),
-  }), env);
+  const postReport = (occurredAt) => {
+    const report = harnessReportBody({ occurred_at: occurredAt });
+    report.task.heartbeat_at = new Date().toISOString();
+    return worker.fetch(new Request('https://api.test/api/harness/report', {
+      method: 'POST',
+      headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+      body: JSON.stringify(report),
+    }), env);
+  };
 
   // 사용량 20% → 잔여 80, 이어서 사용량 40% → 잔여 60. 이 세션이 쓴 것은 20%p다.
   assert.equal((await postSnapshot(20)).status, 200);

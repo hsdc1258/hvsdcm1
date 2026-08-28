@@ -41,6 +41,7 @@ const VALID_HARNESS_PHASES = new Set([
   'input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done',
 ]);
 const VALID_HARNESS_REPORT_PHASES = new Set([...VALID_HARNESS_PHASES, 'heartbeat']);
+const TERMINAL_HARNESS_PHASES = new Set(['approve', 'done']);
 const VALID_HARNESS_TASK_STATES = new Set(['active', 'complete']);
 const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt', 'claude']);
 const VALID_HARNESS_ACTOR_STATES = new Set([
@@ -383,6 +384,10 @@ function normalizeHarnessReport(input) {
     || !Number.isFinite(progress)
     || progress < 0
     || progress > 100) return null;
+  if (TERMINAL_HARNESS_PHASES.has(phase)) {
+    normalizedTask.status = 'complete';
+    normalizedTask.progress = 100;
+  }
 
   const normalizedActors = [];
   const ids = new Set();

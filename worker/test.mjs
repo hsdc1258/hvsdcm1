@@ -1681,7 +1681,7 @@ function harnessStoreEnv() {
   };
 }
 
-test('a late or unresumed report never revives a completed harness task', async () => {
+test('approve alone completes a harness task and late or unresumed reports never revive it', async () => {
   const { state, env } = harnessStoreEnv();
   const setRemaining = (codex, claude) => {
     state.usageSnapshots = [
@@ -1709,7 +1709,7 @@ test('a late or unresumed report never revives a completed harness task', async 
   }), env);
   const completed = harnessInput({
     occurred_at: '2026-08-27T10:00:00.000Z',
-    task: { ...harnessInput().task, status: 'complete', phase: 'done', progress: 100 },
+    task: { ...harnessInput().task, status: 'active', phase: 'approve', progress: 41 },
   });
 
   setRemaining(70, 60);
@@ -1747,7 +1747,7 @@ test('a late or unresumed report never revives a completed harness task', async 
   assert.equal(state.status, 'complete');
   const held = JSON.parse(state.payload);
   assert.equal(held.status, 'complete');
-  assert.equal(held.phase, 'done');
+  assert.equal(held.phase, 'approve');
   assert.equal(held.progress, 100);
   assert.equal(held.completed_at, '2026-08-27T10:00:00.000Z');
   assert.deepEqual(held.actors.map((actor) => actor.status), ['done', 'done']);

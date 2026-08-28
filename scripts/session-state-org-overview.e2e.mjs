@@ -3,6 +3,7 @@ import { createUsageRenderers } from './render-sandbox.mjs';
 import worker from '../worker/src/index.js';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
+const ACTIVE_UPDATED_AT = new Date().toISOString();
 
 function task(id, name, status, actors = []) {
   return {
@@ -16,7 +17,7 @@ function task(id, name, status, actors = []) {
     current: status === 'complete' ? '배포 완료' : '구현 중',
     done: status === 'complete' ? '검증 통과' : '계약 고정',
     next: status === 'complete' ? '없음' : '독립 검토',
-    updated_at: status === 'complete' ? '2026-08-27T10:00:00Z' : '2026-08-27T11:00:00Z',
+    updated_at: status === 'complete' ? '2026-08-27T10:00:00Z' : ACTIVE_UPDATED_AT,
     actors,
   };
 }
