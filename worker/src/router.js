@@ -540,11 +540,21 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     });
     modules = modules.map((module) => ({ ...module, status: 'done', progress: 100 }));
   }
+  // 이 보고가 title을 실었으면 그것이 지정 제목이고, 아니면 **이미 지정으로 확인된**
+  // 이전 제목만 물려받는다. 구 행의 title은 name에서 채워졌을 수 있으므로 근거가 되지
+  // 못한다 — 그런 행은 여기서 지정 아님으로 남고, 화면이 예전 판정 규칙을 그대로 쓴다.
+  const authoredTitle = incoming.task.title || (current.title_authored ? current.title : '') || '';
   const merged = {
     version: 1,
     ...current,
     ...incoming.task,
-    title: incoming.task.title || current.title || incoming.task.name,
+    // 사람이 **지정한** 제목과 하위 호환으로 name을 물려받은 제목을 나눠 둔다
+    // (review 기능 B M-2). 예전에는 둘 다 `title`에 담겨, 지정한 제목이 마침 name과
+    // 같으면 화면이 그것을 "지정한 적 없음"으로 오판해 날짜 꼬리를 떼고 약어를 풀었다.
+    // 값 자체의 형태는 그대로 두고 **출처 플래그 한 개만** 더한다 — 이 필드를 모르는
+    // 구 소비자는 예전과 똑같은 title을 계속 읽는다.
+    title: authoredTitle || incoming.task.name,
+    title_authored: authoredTitle !== '',
     input: incoming.task.input || current.input || '',
     heartbeat_at: incoming.task.heartbeat_at || current.heartbeat_at || incoming.occurred_at,
     // 잠긴 태스크의 머리글 수치(상태·단계·진행률)는 늦은 보고를 따라 뒤로 가지 않는다.
@@ -872,6 +882,10 @@ async function usage(request, env) {
       const hydrated = {
         ...payload,
         title: payload.title || row.title || payload.name,
+        // 출처 플래그는 payload에 실려 있을 때만 참이다. 없는 행(플래그 이전에 저장된
+        // 것)은 false로 나가고, 화면은 그 경우에만 예전의 `title !== name` 추정으로
+        // 떨어진다 — 새 계약이 옛 행의 지정 제목을 소급해 지우지 않는다.
+        title_authored: payload.title_authored === true,
         input: payload.input || row.input || '',
         heartbeat_at: payload.heartbeat_at || row.heartbeat_at || payload.updated_at || row.updated_at,
       };
