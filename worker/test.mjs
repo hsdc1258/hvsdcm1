@@ -1804,6 +1804,44 @@ test('two reports from separate harnesses keep both actors on the shared task', 
 
 // 위 가짜 D1은 "SQLite datetime()이 Date.parse와 같은 순서를 본다"는 전제 위에 서 있다.
 // 그 전제를 실제 SQLite로 잠근다 — node:sqlite가 없는 런타임(Node 20)에서는 건너뛴다.
+// review 기능 B M-2 — 저장된 payload는 title 값만으로 출처를 말하지 못했다. 보고가
+// title을 싣지 않으면 name이 그 자리를 채웠기 때문이다. 이제 출처 플래그를 함께 저장해,
+// 화면이 지정 제목과 파생 이름을 값이 같을 때도 구별할 수 있게 한다.
+test('a stored task records whether its title was authored or inherited from the name', async () => {
+  const post = (env, body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  // (1) title을 싣지 않은 보고 — title은 name을 물려받고 출처는 거짓이다.
+  const inherited = harnessStoreEnv();
+  assert.equal((await post(inherited.env, harnessInput())).status, 200);
+  const withoutTitle = JSON.parse(inherited.state.payload);
+  assert.equal(withoutTitle.title, '사용량 하네스 시각화 (08-27)');
+  assert.equal(withoutTitle.title_authored, false);
+
+  // (2) **반례**: 지정한 title이 마침 name과 글자까지 같은 보고. 값은 구별되지 않지만
+  // 출처는 참이어야 한다 — 여기서 갈라 두지 않으면 화면에서 되살릴 근거가 없다.
+  const authored = harnessStoreEnv();
+  const sameText = 'WP2 관제탑 (08-29)';
+  assert.equal((await post(authored.env, harnessInput({
+    task: { ...harnessInput().task, name: sameText, title: sameText },
+  }))).status, 200);
+  const stored = JSON.parse(authored.state.payload);
+  assert.equal(stored.title, sameText);
+  assert.equal(stored.title_authored, true);
+
+  // (3) 출처는 후속 보고를 넘어 유지된다 — title을 다시 싣지 않아도 지정 사실은 남는다.
+  assert.equal((await post(authored.env, harnessInput({
+    occurred_at: '2026-08-27T10:00:00.000Z',
+    task: { ...harnessInput().task, name: sameText },
+  }))).status, 200);
+  const carried = JSON.parse(authored.state.payload);
+  assert.equal(carried.title, sameText);
+  assert.equal(carried.title_authored, true);
+});
+
 test('the real SQLite UPSERT preserves milliseconds and advances strictly', async (t) => {
   let DatabaseSync;
   try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
@@ -2431,6 +2469,9 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
     tasks: [{
       ...storedTask,
       title: storedTask.name,
+      // 이 행은 title을 지정한 적이 없다 — 하위 호환으로 name을 물려받았을 뿐이므로
+      // 출처는 거짓이다. 화면은 이 값이 false일 때만 예전 추정으로 떨어진다 (M-2).
+      title_authored: false,
       input: '',
       heartbeat_at: storedTask.updated_at,
       status: 'stale',

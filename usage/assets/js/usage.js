@@ -80,9 +80,9 @@
   // 축 노드의 종류 라벨. 예전에는 REQUEST·MAIN·PHASE·AGENT 같은 영문 약어였다 —
   // 화면이 스스로 만드는 문구에는 약어를 쓰지 않는다 (사용자 지시 ③). 보고 데이터가
   // 실어 오는 약어(작업 이름의 WP1 등)는 그 데이터의 사실이므로 손대지 않는다.
-  const NODE_KIND_LABELS = {
-    request: '사용자 요청', lead: '총괄', phase: '단계', agent: '에이전트',
-  };
+  // '사용자 요청'은 여기서 빠졌다 — 요청 원문은 상세 머리의 inset이 정본으로 내고,
+  // 조직도는 사람이 아닌 노드를 만들지 않는다 (review-visual M4 · DESIGN.md §1.1 v9).
+  const NODE_KIND_LABELS = { lead: '총괄', phase: '단계', agent: '에이전트' };
   // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
   // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
   const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
@@ -163,6 +163,9 @@
   // 모드는 새로고침을 넘어 유지된다 (계약 §A). 조직도를 골라 둔 사람에게 5초 폴링마다
   // 관제탑이 돌아오면 그 토글은 없는 것과 같다.
   const ACTIVE_MODE_KEY = 'hvsdcm.usage.activeMode';
+  // 소유자 응답을 받은 뒤에만 세우는 문서 제목. 정지 HTML의 제목은 랜딩과 같은 값이라
+  // 미로그인 방문자에게는 이 화면의 존재가 제목으로도 새지 않는다 (review-visual N7).
+  const OWNER_TITLE = '사용량 — hvsdcm';
 
   const elements = {
     body: document.getElementById('usageBody'),
@@ -456,9 +459,19 @@
     return HEALTH_OUTCOME_LABELS[key] || key;
   }
 
+  // **필드 부재와 명시적 null은 다른 사실이다** (review 기능 B M-1).
+  //   · `undefined` — health를 아예 싣지 않는 **구 응답**이다. 그 응답에서 이 화면이
+  //     아는 유일한 성공 근거는 행 시각(captured_at)뿐이므로 거기로 떨어진다. 그러지
+  //     않으면 2분 전에 수집된 스냅샷이 곧장 '30분 넘게 수집 성공 없음'으로 고발된다.
+  //   · `null` — 서버가 health를 싣고 "성공 기록이 없다"고 **말한** 것이다. 이때
+  //     captured_at으로 덮으면 서버의 판정을 화면이 지운다.
+  function healthTime(value, fallback) {
+    return value === undefined ? parseTime(fallback) : parseTime(value);
+  }
+
   function renderQuotaHealth(snapshot, now) {
-    const success = parseTime(snapshot?.last_success_at);
-    const attempt = parseTime(snapshot?.last_attempt_at);
+    const success = healthTime(snapshot?.last_success_at, snapshot?.captured_at);
+    const attempt = healthTime(snapshot?.last_attempt_at, snapshot?.captured_at);
     const outcome = healthOutcomeLabel(snapshot?.last_outcome);
     // 성공 기록이 아예 없는 것도 SLO 위반이다 — "한 번도 못 받았다"가 "오래 못 받았다"보다
     // 나은 상태일 수 없다.
@@ -509,7 +522,7 @@
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
+          <h3 class="title-3">${escapeHtml(label)} 한도</h3>
           ${renderCaptureMeta(headCaptured, headStale)}
         </header>
         ${renderQuotaHealth(snapshot, now)}
@@ -524,7 +537,7 @@
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
+          <h3 class="title-3">${escapeHtml(label)} 한도</h3>
           <span class="us-card-meta">수집 대기</span>
         </header>
         <p class="us-empty">아직 ${escapeHtml(label)} 스냅샷이 없습니다.</p>
@@ -797,15 +810,20 @@
   // 카드 제목의 **정본은 보고의 title**이다 (계약: 사용자 지정 프로젝트 제목).
   //
   // 다만 Worker는 하위 호환을 위해 title이 없는 구 payload에 `name`을 그대로 채워 준다
-  // (router.js hydrated.title = payload.title || row.title || payload.name). 그래서 title이
-  // 있다는 사실만으로는 사람이 지은 제목인지 세션 slug에서 파생된 이름인지 갈리지 않는다.
-  // 판정 기준은 **name과 다른가**이다: 다르면 사람이 지은 제목이므로 손대지 않고 그대로
-  // 세우고, 같으면 예전처럼 `(MM-DD)` 꼬리를 떼고 약어를 풀어 쓴다. 사람이 지은 제목에
-  // 약어 확장을 걸지 않는 이유는 그것이 이미 그 사람이 고른 최종 표기이기 때문이다.
+  // (router.js hydrated.title = payload.title || row.title || payload.name). 그래서 title
+  // 값 하나만으로는 사람이 지은 제목인지 세션 이름에서 파생된 것인지 갈리지 않는다.
+  //
+  // 이제 **출처를 서버가 말한다**: `title_authored === true`면 그 값이 곧 정본이므로
+  // 어떤 손질도 하지 않는다 — 지정한 제목이 마침 name과 같아도 마찬가지다
+  // (review 기능 B M-2: `name === title === 'WP2 관제탑 (08-29)'`가 '작업 묶음 2 — 관제탑'
+  // 으로 바뀌던 결함). 플래그를 싣지 않는 구 응답만 예전 추정(`name과 다른가`)으로
+  // 떨어진다 — 그 응답에는 다른 근거가 없고, 이 추정이 옛 화면과 같은 결과를 준다.
   function taskPresentation(task) {
     const rawName = String(task?.name || '').trim();
     const rawTitle = String(task?.title || '').trim();
-    const authored = rawTitle && rawTitle !== rawName ? rawTitle : '';
+    const authored = rawTitle && (task?.title_authored === true || rawTitle !== rawName)
+      ? rawTitle
+      : '';
     const suffix = rawName.match(/\s*\((\d{2})-(\d{2})\)\s*$/u);
     const trimmed = suffix ? rawName.slice(0, suffix.index).trim() : rawName;
     const name = authored || expandAbbreviations(trimmed) || '이름 없는 작업';
@@ -938,16 +956,45 @@
     return `<div class="h-branch"><ul class="h-tree">${list.map(renderBranch).join('')}</ul></div>`;
   }
 
-  // 조직도의 뼈대는 **위 → 아래 중앙 축**이다 (사용자 첨부 레퍼런스, plan §3.3).
-  // 축 노드는 입력 → 총괄 → 여덟 단계 순서로 한 줄로 서고, 각 단계에 투입된
-  // 서브에이전트만 그 축 노드의 오른쪽으로 갈라진다. 세로 커넥터는 축 노드 사이를 잇는
-  // CSS 헤어라인이고, 첫·마지막 노드에서는 카드 바깥으로 새지 않게 끊긴다.
-  function renderFlow(nodes) {
-    return `<div class="h-flow">${nodes.map((node) => `
-        <div class="h-flow-step">
-          ${renderNode(node)}
-          ${renderBranchList(node.children)}
-        </div>`).join('')}</div>`;
+  // 조직도의 뼈대는 **고전적인 조직도**다: 총괄이 최상단에 서고, 그 아래 수평 trunk에서
+  // 단계마다 개별 stem이 내려온다 (DESIGN.md §1.1 v9 · review-visual B1).
+  //
+  // 예전에는 이 자리가 세로 1열 적층이었다. 데스크톱에서 조직도 컨테이너가 845px인데
+  // 노드는 213px 한 열에만 쌓여 오른쪽 62%가 빈 검은 면이었고, 카드가 다섯 장 넘게
+  // 세로로 이어져 §6의 "카드 3연속 스택" 금지에 걸렸다. 세로 직렬화는 **모바일에서만**
+  // 허용되는 조판인데 그것이 데스크톱에 그대로 나와 있었다.
+  //
+  // 좌표는 여전히 손으로 계산하지 않는다 — 가로 배치도 브라우저의 flex가 잡고,
+  // 커넥터는 CSS 헤어라인 의사요소가 그린다 (DESIGN.md §9·§10).
+  const ORG_REST_STATES = ['skipped', 'pending'];
+
+  // 카드가 되지 못한 단계는 **한 줄의 라벨-값**으로 남는다. 사실("이 단계는 보고가 없다")은
+  // 그대로 남기면서, 빈 카드가 조직도의 세로 길이를 늘리는 것은 막는다 (review-visual B2 —
+  // "고정 단계 골격을 먼저 그린 뒤 보고 없는 칸을 빈 카드로 채운다"). 판독용
+  // data-org-phase·data-phase-state는 카드일 때와 같은 어휘로 남겨, 게이트가 여전히
+  // "없던 단계를 완료로 지어내지 않는다"를 기계로 검사할 수 있게 한다.
+  function renderOrgRest(rest) {
+    if (rest.length === 0) return '';
+    return `
+        <dl class="h-orgchart-rest">
+          ${rest.map((group) => `<div><dt>${escapeHtml(group.label)}</dt><dd>${group.phases
+    .map((phase) => `<span data-org-phase="${escapeHtml(phase.key)}" data-phase-state="${escapeHtml(group.state)}">${escapeHtml(phase.label)}</span>`)
+    .join('')}</dd></div>`).join('')}
+        </dl>`;
+  }
+
+  function renderOrgTree(tree) {
+    const branches = tree.branches.map((node) => `
+          <div class="h-orgchart-branch">
+            ${renderNode(node)}
+            ${renderBranchList(node.children)}
+          </div>`).join('');
+    return `
+      <div class="h-orgchart">
+        <div class="h-orgchart-root">${renderNode(tree.lead)}</div>
+        ${branches ? `<div class="h-orgchart-branches">${branches}</div>` : ''}
+        ${renderOrgRest(tree.rest)}
+      </div>`;
   }
 
   // ---- 트리 구성 -----------------------------------------------------------
@@ -1084,33 +1131,45 @@
     });
   }
 
-  // 세션 하나의 **중앙 축** — 사용자 입력 → 총괄 → 여덟 단계. 예전에는 이 셋이 서로의
-  // 자식으로 중첩된 좌→우 트리였고, 그래서 단계가 오른쪽으로 계단처럼 밀렸다. 이제는
-  // 한 축 위에 순서대로 서고(요구 3), 갈라지는 것은 서브에이전트뿐이다.
-  function sessionFlowNodes(task, now) {
+  // 세션 하나의 조직도 모델 — **뿌리(총괄) + 단계 분기 + 카드가 되지 못한 단계**.
+  //
+  // 사용자 입력 노드는 없다 (review-visual M4 · DESIGN.md §1.1 "그 밖의 노드를 추측해
+  // 추가하지 않는다"). 요청 원문은 이미 상세 머리의 `요청 원문` inset이 정본으로 내고
+  // 있었고, 조직도가 같은 문장을 한 번 더 그리면 한 화면에 같은 문자열이 두 번 선다.
+  // 남길 쪽은 사람이 아닌 노드를 만들지 않는 inset이다.
+  function sessionOrgTree(task, now) {
     const phases = phaseNodesOf(task, now);
     const main = mainActorOf(task);
-    // 입력 노드는 **보고가 실어 온 요청 원문**을 낸다. 예전에는 여기에 세션 제목을
-    // 얹었는데, 그러면 제목을 두 번 읽을 뿐 요청이 무엇이었는지는 화면 어디에도 없었다
-    // (조사 §b). 원문이 오지 않은 세션은 제목으로 자리를 메우지 않고 그 사실을 말한다.
-    const input = taskInput(task);
-    const request = {
-      kind: 'request',
-      kindLabel: NODE_KIND_LABELS.request,
-      name: '사용자 입력',
-      detail: input,
-      status: input ? '' : TASK_INPUT_EMPTY_LABEL,
-      note: input ? '' : TASK_INPUT_MISSING_REASON,
-    };
-    // 액터를 하나도 보고하지 않은 세션도 자리를 비우지 않는다 — 축 모양을 같게 두고
-    // "보고가 없다"를 말한다. 노드를 지우면 단계만 남아 원인이 보이지 않는다.
+    // 단계는 **근거가 있을 때만 카드**가 된다: 보고된 단계(done·current)이거나, 보고는
+    // 없어도 그 단계에 실제 액터가 붙어 있는 경우다. 나머지는 rest 줄로 내려간다.
+    const branches = [];
+    const restBy = new Map();
+    for (const node of phases) {
+      const state = node.attributes['data-phase-state'];
+      if (state === 'done' || state === 'current' || (node.children || []).length > 0) {
+        branches.push(node);
+        continue;
+      }
+      const list = restBy.get(state) || [];
+      list.push({ key: node.attributes['data-org-phase'], label: node.name });
+      restBy.set(state, list);
+    }
+    const rest = ORG_REST_STATES
+      .filter((state) => restBy.has(state))
+      .map((state) => ({ state, label: PHASE_STATE_LABELS[state], phases: restBy.get(state) }));
+    // 액터를 하나도 보고하지 않은 세션도 뿌리를 비우지 않는다 — 조직도 모양을 같게 두고
+    // "보고가 없다"를 말한다. 뿌리를 지우면 단계만 남아 원인이 보이지 않는다.
     if (!main) {
-      return [request, {
-        kind: 'lead',
-        kindLabel: NODE_KIND_LABELS.lead,
-        name: '에이전트 보고 없음',
-        detail: '이 세션은 실행자를 보고하지 않았습니다',
-      }, ...phases];
+      return {
+        lead: {
+          kind: 'lead',
+          kindLabel: NODE_KIND_LABELS.lead,
+          name: '에이전트 보고 없음',
+          detail: '이 세션은 실행자를 보고하지 않았습니다',
+        },
+        branches,
+        rest,
+      };
     }
     // Main 노드는 `data-actor-id`가 붙은 **액터 카드**다. 그러므로 진행률도 그 액터의
     // 보고에서 와야 한다 (review WP3 major 4 — 예전에는 task.progress를 얹어서
@@ -1119,23 +1178,27 @@
     // 세션 진행률. 마지막 폴백을 남기는 이유는 progress를 안 싣는 구 보고에서 총괄
     // 카드만 수치를 잃지 않게 하기 위해서다.
     const mainProgress = actorProgressMap(task).get(String(main.id));
-    return [request, {
-      kind: 'lead',
-      kindLabel: NODE_KIND_LABELS.lead,
-      name: main.name || '이름 미기록',
-      model: modelAndReasoning(main.model, main.reasoning),
-      facts: [
-        { label: NODE_FACT_LABELS.role, value: main.role || '' },
-        { label: NODE_FACT_LABELS.assignment, value: main.assignment || '' },
-        { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now) },
-        { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(main) },
-      ],
-      status: actorStatus(main),
-      tone: statusDotClass(main.status),
-      progress: mainProgress ?? finiteNumber(main.progress) ?? finiteNumber(task.progress),
-      current: main.status === 'working' || main.status === 'reviewing',
-      attributes: { 'data-actor-id': main.id || '' },
-    }, ...phases];
+    return {
+      lead: {
+        kind: 'lead',
+        kindLabel: NODE_KIND_LABELS.lead,
+        name: main.name || '이름 미기록',
+        model: modelAndReasoning(main.model, main.reasoning),
+        facts: [
+          { label: NODE_FACT_LABELS.role, value: main.role || '' },
+          { label: NODE_FACT_LABELS.assignment, value: main.assignment || '' },
+          { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now) },
+          { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(main) },
+        ],
+        status: actorStatus(main),
+        tone: statusDotClass(main.status),
+        progress: mainProgress ?? finiteNumber(main.progress) ?? finiteNumber(task.progress),
+        current: main.status === 'working' || main.status === 'reviewing',
+        attributes: { 'data-actor-id': main.id || '' },
+      },
+      branches,
+      rest,
+    };
   }
 
   // ---- 조직도 껍데기 ------------------------------------------------------
@@ -1193,6 +1256,11 @@
       </section>`;
   }
 
+  // 현재·완료·다음은 **라벨-값 세 줄**이지 요약 스트립이 아니다 (review-visual M3).
+  // 예전에는 이 셋이 가로 3칸 타일이었고, 완료 목록에서 펴면 필터 칩('완료 10')·행
+  // 배지('완료')·이 타일('완료 / 기계 게이트 통과')이 한 화면에서 같은 말을 세 번 했다.
+  // DESIGN.md §1.1은 usage가 요약 스트립을 쓰지 않는다고 못 박았으므로 타일을 걷고
+  // 헤어라인 없는 정의 목록으로 낮춘다 — 값은 하나도 잃지 않는다.
   function renderTaskFacts(task) {
     return `
       <dl class="h-task-facts">
@@ -1223,7 +1291,7 @@
         ${renderTaskInput(task)}
         ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
+        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderOrgTree(sessionOrgTree(task, now)))}
         ${renderArtifacts(task)}`;
   }
 
@@ -1645,14 +1713,20 @@
   // 그 자리에서 요청 원문과 단계가 나온다. 접힘은 `<details>`이므로 선택 상태를 화면이
   // 따로 들고 있지 않고(roving tabindex도, hidden 패널도 없다), 여러 개를 동시에 펼 수 있다.
   // 모양은 system.css의 `.disclosure` 프리미티브를 그대로 소비한다(DESIGN.md §7.2).
-  function renderPostRow(task, now) {
+  // 상태 배지는 **목록에 상태가 섞여 있을 때만** 낸다 (review-visual M3).
+  // 상위 탭이 상태를 이미 고정한 목록에서 행마다 같은 배지를 반복하면 그 열은 어떤
+  // 판단도 돕지 않는 노이즈다 — 완료 10건 목록에 '완료'가 열 번 서던 화면이 그랬다.
+  // 판정은 렌더 시점의 실제 데이터에서 도출한다: 목록이 실제로 혼재하면 다시 나온다.
+  function renderPostRow(task, now, showStatus) {
     const presentation = taskPresentation(task);
     const statusKey = taskStatusKey(task);
     const stamp = seoulStamp(completedTime(task) || null);
     return `
           <details class="disclosure h-post" data-task-post="${escapeHtml(task.id || '')}">
             <summary class="disclosure-head h-post-head">
-              <span class="h-post-state"><span class="status-dot${TASK_STATUS_TONE[statusKey]}" aria-hidden="true"></span>${TASK_STATUS_LABELS[statusKey]}</span>
+              ${showStatus
+    ? `<span class="h-post-state"><span class="status-dot${TASK_STATUS_TONE[statusKey]}" aria-hidden="true"></span>${TASK_STATUS_LABELS[statusKey]}</span>`
+    : ''}
               <span class="disclosure-title h-post-title">${escapeHtml(presentation.name)}</span>
               <span class="disclosure-hint h-post-when">${stamp
     ? `<time datetime="${escapeHtml(stamp.datetime)}">${escapeHtml(stamp.label)}</time>`
@@ -1663,12 +1737,14 @@
   }
 
   function renderPostList(groups, status, now, footer = '') {
+    const states = new Set(groups.flatMap((group) => group.tasks.map(taskStatusKey)));
+    const showStatus = states.size > 1;
     return `
       <div class="h-post-board" data-post-list="${escapeHtml(status)}">
         ${groups.map((group) => `
         ${group.label ? `<p class="list-group-head h-session-group-head">${escapeHtml(group.label)}</p>` : ''}
         <section class="h-post-group" aria-label="${escapeHtml(group.ariaLabel)}">
-          ${group.tasks.map((task) => renderPostRow(task, now)).join('')}
+          ${group.tasks.map((task) => renderPostRow(task, now, showStatus)).join('')}
         </section>`).join('')}
         ${footer}
       </div>`;
@@ -2001,6 +2077,8 @@
     try {
       const data = await api('/api/usage');
       lastSyncAt = Date.now();
+      // 소유자 응답을 실제로 받은 뒤에만 제목을 올린다 (review-visual N7).
+      document.title = OWNER_TITLE;
       renderDashboard(data, { announce });
       if (announce) {
         elements.reload.textContent = '업데이트됨';
@@ -2054,7 +2132,7 @@
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
     renderTaskBody, renderPostList, taskPresentation, taskStatusKey, taskInput,
-    sessionFlowNodes, renderFlow, pipelineFromTask, renderBoard, buildFallbackBoard,
+    sessionOrgTree, renderOrgTree, pipelineFromTask, renderBoard, buildFallbackBoard,
     phaseTimeline, sessionUsageDeltas, actorNodes,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
     wireLocalControls, renderActiveModes, readActiveMode, writeActiveMode, load,
