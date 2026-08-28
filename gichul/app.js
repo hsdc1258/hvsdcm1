@@ -200,7 +200,7 @@
     const id = `gi-pick-${exam.id}`;
     const lead = blocked
       ? ''
-      : `<label class="list-row-stretch" for="${escapeHtml(id)}">`
+      : `<label class="list-row-stretch gi-pick-hit" for="${escapeHtml(id)}">`
         + `<span class="sr-only">${escapeHtml(examLabel(exam))} 선택</span></label>`;
     return `<div class="list-row"${blocked ? ' aria-disabled="true"' : ''}>${lead}`
       + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(title)}</span>`

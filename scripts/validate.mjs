@@ -698,6 +698,9 @@ function validateGichulFrontend() {
   const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
   check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),
     'gichul/gichul.css: shadows, blur and gradients are forbidden (DESIGN.md §3·§4)');
+  check(appSource.includes('class="list-row-stretch gi-pick-hit"')
+    && /\.gi-pick-hit\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*width:\s*auto;/u.test(css),
+    'gichul: the row-wide pick label must be an overlay, not a 100%-wide flex item');
 }
 
 function validateDesignHeadingSequence() {
@@ -2151,7 +2154,7 @@ function validateGlobalsAndOrder() {
     'smstudy/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260829-orgchart-v10', '/usage/assets/css/usage.css?v=20260829-orgchart-v10'],
-    'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css'],
+    'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
