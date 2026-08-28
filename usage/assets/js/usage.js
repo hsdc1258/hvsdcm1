@@ -679,10 +679,35 @@
     return new Date(time + SEOUL_OFFSET_MS).toISOString().slice(0, 10);
   }
 
+  // 화면에 서는 이름에는 축약어를 남기지 않는다 (사용자 지시 ③ / review R2-1).
+  // 축약어마다 사전을 손으로 적으면 원본과 어긋나는 사본이 생기므로(LESSONS
+  // "파생 가능한 것을 손으로 적지 않는다") **패턴 규칙**으로 도출한다 — WP 뒤의 숫자는
+  // 그 숫자 그대로 '작업 묶음 N'이 되며, 새 번호가 생겨도 손댈 곳이 없다.
+  // 원문(rawName)은 지우지 않고 내부 필드로 남아 식별자로 쓰인다.
+  const NAME_EXPANSIONS = [
+    // WP1 · WP-2 · wp 3 → '작업 묶음 1'. 풀어 쓴 머리말이 이름 맨 앞에 서면 나머지와
+    // 층이 달라지므로 em dash로 가른다 ('작업 묶음 1 서버'는 한 덩어리로 읽힌다).
+    {
+      pattern: /\bWP[\s._-]*(\d+)(\s*)/giu,
+      expand: (match, digits, gap, offset, whole) => {
+        const rest = whole.slice(offset + match.length);
+        if (!gap || !rest) return `작업 묶음 ${digits}`;
+        return `작업 묶음 ${digits}${offset === 0 ? ' — ' : ' '}`;
+      },
+    },
+  ];
+
+  function expandAbbreviations(name) {
+    let expanded = name;
+    for (const rule of NAME_EXPANSIONS) expanded = expanded.replace(rule.pattern, rule.expand);
+    return expanded.trim();
+  }
+
   function taskPresentation(task) {
     const rawName = String(task?.name || '').trim();
     const suffix = rawName.match(/\s*\((\d{2})-(\d{2})\)\s*$/u);
-    const name = (suffix ? rawName.slice(0, suffix.index).trim() : rawName) || '이름 없는 작업';
+    const trimmed = suffix ? rawName.slice(0, suffix.index).trim() : rawName;
+    const name = expandAbbreviations(trimmed) || '이름 없는 작업';
     const time = parseTime(task?.updated_at);
     const dateTime = time === null ? '' : seoulDateKey(time);
     const dateLabel = suffix
@@ -690,7 +715,8 @@
       : dateTime
         ? `${dateTime.slice(5, 7)}.${dateTime.slice(8, 10)}`
         : '';
-    return { name, dateTime, dateLabel };
+    // rawName은 화면에 쓰지 않는다 — 보고가 준 원문 그대로의 내부 식별자다.
+    return { name, rawName, dateTime, dateLabel };
   }
 
   function renderTaskDate(task) {

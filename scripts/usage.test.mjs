@@ -1558,9 +1558,9 @@ test('a stale source names itself and its age next to every gauge', () => {
   assert.doesNotMatch(fresh, /list-row-sub[^>]*>[^<]*수집/u);
 });
 
-// 사용자 지시 ③ — 화면이 **스스로 만드는** 문구에는 약어를 쓰지 않는다.
-// 보고 데이터가 실어 오는 약어(작업 이름의 WP1 등)는 그 데이터의 사실이므로 손대지 않는다.
-test('labels the UI writes itself are spelled out, while reported text is left alone', () => {
+// 사용자 지시 ③ — 화면에 축약어를 남기지 않는다. UI가 스스로 만드는 문구뿐 아니라
+// 보고가 실어 온 이름의 약어(WP1 등)도 표시 계층에서 풀어 쓴다 (review R2-1).
+test('abbreviations are spelled out, in the UI chrome and in reported names alike', () => {
   const markup = createUsageRenderers()
     .renderSessionView([harnessTask({ name: 'WP1 서버 (08-27)' })], NOW, 'active', 'org');
   for (const abbreviation of ['>REQUEST<', '>MAIN<', '>PHASE<', '>AGENT<', '>NODE<', 'ORG CHART', '>CODEX<', '>WEBGPT<', 'ARTIFACT']) {
@@ -1569,8 +1569,17 @@ test('labels the UI writes itself are spelled out, while reported text is left a
   assert.match(markup, />사용자 요청</u);
   assert.match(markup, />총괄</u);
   assert.match(markup, />단계</u);
-  // 보고가 실어 온 이름은 그대로 나온다.
-  assert.match(markup, /WP1 서버/u);
+  // 보고가 실어 온 약어는 풀어 쓴 형태로만 나온다 — 원문은 내부 필드에만 남는다.
+  assert.doesNotMatch(markup, /WP1/iu);
+  assert.match(markup, /작업 묶음 1 — 서버/u);
+});
+
+// 풀어쓰기는 축약어 사전이 아니라 규칙이다 — 목록에 없는 번호도 같은 모양으로 풀린다.
+test('the spell-out rule is derived from the pattern, not from a per-abbreviation list', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderSessionView([harnessTask({ name: 'WP7' })], NOW, 'active', 'org');
+  assert.match(markup, /작업 묶음 7/u);
+  assert.doesNotMatch(markup, /WP7/iu);
 });
 
 // 사용자 지시 ④ — 카드의 시각은 하네스의 **마지막 보고**이고, 화면 갱신 시계와 이름이
@@ -1587,6 +1596,16 @@ test('the card clock is named after the report, not after the screen refresh', (
   // 보고 시각이 아예 없으면 그렇게 말한다 (0분 전으로 지어내지 않는다).
   const noTime = renderers.renderSessionView([harnessTask({ id: 'no-clock', updated_at: '' })], NOW, 'active', 'org');
   assert.match(noTime, /보고 시각 없음/u);
+});
+
+// 지시 ④의 다른 쪽 시계 — 머리말의 갱신 표기는 '화면 갱신'이라는 제 이름을 쓰고,
+// 진행 중 세션이 없을 때의 폴링 주기(60초)를 그대로 밝힌다 (review R2-N1).
+test('the header clock names itself the screen refresh and states the polling cadence', async () => {
+  const sandbox = await createUsageAppSandbox([{ snapshots: [], tasks: [] }]);
+  const freshness = sandbox.store.get('usageFreshness').textContent;
+  assert.match(freshness, /화면 갱신/u);
+  assert.doesNotMatch(freshness, /마지막 보고/u);
+  assert.match(freshness, /60초마다 자동 갱신/u);
 });
 
 // ---- 완료 목록 정리 (요구 6) ----------------------------------------------
