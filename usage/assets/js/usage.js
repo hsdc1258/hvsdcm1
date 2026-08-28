@@ -40,6 +40,17 @@
   const ZOOM_MAX = 2.5;
   const ZOOM_STEP = 1.2;
   const PAN_STEP = 48;
+  // **판독 바닥** (review WP3 major 1). 두 축을 모두 넣으려다 배율이 0.232까지 떨어지면
+  // 노드의 12px(--fs-micro) 글자가 2.8px가 되어 "맞췄다"고 말할 뿐 아무것도 읽히지 않았다.
+  // 그래서 맞춤에는 순서가 있다:
+  //   1) 가로는 **반드시** 들어간다 — 좌우로 끌어야 첫 글자가 보이는 화면은 못 읽는다.
+  //   2) 세로는 글자가 이 바닥 위에 있는 동안에만 줄인다.
+  //   3) 그래도 넘치면 넘친다고 화면이 말하고(끌어서 이동), 전체 조망은 축소 버튼이 맡는다.
+  // 0.75인 이유: 노드 최소 글자가 12px이므로 12 × 0.75 = 9px — 본문은 아니지만 사람이
+  // 읽어낼 수 있는 하한이다. 이보다 낮추면 다시 "보이기만 하는 축소"가 된다.
+  const FIT_READABLE_MIN = 0.75;
+  const ORG_HINT_DEFAULT = '휠 확대 · 끌어 이동';
+  const ORG_HINT_OVERFLOW = '화면보다 큼 · 끌어서 이동 · 축소로 전체 보기';
 
   // 단계는 제어면과 report schema가 함께 보장하는 여덟 개다 (DESIGN.md §1.1).
   // 이 배열이 화면의 단일 원본이다 — 트리·상태·소요시간 계산이 모두 여기서 도출된다.
@@ -65,7 +76,20 @@
   const PHASE_STATE_LABELS = {
     done: '완료', current: '진행 중', pending: '대기', skipped: '기록 없음',
   };
-  const ACTOR_KIND_LABELS = { codex: 'CODEX', webgpt: 'WEBGPT', claude: 'CLAUDE' };
+  // '기록 없음'만 적으면 사용자는 그것이 화면의 고장인지, 단계를 건너뛴 것인지, 보고가
+  // 오지 않은 것인지 알 수 없다. 판정의 근거를 그대로 문장으로 낸다 (사용자 지시 ①).
+  // 이 화면이 아는 사유는 하나뿐이다 — **보고가 오지 않았다**. 다른 사유(해당 없음·구형식)를
+  // 지어내지 않는 이유는 그것을 판정할 근거가 payload에 없기 때문이다.
+  const PHASE_SKIPPED_REASON = '이 단계는 보고가 전송되지 않았습니다';
+  // 액터 종류 라벨은 **제품 이름**이다. 대문자로 소리치던 것을 원래 표기로 되돌린다
+  // (사용자 지시 ③ — UI가 만드는 문구는 축약·약어 대신 그대로 읽히는 말).
+  const ACTOR_KIND_LABELS = { codex: 'Codex', webgpt: 'WebGPT', claude: 'Claude' };
+  // 축 노드의 종류 라벨. 예전에는 REQUEST·MAIN·PHASE·AGENT 같은 영문 약어였다 —
+  // 화면이 스스로 만드는 문구에는 약어를 쓰지 않는다 (사용자 지시 ③). 보고 데이터가
+  // 실어 오는 약어(작업 이름의 WP1 등)는 그 데이터의 사실이므로 손대지 않는다.
+  const NODE_KIND_LABELS = {
+    request: '사용자 요청', lead: '총괄', phase: '단계', agent: '에이전트',
+  };
   // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
   // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
   const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
@@ -76,9 +100,9 @@
   const BUCKET_LABELS = {
     primary: '기본 사용량',
     secondary: '추가 사용량',
-    five_hour: '5시간 사용량',
-    seven_day: '주간 사용량',
-    seven_day_opus: '주간 사용량 (Opus)',
+    five_hour: '5시간',
+    seven_day: '주간',
+    seven_day_opus: '주간 (Opus)',
   };
   const ACTOR_STATUS_LABELS = {
     working: '작업 중', reviewing: '검토 중', waiting: '대기',
@@ -97,6 +121,9 @@
     duration: '소요',
     usage: '한도 소비',
     model: '모델',
+    // 자기 단계가 부모와 달라 부모 카드 밖에 선 액터는 **부모를 이름으로** 밝힌다.
+    // 계층을 잃지 않으면서 API가 고정한 단계 자리도 지키는 유일한 방법이다 (major 2).
+    parent: '상위',
   };
   // actor.kind ↔ 그 actor가 갉아먹는 계정 한도. usage_at_start·usage_at_end는 그 시점
   // 계정의 **잔여(%)** 스냅샷이므로 소비는 `시작 − 종료`다(세션 소모와 같은 부호 계약).
@@ -271,11 +298,15 @@
     return [{ label: planLabels[plan] || 'Codex 계정', buckets: payload.rate_limits, capturedAt: null }];
   }
 
+  // 게이지 한 줄의 이름은 **창(window)의 이름**이고, 어느 계정의 창인지는 renderQuota가
+  // 원본 이름을 앞에 붙여 완성한다 — 'Claude 주간' · 'Claude 5시간' · 'Codex 주간'
+  // (사용자 지시 ②). 예전에는 '주간 사용량'만 적혀 있어서, 카드 머리를 놓치면 그 게이지가
+  // 어느 계정 것인지 화면 어디에도 없었다.
   function bucketLabel(key, windowMinutes) {
-    if (windowMinutes === 300) return '5시간 사용량';
-    if (windowMinutes === 10_080) return '주간 사용량';
+    if (windowMinutes === 300) return '5시간';
+    if (windowMinutes === 10_080) return '주간';
     if (Number.isFinite(windowMinutes) && windowMinutes > 0) {
-      return `${formatDuration(windowMinutes * 60_000)} 사용량`;
+      return formatDuration(windowMinutes * 60_000);
     }
     return BUCKET_LABELS[key] || key;
   }
@@ -296,20 +327,27 @@
       });
   }
 
-  function renderQuotaRow(bucket, now) {
+  // 게이지 한 줄. 제목은 `<원본> <창>`이고(사용자 지시 ②), 그 원본의 수집이 낡았으면
+  // **그 줄 옆에서** 수집원과 경과 시간을 밝힌다 — 카드 머리의 '수집 지연' 한 줄만으로는
+  // 어느 게이지가 낡은 값인지 게이지를 보는 눈높이에서 알 수 없다.
+  function renderQuotaRow(bucket, now, sourceLabel = '', staleNote = '') {
     const hasPercent = bucket.percent !== null;
     const percent = hasPercent ? clampPercent(bucket.percent) : 0;
     const tone = percent >= OVER_PERCENT ? ' is-over' : percent >= WARN_PERCENT ? ' is-warn' : '';
     const reset = relativeTime(bucket.resetsAt, now);
-    const sub = reset
-      ? `${reset} 초기화`
-      : bucket.windowMinutes
-        ? `${formatDuration(bucket.windowMinutes * 60_000)} 창`
-        : '';
+    const sub = [
+      reset
+        ? `${reset} 초기화`
+        : bucket.windowMinutes
+          ? `${formatDuration(bucket.windowMinutes * 60_000)} 창`
+          : '',
+      staleNote,
+    ].filter(Boolean).join(' · ');
+    const title = [sourceLabel, bucket.label].filter(Boolean).join(' ');
     return `
       <div class="list-row">
         <span class="list-row-body">
-          <span class="list-row-title">${escapeHtml(bucket.label)}</span>
+          <span class="list-row-title">${escapeHtml(title)}</span>
           ${hasPercent
     ? `<span class="gauge-track" aria-hidden="true"><span class="gauge-fill${tone}" style="width: ${percent.toFixed(1)}%"></span></span>`
     : ''}
@@ -367,16 +405,18 @@
         : group.hasOwnTime
           ? `<div class="list-group-head-row"><p class="list-group-head">${escapeHtml(group.label)}</p>${renderCaptureMeta(group.captured, group.stale)}</div>`
           : `<p class="list-group-head">${escapeHtml(group.label)}</p>`;
+      // 낡은 그룹의 게이지에는 수집원과 나이를 함께 적는다 (사용자 지시 ②).
+      const staleNote = group.stale && group.captured ? `${label} ${group.captured} 수집` : '';
       return `
         <div class="us-group">
           ${head}
-          <div class="list-group is-inset">${group.rows.map((bucket) => renderQuotaRow(bucket, now)).join('')}</div>
+          <div class="list-group is-inset">${group.rows.map((bucket) => renderQuotaRow(bucket, now, label, staleNote)).join('')}</div>
         </div>`;
     }).join('');
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
+          <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
           ${renderCaptureMeta(headCaptured, headStale)}
         </header>
         ${body || `<p class="us-empty">읽을 수 있는 ${escapeHtml(label)} 한도 정보가 없습니다.</p>`}
@@ -390,7 +430,7 @@
     return `
       <article class="us-limit-widget">
         <header class="us-card-head">
-          <div><p class="us-eyebrow">LIVE LIMIT</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
+          <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
           <span class="us-card-meta">수집 대기</span>
         </header>
         <p class="us-empty">아직 ${escapeHtml(label)} 스냅샷이 없습니다.</p>
@@ -538,10 +578,15 @@
   // 현재 단계(완료 세션이면 '완료')로 끌려가 **지나간 단계가 텅 비어 보인다**(조사-결론 C-5).
   // 고정 배치로 바꾸면 종료된 단계에도 그 단계에 투입됐던 actor가 영구히 남는다.
   // phase를 싣지 않는 구 보고는 종전 추정(이벤트 → task 단계)으로 그대로 떨어진다.
-  function actorPhaseKey(actor, phaseFromEvents, fallbackPhase) {
-    if (PHASE_KEYS.has(actor?.phase)) return actor.phase;
+  //
+  // 반환값은 `{ key, explicit }`이다. **explicit**은 "그 단계에 근거가 있다"는 뜻이고,
+  // 근거가 없는 액터(구 보고)는 부모의 단계를 물려받는다 — 근거 없는 액터를 task의
+  // 현재 단계로 떼어내면 부모 아래 있던 서브에이전트가 계층을 잃기 때문이다.
+  function actorPhaseOf(actor, phaseFromEvents, fallbackPhase) {
+    if (PHASE_KEYS.has(actor?.phase)) return { key: actor.phase, explicit: true };
     const inferred = phaseFromEvents.get(String(actor?.id));
-    return PHASE_KEYS.has(inferred) ? inferred : fallbackPhase;
+    if (PHASE_KEYS.has(inferred)) return { key: inferred, explicit: true };
+    return { key: fallbackPhase, explicit: false };
   }
 
   // actor 하나의 소요시간. started_at이 없는 구 보고는 잴 근거가 없으므로 빈 문자열이다
@@ -603,12 +648,23 @@
     return deltas;
   }
 
+  // 날짜는 **한국 시간(KST) 기준**이다 (review WP3 major 5).
+  // toISOString()은 UTC라, 한국 시간 자정 직후(00:00~09:00)에 끝난 세션이 전날 날짜로
+  // 묶였다 — 한국어 서비스의 완료 기록이 매일 아홉 시간씩 어제로 밀리는 체계적 오분류다.
+  // 한국은 1988년 이후 서머타임이 없어 고정 +09:00이 곧 정확한 변환이고, 그래서
+  // Intl 없이 오프셋 한 번으로 끝난다(브라우저 로캘·타임존 설정에 좌우되지 않는다).
+  const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+  function seoulDateKey(time) {
+    return new Date(time + SEOUL_OFFSET_MS).toISOString().slice(0, 10);
+  }
+
   function taskPresentation(task) {
     const rawName = String(task?.name || '').trim();
     const suffix = rawName.match(/\s*\((\d{2})-(\d{2})\)\s*$/u);
     const name = (suffix ? rawName.slice(0, suffix.index).trim() : rawName) || '이름 없는 작업';
     const time = parseTime(task?.updated_at);
-    const dateTime = time === null ? '' : new Date(time).toISOString().slice(0, 10);
+    const dateTime = time === null ? '' : seoulDateKey(time);
     const dateLabel = suffix
       ? `${suffix[1]}.${suffix[2]}`
       : dateTime
@@ -638,12 +694,14 @@
     return parseTime(task?.completed_at) ?? parseTime(task?.updated_at) ?? 0;
   }
 
-  // 완료 목록을 날짜별로 묶는다. 키는 완료 시각의 ISO 날짜이고, 순서는 최신 날짜부터다.
+  // 완료 목록을 날짜별로 묶는다. 키는 완료 시각의 **한국 시간** 날짜이고(seoulDateKey),
+  // 순서는 최신 날짜부터다. 탭의 날짜 표기(taskPresentation)와 같은 변환을 쓴다 — 두
+  // 표기가 다른 축을 쓰면 08.28 그룹 안에 08.27 탭이 서는 모순이 생긴다.
   function groupTasksByDate(tasks) {
     const groups = new Map();
     for (const task of tasks) {
       const time = completedTime(task);
-      const key = time ? new Date(time).toISOString().slice(0, 10) : '';
+      const key = time ? seoulDateKey(time) : '';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(task);
     }
@@ -696,7 +754,7 @@
     const progress = Number.isFinite(node.progress) ? clampPercent(node.progress) : null;
     return `
       <article class="h-node is-${escapeHtml(node.kind)}${node.current ? ' is-current' : ''}"${renderNodeAttributes(node.attributes)}>
-        <p class="h-node-kind">${escapeHtml(node.kindLabel || 'NODE')}${node.current ? '<span class="h-node-flag">작업중</span>' : ''}</p>
+        <p class="h-node-kind">${escapeHtml(node.kindLabel || '노드')}${node.current ? '<span class="h-node-flag">작업중</span>' : ''}</p>
         <h5 class="h-node-name">${escapeHtml(node.name || '이름 미기록')}</h5>
         ${node.detail ? `<p class="h-node-detail">${escapeHtml(node.detail)}</p>` : ''}
         ${renderNodeFacts(node)}
@@ -751,18 +809,48 @@
     const fallbackPhase = normalizedTaskPhase(task);
     const childrenOf = new Map();
     const byPhase = new Map(PHASES.map((phase) => [phase.key, []]));
+    // 부모 아래로 접히지 못하고 자기 단계로 올라온 액터 ↔ 그 부모의 이름. 노드가
+    // '상위' 줄로 계층을 되살린다.
+    const detachedParent = new Map();
+
+    // **단계를 먼저 정하고 계층은 그 다음이다** (review WP3 major 2).
+    // 예전에는 parent_id가 있으면 곧장 부모 밑으로 넣었고, 그래서 부모가 `work`인
+    // 검토자가 API의 `phase: 'review'`를 실은 채로 구현 단계에 서 있었다 — "API가 준
+    // actor.phase 고정 배치"라는 계약이 자식에서만 조용히 깨졌다.
+    // 이제 규칙은 둘뿐이다:
+    //   · 자식의 단계가 부모와 **같으면** 부모 카드 아래로 중첩한다 (계층 유지).
+    //   · **다르면** 자기 단계 자리에 서고, 부모는 '상위' 줄로 명시한다 (배치 유지).
+    // 근거 없는(explicit이 아닌) 단계는 부모의 단계를 물려받으므로, 구 보고는 예전처럼
+    // 통째로 부모 밑에 남는다.
+    const phaseCache = new Map();
+    const phaseKeyFor = (actor, seen = new Set()) => {
+      const id = String(actor?.id ?? '');
+      if (phaseCache.has(id)) return phaseCache.get(id);
+      const own = actorPhaseOf(actor, phaseOf, fallbackPhase);
+      let key = own.key;
+      const parent = actor?.parent_id && actor.parent_id !== main?.id
+        ? byId.get(actor.parent_id)
+        : null;
+      if (!own.explicit && parent && !seen.has(String(parent.id))) {
+        key = phaseKeyFor(parent, new Set(seen).add(id));
+      }
+      const resolved = PHASE_KEYS.has(key) ? key : fallbackPhase;
+      phaseCache.set(id, resolved);
+      return resolved;
+    };
 
     for (const actor of actors) {
       if (main && actor.id === main.id) continue;
-      const parentId = actor.parent_id && actor.parent_id !== main?.id && byId.has(actor.parent_id)
-        ? actor.parent_id
-        : '';
-      if (parentId) {
-        if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
-        childrenOf.get(parentId).push(actor);
+      const parent = actor.parent_id && actor.parent_id !== main?.id && byId.has(actor.parent_id)
+        ? byId.get(actor.parent_id)
+        : null;
+      const phaseKey = phaseKeyFor(actor);
+      if (parent && parent.id !== actor.id && phaseKeyFor(parent) === phaseKey) {
+        if (!childrenOf.has(parent.id)) childrenOf.set(parent.id, []);
+        childrenOf.get(parent.id).push(actor);
         continue;
       }
-      const phaseKey = actorPhaseKey(actor, phaseOf, fallbackPhase);
+      if (parent) detachedParent.set(actor.id, parent.name || '이름 미기록');
       (byPhase.get(phaseKey) || byPhase.get(fallbackPhase)).push(actor);
     }
 
@@ -773,17 +861,19 @@
         : finiteNumber(actor.progress);
       return {
         kind: 'agent',
-        kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || 'AGENT',
+        kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || NODE_KIND_LABELS.agent,
         name: actor.name || '이름 미기록',
         model: modelAndReasoning(actor.model, actor.reasoning),
         // 역할·담당·소요·한도를 **각각** 낸다 (요구 2·4). 하나로 합치지 않는다.
         facts: [
           { label: NODE_FACT_LABELS.role, value: actor.role || '' },
           { label: NODE_FACT_LABELS.assignment, value: actor.assignment || '' },
+          { label: NODE_FACT_LABELS.parent, value: detachedParent.get(actor.id) || '' },
           { label: NODE_FACT_LABELS.duration, value: actorDuration(actor, task, now) },
           { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(actor) },
         ],
         role: actor.role || '',
+        parent: detachedParent.get(actor.id) || '',
         status: actorStatus(actor),
         tone: statusDotClass(actor.status),
         progress,
@@ -816,10 +906,12 @@
       );
       return {
         kind: 'phase',
-        kindLabel: 'PHASE',
+        kindLabel: NODE_KIND_LABELS.phase,
         name: phase.label,
         detail: phase.detail,
         model,
+        // '기록 없음'이 왜 기록 없음인지 노드가 직접 말한다 (사용자 지시 ①).
+        note: state === 'skipped' ? PHASE_SKIPPED_REASON : '',
         status: PHASE_STATE_LABELS[state],
         tone: isCurrent ? ' is-accent' : ' is-idle',
         time: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
@@ -838,7 +930,7 @@
     const main = mainActorOf(task);
     const request = {
       kind: 'request',
-      kindLabel: 'REQUEST',
+      kindLabel: NODE_KIND_LABELS.request,
       name: '사용자 입력',
       detail: taskPresentation(task).name,
     };
@@ -847,14 +939,21 @@
     if (!main) {
       return [request, {
         kind: 'lead',
-        kindLabel: 'MAIN',
+        kindLabel: NODE_KIND_LABELS.lead,
         name: '에이전트 보고 없음',
         detail: '이 세션은 실행자를 보고하지 않았습니다',
       }, ...phases];
     }
+    // Main 노드는 `data-actor-id`가 붙은 **액터 카드**다. 그러므로 진행률도 그 액터의
+    // 보고에서 와야 한다 (review WP3 major 4 — 예전에는 task.progress를 얹어서
+    // 총괄이 17%를 보고해도 카드가 세션 전체의 82%로 렌더됐다).
+    // 우선순위는 다른 액터와 같다: 이벤트가 측정한 값 → 액터 payload → (둘 다 없을 때만)
+    // 세션 진행률. 마지막 폴백을 남기는 이유는 progress를 안 싣는 구 보고에서 총괄
+    // 카드만 수치를 잃지 않게 하기 위해서다.
+    const mainProgress = actorProgressMap(task).get(String(main.id));
     return [request, {
       kind: 'lead',
-      kindLabel: 'MAIN',
+      kindLabel: NODE_KIND_LABELS.lead,
       name: main.name || '이름 미기록',
       model: modelAndReasoning(main.model, main.reasoning),
       facts: [
@@ -865,7 +964,7 @@
       ],
       status: actorStatus(main),
       tone: statusDotClass(main.status),
-      progress: finiteNumber(task.progress),
+      progress: mainProgress ?? finiteNumber(main.progress) ?? finiteNumber(task.progress),
       current: main.status === 'working' || main.status === 'reviewing',
       attributes: { 'data-actor-id': main.id || '' },
     }, ...phases];
@@ -877,9 +976,9 @@
     return `
       <section class="h-org" aria-label="${escapeHtml(label)}">
         <header class="h-org-head">
-          <div><p class="us-eyebrow">ORG CHART</p><h4>실행 조직도</h4></div>
+          <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
           <div class="h-org-tools">
-            <span class="h-org-hint">휠 확대 · 끌어 이동</span>
+            <span class="h-org-hint" data-org-hint>${ORG_HINT_DEFAULT}</span>
             <button class="btn btn-secondary btn-sm" type="button" data-org-action="out">축소</button>
             <button class="btn btn-secondary btn-sm" type="button" data-org-action="in">확대</button>
             <button class="btn btn-secondary btn-sm" type="button" data-org-action="fit">맞춤</button>
@@ -906,10 +1005,20 @@
     canvas.style.transform = `translate(${Math.round(state.x)}px, ${Math.round(state.y)}px) scale(${state.scale.toFixed(3)})`;
   }
 
-  // "맞춤"은 **두 축 모두** 들어가야 맞춤이다. 폭만 재면 세로로 긴 모바일 트리가
-  // 잘린 채로 "맞췄다"고 말하게 된다 (review WPA2 M3 — 16노드 중 4개가 잘렸다).
-  // 세로가 부족해 ZOOM_MIN(0.3) 아래로 내려가야 한다면 내려간다. 사람이 휠로 축소할 때의
-  // 바닥은 그대로 0.3이고, 그 바닥은 zoomOrgView가 "지금 배율보다 위로 튀지 않게" 지킨다.
+  // "맞춤"은 **읽을 수 있는 상태로** 맞추는 것이다.
+  //
+  // 종전 규칙("두 축 모두 들어가야 맞춤이다", review WPA2 M3)은 잘림은 없앴지만 대신
+  // 판독을 없앴다: 317×480 뷰포트에 908×2065 트리를 넣으면 배율이 0.232가 되고 노드
+  // 글자는 2.8px가 된다 (review WP3 major 1의 실측). 잘리지 않았을 뿐 아무것도 읽히지
+  // 않는 화면을 "맞춤"이라 부를 수는 없다.
+  //
+  // 그래서 우선순위를 명시한다:
+  //   1) **가로는 언제나 들어간다.** 좌우로 끌어야 문장의 첫 글자가 보이는 화면은 못 읽는다.
+  //   2) 세로는 배율이 FIT_READABLE_MIN 위에 있는 동안에만 줄인다.
+  //   3) 그래도 넘치면 **넘친다고 말한다** — 뷰포트에 data-org-overflow를 세우고 머리말
+  //      힌트를 바꾼다. 전체 조망이 필요하면 축소 버튼이 ZOOM_MIN까지 데려간다.
+  // 넘칠 때 가운데 정렬 대신 왼쪽 위에서 시작하는 것도 같은 이유다(아래 Math.max(0, …)):
+  // 트리는 위에서 아래로 읽으므로 시작점이 화면 밖에 있으면 안 된다.
   function fitOrgView(viewport, state) {
     const canvas = orgCanvasOf(viewport);
     if (!canvas) return;
@@ -917,14 +1026,26 @@
     const contentHeight = canvas.scrollHeight || canvas.offsetHeight || 0;
     const viewWidth = viewport.clientWidth || 0;
     const viewHeight = viewport.clientHeight || 0;
-    const ratios = [];
-    if (contentWidth > 0 && viewWidth > 0) ratios.push(viewWidth / contentWidth);
-    if (contentHeight > 0 && viewHeight > 0) ratios.push(viewHeight / contentHeight);
-    const scale = ratios.length ? Math.min(1, Math.max(FIT_MIN, Math.min(...ratios))) : 1;
+    const measurable = contentWidth > 0 && viewWidth > 0;
+    const widthRatio = measurable ? viewWidth / contentWidth : 1;
+    const heightRatio = contentHeight > 0 && viewHeight > 0 ? viewHeight / contentHeight : 1;
+    // 두 축을 다 넣는 이상적인 배율과, 판독을 지키는 바닥. 바닥은 가로 맞춤을 넘지
+    // 않는다 — 판독을 지키려다 트리가 화면 옆으로 빠져나가면 규칙 1이 깨진다.
+    const ideal = Math.min(1, widthRatio, heightRatio);
+    const readableFloor = Math.min(1, widthRatio, FIT_READABLE_MIN);
+    const scale = measurable
+      ? Math.min(1, Math.max(FIT_MIN, ideal, readableFloor))
+      : 1;
     state.scale = scale;
     state.x = Math.max(0, (viewWidth - (contentWidth * scale)) / 2);
     state.y = Math.max(0, (viewHeight - (contentHeight * scale)) / 2);
     applyOrgTransform(viewport, state);
+    const clipped = measurable && (
+      (contentWidth * scale) > viewWidth + 0.5 || (contentHeight * scale) > viewHeight + 0.5
+    );
+    if (viewport.dataset) viewport.dataset.orgOverflow = clipped ? 'true' : 'false';
+    const hint = viewport.closest?.('.h-org')?.querySelector?.('[data-org-hint]');
+    if (hint) hint.textContent = clipped ? ORG_HINT_OVERFLOW : ORG_HINT_DEFAULT;
   }
 
   // 커서(또는 뷰포트 중앙)를 고정점으로 두고 확대한다 — 그래야 보고 있던 노드가 안 달아난다.
@@ -1059,7 +1180,7 @@
     return `
       <section class="h-modules" aria-label="모듈별 진행도">
         <header class="h-modules-head">
-          <div><p class="us-eyebrow">MODULES</p><h4>모듈별 진행도</h4></div>
+          <div><p class="us-eyebrow">모듈</p><h4>모듈별 진행도</h4></div>
           <span>보고된 작업 ${modules.length}개</span>
         </header>
         <div class="h-module-list">
@@ -1089,7 +1210,7 @@
     if (artifacts.length === 0) return '';
     return `
       <footer class="h-evidence">
-        <span class="h-evidence-label">검증 ARTIFACT</span>
+        <span class="h-evidence-label">검증 자료</span>
         <div class="h-evidence-list">
           ${artifacts.map((artifact) => `<span>${escapeHtml(artifact)}</span>`).join('')}
         </div>
@@ -1103,7 +1224,9 @@
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const deltas = sessionUsageDeltas(task);
     const meta = [
-      updated ? `${updated} 동기화` : '동기화 시각 없음',
+      // 카드가 말하는 시각은 하네스의 **마지막 보고**다 (사용자 지시 ④ — 머리말의
+      // 화면 갱신 시계와 같은 말('동기화')을 쓰면 두 값이 어긋난 것처럼 읽힌다).
+      updated ? `마지막 보고 ${updated}` : '보고 시각 없음',
       `${taskCategory(task).label} · 진행 ${progress}%`,
       task.deadline ? `마감 ${task.deadline}` : '',
     ].filter(Boolean).join(' · ');
@@ -1111,7 +1234,7 @@
       <article class="h-task${complete ? ' is-complete' : ''}">
         <header class="h-task-head">
           <div>
-            <p class="us-eyebrow">${complete ? 'COMPLETED SESSION' : 'SELECTED SESSION'}</p>
+            <p class="us-eyebrow">${complete ? '완료한 세션' : '선택한 세션'}</p>
             <h3>${escapeHtml(presentation.name)}</h3>
             <p class="h-task-meta">${escapeHtml(meta)}</p>
             ${deltas.length ? `<p class="h-task-usage">이 세션 소모 · ${escapeHtml(deltas.join(' · '))}</p>` : ''}
@@ -1182,7 +1305,11 @@
         }
         : null,
       meta: [
-        updated ? `${updated} 동기화` : '동기화 시각 없음',
+        // 이 시각은 **하네스가 마지막으로 보고한 때**이지 화면이 서버를 마지막으로 읽은
+        // 때가 아니다. 예전 문구('N분 전 동기화')는 머리말의 '마지막 갱신 3초 전 ·
+        // 60초 주기'와 나란히 놓여 두 시계가 어긋난 것처럼 보였다 (사용자 지시 ④).
+        // 화면 갱신 시계는 머리말이, 보고 시계는 카드가 맡는다고 말이 갈라 준다.
+        updated ? `마지막 보고 ${updated}` : '보고 시각 없음',
         progress === null ? '' : `진행 ${Math.round(clampPercent(progress))}%`,
         task.deadline ? `마감 ${task.deadline}` : '',
         deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
@@ -1206,6 +1333,9 @@
             stat?.reasoning || (isCurrent ? task.reasoning : ''),
           ),
           note: phase.detail,
+          // '기록 없음' 마디에는 사유를 함께 싣는다 (사용자 지시 ①). 상세 조직도의
+          // 같은 노드와 **한 상수**를 공유하므로 두 화면이 다른 말을 하지 않는다.
+          reason: state === 'skipped' ? PHASE_SKIPPED_REASON : '',
           cost: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
           // 칩은 이름·역할·상태·진행률을 **각각** 낸다 (요구 2). 예전처럼 `이름:역할`
           // 한 문자열로 이어 붙이면 역할이 없는 액터에서 상태가 역할 자리에 들어앉아
@@ -1214,6 +1344,9 @@
           chips: flattenAgentNodes(byPhase.get(phase.key)).map(({ node, depth }) => ({
             name: node.name,
             role: node.role || '',
+            // 부모와 단계가 달라 중첩되지 못한 액터는 부모를 이름으로 밝힌다 —
+            // 들여쓰기로 말하던 계층을 글자로 대신한다 (major 2).
+            parent: node.parent || '',
             status: node.status || '',
             depth,
             actorId: node.attributes?.['data-actor-id'] || '',
@@ -1234,6 +1367,7 @@
     return `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}" data-depth="${depth}">`
       + `<b class="pl-chip-name">${escapeHtml(chip.name || '이름 미기록')}</b>`
       + `${chip.role ? `<span class="pl-chip-role">${escapeHtml(chip.role)}</span>` : ''}`
+      + `${chip.parent ? `<span class="pl-chip-role">${escapeHtml(`${NODE_FACT_LABELS.parent} ${chip.parent}`)}</span>` : ''}`
       + `${chip.status ? `<span class="pl-chip-state">${escapeHtml(chip.status)}</span>` : ''}`
       + `${percent === null ? '' : `<strong class="pl-chip-percent">${Math.round(clampPercent(percent))}%</strong>`}`
       + '</span>';
@@ -1247,6 +1381,7 @@
         <div class="pl-stage-main">
           <div class="pl-stage-name">${escapeHtml(stage.n)}${stage.who ? `<span class="pl-who">${escapeHtml(stage.who)}</span>` : ''}</div>
           ${stage.note ? `<div class="pl-note">${escapeHtml(stage.note)}</div>` : ''}
+          ${stage.reason ? `<div class="pl-note pl-reason">${escapeHtml(stage.reason)}</div>` : ''}
           ${stage.cost ? `<div class="pl-cost">${escapeHtml(stage.cost)}</div>` : ''}
           ${chips.length > 0 ? `<div class="pl-chips">${chips.map(renderBoardChip).join('')}</div>` : ''}
         </div>
@@ -1364,6 +1499,8 @@
         st: BOARD_STATE_LABELS[stage?.st] ? stage.st : 'wait',
         who: stage?.who || '',
         note: stage?.note || '',
+        // 사본에는 skipped 판정 자체가 없으므로 사유도 없다 (지어내지 않는다).
+        reason: '',
         // t(소요)·tok(토큰)·pct는 전부 선택 필드다. 있는 것만 잇고, pct 0은 값이다.
         cost: [
           stage?.t,
@@ -1381,10 +1518,17 @@
               status: chip.status ? String(chip.status) : '',
               percent: finiteNumber(chip.percent),
               depth: Number(chip.depth) || 0,
+              parent: chip.parent ? String(chip.parent) : '',
               actorId: '',
             }
             : {
-              name: String(chip), role: '', status: '', percent: null, depth: 0, actorId: '',
+              name: String(chip),
+              role: '',
+              status: '',
+              percent: null,
+              depth: 0,
+              parent: '',
+              actorId: '',
             })),
       })),
     };
@@ -1419,14 +1563,16 @@
     });
   }
 
-  function renderTaskTab(task, index, selected, status, now) {
+  // tabbable은 aria-selected와 **다른 사실**이다. 선택은 화면 전체에 하나뿐이지만,
+  // 초점을 받을 수 있는 탭은 tablist마다 하나씩 있어야 한다 (review WP3 major 3).
+  function renderTaskTab(task, index, selected, status, now, tabbable = selected) {
     const category = taskCategory(task);
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const presentation = taskPresentation(task);
     return `
             <button class="h-session-tab${selected ? ' is-selected' : ''}" type="button" role="tab"
               id="hSessionTab-${status}-${index}" aria-controls="hSessionPanel-${status}-${index}" aria-selected="${selected}"
-              tabindex="${selected ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
+              tabindex="${tabbable ? '0' : '-1'}" data-task-tab="${index}" data-task-id="${escapeHtml(task.id || String(index))}" data-task-status="${status}">
               <span class="h-session-tab-copy">
                 <strong>${escapeHtml(presentation.name)}</strong>
                 <small class="h-session-tab-meta"><span>${escapeHtml(category.label)} · ${escapeHtml(currentPhaseLabel(task, now))} ${progress}%</span>${renderTaskDate(task)}</small>
@@ -1437,20 +1583,33 @@
   // 세션 탭 묶음. 진행 중은 한 줄이고, 완료는 **날짜별 그룹**이 각자 tablist를 갖는다
   // (요구 6). 그룹 머리를 tablist 안에 끼우면 tab이 아닌 자식이 생겨 역할 계약이 깨지므로,
   // 그룹마다 tablist를 하나씩 둔다 — 패널은 스위처 하나가 공유한다.
+  //
+  // **tablist마다 tabindex="0"인 탭이 하나씩 있어야 한다** (review WP3 major 3).
+  // 예전에는 선택된 탭 하나만 0을 받아, 두 번째 날짜 그룹부터는 tablist 전체가 초점을
+  // 받을 수 없었다 — 방향키 이동도 tablist 안으로 제한돼 있어서 키보드 사용자는 그
+  // 그룹의 세션을 아예 열 수 없었다. 선택(aria-selected)은 여전히 화면에 하나뿐이고,
+  // 초점 진입점(roving tabindex)만 그룹마다 둔다.
   function renderTaskTabs(groups, now, status, footer = '') {
     const flat = groups.flatMap((group) => group.tasks);
     const selectedIndex = Math.max(0, flat.findIndex((task) => task.id === selectedTaskIds[status]));
     let cursor = -1;
     return `
       <div class="h-session-switcher" data-session-switcher="${status}">
-        ${groups.map((group) => `
+        ${groups.map((group) => {
+    const first = cursor + 1;
+    const hasSelected = selectedIndex >= first && selectedIndex < first + group.tasks.length;
+    return `
           ${group.label ? `<p class="list-group-head h-session-group-head">${escapeHtml(group.label)}</p>` : ''}
           <div class="h-session-tabs" role="tablist" aria-label="${escapeHtml(group.ariaLabel)}" data-task-tablist>
             ${group.tasks.map((task) => {
     cursor += 1;
-    return renderTaskTab(task, cursor, cursor === selectedIndex, status, now);
+    return renderTaskTab(
+      task, cursor, cursor === selectedIndex, status, now,
+      hasSelected ? cursor === selectedIndex : cursor === first,
+    );
   }).join('')}
-          </div>`).join('')}
+          </div>`;
+  }).join('')}
         ${footer}
         <div class="h-session-panels">
           ${flat.map((task, index) => `
@@ -1543,7 +1702,7 @@
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
-            <div><p class="us-eyebrow">ACCOUNT</p><h2 id="quotaTitle" class="title-3">Codex · Claude 한도</h2></div>
+            <div><p class="us-eyebrow">계정</p><h2 id="quotaTitle" class="title-3">Codex · Claude 한도</h2></div>
             <p>실제 계정 보고</p>
           </header>
           <div class="us-quota-list">${quotas}</div>
@@ -1564,6 +1723,15 @@
       item.classList.toggle('is-selected', selected);
       item.setAttribute('aria-selected', String(selected));
       item.tabIndex = selected ? 0 : -1;
+    }
+    // 선택이 옮겨간 뒤에도 **모든 tablist가 초점 진입점을 갖는다** (major 3).
+    // 위 루프는 선택된 탭 하나만 0으로 만들므로, 선택을 품지 않은 tablist는 여기서
+    // 첫 탭을 다시 tabbable로 되돌린다 — 그러지 않으면 탭을 한 번 누르는 순간
+    // 나머지 날짜 그룹이 렌더 시점에 갖고 있던 진입점을 잃는다.
+    for (const list of [...(scope.querySelectorAll?.('[data-task-tablist]') || [])]) {
+      if (typeof list?.querySelectorAll !== 'function') continue;
+      const listTabs = [...list.querySelectorAll('[data-task-tab]')];
+      if (listTabs.length > 0 && !listTabs.includes(tab)) listTabs[0].tabIndex = 0;
     }
     for (const panel of panels) panel.hidden = panel.dataset.taskPanel !== tab.dataset.taskTab;
     const status = tab.dataset.taskStatus === 'complete' ? 'complete' : 'active';
@@ -1691,8 +1859,10 @@
     }
     const seconds = Math.max(0, Math.round((Date.now() - lastSyncAt) / 1000));
     const elapsed = seconds < 60 ? `${seconds}초 전` : `${formatDuration(seconds * 1000)} 전`;
-    const cadence = isHidden() ? '자동 갱신 멈춤' : `${Math.round(pollDelay() / 1000)}초 주기`;
-    elements.freshness.textContent = `마지막 갱신 ${elapsed} · ${cadence}`;
+    const cadence = isHidden() ? '자동 갱신 멈춤' : `${Math.round(pollDelay() / 1000)}초마다 자동 갱신`;
+    // '화면 갱신'이라고 못박는다 — 카드의 '마지막 보고'와 다른 시계임을 이름으로
+    // 구분해야 두 값이 달라도 어긋난 것으로 읽히지 않는다 (사용자 지시 ④).
+    elements.freshness.textContent = `화면 갱신 ${elapsed} · ${cadence}`;
   }
 
   function scheduleFreshnessTick() {

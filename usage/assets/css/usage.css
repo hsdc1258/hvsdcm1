@@ -732,8 +732,9 @@
   font-size: var(--fs-micro);
 }
 /* ==========================================================================
-   반응형 — 1100(rail 아래로) / 700(도구 줄바꿈·캔버스 축소) / 430(여백 압축)
-   조직도는 확대·이동이 되므로 좁은 화면에서 트리를 다시 조판하지 않는다.
+   반응형 — 1100(rail 아래로) / 700(도구 줄바꿈 · **조직도 분기를 축 아래로**) / 430(여백 압축)
+   좁은 화면에서는 트리를 다시 조판한다. 확대·이동만으로는 부족하기 때문이다: 좌→우
+   분기가 만드는 900px대 폭을 300px대 화면에 "맞추면" 글자가 읽히지 않는다 (WP3 major 1).
    ========================================================================== */
 @media (max-width: 1100px) {
   .us-command-layout {
@@ -779,6 +780,49 @@
   .h-org-viewport {
     height: clamp(320px, 68vh, 560px);
   }
+  /* ---- 모바일 전용 배치: 분기를 오른쪽이 아니라 **축 아래로** 내린다 ----
+     근거(review WP3 major 1): 좌→우 분기는 트리 폭을 908px까지 부풀렸고, 그 폭을
+     317px 화면에 맞추면 배율이 0.35 아래로 떨어져 12px 글자가 4px가 됐다. 폭을 줄이는
+     것 말고 판독을 되찾을 방법이 없다 — 그래서 좁은 화면에서만 조판을 바꾼다.
+     아래로 내리면 트리 폭은 '노드 하나 + 들여쓰기'가 되어 가로가 그대로 들어가고,
+     길어진 세로는 usage.js의 판독 바닥(FIT_READABLE_MIN)이 지킨 채 끌어서 본다.
+     새 선을 만들지 않는다: 축 헤어라인(left: 106px)이 그대로 분기의 세로 척추가 되고,
+     분기의 들여쓰기는 그 x에 스텁 22px을 더한 값이다. */
+  .h-flow-step {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .h-branch {
+    padding-left: 128px;
+  }
+  .h-branch::before, .h-branch > .h-tree > .h-node-slot::after {
+    display: none;
+  }
+  /* 마지막 단은 축을 절반에서 끊는다(선이 트리 밖으로 새지 않게). 그 단에 분기가 붙으면
+     축이 곧 그 분기의 척추이므로 분기 끝까지 내려가야 한다. */
+  .h-flow-step:last-child:has(.h-branch)::before {
+    bottom: 0;
+  }
+  /* 손자도 부모 카드 아래로 내린다 — 오른쪽으로 이어 붙이면 깊이 한 단마다 232px씩
+     늘어 다시 화면을 넘는다. 척추는 부모 카드의 왼쪽 모서리를 따라 내려간다. */
+  .h-node-slot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .h-node-slot > ul {
+    padding-left: 22px;
+  }
+  .h-node-slot > ul::before {
+    display: none;
+  }
+  .h-node-slot > ul > .h-node-slot::after, .h-node-slot > ul > .h-node-slot:first-child::after {
+    top: -9px;
+  }
+  .h-node-slot > ul > .h-node-slot:only-child::after {
+    display: block;
+    top: -9px;
+    bottom: 50%;
+  }
   .h-session-tab {
     flex-basis: 74vw;
   }
@@ -790,12 +834,17 @@
   .h-node {
     width: 188px;
   }
-  /* 노드가 좁아지면 축 커넥터의 x좌표(= 폭의 절반)도 함께 내려간다. */
+  /* 노드가 좁아지면 축 커넥터의 x좌표(= 폭의 절반)도 함께 내려간다.
+     이 폭에서는 분기가 이미 축 아래로 내려가 있으므로(700px 블록), 열은 한 줄이고
+     분기 들여쓰기는 축의 새 x(94) + 스텁(22)이다. */
   .h-flow-step {
-    grid-template-columns: 188px minmax(0, auto);
+    grid-template-columns: minmax(0, 1fr);
   }
   .h-flow-step::before {
     left: 94px;
+  }
+  .h-branch {
+    padding-left: 116px;
   }
   .us-freshness {
     display: none;
@@ -1050,6 +1099,12 @@
   margin-top: 1px;
   font-size: 12.5px;
   color: #9a9cac;
+}
+/* '기록 없음' 마디의 **사유** 한 줄. 단계 설명(.pl-note)과 같은 조판을 쓰되 한 톤 낮춰
+   둘이 섞이지 않게 한다. 새 색을 만들지 않고 이미 실측된 마디 색을 그대로 쓴다:
+   #8D8F9E on #1D1F28 = 5.13:1 ✓ (위 전수표 "단계 상태 '대기'·'기록 없음'" 줄). */
+.pl-reason {
+  color: #8d8f9e;
 }
 .pl-cost {
   margin-top: 2px;

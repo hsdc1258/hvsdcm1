@@ -266,6 +266,16 @@ const DOCUMENT_SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ----
 .snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
 .snap-note code { color: var(--text); }`;
 
+// 사용량 문서 스냅샷이 조직도에 얹는 유일한 예외.
+//
+// **높이를 풀지 않는다.** 예전에는 `height: auto`로 캔버스를 통째로 펴서 트리 전체가
+// 문서에 흘러나오게 했는데, 그러면 "이 상자에 이 트리가 들어가는가"라는 물음 자체가
+// 사본에서 사라진다 — 390px 캡처가 멀쩡해 보여도 실제 화면의 맞춤 배율(0.23)은 보이지
+// 않았다 (WP3 리뷰 major 1이 지적한 사각지대). 실제 규칙과 같은 높이를 두고 스크롤만
+// 허용하면, 사람이 보는 사본에도 상자 대 트리의 실제 크기 비가 그대로 남는다.
+// 배율 계산 자체(가로 우선 · 판독 바닥 · 넘침 표시)는 scripts/usage.test.mjs가 잠근다.
+export const USAGE_SNAPSHOT_CSS = '.h-org-viewport { overflow: auto; }';
+
 // 생성물이므로 줄 끝 공백을 남기지 않는다 (git diff --check).
 function normalize(html) {
   return `${html.split('\n').map((line) => line.replace(/[ \t]+$/u, '')).join('\n').replace(/\n+$/u, '')}\n`;
@@ -430,14 +440,19 @@ export function buildSnapshots() {
         + ' 지나간 단계는 완료·앞으로 올 단계는 대기로 <strong>상태만</strong> 다른지, 노드·연결선·글자가 어디서도 겹치지 않는지,'
         + ' 오른쪽 Codex · Claude 한도 rail, 게이지의 세 색 구간, 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
-        + ' 조직도는 실제 화면에서 <strong>휠 확대 · 끌어 이동</strong>하는 캔버스이고, 열리는 순간 트리 전체가 들어오도록 배율이 맞춰진다.'
-        + ' 이 정적 사본은 스크립트가 없어 그 맞춤이 돌지 않으므로, 스냅샷 전용 규칙으로 캔버스 높이를 풀고 가로 스크롤을 허용했다 —'
-        + ' 조직도 안을 옆으로 밀어 보면 실제 화면에서 끌어 이동했을 때와 같은 것이 보인다.'
+        + ' 조직도는 실제 화면에서 <strong>휠 확대 · 끌어 이동</strong>하는 캔버스이고, 열리는 순간 <code>fitOrgView()</code>가 배율을 맞춘다 —'
+        + ' 가로는 반드시 넣고, 세로는 글자가 읽히는 배율(<code>FIT_READABLE_MIN</code>) 위에서만 줄이며, 그래도 넘치면 넘친다고 머리말이 말한다.'
+        + ' 이 사본은 스크립트가 없어 그 변환이 돌지 않는다. 그렇다고 캔버스 높이를 풀면 <strong>뷰포트와 트리의 실제 크기 차이가 사라져</strong>'
+        + ' 모바일 폭에서 배율이 어디까지 내려가는지가 사본에서 보이지 않는다 (WP3 리뷰가 지적한 사각지대다).'
+        + ' 그래서 높이는 실제 규칙 그대로 두고 <strong>스크롤만 허용</strong>했다 — 상자 안을 밀어 보면 실제 화면에서 끌어 이동했을 때와 같은 것이 보이고,'
+        + ' 상자 크기 대비 트리 크기도 그대로 보인다. 배율 계산 자체는 <code>scripts/usage.test.mjs</code>가 기계로 잠근다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => html
         // 확대·이동은 JS가 하는 일이다. 정적 사본에서 뷰포트를 그대로 두면 트리의
-        // 왼쪽 위 모서리만 보여 시각 확인(DESIGN.md §10)에 쓸 수 없다.
-        .replace('</head>', '<style>\n/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */\n.h-org-viewport { height: auto; overflow: auto; }\n</style>\n</head>')
+        // 왼쪽 위 모서리만 보여 시각 확인(DESIGN.md §10)에 쓸 수 없다. 그래서 스크롤을
+        // 허용한다 — **높이는 풀지 않는다**: 높이를 풀면 "이 상자에 이 트리가 들어가는가"
+        // 라는 물음 자체가 사본에서 사라진다 (WP3 리뷰 major 1의 사각지대).
+        .replace('</head>', `<style>\n/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */\n${USAGE_SNAPSHOT_CSS}\n</style>\n</head>`)
         .replace(
           '<div id="usageBody" class="us-body"></div>',
           `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,

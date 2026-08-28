@@ -86,9 +86,11 @@ test('bucket labels come from window duration, never primary position', () => {
     secondary: { used_percent: 20, window_minutes: 300 },
     monthly: { used_percent: 10 },
   })]);
-  assert.match(markup, /기본 사용량/u);
-  assert.match(markup, /5시간 사용량/u);
-  assert.match(markup, />monthly</u);      // 모르는 키 → 키 문자열 그대로
+  // 게이지 제목은 `<수집 원본> <창>`이다 (사용자 지시 ② — 게이지만 보고도 어느 계정의
+  // 어떤 창인지 알 수 있어야 한다).
+  assert.match(markup, />Codex 기본 사용량</u);
+  assert.match(markup, />Codex 5시간</u);
+  assert.match(markup, />Codex monthly</u);      // 모르는 키 → 키 문자열 그대로
   assert.doesNotMatch(markup, />primary</u);
 });
 
@@ -206,10 +208,13 @@ test('every group is delayed only when even the freshest one is', () => {
 });
 
 // codex payload는 계정이 하나뿐이라 그룹 시각을 싣지 않는다 — 행 시각이 곧 그 계정의
-// 시각이므로 카드 머리와 그룹에 같은 값을 두 번 적지 않는다.
-test('a source without per-group times prints its capture time exactly once', () => {
+// 시각이므로 **카드 머리와 그룹 머리**에 같은 값을 두 번 적지 않는다.
+// (게이지 줄의 수집 표기는 다른 사실이다: 낡은 값 옆에서 그 값의 출처와 나이를 밝히는
+//  것이고, 사용자 지시 ②가 요구한 표기다. 아래 stale 테스트가 그쪽을 본다.)
+test('a source without per-group times prints its capture time once in the heads', () => {
   const markup = dashboard([codexSnapshot({ primary: { used_percent: 5 } }, iso(3 * HOUR))]);
-  assert.equal((markup.match(/3시간 전 수집/gu) || []).length, 1);
+  assert.equal((markup.match(/us-card-meta">3시간 전 수집/gu) || []).length, 1);
+  assert.doesNotMatch(markup, /list-group-head-row/u);
   assert.equal((markup.match(/수집 지연/gu) || []).length, 1);
 });
 
@@ -218,9 +223,9 @@ test('Pro weekly limit is account-scoped and never named after the active model'
     primary: { used_percent: 26, window_minutes: 10_080 },
   })]);
   assert.match(markup, /ChatGPT Pro/u);
-  assert.match(markup, /주간 사용량/u);
+  assert.match(markup, />Codex 주간</u);
   assert.doesNotMatch(markup, /gpt-5\.6-codex/iu);
-  assert.doesNotMatch(markup, /5시간 사용량/u);
+  assert.doesNotMatch(markup, /5시간/u);
 });
 
 test('the command layout keeps the pipeline first and the Codex limit in a dedicated side rail', () => {
@@ -262,7 +267,7 @@ test('the session tree always renders every phase plus the reported actors', () 
   assert.doesNotMatch(markup, /<svg/u);
   // 보고된 액터 3명이 전부 자기 노드를 갖는다.
   assert.equal((markup.match(/data-actor-id=/gu) || []).length, 3);
-  assert.match(markup, /h-node-kind">WEBGPT</u);
+  assert.match(markup, /h-node-kind">WebGPT</u);
   // 조직도는 확대·이동 캔버스 안에 있다.
   assert.match(markup, /class="h-org-viewport" data-org-view="session:usage-harness"/u);
 });
@@ -552,14 +557,23 @@ function fakeOrgViewport(key, {
     scrollHeight: contentHeight,
     offsetHeight: contentHeight,
   };
+  // 머리말 힌트. 맞춤이 트리를 다 담지 못했을 때 화면이 그 사실을 말하는 자리다
+  // (review WP3 major 1 — 읽히지 않는 축소를 "맞춤"이라 부르지 않기 위한 짝).
+  const hint = { textContent: '' };
   return {
     canvas,
+    hint,
     listeners: {},
     dataset: { orgView: key },
     clientWidth,
     clientHeight,
     classList: { add() {}, remove() {} },
     querySelector(selector) { return selector === '[data-org-canvas]' ? canvas : null; },
+    closest(selector) {
+      return selector === '.h-org'
+        ? { querySelector: (inner) => (inner === '[data-org-hint]' ? hint : null) }
+        : null;
+    },
     addEventListener(type, handler) { this.listeners[type] = handler; },
     getBoundingClientRect() { return { left: 0, top: 0 }; },
     setPointerCapture() {},
@@ -619,9 +633,15 @@ test('zoom stops at the 0.3-2.5 band and dragging pans the canvas', () => {
   assert.deepEqual(offsetOf(viewport), [before[0] + 60, before[1] + 30]);
 });
 
-// review WPA2 M3 — 실측 재현: 390×844 화면, 액터 10명 세션에서 내용 908×2065,
-// 뷰포트 317×480. 폭만 맞추면 0.347배가 뽑혀 16노드 중 4개가 잘린 채로 "맞춤"이었다.
-test('fit covers both axes, so a tall mobile tree is not clipped', () => {
+// review WP3 major 1 — 실측 재현: 390×844 화면, 액터 10명 세션에서 내용 908×2065,
+// 뷰포트 317×480.
+//
+// 이 케이스에서 종전 규칙("두 축 모두 넣는다", WPA2 M3)은 배율 0.232를 뽑았고 12px
+// 노드 글자가 2.8px가 됐다 — 잘리지 않았을 뿐 아무것도 읽히지 않는 화면이다.
+// 그래서 계약을 다시 세웠다: **가로는 반드시 들어가고, 세로는 판독 배율 위에서만 줄이며,
+// 그래도 넘치면 넘친다고 말한다.** 이 기하는 세로가 압도적이라 가로 맞춤(0.349)이
+// 그대로 바닥이 되고, 세로는 넘친 채로 남아 사용자가 끌어서 본다.
+test('fit keeps the width but never shrinks below what can be read', () => {
   const { wireOrgViews, fitOrgView, orgViewState } = createUsageRenderers();
   const viewport = fakeOrgViewport('session:tall', {
     clientWidth: 317, clientHeight: 480, contentWidth: 908, contentHeight: 2065,
@@ -629,9 +649,16 @@ test('fit covers both axes, so a tall mobile tree is not clipped', () => {
   wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
 
   const fitted = scaleOf(viewport);
-  assert.ok(fitted < 317 / 908, '폭만 맞춘 배율(0.349)이 그대로 남아 있으면 세로가 잘린다.');
+  // 두 축을 다 넣으려던 배율(480/2065 = 0.232)로는 내려가지 않는다 — 그 배율에서
+  // 노드 글자는 2.8px다.
+  assert.ok(fitted > 480 / 2065, `판독 불가 배율까지 내려갔습니다: ${fitted}`);
+  // 가로는 언제나 들어간다. 좌우로 끌어야 첫 글자가 보이는 화면은 만들지 않는다.
   assert.ok(908 * fitted <= 317 + 0.5, `가로가 뷰포트를 넘습니다: ${908 * fitted}`);
-  assert.ok(2065 * fitted <= 480 + 0.5, `세로가 뷰포트를 넘습니다: ${2065 * fitted}`);
+  assert.equal(fitted, Number((317 / 908).toFixed(3)));
+  // 세로는 넘친다. 그러면 화면이 그렇게 **말한다** — 조용히 잘라 두지 않는다.
+  assert.ok(2065 * fitted > 480);
+  assert.equal(viewport.dataset.orgOverflow, 'true');
+  assert.match(viewport.hint.textContent, /끌어서 이동/u);
 
   // 확대해서 보다가 다시 "맞춤"을 눌러도 같은 배율로 돌아온다.
   viewport.listeners.wheel({ deltaY: -300, clientX: 0, clientY: 0, preventDefault() {} });
@@ -639,9 +666,51 @@ test('fit covers both axes, so a tall mobile tree is not clipped', () => {
   fitOrgView(viewport, orgViewState.get('session:tall'));
   assert.equal(scaleOf(viewport), fitted);
 
-  // 맞춤이 0.3 아래로 내려간 상태에서 축소 휠이 화면을 도로 **확대**하면 안 된다.
+  // 맞춤이 0.3 언저리인 상태에서 축소 휠이 화면을 도로 **확대**하면 안 된다.
   viewport.listeners.wheel({ deltaY: 200, clientX: 0, clientY: 0, preventDefault() {} });
   assert.ok(scaleOf(viewport) <= fitted, '축소가 배율을 올려서는 안 됩니다.');
+});
+
+// 좁은 화면에서는 CSS가 분기를 축 아래로 내려 트리 폭을 화면 폭 수준으로 되돌린다
+// (usage.css @media max-width: 700px). 그 배치에서 맞춤이 실제로 하는 일을 잠근다:
+// 세로가 아무리 길어도 판독 바닥(0.75) 아래로는 내려가지 않는다.
+test('a narrow-layout tree stops shrinking at the readable floor and says it overflows', () => {
+  const { wireOrgViews } = createUsageRenderers();
+  const viewport = fakeOrgViewport('session:narrow', {
+    clientWidth: 317, clientHeight: 480, contentWidth: 288, contentHeight: 2600,
+  });
+  wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
+
+  const fitted = scaleOf(viewport);
+  assert.equal(fitted, 0.75, `판독 바닥이 아니라 ${fitted}로 맞춰졌습니다.`);
+  // 12px 글자가 9px로 남는다. 두 축을 다 넣던 규칙이었다면 0.184(=2.2px)였다.
+  assert.ok(12 * fitted >= 9);
+  assert.ok(288 * fitted <= 317);
+  assert.equal(viewport.dataset.orgOverflow, 'true');
+  assert.match(viewport.hint.textContent, /화면보다 큼/u);
+});
+
+// 반대로 트리가 통째로 들어가면 넘침 표시를 켜지 않는다 — 넘치지 않는데 "끌어서
+// 이동하라"고 말하면 그 문구가 거짓이 된다.
+test('a tree that fits leaves the overflow hint alone', () => {
+  const { wireOrgViews } = createUsageRenderers();
+  const viewport = fakeOrgViewport('session:small', {
+    clientWidth: 900, clientHeight: 600, contentWidth: 400, contentHeight: 300,
+  });
+  wireOrgViews({ querySelectorAll: (selector) => (selector === '[data-org-view]' ? [viewport] : []) });
+  assert.equal(scaleOf(viewport), 1);
+  assert.equal(viewport.dataset.orgOverflow, 'false');
+  assert.match(viewport.hint.textContent, /휠 확대/u);
+});
+
+// 스냅샷이 실제 변환을 가리면 안 된다 (review WP3 major 1 후반부): 예전 스냅샷 전용
+// 규칙은 `height: auto`로 캔버스를 펴서 "이 상자에 이 트리가 들어가는가"라는 물음
+// 자체를 사본에서 지웠다. 높이는 실제 규칙 그대로 두고 스크롤만 허용해야 한다.
+test('the snapshot override may not unfreeze the org viewport height', async () => {
+  const { USAGE_SNAPSHOT_CSS } = await import('./snapshot.mjs');
+  assert.match(USAGE_SNAPSHOT_CSS, /overflow:\s*auto/u);
+  assert.doesNotMatch(USAGE_SNAPSHOT_CSS, /height/u,
+    '스냅샷이 캔버스 높이를 풀면 모바일 맞춤 배율 문제가 사본에서 보이지 않는다.');
 });
 
 test('an org view keeps its zoom and pan across a re-render of the same key', () => {
@@ -755,8 +824,9 @@ test('Claude snapshots render beside Codex and actor text is escaped', () => {
   });
   assert.match(markup, /Claude 한도/u);
   assert.match(markup, /claude-opus-5/u);
-  assert.match(markup, /5시간 사용량/u);
-  assert.match(markup, /주간 사용량/u);
+  // 사용자 지시 ②가 요구한 세 라벨 중 둘이 여기서 선다.
+  assert.match(markup, />Claude 5시간</u);
+  assert.match(markup, />Claude 주간</u);
   assert.match(markup, />44%</u);
   // 카드 제목 기준으로 Codex가 먼저 온다 (SOURCE_LABELS 키 순서). rail 헤더의
   // "Codex · Claude 한도"와 섞이지 않게 태그 경계까지 붙여 찾는다.
@@ -814,7 +884,9 @@ test('claude actors render in the reporting tree', () => {
       ],
     })],
   });
-  assert.match(markup, /CLAUDE</u);
+  // 액터 종류 라벨은 제품 이름 그대로다 (사용자 지시 ③ — 화면이 만드는 약어 금지).
+  assert.match(markup, />Claude</u);
+  assert.doesNotMatch(markup, />CLAUDE</u);
   assert.match(markup, /Fable 5 오케스트레이터/u);
   assert.match(markup, /claude-fable-5 · high/u);
 });
@@ -1283,6 +1355,258 @@ test('a payload without any of the new fields still renders through the old infe
   // 역할은 그대로 나온다 (구 payload에도 role은 있다).
   assert.match(markup, /<dt>역할<\/dt><dd>위임 실행<\/dd>/u);
   assert.doesNotMatch(markup, /undefined|NaN/u);
+});
+
+// ---- WP3 교차 리뷰 수정 (2026-08-28) --------------------------------------
+//
+// 리뷰가 반례로 쓴 시나리오를 그대로 잠근다. 각 테스트의 머리에 그 반례가 무엇이었는지
+// 적어 둔다 — 수정이 지워져도 여기서 다시 실패해야 하기 때문이다.
+
+// major 2 — 반례: 부모가 `work`인 액터의 자식이 API에서 `phase: 'review'`를 받아도
+// 부모 밑(work)에 그려졌다. 즉 자식에서만 "API의 actor.phase 고정 배치" 계약이 깨졌고,
+// 실제 review 단계는 텅 비어 보였다.
+const crossPhaseTask = () => harnessTask({
+  id: 'cross',
+  phase: 'approve',
+  status: 'active',
+  events: [],
+  actors: [
+    {
+      id: 'cross:main', parent_id: '', name: '오케스트레이터', kind: 'claude',
+      model: 'claude-fable-5', reasoning: 'high', role: '총괄', status: 'working', phase: 'plan',
+    },
+    {
+      id: 'cross:impl', parent_id: 'cross:main', name: '구현자', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'xhigh', role: '구현', status: 'done', phase: 'work',
+    },
+    {
+      id: 'cross:reviewer', parent_id: 'cross:impl', name: '검토자', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'xhigh', role: '리뷰', status: 'reviewing', phase: 'review',
+    },
+    {
+      id: 'cross:helper', parent_id: 'cross:impl', name: '보조 구현자', kind: 'codex',
+      model: 'gpt-5.2-codex', reasoning: 'high', role: '구현 보조', status: 'done', phase: 'work',
+    },
+  ],
+});
+
+test('a child actor keeps the phase the API gave it, and still names its parent', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderSessionView([crossPhaseTask()], NOW, 'active');
+
+  // 검토자는 부모(work)를 따라가지 않고 자기 단계(review)에 선다.
+  const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
+  assert.match(workBlock, /data-actor-id="cross:impl"/u);
+  assert.doesNotMatch(workBlock, /data-actor-id="cross:reviewer"/u);
+  const reviewBlock = /data-org-phase="review"[\s\S]*?data-org-phase="revise"/u.exec(markup)[0];
+  assert.match(reviewBlock, /data-actor-id="cross:reviewer"/u);
+
+  // 배치가 옮겨져도 계층은 사라지지 않는다 — 부모를 이름으로 명시한다.
+  assert.match(markup, /data-actor-id="cross:reviewer"[\s\S]*?<dt>상위<\/dt><dd>구현자<\/dd>/u);
+  // 부모와 단계가 같은 자식은 예전처럼 부모 카드 아래로 중첩되고, '상위' 줄이 붙지 않는다.
+  assert.match(
+    markup,
+    /data-actor-id="cross:impl"[\s\S]*?<ul><li class="h-node-slot">[\s\S]*?data-actor-id="cross:helper"/u,
+  );
+  const helperNode = /data-actor-id="cross:helper"[\s\S]*?<\/article>/u.exec(markup)[0];
+  assert.doesNotMatch(helperNode, /<dt>상위<\/dt>/u);
+
+  // 관제탑도 같은 배치를 쓴다 — 두 화면이 액터를 서로 다른 단계에 세우지 않는다.
+  const board = renderers.renderPortfolioBoard([crossPhaseTask()], NOW);
+  assert.match(board, /data-org-phase="review"[\s\S]*?data-actor-id="cross:reviewer"/u);
+  assert.match(board, /data-actor-id="cross:reviewer"[\s\S]*?상위 구현자/u);
+});
+
+// major 4 — 반례: task.progress=82 · main.progress=17을 넣으면 Main 카드가 82%로 렌더됐다.
+// Main 노드는 data-actor-id가 붙은 액터 카드이므로 수치도 그 액터의 것이어야 한다.
+test('the main node shows the orchestrator progress, not the whole session progress', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'main-progress',
+    progress: 82,
+    events: [],
+    actors: [{
+      id: 'mp:main', parent_id: '', name: '총괄', kind: 'claude',
+      model: 'claude-fable-5', reasoning: 'high', role: '오케스트레이션',
+      status: 'working', progress: 17,
+    }],
+  });
+  const markup = renderers.renderSessionView([task], NOW, 'active');
+  assert.match(markup, /data-actor-id="mp:main"[\s\S]*?<strong>17%<\/strong>/u);
+  assert.doesNotMatch(markup, /data-actor-id="mp:main"[\s\S]*?<strong>82%<\/strong>/u);
+
+  // 이벤트가 측정한 값이 있으면 그것이 payload보다 우선한다 (다른 액터와 같은 규칙).
+  const measured = renderers.renderSessionView([{
+    ...task,
+    events: [{ ts: iso(HOUR), kind: 'report', phase: 'work', actor_id: 'mp:main', percent: 44 }],
+  }], NOW, 'active');
+  assert.match(measured, /data-actor-id="mp:main"[\s\S]*?<strong>44%<\/strong>/u);
+
+  // progress를 싣지 않는 구 보고에서만 세션 진행률로 떨어진다 — 총괄 카드가 수치를
+  // 통째로 잃지 않게 남겨 둔 폴백이다.
+  const legacy = renderers.renderSessionView([{
+    ...task,
+    actors: [{ ...task.actors[0], progress: undefined }],
+  }], NOW, 'active');
+  assert.match(legacy, /data-actor-id="mp:main"[\s\S]*?<strong>82%<\/strong>/u);
+});
+
+// major 5 — 반례: 2026-08-27T15:30:00Z(= 한국 시간 08-28 00:30)에 끝난 세션이
+// `2026.08.27` 그룹에 들어갔다. 한국어 서비스의 완료 기록이 자정 이후 아홉 시간 동안
+// 전날로 밀리는 체계적 오분류다.
+test('completed sessions are grouped by the Korean calendar day, not by UTC', () => {
+  const renderers = createUsageRenderers();
+  const afterMidnight = Date.parse('2026-08-27T15:30:00.000Z');   // KST 08-28 00:30
+  const beforeMidnight = Date.parse('2026-08-27T14:30:00.000Z');  // KST 08-27 23:30
+  const markup = renderers.renderSessionView([
+    harnessTask({
+      id: 'kst-late', name: '자정 이후 완료', status: 'complete', phase: 'done', progress: 100,
+      completed_at: new Date(afterMidnight).toISOString(),
+      updated_at: new Date(afterMidnight).toISOString(),
+    }),
+    harnessTask({
+      id: 'kst-early', name: '자정 이전 완료', status: 'complete', phase: 'done', progress: 100,
+      completed_at: new Date(beforeMidnight).toISOString(),
+      updated_at: new Date(beforeMidnight).toISOString(),
+    }),
+  ], Date.parse('2026-08-28T03:00:00.000Z'), 'complete');
+
+  assert.match(markup, /h-session-group-head">2026\.08\.28</u);
+  assert.match(markup, /h-session-group-head">2026\.08\.27</u);
+  // 자정 이후 세션은 08.28 그룹에 있고, 08.27 그룹에는 자정 이전 세션만 있다.
+  const late = /2026\.08\.28<\/p>[\s\S]*?<\/div>/u.exec(markup)[0];
+  assert.match(late, /자정 이후 완료/u);
+  assert.doesNotMatch(late, /자정 이전 완료/u);
+  // 탭의 날짜 표기도 같은 축을 쓴다 — 그러지 않으면 08.28 그룹 안에 08.27 탭이 선다.
+  assert.match(markup, /datetime="2026-08-28">08\.28</u);
+});
+
+// major 3 — 반례: 두 날짜 그룹에서 두 번째 tablist에는 tabindex="0"인 탭이 하나도 없어
+// 키보드 사용자가 그 그룹의 세션을 열 수 없었다(방향키 이동도 tablist 안으로 제한된다).
+const tabbableCounts = (markup) => [...markup.matchAll(/<div class="h-session-tabs"[\s\S]*?<\/div>/gu)]
+  .map(([block]) => ({
+    selected: (block.match(/aria-selected="true"/gu) || []).length,
+    tabbable: (block.match(/tabindex="0"/gu) || []).length,
+  }));
+
+test('every date group keeps a keyboard entry point while selection stays unique', () => {
+  const completed = [0, 30, 60, 90].map((hours, index) => harnessTask({
+    id: `kbd-${index}`,
+    name: `완료 세션 ${index}`,
+    status: 'complete',
+    phase: 'done',
+    progress: 100,
+    completed_at: iso(hours * HOUR),
+    updated_at: iso(hours * HOUR),
+  }));
+  const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
+  const groups = tabbableCounts(markup);
+  assert.ok(groups.length >= 2, `날짜 그룹이 둘 이상이어야 반례가 재현된다: ${groups.length}`);
+  // 선택은 화면 전체에 하나뿐이고, 초점 진입점은 그룹마다 하나씩이다.
+  assert.equal(groups.reduce((total, group) => total + group.selected, 0), 1);
+  for (const group of groups) assert.equal(group.tabbable, 1);
+});
+
+test('activating a tab restores a keyboard entry point in the other tablists', () => {
+  const { activateTaskTab } = createUsageRenderers();
+  const makeTab = (index, tabbable) => ({
+    dataset: { taskTab: String(index), taskId: `task-${index}`, taskStatus: 'complete' },
+    tabIndex: tabbable ? 0 : -1,
+    classList: { toggle() {} },
+    setAttribute() {},
+    focus() {},
+    closest() { return null; },
+  });
+  // 두 그룹: [0,1] · [2,3]. 처음에는 0과 2가 진입점이고 선택은 0이다.
+  const tabs = [makeTab(0, true), makeTab(1, false), makeTab(2, true), makeTab(3, false)];
+  const lists = [
+    { querySelectorAll: () => tabs.slice(0, 2) },
+    { querySelectorAll: () => tabs.slice(2) },
+  ];
+  const panels = tabs.map((_, index) => ({ dataset: { taskPanel: String(index) }, hidden: index !== 0 }));
+  const root = {
+    querySelectorAll(selector) {
+      if (selector === '[data-task-tab]') return tabs;
+      if (selector === '[data-task-tablist]') return lists;
+      return panels;
+    },
+  };
+
+  activateTaskTab(root, tabs[1]);
+  // 선택은 옮겨졌지만 두 번째 그룹은 진입점을 잃지 않는다.
+  assert.deepEqual(tabs.map((tab) => tab.tabIndex), [-1, 0, 0, -1]);
+});
+
+// 사용자 지시 ① — '기록 없음'은 판정이지 사유가 아니다. 왜 비었는지를 화면이 말한다.
+test('a stage with no report explains why it has no record', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'skip-reason',
+    phase: 'review',
+    events: [
+      { ts: iso(3 * HOUR), kind: 'phase-change', phase: 'plan' },
+      { ts: iso(HOUR), kind: 'phase-change', phase: 'review' },
+    ],
+  });
+  const tree = renderers.renderSessionView([task], NOW, 'active');
+  const board = renderers.renderPortfolioBoard([task], NOW);
+  const reason = '이 단계는 보고가 전송되지 않았습니다';
+  // 보고된 적 없는 앞 단계(input·work·gate)마다 사유가 붙는다.
+  assert.match(tree, new RegExp(`data-phase-state="skipped"[\\s\\S]*?${reason}`, 'u'));
+  assert.equal((tree.match(new RegExp(reason, 'gu')) || []).length,
+    (tree.match(/data-phase-state="skipped"/gu) || []).length);
+  assert.match(board, new RegExp(`data-phase-state="skipped"[\\s\\S]*?${reason}`, 'u'));
+  // 보고된 단계에는 사유를 붙이지 않는다 — 사유가 상태와 짝을 이룬다.
+  const planBlock = /data-org-phase="plan"[\s\S]*?data-org-phase="work"/u.exec(tree)[0];
+  assert.doesNotMatch(planBlock, new RegExp(reason, 'u'));
+});
+
+// 사용자 지시 ② — 낡은 수집값은 게이지 옆에서 수집원과 나이를 밝힌다.
+test('a stale source names itself and its age next to every gauge', () => {
+  const markup = dashboard([codexSnapshot({
+    primary: { used_percent: 40, window_minutes: 10_080 },
+    secondary: { used_percent: 12, window_minutes: 300 },
+  }, iso(3 * HOUR))]);
+  assert.match(markup, />Codex 주간<[\s\S]*?Codex 3시간 전 수집/u);
+  assert.match(markup, />Codex 5시간<[\s\S]*?Codex 3시간 전 수집/u);
+
+  // 신선하면 게이지 옆에 수집 문구를 붙이지 않는다 — 매 줄이 시각을 반복하면 읽기 비용만 는다.
+  const fresh = dashboard([codexSnapshot({
+    primary: { used_percent: 40, window_minutes: 10_080 },
+  }, iso(60_000))]);
+  assert.match(fresh, />Codex 주간</u);
+  assert.doesNotMatch(fresh, /list-row-sub[^>]*>[^<]*수집/u);
+});
+
+// 사용자 지시 ③ — 화면이 **스스로 만드는** 문구에는 약어를 쓰지 않는다.
+// 보고 데이터가 실어 오는 약어(작업 이름의 WP1 등)는 그 데이터의 사실이므로 손대지 않는다.
+test('labels the UI writes itself are spelled out, while reported text is left alone', () => {
+  const markup = createUsageRenderers()
+    .renderSessionView([harnessTask({ name: 'WP1 서버 (08-27)' })], NOW, 'active');
+  for (const abbreviation of ['>REQUEST<', '>MAIN<', '>PHASE<', '>AGENT<', '>NODE<', 'ORG CHART', '>CODEX<', '>WEBGPT<', 'ARTIFACT']) {
+    assert.ok(!markup.includes(abbreviation), `UI가 만든 약어가 남아 있습니다: ${abbreviation}`);
+  }
+  assert.match(markup, />사용자 요청</u);
+  assert.match(markup, />총괄</u);
+  assert.match(markup, />단계</u);
+  // 보고가 실어 온 이름은 그대로 나온다.
+  assert.match(markup, /WP1 서버/u);
+});
+
+// 사용자 지시 ④ — 카드의 시각은 하네스의 **마지막 보고**이고, 화면 갱신 시계와 이름이
+// 다르다. 같은 말('동기화')을 두 시계가 나눠 쓰면 값이 어긋난 것처럼 읽힌다.
+test('the card clock is named after the report, not after the screen refresh', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({ id: 'clock', updated_at: iso(3 * HOUR) });
+  const tree = renderers.renderSessionView([task], NOW, 'active');
+  const board = renderers.renderPortfolioBoard([task], NOW);
+  assert.match(tree, /마지막 보고 3시간 전/u);
+  assert.match(board, /마지막 보고 3시간 전/u);
+  assert.doesNotMatch(tree, /동기화/u);
+  assert.doesNotMatch(board, /동기화/u);
+  // 보고 시각이 아예 없으면 그렇게 말한다 (0분 전으로 지어내지 않는다).
+  const noTime = renderers.renderSessionView([harnessTask({ id: 'no-clock', updated_at: '' })], NOW, 'active');
+  assert.match(noTime, /보고 시각 없음/u);
 });
 
 // ---- 완료 목록 정리 (요구 6) ----------------------------------------------
