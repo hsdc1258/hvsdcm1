@@ -523,6 +523,91 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
     '국어영역_문제지_홀수형.pdf');
 });
 
+test('collector extracts live 2020-2022 CSAT subject ZIP naming variants in their area context', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const contexts = [
+    { boardID: '1500234', academicYear: 2020, area: '국어', subject: 'korean', round: 'csat' },
+    { boardID: '1500234', academicYear: 2021, area: '국어', subject: 'korean', round: 'csat' },
+    { boardID: '1500234', academicYear: 2022, area: '국어', subject: 'korean', round: 'csat' },
+    { boardID: '1500234', academicYear: 2020, area: '수학', subject: 'math', round: 'csat' },
+    { boardID: '1500234', academicYear: 2020, area: '영어', subject: 'english', round: 'csat' },
+  ];
+  const fixtures = new Map([
+    ['2020-국어', {
+      seq: '10101010101010101010101010101010', filename: '국어.zip', archive: zipFixture([
+        ['국어_문제지_짝수형.pdf', '%PDF-2020-korean-even'],
+        ['국어_문제지_홀수형.pdf', '%PDF-2020-korean-odd'],
+      ]),
+    }],
+    ['2021-국어', {
+      seq: '11111111111111111111111111111111', filename: '1교시_국어영역.zip', archive: zipFixture([
+        ['1교시_국어영역_문제지_홀수형.pdf', '%PDF-2021-korean-odd'],
+        ['1교시_국어영역_문제지_짝수형.pdf', '%PDF-2021-korean-even'],
+      ]),
+    }],
+    ['2022-국어', {
+      seq: '12121212121212121212121212121212', filename: '1교시_국어영역_문제지.zip', archive: zipFixture([
+        ['국어영역_문제지_홀수형.pdf', '%PDF-2022-korean-odd'],
+        ['국어영역_문제지_짝수형.pdf', '%PDF-2022-korean-even'],
+      ]),
+    }],
+    ['2020-수학', {
+      seq: '20202020202020202020202020202020', filename: '수학.zip', archive: zipFixture([
+        ['수학_가형_문제지_짝수형.pdf', '%PDF-2020-math-ga-even'],
+        ['수학_가형_문제지_홀수형.pdf', '%PDF-2020-math-ga-odd'],
+        ['수학_나형_문제지_홀수형.pdf', '%PDF-2020-math-na-odd'],
+        ['수학_나형_정답표.pdf', '%PDF-2020-math-answer'],
+      ]),
+    }],
+    ['2020-영어', {
+      seq: '30303030303030303030303030303030', filename: '영어.zip', archive: zipFixture([
+        ['영어_문제지.pdf', '%PDF-2020-english-question'],
+        ['영어_듣기대본.pdf', '%PDF-2020-english-script'],
+      ]),
+    }],
+  ]);
+  const downloads = [];
+  const logs = [];
+  const results = await fetchKice({
+    outputDirectory,
+    contexts,
+    delayMs: 0,
+    allowPartial: true,
+    log: (message) => logs.push(message),
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        const key = `${parsed.searchParams.get('C01')}-${parsed.searchParams.get('C02')}`;
+        const fixture = fixtures.get(key);
+        const accessory = key === '2020-영어'
+          ? `<a title='듣기평가.zip' onclick="fn_fileDown('40404040404040404040404040404040')">듣기</a>`
+          : '';
+        return new Response(`<a title='${fixture.filename}' onclick="fn_fileDown('${fixture.seq}')">본편</a>${accessory}`);
+      }
+      const fixture = [...fixtures.values()].find(({ seq }) => seq === parsed.searchParams.get('fileSeq'));
+      downloads.push(fixture.seq);
+      return new Response(fixture.archive);
+    },
+  });
+
+  assert.equal(results.length, 6);
+  assert.equal(downloads.length, fixtures.size);
+  assert.equal(await readFile(path.join(outputDirectory, '2019-csat-korean-question.pdf'), 'utf8'),
+    '%PDF-2020-korean-odd');
+  assert.equal(await readFile(path.join(outputDirectory, '2020-csat-korean-question.pdf'), 'utf8'),
+    '%PDF-2021-korean-odd');
+  assert.equal(await readFile(path.join(outputDirectory, '2021-csat-korean-question.pdf'), 'utf8'),
+    '%PDF-2022-korean-odd');
+  assert.equal(await readFile(path.join(outputDirectory, '2019-csat-math-ga-question.pdf'), 'utf8'),
+    '%PDF-2020-math-ga-odd');
+  assert.equal(await readFile(path.join(outputDirectory, '2019-csat-math-na-question.pdf'), 'utf8'),
+    '%PDF-2020-math-na-odd');
+  assert.equal(await readFile(path.join(outputDirectory, '2019-csat-english-question.pdf'), 'utf8'),
+    '%PDF-2020-english-question');
+  assert.ok(logs.some((message) => message.includes('듣기평가.zip')));
+  assert.ok(logs.some((message) => message.includes('영어_듣기대본.pdf')));
+});
+
 test('collector extracts Social and Culture plus Politics and Law PDFs from real-shape social ZIP bundles', async (t) => {
   const outputDirectory = await temporaryDirectory(t);
   const context = {
@@ -598,6 +683,76 @@ test('collector extracts Social and Culture plus Politics and Law PDFs from real
   });
   assert.equal(cached.length, 4);
   assert.ok(cached.every(({ status }) => status === 'skipped'));
+});
+
+test('collector maps live legacy social ZIP names and one integrated answer PDF to both subjects', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const contexts = [2020, 2021, 2022].map((academicYear) => ({
+    boardID: '1500234', academicYear, area: '사회탐구', subject: 'social', round: 'csat',
+  }));
+  const fixtures = new Map([
+    ['2020', {
+      questionName: '사회탐구.zip',
+      questionSeq: '50505050505050505050505050505050',
+      answerName: '사회탐구_정답표.pdf',
+      answerSeq: '51515151515151515151515151515151',
+    }],
+    ['2021', {
+      questionName: '4교시_사회탐구영역.zip',
+      questionSeq: '60606060606060606060606060606060',
+      answerName: '4교시_사회탐구영역_정답표.pdf',
+      answerSeq: '61616161616161616161616161616161',
+    }],
+    ['2022', {
+      answerName: '4교시_사회탐구영역_정답표.pdf',
+      answerSeq: '71717171717171717171717171717171',
+    }],
+  ]);
+  const archives = new Map([
+    ['50505050505050505050505050505050', zipFixture([
+      ['사회탐구_사회문화_문제지.pdf', '%PDF-2020-social-question'],
+      ['사회탐구_법과 정치_문제지.pdf', '%PDF-2020-politics-question'],
+    ])],
+    ['60606060606060606060606060606060', zipFixture([
+      ['4교시_사회탐구영역_사회문화_문제지.pdf', '%PDF-2021-social-question'],
+      ['4교시_사회탐구영역_법과 정치_문제지.pdf', '%PDF-2021-politics-question'],
+    ])],
+  ]);
+  const results = await fetchKice({
+    outputDirectory,
+    contexts,
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        const fixture = fixtures.get(parsed.searchParams.get('C01'));
+        return new Response(`
+          ${fixture.questionName ? `<a title='${fixture.questionName}' onclick="fn_fileDown('${fixture.questionSeq}')">문제</a>` : ''}
+          <a title='${fixture.answerName}' onclick="fn_fileDown('${fixture.answerSeq}')">정답</a>
+        `);
+      }
+      const fileSeq = parsed.searchParams.get('fileSeq');
+      return new Response(archives.get(fileSeq) || `%PDF-integrated-answer-${fileSeq.slice(0, 2)}`);
+    },
+  });
+
+  assert.equal(results.length, 10);
+  for (const [year, answerPrefix] of [[2019, '51'], [2020, '61'], [2021, '71']]) {
+    const socialAnswer = await readFile(path.join(outputDirectory, `${year}-csat-soc_culture-answer.pdf`), 'utf8');
+    const politicsAnswer = await readFile(path.join(outputDirectory, `${year}-csat-politics_law-answer.pdf`), 'utf8');
+    assert.equal(socialAnswer, `%PDF-integrated-answer-${answerPrefix}`);
+    assert.equal(politicsAnswer, socialAnswer);
+  }
+  assert.equal(await readFile(path.join(outputDirectory, '2019-csat-soc_culture-question.pdf'), 'utf8'),
+    '%PDF-2020-social-question');
+  assert.equal(await readFile(path.join(outputDirectory, '2020-csat-politics_law-question.pdf'), 'utf8'),
+    '%PDF-2021-politics-question');
+  const inventory = JSON.parse(await readFile(path.join(outputDirectory, 'crawl-inventory.json'), 'utf8'));
+  const integrated = inventory.files.filter(({ sourceFilename }) => sourceFilename.includes('정답표'));
+  assert.equal(integrated.length, 6);
+  assert.ok(integrated.every(({ archiveEntry }) => archiveEntry === undefined));
 });
 
 test('collector reports a target subject missing from a social ZIP as a concrete corpus gap', async (t) => {
@@ -772,13 +927,34 @@ test('collector stops on canonical target collisions before downloading', async 
   });
 });
 
-test('collector default mode rejects an incomplete crawl before download or inventory write', async (t) => {
+test('collector preserves atomic downloads and inventory when the completeness gate fails', async (t) => {
   const outputDirectory = await temporaryDirectory(t);
   const inventoryPath = path.join(outputDirectory, 'crawl-inventory.json');
   const context = {
     boardID: '1500236', academicYear: 2027, month: '6월', area: '영어', subject: 'english', round: '06',
   };
   let downloads = 0;
+  const fetchImpl = async (url) => {
+    const parsed = new URL(url);
+    if (!parsed.pathname.endsWith('/list.do')) {
+      downloads += 1;
+      return new Response('%PDF-preserved');
+    }
+    return new Response('<a title="영어영역_문제지.pdf" onclick="fn_fileDown(\'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\')">문제</a>');
+  };
+  await assert.rejects(fetchKice({
+    outputDirectory,
+    inventoryPath,
+    contexts: [context],
+    delayMs: 0,
+    log() {},
+    fetchImpl,
+  }), /평가원 코퍼스가 불완전합니다/u);
+  assert.equal(downloads, 1);
+  assert.equal(await readFile(path.join(outputDirectory, '2026-06-english-question.pdf'), 'utf8'), '%PDF-preserved');
+  assert.equal(JSON.parse(await readFile(inventoryPath, 'utf8')).files[0].fileSeq,
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
   await assert.rejects(fetchKice({
     outputDirectory,
     inventoryPath,
@@ -786,16 +962,11 @@ test('collector default mode rejects an incomplete crawl before download or inve
     delayMs: 0,
     log() {},
     fetchImpl: async (url) => {
-      const parsed = new URL(url);
-      if (!parsed.pathname.endsWith('/list.do')) {
-        downloads += 1;
-        return new Response('%PDF-should-not-download');
-      }
-      return new Response('<a title="영어영역_문제지.pdf" onclick="fn_fileDown(\'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\')">문제</a>');
+      if (new URL(url).pathname.endsWith('/list.do')) return fetchImpl(url);
+      throw new Error('preserved PDF must be skipped on retry');
     },
   }), /평가원 코퍼스가 불완전합니다/u);
-  assert.equal(downloads, 0);
-  await assert.rejects(readFile(inventoryPath, 'utf8'), /ENOENT/u);
+  assert.equal(downloads, 1);
 });
 
 test('R2 uploader sends only changed manifest objects and persists a local hash checkpoint', async (t) => {

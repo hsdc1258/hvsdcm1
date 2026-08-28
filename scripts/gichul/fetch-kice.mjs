@@ -77,31 +77,71 @@ function legacyMathTrackFromFilename(filename) {
   return null;
 }
 
+function isAccessoryFilename(filename) {
+  return /(?:듣기|음원|대본|mp3|점자)/u.test(compact(filename));
+}
+
+function matchesAreaContext(filename, context) {
+  const value = compact(filename);
+  const markers = {
+    korean: ['국어', '1교시'],
+    math: ['수학', '2교시'],
+    english: ['영어', '3교시'],
+    social: ['사회탐구', '4교시'],
+  }[context.subject] || [];
+  return markers.some((marker) => value.includes(marker));
+}
+
+function derivedOutputSpecs(context) {
+  if (context.subject === 'social') {
+    return SOCIAL_SUBJECTS.map((subject) => ({ subject, track: null }));
+  }
+  if (context.subject === 'math' && context.academicYear <= 2021) {
+    return ['ga', 'na'].map((track) => ({ subject: 'math', track }));
+  }
+  return [{ subject: context.subject, track: null }];
+}
+
 export function classifyAttachment(filename, context) {
   const isPdf = /\.pdf$/iu.test(filename);
-  const isSocialZip = context.subject === 'social' && /\.zip$/iu.test(filename);
-  if (!isPdf && !isSocialZip) return null;
+  const isZip = /\.zip$/iu.test(filename);
+  if ((!isPdf && !isZip) || isAccessoryFilename(filename)) return null;
   const kind = kindFromFilename(filename);
-  if (!kind) return null;
-
   const year = context.academicYear - 1;
-  if (isSocialZip) {
+  if (isZip) {
+    if (!matchesAreaContext(filename, context)) return null;
+    const archiveKind = kind || 'question';
     return {
       archive: true,
-      archiveSubjects: SOCIAL_SUBJECTS,
+      outputSpecs: derivedOutputSpecs(context),
+      subject: context.subject,
+      track: null,
+      kind: archiveKind,
+      year,
+      gradeYear: context.academicYear,
+      round: context.round,
+      target: `${year}-${context.round}-${context.subject}-${archiveKind}.zip`,
+    };
+  }
+  if (!kind) return null;
+
+  const socialSubject = context.subject === 'social' ? socialSubjectFromFilename(filename) : null;
+  if (context.subject === 'social' && !socialSubject && kind === 'answer' && matchesAreaContext(filename, context)) {
+    return {
+      archive: false,
+      replicate: true,
+      outputSpecs: derivedOutputSpecs(context),
       subject: 'social',
       track: null,
       kind,
       year,
       gradeYear: context.academicYear,
       round: context.round,
-      target: `${year}-${context.round}-social-${kind}.zip`,
+      target: `${year}-${context.round}-social-${kind}.pdf`,
     };
   }
 
-  const subject = context.subject === 'social'
-    ? socialSubjectFromFilename(filename)
-    : context.subject;
+  const subject = context.subject === 'social' ? socialSubject : context.subject;
   if (!subject) return null;
 
   const track = subject === 'math' && context.academicYear <= 2021
@@ -154,17 +194,13 @@ function collisionError(target, first, second) {
   return new Error(`서로 다른 첨부가 같은 파일명으로 정규화됩니다: ${target}; 첫 번째[${attachmentDescription(first)}]; 두 번째[${attachmentDescription(second)}]`);
 }
 
-function expectedArchiveOutputs(attachment) {
-  return attachment.archiveSubjects.map((subject) => ({
+function expectedDerivedOutputs(attachment) {
+  return attachment.outputSpecs.map(({ subject, track }) => ({
     ...attachment,
-    archive: true,
     subject,
-    target: `${attachment.year}-${attachment.round}-${subject}-${attachment.kind}.pdf`,
+    track,
+    target: `${attachment.year}-${attachment.round}-${subject}${track ? `-${track}` : ''}-${attachment.kind}.pdf`,
   }));
-}
-
-function expectedOutputs(attachment) {
-  return attachment.archive ? expectedArchiveOutputs(attachment) : [attachment];
 }
 
 function registerDirectAssignment(assignments, attachment, log) {
@@ -189,17 +225,17 @@ function registerDirectAssignment(assignments, attachment, log) {
 }
 
 function registerAssignment(assignments, attachment, log) {
-  if (!attachment.archive) {
+  if (!attachment.outputSpecs) {
     registerDirectAssignment(assignments, attachment, log);
     return;
   }
-  for (const output of expectedArchiveOutputs(attachment)) {
+  for (const output of expectedDerivedOutputs(attachment)) {
     const existing = assignments.get(output.target);
     if (existing && existing.fileSeq.toLowerCase() !== attachment.fileSeq.toLowerCase()) {
       throw collisionError(output.target, existing, attachment);
     }
   }
-  for (const output of expectedArchiveOutputs(attachment)) assignments.set(output.target, attachment);
+  for (const output of expectedDerivedOutputs(attachment)) assignments.set(output.target, attachment);
 }
 
 export function parseListPage(html, context, { log } = {}) {
@@ -452,15 +488,15 @@ async function savePdf(fetchImpl, attachment, outputDirectory, previousFiles) {
   return { status: 'downloaded', target };
 }
 
-async function cachedArchiveOutputs(attachment, outputDirectory, previousFiles) {
-  const outputs = expectedArchiveOutputs(attachment).map((output) => ({
+async function cachedDerivedOutputs(attachment, outputDirectory, previousFiles) {
+  const outputs = expectedDerivedOutputs(attachment).map((output) => ({
     ...output,
     archiveEntry: previousFiles.get(output.target)?.archiveEntry,
   }));
   for (const output of outputs) {
     const previous = previousFiles.get(output.target);
     if (previous?.fileSeq !== attachment.fileSeq
-      || !previous.archiveEntry
+      || (attachment.archive && !previous.archiveEntry)
       || !await hasPdfMagic(path.join(outputDirectory, output.target))) return null;
   }
   return {
@@ -528,7 +564,7 @@ async function commitArchiveOutputs(prepared, fileOperations, log) {
     }
     await cleanFiles(prepared.map(({ temporary }) => temporary), fileOperations);
     if (rollbackErrors.length) {
-      throw new AggregateError([error, ...rollbackErrors], '탐구 ZIP 저장 실패 후 원본 복구도 완료하지 못했습니다.');
+      throw new AggregateError([error, ...rollbackErrors], '복수 산출물 저장 실패 후 원본 복구도 완료하지 못했습니다.');
     }
     throw error;
   }
@@ -537,12 +573,12 @@ async function commitArchiveOutputs(prepared, fileOperations, log) {
     .filter(({ backupStaged }) => backupStaged)
     .map(({ backup }) => fileOperations.unlink(backup)));
   if (backupCleanup.some(({ status }) => status === 'rejected')) {
-    log('warning stale ZIP backup file remains after successful extraction');
+    log('warning stale output backup file remains after successful write');
   }
 }
 
-async function saveSocialArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
-  const cached = await cachedArchiveOutputs(attachment, outputDirectory, previousFiles);
+async function saveArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
+  const cached = await cachedDerivedOutputs(attachment, outputDirectory, previousFiles);
   if (cached) return cached;
 
   const response = await fetchImpl(downloadUrl(attachment.fileSeq), {
@@ -552,18 +588,31 @@ async function saveSocialArchive(fetchImpl, attachment, outputDirectory, previou
   if (!response.ok) throw new Error(`ZIP 요청 실패 ${response.status}: ${attachment.filename}`);
   const archiveBytes = Buffer.from(await response.arrayBuffer());
   const archive = zipEntries(archiveBytes);
-  const expected = new Map(expectedArchiveOutputs(attachment).map((output) => [output.subject, output]));
+  const expected = new Map(expectedDerivedOutputs(attachment).map((output) => [output.target, output]));
   const selected = new Map();
 
   for (const entry of archive.entries) {
     const filename = archiveBasename(entry.name);
     if (!filename || entry.name.endsWith('/')) continue;
-    const subject = /\.pdf$/iu.test(filename) ? socialSubjectFromFilename(filename) : null;
-    if (!subject || !expected.has(subject)) {
+    const entryKind = /\.pdf$/iu.test(filename) ? kindFromFilename(filename) : null;
+    if (!/\.pdf$/iu.test(filename)
+      || isAccessoryFilename(filename)
+      || (entryKind && entryKind !== attachment.kind)) {
       log(`skip archive entry ${filename} from ${attachment.filename} (${contextDescription(attachment.context)})`);
       continue;
     }
-    const output = expected.get(subject);
+    const subject = attachment.subject === 'social'
+      ? socialSubjectFromFilename(filename)
+      : attachment.subject;
+    const track = attachment.subject === 'math' && attachment.gradeYear <= 2021
+      ? legacyMathTrackFromFilename(filename)
+      : null;
+    const target = `${attachment.year}-${attachment.round}-${subject}${track ? `-${track}` : ''}-${attachment.kind}.pdf`;
+    const output = subject && expected.get(target);
+    if (!output) {
+      log(`skip archive entry ${filename} from ${attachment.filename} (${contextDescription(attachment.context)})`);
+      continue;
+    }
     registerDirectAssignment(selected, {
       ...output,
       archiveEntry: entry.name,
@@ -575,7 +624,8 @@ async function saveSocialArchive(fetchImpl, attachment, outputDirectory, previou
   const missing = [...expected.values()].filter((output) => !selected.has(output.target));
   if (missing.length) {
     const names = archive.entries.map(({ name }) => archiveBasename(name)).filter(Boolean);
-    throw new Error(`탐구 ZIP 결측 목록 (${missing.length}개): ${missing.map(({ target }) => target).join(', ')}; ${attachmentDescription(attachment)}; ZIP 엔트리=${names.join(', ')}`);
+    const label = attachment.subject === 'social' ? '탐구 ZIP' : 'ZIP';
+    throw new Error(`${label} 결측 목록 (${missing.length}개): ${missing.map(({ target }) => target).join(', ')}; ${attachmentDescription(attachment)}; ZIP 엔트리=${names.join(', ')}`);
   }
 
   const prepared = [];
@@ -602,9 +652,44 @@ async function saveSocialArchive(fetchImpl, attachment, outputDirectory, previou
   };
 }
 
+async function saveReplicatedPdf(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
+  const cached = await cachedDerivedOutputs(attachment, outputDirectory, previousFiles);
+  if (cached) return cached;
+
+  const response = await fetchImpl(downloadUrl(attachment.fileSeq), {
+    headers: { accept: 'application/pdf' },
+    redirect: 'follow',
+  });
+  if (!response.ok) throw new Error(`PDF 요청 실패 ${response.status}: ${attachment.filename}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length < 5 || bytes.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    throw new Error(`PDF가 아닌 응답입니다: ${attachment.filename}`);
+  }
+
+  const transaction = `${process.pid}-${Date.now()}`;
+  const prepared = expectedDerivedOutputs(attachment).map((candidate) => {
+    const target = path.join(outputDirectory, candidate.target);
+    return {
+      bytes,
+      candidate,
+      target,
+      temporary: `${target}.${transaction}.tmp`,
+      backup: `${target}.${transaction}.bak`,
+    };
+  });
+  await commitArchiveOutputs(prepared, fileOperations, log);
+  return {
+    outputs: prepared.map(({ candidate }) => candidate),
+    results: prepared.map(({ target }) => ({ status: 'downloaded', target })),
+  };
+}
+
 async function saveSource(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
   if (attachment.archive) {
-    return saveSocialArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations);
+    return saveArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations);
+  }
+  if (attachment.replicate) {
+    return saveReplicatedPdf(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations);
   }
   return {
     outputs: [attachment],
@@ -651,7 +736,7 @@ export function validateAssignmentCoverage(attachments) {
     }
   }
   if (missing.length) {
-    throw new Error(`평가원 코퍼스가 불완전합니다 (${missing.length}개 누락): ${missing.slice(0, 8).join(', ')}`);
+    throw new Error(`평가원 코퍼스가 불완전합니다 (${missing.length}개 누락): ${missing.join(', ')}`);
   }
   return attachments;
 }
@@ -729,8 +814,6 @@ export async function fetchKice({
   const sources = [...new Map([...assignments.values()].map((attachment) => [
     attachment.fileSeq.toLowerCase(), attachment,
   ])).values()].sort((left, right) => left.target.localeCompare(right.target));
-  const plannedOutputs = sources.flatMap(expectedOutputs);
-  if (!allowPartial) validateAssignmentCoverage(plannedOutputs);
   const results = [];
   const outputs = [];
   for (const attachment of sources) {
@@ -742,9 +825,9 @@ export async function fetchKice({
     }
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  if (!allowPartial) validateAssignmentCoverage(outputs);
   outputs.sort((left, right) => left.target.localeCompare(right.target));
   await writeInventory(inventoryPath, outputs);
+  if (!allowPartial) validateAssignmentCoverage(outputs);
   return results;
 }
 

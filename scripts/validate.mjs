@@ -524,9 +524,11 @@ function validateGichulBackend() {
   check(fetchSource.includes('2020 + index') && fetchSource.includes('length: 8'),
     'scripts/gichul/fetch-kice.mjs: academic years 2020-2027 must be derived from one bounded range');
   const fetchProduction = /export async function fetchKice\([^]*?\n\}\n\nfunction cliOptions/u.exec(fetchSource)?.[0] || '';
+  const inventoryWriteIndex = fetchProduction.indexOf('await writeInventory(inventoryPath, outputs)');
+  const coverageGateIndex = fetchProduction.indexOf('validateAssignmentCoverage(outputs)');
   check(fetchSource.includes('crawl-inventory.json')
-    && fetchProduction.includes('validateAssignmentCoverage(plannedOutputs)')
-    && fetchProduction.includes('validateAssignmentCoverage(outputs)')
+    && inventoryWriteIndex >= 0
+    && coverageGateIndex > inventoryWriteIndex
     && fetchSource.includes('previous?.fileSeq === attachment.fileSeq'),
     'scripts/gichul/fetch-kice.mjs: current fileSeq inventory and complete-corpus gates are missing');
   for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
