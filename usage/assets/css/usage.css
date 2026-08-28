@@ -1130,7 +1130,7 @@
      그래서 전수 검산의 대상 집합은 그대로이고, 둘 다 본문 하한 4.5:1을 넘는다.
    ========================================================================== */
 .pl-board {
-  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.55;
   color: #e8e9ee;
@@ -1149,7 +1149,7 @@
   letter-spacing: -.01em;
 }
 .pl-window {
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: #9a9cac;
 }
@@ -1323,7 +1323,7 @@
 }
 .pl-who {
   margin-left: 7px;
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: #8b9af2;
 }
@@ -1340,7 +1340,7 @@
 }
 .pl-cost {
   margin-top: 2px;
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: #9a9cac;
   font-variant-numeric: tabular-nums;
@@ -1363,7 +1363,7 @@
   max-width: 100%;
   padding: 2px 7px;
   border-radius: 5px;
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   background: #272b44;
   color: #8b9af2;
@@ -1407,7 +1407,7 @@
 }
 .pl-meta {
   padding-top: 8px;
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.7;
   color: #9a9cac;

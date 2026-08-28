@@ -6,6 +6,7 @@
   const EXPECTED_SUBUNIT_COUNT = 13;
   const app = document.getElementById('app');
   const toast = document.getElementById('toast');
+  function start() {
   const studyUtils = window.HvsStudyUtils;
   const {
     CHOICE_MARKS,
@@ -746,11 +747,12 @@
   }
   function renderQuestionMedia(question, options = {}) {
     const { className = '', loading = 'eager' } = options;
+    const imageName = String(question.image || '').split('/').at(-1) || '';
     return `
       <figure class="sm-media ${esc(className)}">
         <a class="sm-media-link" href="${esc(question.source.question)}" target="_blank"
           rel="noopener" title="원문 PDF 열기">
-          <img class="sm-media-img" data-question-image src="${esc(question.image)}"
+          <img class="sm-media-img" data-question-image="${esc(imageName)}"
             alt="${esc(question.prompt)}의 제시문·보기·선지 전체 원문"
             loading="${loading}" decoding="async">
         </a>
@@ -779,16 +781,31 @@
         link?.classList.remove('is-failed');
         if (fallback) fallback.hidden = true;
       };
-      image.addEventListener('error', markFailed, { once: true });
-      image.addEventListener('load', markLoaded, { once: true });
-      // 캐시 히트로 이미 complete인 경우 load/error 이벤트가 다시 오지 않는다.
-      // naturalWidth > 0 이면 디코드 성공, 0 이면 실패다 (complete 전에는 판정하지 않는다).
-      if (image.complete) {
-        if (image.naturalWidth > 0) markLoaded();
-        else markFailed();
-      } else {
-        markLoaded();
-      }
+      const loadProtectedImage = async () => {
+        let objectUrl = '';
+        try {
+          const name = image.dataset.questionImage || '';
+          if (!/^[a-z0-9-]+\.webp$/u.test(name)) throw new Error('invalid image name');
+          const response = await window.HvsAccount.request(`/api/learning/smstudy/image/${encodeURIComponent(name)}`, {
+            headers: { accept: 'image/webp' },
+          });
+          if (!response.ok) throw new Error('image unavailable');
+          objectUrl = URL.createObjectURL(await response.blob());
+          image.addEventListener('load', () => {
+            markLoaded();
+            URL.revokeObjectURL(objectUrl);
+          }, { once: true });
+          image.addEventListener('error', () => {
+            markFailed();
+            URL.revokeObjectURL(objectUrl);
+          }, { once: true });
+          image.src = objectUrl;
+        } catch (error) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          if (error?.message !== 'unauthorized') markFailed();
+        }
+      };
+      loadProtectedImage();
     });
   }
   function renderAnswerChoices(question, session, current, total) {
@@ -984,10 +1001,10 @@
         </div>
       </article>`;
   }
-  function bindMistakeActions() {
-    bindQuestionImages(app);
-    document.querySelectorAll('.mistake-concept').forEach(button => button.addEventListener('click', () => renderConcept(button.dataset.sub)));
-    document.querySelectorAll('.mistake-retry').forEach(button => button.addEventListener('click', () => {
+  function bindMistakeActions(root = app) {
+    bindQuestionImages(root);
+    root.querySelectorAll('.mistake-concept').forEach(button => button.addEventListener('click', () => renderConcept(button.dataset.sub)));
+    root.querySelectorAll('.mistake-retry').forEach(button => button.addEventListener('click', () => {
       const q = Q_BY_ID.get(button.dataset.id);
       if (q) startQuiz([q], '오답 1문제 재시험', 'all');
     }));
@@ -1121,9 +1138,17 @@
   }
 
   function renderWrongNote(wrongEntries) {
-    const cards = wrongEntries.map(({ question, info }) => (
-      renderMistakeCard(question, info, info.lastInput)
-    )).join('');
+    const disclosures = wrongEntries.map(({ question, info }) => {
+      const subunit = SUB_BY_ID.get(question.sub);
+      return `
+        <details class="disclosure sm-mistake-disclosure" data-mistake-id="${esc(question.id)}">
+          <summary class="disclosure-head">
+            <span class="disclosure-title">${question.year}학년도 ${esc(question.session)} ${question.number}번 · ${esc(subunit.title)}</span>
+            <span class="disclosure-hint">오답 ${info.count || 1}회</span>
+          </summary>
+          <div class="disclosure-body" data-mistake-body></div>
+        </details>`;
+    }).join('');
     return `
       <section class="sm-stack sm-section sm-record-section" aria-labelledby="wrongNoteTitle">
         <div class="view-head">
@@ -1137,8 +1162,23 @@
             <button id="statsReview" class="btn btn-primary btn-sm" type="button" ${wrongEntries.length ? '' : 'disabled'}>전체 재시험</button>
           </div>
         </div>
-        ${wrongEntries.length ? `<div class="sm-mistakes">${cards}</div>` : '<p class="sm-empty">아직 오답이 없습니다.</p>'}
+        ${wrongEntries.length ? `<div class="sm-mistakes">${disclosures}</div>` : '<p class="sm-empty">아직 오답이 없습니다.</p>'}
       </section>`;
+  }
+
+  function bindMistakeDisclosures() {
+    app.querySelectorAll('[data-mistake-id]').forEach((details) => {
+      details.addEventListener('toggle', () => {
+        if (!details.open || details.dataset.loaded === 'true') return;
+        const question = Q_BY_ID.get(details.dataset.mistakeId);
+        const info = db.wrongBank[details.dataset.mistakeId];
+        const body = details.querySelector('[data-mistake-body]');
+        if (!question || !info || !body) return;
+        body.innerHTML = renderMistakeCard(question, info, info.lastInput);
+        details.dataset.loaded = 'true';
+        bindMistakeActions(details);
+      });
+    });
   }
 
   function renderStats() {
@@ -1192,7 +1232,7 @@
     document.getElementById('exportData').addEventListener('click', exportData);
     document.getElementById('importData').addEventListener('change', importData);
     document.getElementById('resetData').addEventListener('click', resetData);
-    bindMistakeActions();
+    bindMistakeDisclosures();
   }
   function exportData() {
     const blob = new Blob([JSON.stringify({
@@ -1280,4 +1320,16 @@
   if (SUBUNITS.length !== EXPECTED_SUBUNIT_COUNT || QUESTIONS.length !== EXPECTED_QUESTION_COUNT) {
     app.innerHTML = `<div class="card"><h2>데이터 검증 오류</h2><p>소단원 ${SUBUNITS.length}개, 문제 ${QUESTIONS.length}개가 로드되었습니다.</p></div>`;
   } else renderHome();
+  }
+
+  const ready = window.SMSTUDY_CONTENT_READY;
+  if (ready) {
+    ready.then(start).catch((error) => {
+      if (error?.message !== 'unauthorized') {
+        app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
+      }
+    });
+  } else {
+    start();
+  }
 })();

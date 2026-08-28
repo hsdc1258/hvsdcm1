@@ -384,7 +384,7 @@ test('OPTIONS and unknown routes include CORS headers', async () => {
 const GICHUL_USER_TOKEN_HASH = await sha256('user-token');
 const GICHUL_DISABLED_TOKEN_HASH = await sha256('disabled-token');
 
-function createGichulEnv({ exams = [], pdfs = new Map(), manifestExists = true } = {}) {
+function createGichulEnv({ exams = [], pdfs = new Map(), learningObjects = new Map(), manifestExists = true } = {}) {
   const r2Reads = [];
   const manifest = { exams };
   return {
@@ -421,6 +421,7 @@ function createGichulEnv({ exams = [], pdfs = new Map(), manifestExists = true }
     GICHUL: {
       async get(key) {
         r2Reads.push(key);
+        if (learningObjects.has(key)) return { body: learningObjects.get(key) };
         if (key === 'manifest.json') {
           if (!manifestExists) return null;
           return {
@@ -447,6 +448,46 @@ test('gichul manifest and PDF routes reject anonymous requests before reading R2
     }
   }
   assert.deepEqual(env.r2Reads, []);
+});
+
+test('learning content and images reject anonymous requests before reading R2', async () => {
+  const env = createGichulEnv();
+  for (const path of [
+    '/api/learning/wordmaster',
+    '/api/learning/smstudy',
+    '/api/learning/smstudy/image/2026-csat-01.webp',
+  ]) {
+    const response = await worker.fetch(new Request(`https://api.test${path}`), env);
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+  }
+  assert.deepEqual(env.r2Reads, []);
+});
+
+test('authenticated learning routes stream only fixed R2 keys', async () => {
+  const objects = new Map([
+    ['learning/wordmaster.json', JSON.stringify({ words: [{ id: 'fixture' }], emoji: {} })],
+    ['learning/smstudy.json', JSON.stringify({ data: {}, notebook: {}, explanations: {} })],
+    ['learning/smstudy/kice/2026-csat-01.webp', new Uint8Array([82, 73, 70, 70])],
+  ]);
+  const env = createGichulEnv({ learningObjects: objects });
+  const headers = { authorization: 'Bearer user-token' };
+
+  const words = await worker.fetch(new Request('https://api.test/api/learning/wordmaster', { headers }), env);
+  assert.equal(words.status, 200);
+  assert.match(words.headers.get('content-type'), /^application\/json/u);
+  assert.equal(words.headers.get('cache-control'), 'no-store');
+  assert.equal((await words.json()).words[0].id, 'fixture');
+
+  const image = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/2026-csat-01.webp', { headers }), env);
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('content-type'), 'image/webp');
+  assert.equal(image.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(env.r2Reads, ['learning/wordmaster.json', 'learning/smstudy/kice/2026-csat-01.webp']);
+
+  const invalid = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/not-a-webp.txt', { headers }), env);
+  assert.equal(invalid.status, 404);
+  assert.equal(env.r2Reads.length, 2);
 });
 
 test('authenticated gichul routes stream only manifest-mapped PDFs with no-store CORS', async () => {

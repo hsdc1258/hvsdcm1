@@ -1,15 +1,17 @@
 (() => {
   'use strict';
 
-  // words.js의 정적 데이터와 localStorage 기반 학습 상태를 연결하는 화면 컨트롤러다.
+  const app = document.getElementById('app');
+  const toast = document.getElementById('toast');
+  function start() {
+
+  // 인증된 Worker 데이터와 localStorage 기반 학습 상태를 연결하는 화면 컨트롤러다.
   // 데이터 불변식(50 DAY × 40개)은 루트 검증 스크립트에서 별도로 확인한다.
   const EXPECTED_WORD_COUNT = 2000;
   const MAX_DAY = 50;
   const WORDS = Array.isArray(window.WORDMASTER_WORDS) ? window.WORDMASTER_WORDS : [];
   const WORD_BY_ID = new Map(WORDS.map((item) => [item.id, item]));
   const STORAGE_KEY = 'wordmaster2000.quiz.v1';
-  const app = document.getElementById('app');
-  const toast = document.getElementById('toast');
   const studyUtils = window.HvsStudyUtils;
 
   if (!studyUtils) {
@@ -17,7 +19,15 @@
     return;
   }
 
-  const { SORT_MODES, escapeHtml, matchesStudySearch, sortStudyItems } = studyUtils;
+  const {
+    SORT_MODES,
+    acceptedMeaningAliases,
+    escapeHtml,
+    matchesMeaningAnswer,
+    matchesStudySearch,
+    normalizeMeaningAnswer,
+    sortStudyItems,
+  } = studyUtils;
 
   // 이모지는 words.js의 WORDMASTER_EMOJI 매핑에서만 나온다 (DESIGN.md §5).
   // 마크업에는 슬롯만 두고 글리프 리터럴을 박지 않는다. 키는 항상 리터럴로 넘긴다 —
@@ -44,6 +54,7 @@
     },
     wrongOrder: 'recent',
     wrongSearch: '',
+    wrongVisible: 50,
   };
 
   let db = loadDb();
@@ -90,88 +101,12 @@
     return Math.min(MAX_DAY, Math.max(1, n));
   }
 
-  function normalizeText(value) {
-    return String(value ?? '')
-      .toLowerCase()
-      .normalize('NFKC')
-      .replace(/[\s\u00A0]+/g, '')
-      .replace(/[.,;:!?"'`´“”‘’·•\/\\|<>《》〈〉「」『』【】()[\]{}~…―—–_-]/g, '');
-  }
-
-  function splitTopLevel(text) {
-    const parts = [];
-    let buf = '';
-    let depth = 0;
-    const open = new Set(['(', '[', '{', '〈', '《', '【']);
-    const close = new Set([')', ']', '}', '〉', '》', '】']);
-    for (const ch of String(text)) {
-      if (open.has(ch)) depth += 1;
-      if (close.has(ch)) depth = Math.max(0, depth - 1);
-      if ((ch === ',' || ch === ';' || ch === '/') && depth === 0) {
-        if (buf.trim()) parts.push(buf.trim());
-        buf = '';
-      } else {
-        buf += ch;
-      }
-    }
-    if (buf.trim()) parts.push(buf.trim());
-    return parts;
-  }
-
-  function expandSquareVariants(segment) {
-    const match = segment.match(/^(.*?)\[([^\]]+)\](.*)$/);
-    if (!match) return [segment];
-    const [, before, inside, after] = match;
-    const variants = [before + after, inside + after, before + inside + after];
-    return [...new Set(variants.flatMap(expandSquareVariants))];
-  }
-
-  function cleanMeaningSegment(segment) {
-    return String(segment)
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\([^)]*\)/g, ' ')
-      .replace(/[<>]/g, ' ')
-      .replace(/^\s*~\s*/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
   function acceptedAliases(item) {
-    const source = item.meaning || '';
-    const set = new Set();
-    const push = (value) => {
-      const normalized = normalizeText(value);
-      if (normalized) set.add(normalized);
-    };
-
-    push(source);
-    const segments = splitTopLevel(source);
-    for (const segment of segments) {
-      for (const expanded of expandSquareVariants(segment)) {
-        const cleaned = cleanMeaningSegment(expanded);
-        push(cleaned);
-        // 일부 뜻은 '~을', '~에'처럼 자리표시자 조사로 시작한다. 그 조사만 뺀 표현도 허용한다.
-        const particleStripped = cleaned.replace(/^(을|를|에|에게|에서|의|로|으로|와|과)\s+/, '');
-        if (particleStripped !== cleaned) push(particleStripped);
-      }
-    }
-
-    const custom = db.customAliases[item.id] || [];
-    for (const alias of custom) push(alias);
-    return set;
-  }
-
-  function parseUserAnswers(input) {
-    const rawParts = splitTopLevel(input);
-    const values = rawParts.length ? rawParts : [input];
-    return values.map(normalizeText).filter(Boolean);
+    return acceptedMeaningAliases(item, db.customAliases[item.id] || []);
   }
 
   function checkAnswer(item, input) {
-    const userAnswers = parseUserAnswers(input);
-    if (!userAnswers.length) return false;
-    const aliases = acceptedAliases(item);
-    return userAnswers.some((answer) => aliases.has(answer));
+    return matchesMeaningAnswer(item, input, db.customAliases[item.id] || []);
   }
 
   function recordAttempt(item, input, isCorrect, mode) {
@@ -207,8 +142,8 @@
     const cleaned = String(input || '').trim();
     if (!cleaned) return false;
     const list = db.customAliases[item.id] || [];
-    const norm = normalizeText(cleaned);
-    if (!list.some((x) => normalizeText(x) === norm)) list.push(cleaned);
+    const norm = normalizeMeaningAnswer(cleaned);
+    if (!list.some((x) => normalizeMeaningAnswer(x) === norm)) list.push(cleaned);
     db.customAliases[item.id] = list;
     saveDb();
     return true;
@@ -320,7 +255,7 @@
     if (!entries.length) {
       return `<p class="wm-empty">${hasWrongItems ? '검색 결과가 없습니다.' : '아직 오답이 없습니다.'}</p>`;
     }
-    return entries.slice(0, 200).map(({ item, info }) => `
+    return entries.slice(0, state.wrongVisible).map(({ item, info }) => `
       <div class="list-row wm-mistake">
         <span class="list-row-body">
           <span class="list-row-title wm-term">${escapeHtml(item.word)}</span>
@@ -339,9 +274,13 @@
     const title = document.getElementById('wrongNoteTitle');
     const list = document.getElementById('wrongEntriesList');
     const reviewButton = document.getElementById('statsReviewBtn');
+    const count = document.getElementById('wrongVisibleCount');
+    const moreButton = document.getElementById('wrongMoreBtn');
     if (title) title.textContent = `오답 암기 노트 · 검색 결과 ${filteredEntries.length.toLocaleString()}개`;
     if (list) list.innerHTML = renderWrongEntryRows(filteredEntries, entries.length > 0);
     if (reviewButton) reviewButton.disabled = filteredEntries.length === 0;
+    if (count) count.textContent = `${Math.min(state.wrongVisible, filteredEntries.length).toLocaleString()} / ${filteredEntries.length.toLocaleString()}개`;
+    if (moreButton) moreButton.hidden = state.wrongVisible >= filteredEntries.length;
     return filteredEntries;
   }
 
@@ -772,6 +711,11 @@
           <div id="wrongEntriesList" class="list-group">
             ${renderWrongEntryRows(filteredWrongEntries, wrongEntries.length > 0)}
           </div>
+          <div class="toolbar" aria-live="polite">
+            <span id="wrongVisibleCount" class="text-secondary">${Math.min(state.wrongVisible, filteredWrongEntries.length).toLocaleString()} / ${filteredWrongEntries.length.toLocaleString()}개</span>
+            <span class="toolbar-spacer"></span>
+            <button id="wrongMoreBtn" class="btn btn-secondary btn-sm" type="button" ${state.wrongVisible >= filteredWrongEntries.length ? 'hidden' : ''}>50개 더 보기</button>
+          </div>
         </section>
 
         <aside class="wm-panel">
@@ -818,11 +762,17 @@
     document.getElementById('statsBackBtn').addEventListener('click', renderHome);
     document.getElementById('wrongSearchInput').addEventListener('input', (event) => {
       state.wrongSearch = event.target.value;
+      state.wrongVisible = 50;
       updateWrongNoteResults(wrongEntries);
     });
     document.getElementById('wrongSortMode').addEventListener('change', (event) => {
       state.wrongOrder = event.target.value;
+      state.wrongVisible = 50;
       renderStatsPage();
+    });
+    document.getElementById('wrongMoreBtn').addEventListener('click', () => {
+      state.wrongVisible += 50;
+      updateWrongNoteResults(wrongEntries);
     });
     document.getElementById('statsReviewBtn').addEventListener('click', () => {
       const currentResults = filterWrongEntries(wrongEntries, state.wrongSearch);
@@ -911,5 +861,17 @@
     app.innerHTML = `<div class="card"><h2>데이터 로드 오류</h2><p>단어 데이터가 ${WORDS.length}개만 로드되었습니다.</p></div>`;
   } else {
     renderHome();
+  }
+  }
+
+  const ready = window.WORDMASTER_CONTENT_READY;
+  if (ready) {
+    ready.then(start).catch((error) => {
+      if (error?.message !== 'unauthorized') {
+        app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>단어 데이터를 불러오지 못했습니다.</p></div>';
+      }
+    });
+  } else {
+    start();
   }
 })();

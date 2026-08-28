@@ -109,6 +109,20 @@ function loginGateOf(htmlFile, source) {
 const STUDY_KEYWORDS = ['학습', 'WordMaster', 'smstudy', 'Study'];
 function validateStudyExposure() {
   const pages = publishedHtml();
+  check(!JEKYLL_DISABLED(), 'learning content: .nojekyll would publish the protected _learning directory');
+  const jekyllConfigPath = path.join(ROOT, '_config.yml');
+  const jekyllConfig = existsSync(jekyllConfigPath) ? readFileSync(jekyllConfigPath, 'utf8') : '';
+  check(!/include\s*:[^\n]*_learning/u.test(jekyllConfig), 'learning content: _config.yml must not include the protected _learning directory');
+  check(!existsSync(path.join(ROOT, 'smstudy/assets/kice')), 'learning content: public smstudy/assets/kice must stay absent');
+  const wordLoader = readFileSync(path.join(ROOT, 'WordMaster/assets/js/words.js'), 'utf8');
+  const smstudyLoader = readFileSync(path.join(ROOT, 'smstudy/assets/js/data.js'), 'utf8');
+  check(wordLoader.includes('/api/learning/wordmaster') && !wordLoader.includes('d01-01'),
+    'learning content: public WordMaster loader must contain only the authenticated API bootstrap');
+  check(smstudyLoader.includes('/api/learning/smstudy') && !smstudyLoader.includes('QUESTION_ROWS'),
+    'learning content: public smstudy loader must contain only the authenticated API bootstrap');
+  for (const file of walk(path.join(ROOT, '_learning'), () => true)) {
+    check(isJekyllHidden(relative(file)), `${relative(file)}: protected source escaped the Jekyll-hidden _learning boundary`);
+  }
   check(pages.length >= 4, `study exposure: only ${pages.length} published HTML files were derived — this check is inert`);
   for (const file of pages) {
     const name = relative(file);
@@ -246,6 +260,21 @@ function validateUiContracts() {
     'home: mountDrawerTemplates() must run only inside the logged-in branch');
   check(homeJs.includes("selector: 'template[data-study]'"), 'home: study template mount routine is missing');
   check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
+  check(homeJs.includes('setLoginBackgroundInert(true)') && homeJs.includes('setLoginBackgroundInert(false)'),
+    'home: the modal must make page siblings inert only while it is open');
+  check(homeJs.includes("event.key === 'Tab'") && homeJs.includes('loginFocusables()'),
+    'home: the login dialog must trap Tab and Shift+Tab focus');
+  check(homeJs.includes('target?.focus()'),
+    'home: closing the login dialog must restore focus to its opener');
+
+  check(wordMasterJs.includes('wrongVisible: 50')
+    && wordMasterJs.includes('.slice(0, state.wrongVisible)')
+    && wordMasterJs.includes('state.wrongVisible += 50'),
+  'WordMaster: wrong-answer history must render in bounded 50-row batches');
+  check(smstudyJs.includes('data-mistake-id=')
+    && smstudyJs.includes('data-mistake-body')
+    && smstudyJs.includes('bindMistakeDisclosures'),
+  'smstudy: wrong-answer detail cards must render lazily inside disclosures');
 
   // ---- 랜딩 학습 은닉 완결 (plan.md §1-1) ----
   // 로그인해도 **본문**에는 학습이 없다. 진입은 좌상단 드로어 하나뿐이다.
@@ -389,7 +418,7 @@ function validateUiContracts() {
     const figureOpen = new RegExp(`<figure class="${figureClass}[^"]*"`, 'gu');
     check((smstudyJs.match(figureOpen) || []).length === (mediaBody.match(figureOpen) || []).length,
       `smstudy: app.js emits <figure class="${figureClass}"> outside renderQuestionMedia() — the image-fallback contract must have exactly one target`);
-    check(new RegExp(`<img\\b[^>]*\\s${imageHook}(?=[\\s>])`, 'u').test(mediaFigure),
+    check(new RegExp(`<img\\b[^>]*\\s${imageHook}(?:="[^"]*")?(?=[\\s>])`, 'u').test(mediaFigure),
       `smstudy: the question <img> inside <figure class="${figureClass}"> must carry the ${imageHook} attribute the binder selects on`);
     check(new RegExp(`<div\\b[^>]*class="${fallbackClass}"[^>]*\\shidden(?=[\\s>])`, 'u').test(mediaFigure),
       `smstudy: the same <figure> must hold a <div class="${fallbackClass}" hidden> for the binder to unhide`);
@@ -397,9 +426,10 @@ function validateUiContracts() {
     check(baseRuleDisplay(smstudyCss, fallbackClass) === 'none', `smstudy: .${fallbackClass} must default to display: none so a rendered-but-hidden fallback stays invisible`);
     check(smstudyCss.includes(`.${fallbackClass}`), `smstudy: KICE image fallback styling for .${fallbackClass} is missing`);
   }
-  check(smstudyJs.includes("addEventListener('error', markFailed, { once: true })"), 'smstudy: image error handler must bind once');
-  check(smstudyJs.includes("addEventListener('load', markLoaded, { once: true })"), 'smstudy: image success handler must be bound');
-  check(smstudyJs.includes('image.naturalWidth > 0'), 'smstudy: cached images must be judged by naturalWidth, not by complete alone');
+  check(smstudyJs.includes("HvsAccount.request(`/api/learning/smstudy/image/"), 'smstudy: question images must cross the authenticated Worker boundary');
+  check(smstudyJs.includes("addEventListener('error', () =>"), 'smstudy: protected image error handler must be bound');
+  check(smstudyJs.includes("addEventListener('load', () =>"), 'smstudy: protected image success handler must be bound');
+  check(smstudyJs.includes('URL.revokeObjectURL(objectUrl)'), 'smstudy: protected image object URLs must be released');
   check(/markLoaded = \(\) => \{[^}]*fallback\.hidden = true/su.test(smstudyJs), 'smstudy: image success path must re-hide the fallback block');
 
   // 회귀 방지: hidden 속성으로 렌더되는 블록을 저자 CSS의 display 선언이 되살리는 결함을 잡는다.
@@ -649,6 +679,8 @@ function validateGichulFrontend() {
     'gichul/app.js: the exam list must be fetched from /api/gichul/manifest');
   check(appSource.includes('/api/gichul/pdf/'),
     'gichul/app.js: PDFs must be fetched through the authenticated worker route');
+  check(appSource.includes('id="gichulRetry"') && appSource.includes("closest('#gichulRetry')"),
+    'gichul/app.js: a manifest failure must provide an in-place retry action');
   check(/location\.replace\(loginPath\(\)\)/u.test(appSource) && appSource.includes('login=1'),
     'gichul/app.js: the login redirect gate is missing — the screen must not render for anonymous visitors');
   check(appSource.includes('window.GICHUL_RENDER'),
@@ -714,7 +746,7 @@ function readWebpDimensions(file) {
 }
 
 function validateWordMasterData() {
-  const words = evaluateBrowserData('WordMaster/assets/js/words.js', 'WORDMASTER_WORDS');
+  const words = evaluateBrowserData('_learning/wordmaster/words.js', 'WORDMASTER_WORDS');
   check(Array.isArray(words), 'WordMaster: exported data must be an array');
   if (!Array.isArray(words)) return;
 
@@ -1115,9 +1147,9 @@ function validateRenderedCopy() {
 }
 
 function validateSmStudyData() {
-  const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
-  const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
-  const explanationData = evaluateBrowserData('smstudy/assets/js/explanation-data.js', 'SMSTUDY_EXPLANATIONS');
+  const data = evaluateBrowserData('_learning/smstudy/data.js', 'SMSTUDY_DATA');
+  const notebookData = evaluateBrowserData('_learning/smstudy/notebook-data.js', 'SMSTUDY_NOTEBOOK');
+  const explanationData = evaluateBrowserData('_learning/smstudy/explanation-data.js', 'SMSTUDY_EXPLANATIONS');
   check(Boolean(data), 'smstudy: SMSTUDY_DATA export is missing');
   check(Boolean(notebookData), 'smstudy: SMSTUDY_NOTEBOOK export is missing');
   check(Boolean(explanationData), 'smstudy: SMSTUDY_EXPLANATIONS export is missing');
@@ -1467,7 +1499,7 @@ function validateSmStudyData() {
     check(Number.isInteger(question.answerNumber) && question.answerNumber >= 1 && question.answerNumber <= 5, `smstudy: ${question.id} has invalid answer`);
     check(question.correctRate + question.wrongRate === 100, `smstudy: ${question.id} rates must total 100`);
     check(Boolean(source?.question && source?.answer), `smstudy: ${question.id} source links are missing`);
-    const imagePath = path.join(ROOT, 'smstudy', question.image);
+    const imagePath = path.join(ROOT, '_learning/smstudy/kice', path.basename(question.image));
     check(existsSync(imagePath), `smstudy: ${question.id} image is missing`);
     if (existsSync(imagePath)) {
       const dimensions = readWebpDimensions(imagePath);
@@ -1479,7 +1511,7 @@ function validateSmStudyData() {
     referencedImages.add(path.basename(question.image));
   }
 
-  const imageDirectory = path.join(ROOT, 'smstudy/assets/kice');
+  const imageDirectory = path.join(ROOT, '_learning/smstudy/kice');
   const imageFiles = readdirSync(imageDirectory).filter((file) => file.endsWith('.webp'));
   check(imageFiles.length === 78, `smstudy: expected 78 WebP images, found ${imageFiles.length}`);
   check(imageFiles.every((file) => referencedImages.has(file)), 'smstudy: unreferenced WebP images exist');
@@ -1892,7 +1924,7 @@ function validateEmojiSystem() {
 // 앱 사이의 교차 충돌은 아래 validateWordMasterEmoji() + validateEmojiCrossMaps()가 본다.
 // (admin은 매핑을 두지 않는다 — macOS HIG 어법의 조작 화면이라 이모지를 쓰지 않는다.)
 function validateSmStudyEmoji() {
-  const data = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA');
+  const data = evaluateBrowserData('_learning/smstudy/data.js', 'SMSTUDY_DATA');
   const map = data?.EMOJI;
   check(Boolean(map), 'smstudy: SMSTUDY_DATA.EMOJI mapping is missing — unit emoji need a single source (DESIGN.md §5)');
   if (!map) return;
@@ -1951,7 +1983,7 @@ function validateSmStudyEmoji() {
 const WORDMASTER_APP_SOURCE = 'WordMaster/assets/js/app.js';
 
 function validateWordMasterEmoji() {
-  const map = evaluateBrowserData('WordMaster/assets/js/words.js', 'WORDMASTER_EMOJI');
+  const map = evaluateBrowserData('_learning/wordmaster/words.js', 'WORDMASTER_EMOJI');
   check(Boolean(map), 'WordMaster: WORDMASTER_EMOJI mapping is missing — row emoji need a single source (DESIGN.md §5)');
   if (!map) return;
 
@@ -2010,8 +2042,8 @@ function validateWordMasterEmoji() {
 function validateEmojiCrossMaps() {
   const sources = [
     { app: 'site', file: SITE_EMOJI_SOURCE, global: 'SITE_EMOJI', pick: (data) => data },
-    { app: 'smstudy', file: 'smstudy/assets/js/data.js', global: 'SMSTUDY_DATA', pick: (data) => data?.EMOJI },
-    { app: 'WordMaster', file: 'WordMaster/assets/js/words.js', global: 'WORDMASTER_EMOJI', pick: (data) => data },
+    { app: 'smstudy', file: '_learning/smstudy/data.js', global: 'SMSTUDY_DATA', pick: (data) => data?.EMOJI },
+    { app: 'WordMaster', file: '_learning/wordmaster/words.js', global: 'WORDMASTER_EMOJI', pick: (data) => data },
   ];
 
   // 대상 이름 정규화. 앱 자신을 가리키는 항목은 랜딩과 앱 매핑 **양쪽에** 있는 것이
@@ -2113,14 +2145,13 @@ function validateGlobalsAndOrder() {
   // 표면별로 고정한다. usage는 JS와 같은 ?v= 토큰을 CSS 두 장 모두에 싣는다.
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
-  const PRETENDARD_CDN = 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css';
   const expectedStylesheets = {
-    'index.html': [PRETENDARD_CDN, '/assets/css/system.css', '/assets/css/home.css'],
-    'WordMaster/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
-    'smstudy/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
+    'index.html': ['/assets/css/system.css', '/assets/css/home.css'],
+    'WordMaster/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
+    'smstudy/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260829-orgchart-v10', '/usage/assets/css/usage.css?v=20260829-orgchart-v10'],
-    'gichul/index.html': [PRETENDARD_CDN, '/assets/css/system.css', '/gichul/gichul.css'],
+    'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2529,7 +2560,7 @@ function validateDocSnapshots() {
       `${file}: expected one <figcaption> per <figure>, found ${captionsIn(file)} for ${figuresIn(file)} figures`);
   }
   const diagrams = readFileSync(path.join(ROOT, SNAPSHOT_FILES.DIAGRAMS), 'utf8');
-  const notebookData = evaluateBrowserData('smstudy/assets/js/notebook-data.js', 'SMSTUDY_NOTEBOOK');
+  const notebookData = evaluateBrowserData('_learning/smstudy/notebook-data.js', 'SMSTUDY_NOTEBOOK');
   for (const [id, notebook] of Object.entries(notebookData?.NOTEBOOKS || {})) {
     for (const diagram of notebook.diagrams || []) {
       check(diagrams.includes(`${id} — ${diagram.title} (${diagram.kind}`),

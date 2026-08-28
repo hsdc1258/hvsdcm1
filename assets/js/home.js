@@ -32,6 +32,19 @@
     title: document.getElementById('welcomeTitle'),
     username: document.getElementById('username'),
   };
+  let loginOpener = null;
+
+  function setLoginBackgroundInert(inert) {
+    for (const element of document.body.children) {
+      if (element === elements.modal || element.tagName === 'SCRIPT') continue;
+      element.inert = inert;
+    }
+  }
+
+  function loginFocusables() {
+    return [...elements.loginForm.querySelectorAll('input, button, [href], [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => !element.disabled && !element.hidden);
+  }
 
   function setMenuOpen(open) {
     elements.drawer.classList.toggle('open', open);
@@ -41,15 +54,26 @@
     elements.menuButton.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
   }
 
-  function openLogin() {
+  function openLogin(event) {
     setMenuOpen(false);
     elements.loginError.textContent = '';
+    loginOpener = event?.currentTarget?.matches?.('[data-login-trigger]')
+      ? event.currentTarget
+      : (document.activeElement?.matches?.('[data-login-trigger]') ? document.activeElement : elements.menuButton);
+    setLoginBackgroundInert(true);
+    elements.modal.setAttribute('aria-hidden', 'false');
     elements.modal.classList.add('open');
     requestAnimationFrame(() => elements.username.focus());
   }
 
   function closeLogin() {
+    if (!elements.modal.classList.contains('open')) return;
     elements.modal.classList.remove('open');
+    elements.modal.setAttribute('aria-hidden', 'true');
+    setLoginBackgroundInert(false);
+    const target = loginOpener;
+    loginOpener = null;
+    requestAnimationFrame(() => target?.focus());
   }
 
   function showUser(username) {
@@ -206,6 +230,20 @@
     if (event.target === elements.modal) closeLogin();
   });
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab' && elements.modal.classList.contains('open')) {
+      const focusables = loginFocusables();
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables.at(-1);
+      if (event.shiftKey && (document.activeElement === first || !elements.loginForm.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !elements.loginForm.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    }
     if (event.key === 'Escape') {
       setMenuOpen(false);
       closeLogin();

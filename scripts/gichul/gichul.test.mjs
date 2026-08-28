@@ -21,6 +21,7 @@ import {
   validateManifest,
 } from './build-manifest.mjs';
 import { uploadR2 } from './upload-r2.mjs';
+import { verifyGichulReadiness } from './readiness.mjs';
 
 async function temporaryDirectory(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'hvsdcm-gichul-'));
@@ -561,7 +562,8 @@ test('collector extracts live 2020-2022 CSAT subject ZIP naming variants in thei
     }],
     ['2020-영어', {
       seq: '30303030303030303030303030303030', filename: '영어.zip', archive: zipFixture([
-        ['영어_문제지.pdf', '%PDF-2020-english-question'],
+        ['영어_짝.pdf', '%PDF-2020-english-even'],
+        ['영어_홀.pdf', '%PDF-2020-english-odd'],
         ['영어_듣기대본.pdf', '%PDF-2020-english-script'],
       ]),
     }],
@@ -603,9 +605,10 @@ test('collector extracts live 2020-2022 CSAT subject ZIP naming variants in thei
   assert.equal(await readFile(path.join(outputDirectory, '2019-csat-math-na-question.pdf'), 'utf8'),
     '%PDF-2020-math-na-odd');
   assert.equal(await readFile(path.join(outputDirectory, '2019-csat-english-question.pdf'), 'utf8'),
-    '%PDF-2020-english-question');
+    '%PDF-2020-english-odd');
   assert.ok(logs.some((message) => message.includes('듣기평가.zip')));
   assert.ok(logs.some((message) => message.includes('영어_듣기대본.pdf')));
+  assert.ok(logs.some((message) => message.includes('영어_짝.pdf')));
 });
 
 test('collector extracts Social and Culture plus Politics and Law PDFs from real-shape social ZIP bundles', async (t) => {
@@ -1000,6 +1003,26 @@ test('R2 uploader sends only changed manifest objects and persists a local hash 
     sourceDirectory, manifestPath, statePath, bucket: 'test-bucket', executable: 'wrangler', run, log() {},
   });
   assert.deepEqual(third.uploaded, ['manifest.json']);
+});
+
+test('readiness accepts manifest entries that intentionally share one R2 object', async (t) => {
+  const sourceDirectory = await temporaryDirectory(t);
+  await writeFile(path.join(sourceDirectory, 'shared.pdf'), '%PDF-fixture');
+  const manifestPath = path.join(sourceDirectory, 'manifest.json');
+  await writeFile(manifestPath, JSON.stringify({
+    exams: [
+      { id: 'shared-form-a', r2_key: 'shared.pdf' },
+      { id: 'shared-form-b', r2_key: 'shared.pdf' },
+    ],
+  }));
+  const evidencePath = path.join(sourceDirectory, 'readiness.json');
+
+  const evidence = await verifyGichulReadiness({ manifestPath, evidencePath });
+
+  assert.equal(evidence.exams, 2);
+  assert.equal(evidence.objects, 2);
+  assert.equal(Object.keys(evidence.referenced_sha256).length, 1);
+  assert.equal(JSON.parse(await readFile(evidencePath, 'utf8')).objects, 2);
 });
 
 test('R2 uploader never publishes the manifest or checkpoint after a PDF upload failure', async (t) => {

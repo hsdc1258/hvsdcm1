@@ -20,9 +20,9 @@ const ROOT = process.cwd();
 export const APP_SOURCE = 'smstudy/assets/js/app.js';
 export const DIAGRAM_SOURCE = 'smstudy/assets/js/diagram.js';
 export const ICON_SOURCE = 'assets/vendor/lucide/icons.js';
-export const DATA_SOURCE = 'smstudy/assets/js/data.js';
-export const NOTEBOOK_SOURCE = 'smstudy/assets/js/notebook-data.js';
-export const EXPLANATION_SOURCE = 'smstudy/assets/js/explanation-data.js';
+export const DATA_SOURCE = '_learning/smstudy/data.js';
+export const NOTEBOOK_SOURCE = '_learning/smstudy/notebook-data.js';
+export const EXPLANATION_SOURCE = '_learning/smstudy/explanation-data.js';
 export const UTILS_SOURCE = 'assets/js/study-utils.js';
 
 // R3-M-1 — `core.autocrlf=true` 체크아웃에서 소스가 CRLF로 내려와도 판정이 같아야 한다.
@@ -223,9 +223,10 @@ export function createAppSandbox(options = {}) {
   }
 
   const source = readSource(APP_SOURCE);
-  const exportLine = `\n  window.__GATE_RENDERERS__ = { ${RENDERER_NAMES.join(', ')} };\n})();\n`;
-  const patched = source.replace(/\n\}\)\(\);\s*$/u, exportLine);
-  if (patched === source) throw new Error(`${APP_SOURCE}: could not append the gate export line — the IIFE tail changed shape`);
+  const readyMarker = '\n  const ready = window.SMSTUDY_CONTENT_READY;';
+  const exportLine = `\n  window.__GATE_RENDERERS__ = { ${RENDERER_NAMES.join(', ')} };\n  }\n${readyMarker}`;
+  const patched = source.replace(`\n  }\n${readyMarker}`, exportLine);
+  if (patched === source) throw new Error(`${APP_SOURCE}: could not append the gate export line inside start() — the bootstrap tail changed shape`);
   vm.runInContext(patched, context, { filename: APP_SOURCE });
 
   const renderers = context.__GATE_RENDERERS__;
@@ -270,7 +271,7 @@ export function renderWordMasterHome() {
   context.alert = () => {};
   context.console = { log() {}, warn() {}, error() {} };
   vm.createContext(context);
-  for (const file of [UTILS_SOURCE, 'WordMaster/assets/js/words.js', WORDMASTER_APP_SOURCE]) {
+  for (const file of [UTILS_SOURCE, '_learning/wordmaster/words.js', WORDMASTER_APP_SOURCE]) {
     vm.runInContext(readSource(file), context, { filename: file });
   }
   const markup = store.get('app')?.innerHTML || '';

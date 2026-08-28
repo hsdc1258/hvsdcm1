@@ -58,6 +58,10 @@ const LOGIN_FAILURES_PER_WINDOW = 10;
 const GICHUL_HEADERS = Object.freeze({
   'cache-control': 'no-store',
 });
+const LEARNING_CONTENT_KEYS = Object.freeze({
+  wordmaster: 'learning/wordmaster.json',
+  smstudy: 'learning/smstudy.json',
+});
 
 export function fixedTimeEqual(left, right) {
   if (typeof crypto.subtle.timingSafeEqual === 'function') {
@@ -995,6 +999,37 @@ async function gichulPdf(request, env, id) {
   });
 }
 
+async function learningContent(request, env, app) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  const key = LEARNING_CONTENT_KEYS[app];
+  if (!key) return gichulError('Not found', 404);
+  const object = await env.GICHUL.get(key);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'application/json; charset=utf-8',
+    },
+  });
+}
+
+async function learningImage(request, env, name) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  if (!/^[a-z0-9-]{1,120}\.webp$/u.test(name)) return gichulError('Not found', 404);
+  const object = await env.GICHUL.get(`learning/smstudy/kice/${name}`);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'image/webp',
+    },
+  });
+}
+
 async function logout(request, env) {
   const rawToken = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (rawToken) {
@@ -1301,6 +1336,16 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
   if (method === 'GET' && path === '/api/gichul/manifest') return gichulManifest(request, env);
+
+  const learningContentMatch = path.match(/^\/api\/learning\/(wordmaster|smstudy)$/u);
+  if (method === 'GET' && learningContentMatch) {
+    return learningContent(request, env, learningContentMatch[1]);
+  }
+
+  const learningImageMatch = path.match(/^\/api\/learning\/smstudy\/image\/([^/]+)$/u);
+  if (method === 'GET' && learningImageMatch) {
+    return learningImage(request, env, learningImageMatch[1]);
+  }
 
   const gichulPdfMatch = path.match(/^\/api\/gichul\/pdf\/(.+)$/u);
   if (method === 'GET' && gichulPdfMatch) {

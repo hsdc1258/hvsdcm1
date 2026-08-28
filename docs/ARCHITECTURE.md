@@ -9,7 +9,7 @@ The front end is static and requires no bundler. GitHub Pages serves the reposit
 1. The home page logs a user in through `POST /api/login` and stores `hvsdcm.token` plus `hvsdcm.user` in localStorage.
 2. A learning page loads `/account.js` with `data-app` and `data-key` attributes.
 3. `account.js` requires the account token, fetches remote progress and shared accepted answers, then hydrates the app-specific localStorage record.
-4. The app controller renders from static content plus that local record.
+4. The public content loader uses the same bearer session to fetch private R2 content through `/api/learning/*`; the app controller renders that content plus the local record.
 5. Each app saves its local record and explicitly schedules a debounced 350 ms synchronization to `PUT /api/progress/:app`. Custom aliases are also sent to `/api/answers/accept`.
 6. The local Codex control plane sends one authenticated harness report alongside each Discord progress report. The Worker merges actors by stable ID and returns every retained harness task to the owner-only usage screen, which separates parallel tasks into `active` and `complete` tab views. A third portfolio view always exposes the complete `user input -> main orchestration -> input -> plan -> work -> gate -> review -> revise -> approve -> done` pipeline, places each retained session exactly once below its reported phase and highlights non-complete work. Each session connects to a compact hierarchy containing only the actors actually present in the report by stable parent ID; it never invents a Main Codex for a report with no actors. Display titles remove a trailing `(MM-DD)` suffix and demote that date to small metadata beside phase progress. A selected session still renders the canonical eight reported phases (legacy four-key reports stay valid as a subset; the screen's `PHASES` and the Worker's `VALID_HARNESS_PHASES` are cross-checked source-to-source by `scripts/validate.mjs`), module progress, evidence and its own reporting tree. Model plus reasoning, role, assignment, status and progress come directly from each actor report; gate and evidence remain non-person session metadata. A desktop `aside` shows only Codex account-limit snapshots and reflows below the pipeline on narrower screens.
 7. The past-paper screen fetches its R2-resident manifest and PDFs only through bearer-authenticated Worker routes. Selection extraction and merging remain in the browser; neither the static Pages deployment nor logged-out HTML contains the exam list.
@@ -22,11 +22,12 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `assets/js/study-utils.js`: shared HTML escaping, stable sorting and randomization for both learning apps.
 - `admin/assets/`: admin-only presentation and behavior.
 - `account.js`: shared authentication and synchronization adapter.
-- `WordMaster/assets/js/words.js`: vocabulary content only.
+- `_learning/wordmaster/words.js`: Jekyll-hidden vocabulary source used by validation and the R2 payload builder.
+- `WordMaster/assets/js/words.js`: public authenticated-content loader; contains no vocabulary rows.
 - `WordMaster/assets/js/app.js`: WordMaster state, grading, personal error-rate metrics and rendering.
-- `smstudy/assets/js/data.js`: concept, source and question content only.
+- `_learning/smstudy/`: Jekyll-hidden concept, question, explanation and 78-image source used by validation and the R2 payload builder.
+- `smstudy/assets/js/data.js`: public authenticated-content loader; the companion data filenames remain empty compatibility stubs for script-order stability.
 - `smstudy/assets/js/app.js`: social-studies state, source error-rate sorting, grading and rendering.
-- `smstudy/assets/kice/`: question images referenced by stable question IDs.
 - `gichul/`: login-gated past-paper filtering, viewing, extraction and client-side merge UI. The data list itself is not checked into this directory. The screen loads `account.js` in gate-only mode (`data-app`, no `data-key` — there is no study progress to sync), then the vendored icon set, then `assets/vendor/pdf-lib/`, then `gichul/app.js`; filter options, labels and results are all derived from the manifest that `GET /api/gichul/manifest` returns after authentication.
 - `assets/vendor/pdf-lib/`: pinned pdf-lib UMD bundle plus its MIT text, used for in-browser merging and selection-section extraction. `scripts/validate.mjs` locks the bundle bytes with a sha256 so it cannot be swapped silently.
 
@@ -36,7 +37,7 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `worker/src/router.js`: endpoint matching and domain handlers.
 - `worker/src/lib.js`: HTTP, hashing, token, authentication and activity helpers.
 - `worker/migrations/`: append-only D1 schema history.
-- R2 binding `GICHUL`: generated `manifest.json` and KICE source PDFs. Both are private behind Worker session checks rather than static Pages assets.
+- R2 binding `GICHUL`: generated past-paper manifest/PDFs plus WordMaster and social-studies payloads/images. All are private behind Worker session checks rather than static Pages assets.
 
 The KICE ingestion pipeline is owned by `scripts/gichul/`. `fetch-kice.mjs` derives attachments and a current `fileSeq` inventory from the official list filters for academic years 2020-2027, refreshing an existing PDF when that sequence changes. `build-manifest.mjs` derives deterministic metadata and page sections from only the inventoried filesystem and rejects incomplete question/answer or track coverage. `upload-r2.mjs` uploads content-hash changes through the locally installed Wrangler CLI, placing changed PDFs before the manifest visibility switch and advancing its checkpoint only after success. `gichul-src/`, the crawl inventory, and the upload checkpoint are ignored. The checked-in `overrides.json` is only an exact `common`/`selection` correction layer keyed by final manifest ID; it is not a second source list.
 
@@ -65,6 +66,9 @@ Harness payload version 1 remains backward compatible while accepting `title`, a
 | `GET /api/usage[?completed_limit=N]` | owner user | Read Codex limits and harness tasks; optionally cap completed tasks while retaining all active tasks |
 | `GET /api/gichul/manifest` | user | Read the R2 past-paper manifest with caching disabled |
 | `GET /api/gichul/pdf/:id` | user | Stream a manifest-mapped R2 PDF with caching disabled |
+| `GET /api/learning/wordmaster` | user | Read the private WordMaster payload with caching disabled |
+| `GET /api/learning/smstudy` | user | Read the private social-studies payload with caching disabled |
+| `GET /api/learning/smstudy/image/:name` | user | Stream one allowlisted-name private WebP with caching disabled |
 
 ## Regression boundaries
 

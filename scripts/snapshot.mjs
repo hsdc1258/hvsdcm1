@@ -370,7 +370,7 @@ export function buildSnapshots() {
 
   const sandbox = createAppSandbox();
   const conceptMarkup = sandbox.renderConcept(CONCEPT_SAMPLE_ID);
-  const subunitTitle = evaluateBrowserData('smstudy/assets/js/data.js', 'SMSTUDY_DATA')
+  const subunitTitle = evaluateBrowserData('_learning/smstudy/data.js', 'SMSTUDY_DATA')
     .UNITS.flatMap((unit) => unit.subs).find((sub) => sub.id === CONCEPT_SAMPLE_ID).title;
 
   return {

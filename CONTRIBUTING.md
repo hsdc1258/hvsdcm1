@@ -12,7 +12,7 @@
 ## Compatibility rules
 
 - Do not change `wordmaster` or `smstudy` API identifiers or their localStorage keys without a forward migration.
-- Preserve the load order `account.js` → content data → shared study utilities → app controller.
+- Preserve the load order `account.js` → authenticated content loader → shared study utilities → app controller.
 - Escape data inserted through `innerHTML`. Use `textContent` for untrusted single values.
 - External links opened in a new tab must use `rel="noopener"`.
 - Keep the home login `next` redirect same-origin.
@@ -22,7 +22,7 @@
 
 ## Content changes
 
-WordMaster and social-studies files are deliberately data-heavy. Keep stable IDs so existing progress and wrong-answer records remain usable. Any addition or removal must update the invariants in `scripts/validate.mjs`, the UI's expected counts and the relevant documentation in the same change.
+WordMaster and social-studies files under `_learning/` are deliberately data-heavy and must never be moved onto a published path or exposed through `.nojekyll`. Keep stable IDs so existing progress and wrong-answer records remain usable. Any addition or removal must update the invariants in `scripts/validate.mjs`, rebuild the private R2 payloads, and update the UI's expected counts and relevant documentation in the same change.
 
 ## Database changes
 
