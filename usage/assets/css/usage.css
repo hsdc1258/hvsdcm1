@@ -129,8 +129,12 @@
 }
 /* rail 카드 머리 — 제목과 수집 시각이 폭을 다투지 않게 **두 줄로 나눈다**.
    한 줄에 우겨 넣으면 시각이 두 줄로 깨지면서 그 둘째 줄이 제목의 시각 영역과 붙어
-   라벨/값 위계가 사라진다 (review-visual M1). 시각은 여전히 오른쪽 정렬이라 값 열의
-   축은 아래 .us-health와 같다. */
+   라벨/값 위계가 사라진다 (review-visual M1).
+
+   둘째 줄은 **제목과 같은 왼쪽 축**에 선다. 오른쪽 정렬이었을 때는 대응 라벨이 없는 값
+   한 줄이 홀로 떠, 바로 아래 `마지막 수집 성공 / 16분 전` 쌍과 정렬 체계가 달라 보였다
+   (review-visual N11). 이 줄은 값이 아니라 카드 제목의 **부제**이므로, 라벨/값 격자가
+   아니라 제목의 축을 따르는 편이 읽는 순서와 맞는다. */
 .us-quota-rail .us-card-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -138,6 +142,7 @@
 }
 .us-quota-rail .us-card-head > .us-card-meta {
   max-width: 100%;
+  text-align: left;
 }
 /* 수집 건강 상태 — 마지막 성공 · 마지막 시도 · 그 결과. 카드 머리와 게이지 사이에 두
    줄로 눕는다: 게이지의 숫자를 믿어도 되는지가 그 숫자를 읽기 전에 판정돼야 한다.
@@ -591,16 +596,26 @@
 /* ==========================================================================
    조직도 — 뿌리 → 수평 trunk → 개별 stem (DESIGN.md §1.1 v9)
    ==========================================================================
-   조판 (2026-08-29 재작성, review-visual B1·B2)
+   조판 (2026-08-29 재작성, review-visual B1·B2 / 라운드 3 재조정 B3·M7·M8·N8·N9)
      · **뿌리**: 총괄(Main) 카드 하나가 최상단 가운데에 선다.
-     · **trunk**: 그 아래 가로 헤어라인 하나에서 단계마다 개별 stem이 내려온다.
+     · **trunk**: 그 아래 가로 헤어라인 하나에서 자식마다 개별 stem이 내려온다.
        카드가 되는 단계는 **보고된 단계 + 액터가 붙은 단계**뿐이고, 나머지는 조직도
        아래 rest 줄이 이름으로 받는다. 여덟 장을 상시 세우던 골격이 아니다.
-     · **액터 줄기**: 단계 카드 아래로 척추가 내려오고 액터마다 스텁이 가로로 뻗는다.
-       parent_id 자식은 같은 모듈을 한 단 더 되쓴다.
+     · **커넥터는 한 체계뿐이다** — 뿌리→단계, 단계→액터, 액터→하위 액터가 전부 같은
+       `stem 22px → 수평 trunk → stem 22px` 모듈을 되쓴다. 예전에는 1→2층만 중앙 stem이고
+       2→3층은 좌측 행잉 elbow(모바일 idiom)여서 한 그림에 두 체계가 보였다 (N3·N8).
      · 연결선은 전부 의사요소 헤어라인이다. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §10).
-   치수는 둘뿐이다: **노드 폭 188px**(모든 뷰포트 공통)과 **커넥터 모듈 22px**.
-   커스텀 프로퍼티로 묶지 않는 이유는 토큰 *정의*가 system.css 단일 원본이기 때문이다
+
+   **폭 예산 (라운드 3)** — 조직도는 컨테이너 폭 **안에서 완결된다.** 고정 노드 폭
+   188px을 버리고, 한 층의 형제들이 가용 폭을 나눠 갖는다(`flex: 1 1 0`). 고정폭은 폭이
+   모자란 쪽에서는 마지막 카드를 잘라 내고(데스크톱 845px 칼럼에 약 1050px 트리 →
+   B3: 잘린 `완료` 카드 + 전폭 네이티브 스크롤바), 폭이 남는 쪽에서는 카드 오른쪽을
+   비웠다(모바일 560px 컨테이너에 186px 고정 카드 → M8: 우측 약 45% 공백). 한 치수가
+   양쪽에서 동시에 틀린 것은 그 치수가 폭을 **모르기** 때문이므로, 치수를 고치는 대신
+   폭을 배분으로 바꾼다.
+
+   남는 고정 치수는 **커넥터 모듈 22px** 하나와 뿌리 카드 폭뿐이다. 커스텀 프로퍼티로
+   묶지 않는 이유는 토큰 *정의*가 system.css 단일 원본이기 때문이다
    (DESIGN.md §3 마지막 줄, validate.mjs가 강제). */
 .h-org {
   gap: var(--space-3);
@@ -614,11 +629,14 @@
   font-weight: 600;
 }
 /* 조직도 컨테이너 — 확대·이동 캔버스를 걷어낸 자리다 (계약 §C).
-   `transform: scale`이 없으므로 글자는 어느 폭에서도 원본 크기다. 트리가 컨테이너보다
-   넓으면 **이 상자만** 가로로 스크롤한다: min-width: 0이 그리드 칸의 자동 최소 크기를
-   풀어 주고(그러지 않으면 max-content 트리가 칸을 밀어내 페이지 body가 가로로 흔들린다),
-   overscroll-behavior가 가로 스크롤 끝에서 페이지로 넘어가는 것을 막는다.
-   키보드로도 스크롤할 수 있도록 tabindex를 받는 상자라 초점 링을 그린다. */
+   `transform: scale`이 없으므로 글자는 어느 폭에서도 원본 크기다.
+
+   트리가 이 상자의 폭을 **나눠 쓰므로** 정상 데이터에서는 스크롤이 발생하지 않는다.
+   `overflow-x: auto`는 안전망으로만 남는다 — 한 층에 형제가 비정상적으로 많아 노드가
+   더 줄어들 수 없을 때만 발동한다. 그때도 순검정 캔버스에서 가장 밝은 요소가 되지
+   않도록 스크롤바를 헤어라인 색의 얇은 것으로 낮춘다 (B3: 밝은 회색 트랙·썸·화살표
+   버튼이 패널 폭 전체에 걸쳐 있었다). min-width: 0은 그리드 칸의 자동 최소 크기를 풀어
+   페이지 body가 가로로 흔들리지 않게 한다. */
 .h-org-scroll {
   min-width: 0;
   padding: var(--space-4);
@@ -627,10 +645,8 @@
   background: var(--surface-2);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
-}
-.h-org-scroll:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
 /* 보기 모드 토글(관제탑 · 조직도). 모양은 system.css의 `.segmented`가 그린다 —
    여기서는 진행 중 패널 머리에서의 자리만 잡는다. 좁은 화면에서는 두 칸이 폭을
@@ -651,31 +667,46 @@
    좌표는 손으로 계산하지 않는다: 배치는 flex/grid가, 선은 의사요소 헤어라인이 잡는다
    (DESIGN.md §9·§10).
 
-   폭 계약: 트리는 `width: max-content`로 원본 크기에 서고, 컨테이너보다 좁으면
-   `min-width: 100%`가 폭을 채워 중앙 정렬이 실제로 컨테이너 전체를 쓴다. 넘치면
-   `.h-org-scroll`만 가로로 스크롤한다(계약 §C — 배율 변환은 이 화면에 없다). */
+   폭 계약: 트리가 컨테이너 폭을 그대로 쓰고, 한 층의 형제들이 그 폭을 나눠 갖는다.
+   `max-content`로 서지 않으므로 넘칠 것이 없다(계약 §C — 배율 변환은 이 화면에 없다). */
 .h-orgchart {
   display: grid;
   justify-items: center;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
 }
+/* 뿌리 카드만 폭을 고정한다 — 조직도에서 **위로 갈수록 무거워야** 하는데, 뿌리가 아래
+   층과 같은 폭이면 위계가 폭으로는 전혀 표현되지 않는다 (review-visual N9: 뿌리와 말단
+   actor가 가장 크고 중간층 단계 카드가 가장 작아 위계가 역전돼 보였다). 게이지도 뿌리
+   에만 남겨 밝기의 무게중심을 위로 올린다. */
 .h-orgchart-root {
   display: grid;
   justify-items: center;
+  width: 252px;
+  max-width: 100%;
 }
-/* 분기 사이 간격은 --space-3이다. 트렁크 계산이 이 값을 그대로 되쓰므로(아래 ::after의
-   좌우 음수 여백), 간격을 바꾸면 선도 함께 따라온다 — 두 곳에 숫자를 적지 않는다. */
-.h-orgchart-branches {
+/* ---- 커넥터 한 체계 ----
+   층마다 같은 모듈을 되쓴다: 부모 카드 아래 22px stem → 수평 trunk → 자식마다 22px stem.
+   `.h-orgchart-branches`(뿌리→단계), `.h-tree`(단계→액터), `.h-node-slot > ul`
+   (액터→하위 액터)이 **같은 규칙**을 공유하므로, 깊이가 늘어도 그림의 문법은 하나다.
+
+   형제 사이 간격은 --space-3이고 트렁크 계산이 이 값을 그대로 되쓰므로(::after의 좌우
+   음수 여백), 간격을 바꾸면 선도 함께 따라온다 — 두 곳에 숫자를 적지 않는다. */
+.h-orgchart-branches, .h-branch > .h-tree, .h-node-slot > ul {
   position: relative;
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   justify-content: center;
   gap: var(--space-3);
-  padding-top: 22px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 22px 0 0;
+  list-style: none;
 }
-/* 뿌리 → trunk */
-.h-orgchart-branches::before {
+/* 부모 카드 → trunk */
+.h-orgchart-branches::before, .h-branch > .h-tree::before, .h-node-slot > ul::before {
   content: '';
   position: absolute;
   top: 0;
@@ -683,15 +714,19 @@
   height: 22px;
   border-left: 1px solid var(--line);
 }
-.h-orgchart-branch {
+/* 자식 슬롯. `flex: 1 1 0`이 이 층의 형제들에게 가용 폭을 **똑같이** 나눠 준다 —
+   카드가 폭을 모른 채 고정 188px로 서던 것이 B3(잘림)과 M8(사공간)의 공통 원인이다.
+   min-width: 0이 없으면 flex 항목의 자동 최소 크기가 max-content라 다시 넘친다. */
+.h-orgchart-branch, .h-node-slot {
   position: relative;
   display: grid;
-  flex: none;
-  justify-items: center;
+  flex: 1 1 0;
+  justify-items: stretch;
+  min-width: 0;
   padding-top: 22px;
 }
-/* 개별 stem: trunk → 단계 카드 */
-.h-orgchart-branch::before {
+/* 개별 stem: trunk → 자식 카드 */
+.h-orgchart-branch::before, .h-node-slot::before {
   content: '';
   position: absolute;
   top: 0;
@@ -699,9 +734,9 @@
   height: 22px;
   border-left: 1px solid var(--line);
 }
-/* 수평 trunk. 분기마다 자기 폭과 좌우 gap의 절반씩을 그려 하나의 선으로 이어지고,
-   첫·마지막 분기는 바깥쪽 절반을 지워 선이 조직도 밖으로 새지 않는다. */
-.h-orgchart-branch::after {
+/* 수평 trunk. 형제마다 자기 폭과 좌우 gap의 절반씩을 그려 하나의 선으로 이어지고,
+   첫·마지막 형제는 바깥쪽 절반을 지워 선이 조직도 밖으로 새지 않는다. */
+.h-orgchart-branch::after, .h-node-slot::after {
   content: '';
   position: absolute;
   top: 0;
@@ -709,25 +744,27 @@
   left: calc(var(--space-3) / -2);
   border-top: 1px solid var(--line);
 }
-.h-orgchart-branch:first-child::after {
+.h-orgchart-branch:first-child::after, .h-node-slot:first-child::after {
   left: 50%;
 }
-.h-orgchart-branch:last-child::after {
+.h-orgchart-branch:last-child::after, .h-node-slot:last-child::after {
   right: 50%;
 }
-.h-orgchart-branch:only-child::after {
+.h-orgchart-branch:only-child::after, .h-node-slot:only-child::after {
   display: none;
 }
 /* 카드가 되지 못한 단계 — 라벨-값 한 줄. 빈 카드를 만들지 않으면서 "보고가 오지
-   않았다"는 사실은 그대로 남긴다 (review-visual B2). --text-3 on --surface-2 4.65 ✓ 캡션 */
+   않았다"는 사실은 그대로 남긴다 (review-visual B2).
+   이 줄은 조직도 상자 **밖**, 상세 본문 레벨에 선다 (M9) — 조직도 기하가 아니라
+   선택 세션의 메타이기 때문이다. 그래서 배경면이 --surface-2(상자 안)에서
+   --surface(본문 면, `.h-task`)로 바뀐다. 두 면 모두 대비 하한을 넘는다
+   (system.css 전수표: --text-3 surface 4.99 / surface-2 4.65 ✓ 캡션 하한 4.5,
+   --text-2 surface 7.03 / surface-2 6.54 ✓ 본문). */
 .h-orgchart-rest {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 2px var(--space-3);
-  justify-self: stretch;
-  margin: var(--space-4) 0 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line-faint);
+  margin: 0;
   color: var(--text-3);
   font-size: var(--fs-micro);
 }
@@ -745,58 +782,39 @@
   margin: 0;
   color: var(--text-2);
 }
-/* ---- 액터 줄기(단계 카드 아래) ----
-   같은 22px 모듈을 되쓴다: 척추가 카드 아래로 내려오고 액터마다 스텁이 가로로 뻗는다.
-   자식(parent_id) 액터는 이 모듈을 한 단 더 반복하므로 깊이가 늘어도 규칙은 하나다.
-   스텁은 카드 세로 중심이 아니라 **머리에서 22px** 지점에 붙는다 — 카드 높이가 사실
-   줄 수에 따라 달라지므로 중심에 매달면 형제끼리 선이 어긋난다. */
-.h-tree, .h-tree ul {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* 값 사이에 구분자를 세운다. 띄어쓰기만으로 이으면 `입력 게이트 수정 승인`이 네 개의
+   단계 이름이 아니라 한 구절로 읽힌다 (review-visual N10). 마크업에 문자를 넣지 않는
+   이유는 각 값이 판독용 data 속성을 가진 span이어야 하기 때문이다 — 구분자는 값이
+   아니라 조판이므로 CSS가 그린다. */
+.h-orgchart-rest dd > span + span::before {
+  content: '·';
+  margin-right: var(--space-2);
+  color: var(--text-3);
 }
-.h-node-slot {
-  position: relative;
-  display: block;
-}
-.h-branch, .h-node-slot > ul {
-  position: relative;
+/* ---- 액터 가지(단계 카드 아래) ----
+   위의 커넥터 한 체계를 그대로 되쓴다. `.h-branch`는 폭만 넘겨주는 껍데기이고,
+   선과 배치는 `.h-tree`·`.h-node-slot`이 `.h-orgchart-branches`·`.h-orgchart-branch`와
+   **같은 규칙**으로 그린다 (N8 — 예전에는 여기만 좌측 행잉 elbow였다). */
+.h-branch {
+  min-width: 0;
   justify-self: stretch;
-  padding-left: 44px;
-}
-.h-branch > .h-tree > .h-node-slot::before, .h-node-slot > ul > .h-node-slot::before {
-  content: '';
-  position: absolute;
-  top: 27px;
-  left: -22px;
-  width: 22px;
-  border-top: 1px solid var(--line);
-}
-.h-branch > .h-tree > .h-node-slot::after, .h-node-slot > ul > .h-node-slot::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -22px;
-  border-left: 1px solid var(--line);
-}
-/* 마지막 형제의 척추는 자기 스텁에서 끊는다 — 선이 목록 밖으로 새지 않는다. */
-.h-branch > .h-tree > .h-node-slot:last-child::after, .h-node-slot > ul > .h-node-slot:last-child::after {
-  bottom: calc(100% - 27px);
+  /* 깊이가 내려갈수록 카드가 한 단씩 좁아진다 — 조직도는 아래로 갈수록 가벼워야 하는데
+     말단 카드가 부모와 같은 폭이면 위계가 폭으로 표현되지 않는다 (review-visual N9).
+     들여쓰기 값은 형제 사이 gap과 같은 --space-2 계열이라 새 치수를 들이지 않는다. */
+  padding: 0 var(--space-2);
 }
 /* ---- 노드 ----
    surface-2 캔버스 위 surface-3 면. 노드 안 텍스트는 --text(12.80)와
    --text-2(5.42)만 쓴다 — --text-3는 3.85로 캡션 하한 미달이다. */
-/* 조직도 노드는 188px 한 폭으로 통일한다. 212px였을 때는 단계 넷만 서도 분기 열이
-   컨테이너보다 130px 넘게 넓어져 마지막 카드가 잘린 채로 읽혔다 — 스크롤이 계약이긴
-   하지만(계약 §C), 흔한 경우까지 잘려 보이면 조판이 미완성으로 읽힌다. 이 폭은 예전
-   430px 분기에서 이미 쓰던 값이라 새 치수를 들이지 않는다. */
+/* 노드는 **자기 슬롯의 폭을 쓴다.** 고정 폭(188px)이었을 때 같은 한 치수가 데스크톱
+   에서는 모자라 마지막 카드를 잘랐고(B3) 모바일에서는 남아 컨테이너 우측 45%를
+   비웠다(M8). 폭을 아는 것은 카드가 아니라 컨테이너이므로, 카드는 배분받은 만큼 선다.
+   min-width: 0은 그리드 항목의 자동 최소 크기를 풀어 준다. */
 .h-node {
   display: grid;
   gap: 3px;
-  width: 188px;
+  width: 100%;
+  min-width: 0;
   margin: 5px 0;
   padding: 10px var(--space-3);
   background: var(--surface-3);
@@ -837,18 +855,24 @@
   font-weight: 500;
 }
 /* 조직도의 뿌리(총괄)는 면을 바꾸지 않고 헤어라인 한 단으로만 구분한다.
-   `.is-request`는 사라졌다 — 사용자 입력은 더 이상 조직도 노드가 아니다 (M4). */
+   `.is-request`는 사라졌다 — 사용자 입력은 더 이상 조직도 노드가 아니다 (M4).
+   위계는 폭(위 `.h-orgchart-root`)·이름 크기·게이지 세 가지로만 표현한다 — 새 면색이나
+   강조색을 들이지 않는다 (N9: 말단 actor 카드가 가장 크고 밝아 위계가 역전돼 보였다). */
 .h-node.is-lead {
   border-color: var(--line);
 }
+.h-node.is-lead .h-node-name {
+  font-size: var(--fs-body-sm);
+}
+/* 이름은 잘리지 않는다 — 카드 폭이 이제 컨테이너를 따라가므로 자를 이유가 없고,
+   한국어 이름을 말줄임하면 어절이 끊긴다 (§2 keep-all). */
 .h-node-name {
+  min-width: 0;
   margin: 0;
-  overflow: hidden;
   color: var(--text);
   font-size: var(--fs-caption);
   font-weight: 600;
   line-height: var(--lh-snug);
-  text-overflow: ellipsis;
 }
 .h-node-detail, .h-node-note, .h-node-state, .h-node-progress, .h-node-facts {
   color: var(--text-2);
@@ -880,12 +904,14 @@
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-/* 모델·추론은 한 줄 고정이다 — 노드 폭이 값에 따라 흔들리면 축이 들쭉날쭉해진다. */
+/* 모델·추론은 이제 **각자 한 줄**이라 값 하나가 짧다(`gpt-5.6-codex` / `xhigh`).
+   그래도 폭이 모자라면 말줄임이 아니라 줄바꿈으로 넘긴다 — 말줄임은 값을 **잃지만**
+   줄바꿈은 잃지 않는다. 모델명의 하이픈이 자연스러운 분절점이라 어절 중간에서 끊기지도
+   않는다 (review-visual M7: `claude-opus-5 · hi…`처럼 추론 단계가 늘 사라졌다). */
 .h-node-fact-mono {
-  overflow: hidden;
+  min-width: 0;
   font-family: var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 /* note는 반대로 길어지면 줄바꿈한다. 잘라 버리면 수치가 사라지기 때문이다. */
 .h-node-note {
@@ -896,8 +922,10 @@
   align-items: center;
   gap: 6px;
 }
+/* 소요는 이제 사실 목록의 한 줄(dd)이다. `margin-left: auto`로 상태 줄 오른쪽에 밀어
+   붙이던 좌우 양끝 정렬을 걷었다 — 한 조직도 안에서 단계 카드만 정렬 규칙이 달랐다
+   (review-visual N4 잔여 · N12). */
 .h-node-time {
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 /* 진행도도 다른 사실과 **같은 정렬 규칙**을 쓴다: 라벨 뒤에 값이 붙는다.
@@ -965,49 +993,59 @@
   }
 }
 /* ---- 모바일 배치(≤768px): 조직도를 **세로 트리로 직렬화**한다 ----
-   §1.1이 모바일에만 허용한 조판이다. 단계를 가로로 늘어놓으면 노드 하나가 320px대
+   §1.1이 모바일에만 허용한 조판이다. 형제를 가로로 늘어놓으면 노드 하나가 320px대
    화면보다 넓은 열을 여럿 만들고, 그것을 넣는 방법은 배율을 떨어뜨리는 것뿐인데
    이 화면에 `transform: scale`은 존재하지 않는다(계약 §C). 그래서 폭을 '노드 하나 +
    들여쓰기'로 줄이고 길어진 세로는 페이지가 그냥 스크롤한다.
 
-   새 선을 만들지 않는다 — 데스크톱의 22px 모듈을 방향만 돌려 되쓴다: 단계 척추가
-   왼쪽 22px에서 내려오고, 단계마다 27px 지점에 22px 스텁이 붙는다(액터 줄기와 같은 값). */
+   **직렬화가 허용된 것이지 고정폭 카드가 허용된 것은 아니다** (review-visual M8).
+   카드는 들여쓰기 이후의 잔여 폭을 끝까지 쓴다 — 560px 컨테이너에 186px 고정 카드가
+   서던 때는 오른쪽 약 235px가 빈 검은 면이었고, 남는 폭이 바로 옆에 있는데도 모델 값이
+   말줄임으로 잘렸다. 깊이는 카드 폭이 아니라 **들여쓰기와 커넥터**가 표현한다.
+
+   새 선을 만들지 않는다 — 데스크톱의 22px 모듈을 방향만 돌려 되쓴다: 척추가 왼쪽
+   22px에서 내려오고, 형제마다 27px 지점에 22px 스텁이 붙는다. 데스크톱과 마찬가지로
+   모든 층(뿌리→단계, 단계→액터, 액터→하위)이 같은 규칙을 공유한다. */
 @media (max-width: 768px) {
   .h-orgchart {
+    justify-items: stretch;
+  }
+  .h-orgchart-root {
+    width: 100%;
     justify-items: start;
   }
-  .h-orgchart-branches {
+  .h-orgchart-branches, .h-branch > .h-tree, .h-node-slot > ul {
     flex-direction: column;
     align-items: stretch;
     gap: 0;
-    align-self: stretch;
+    padding-top: 0;
   }
-  .h-orgchart-branches::before {
-    left: 22px;
+  .h-orgchart-branches::before, .h-branch > .h-tree::before, .h-node-slot > ul::before {
+    display: none;
   }
-  .h-orgchart-branch {
-    justify-items: start;
+  .h-orgchart-branch, .h-node-slot {
+    justify-items: stretch;
     padding-top: 0;
     padding-left: 44px;
   }
-  /* 세로 척추 — 단마다 이어져 하나의 선이 되고, 마지막 단은 자기 스텁에서 끊는다. */
-  .h-orgchart-branch::before {
+  /* 세로 척추 — 형제마다 이어져 하나의 선이 되고, 마지막 형제는 자기 스텁에서 끊는다. */
+  .h-orgchart-branch::before, .h-node-slot::before {
     top: 0;
     bottom: 0;
     left: 22px;
     height: auto;
   }
-  .h-orgchart-branch:last-child::before {
+  .h-orgchart-branch:last-child::before, .h-node-slot:last-child::before {
     bottom: calc(100% - 27px);
   }
-  /* trunk였던 가로선은 단계 하나짜리 스텁이 된다. */
-  .h-orgchart-branch::after, .h-orgchart-branch:first-child::after, .h-orgchart-branch:last-child::after {
+  /* trunk였던 가로선은 형제 하나짜리 스텁이 된다. */
+  .h-orgchart-branch::after, .h-orgchart-branch:first-child::after, .h-orgchart-branch:last-child::after, .h-node-slot::after, .h-node-slot:first-child::after, .h-node-slot:last-child::after {
     top: 27px;
     right: auto;
     left: 22px;
     width: 22px;
   }
-  .h-orgchart-branch:only-child::after {
+  .h-orgchart-branch:only-child::after, .h-node-slot:only-child::after {
     display: block;
   }
 }
