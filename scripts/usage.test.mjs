@@ -847,7 +847,9 @@ test('an empty snapshot list and a payload without buckets render an empty state
 test('a fetch that never settles times out and the automatic poll keeps running', async () => {
   const clock = createFakeClock();
   const sandbox = await createUsageAppSandbox(
-    [HANGING_RESPONSE, { snapshots: [], tasks: [harnessTask()] }],
+    // 가운데 항목은 시간초과 뒤 화면이 비어 있을 때 읽는 정적 사본 요청의 응답이다.
+    // 여기서는 사본도 없는 상황을 재현해(오류) 폴백이 폴링을 가로채지 않는지 함께 본다.
+    [HANGING_RESPONSE, new Error('사본 없음'), { snapshots: [], tasks: [harnessTask()] }],
     { clock },
   );
   assert.equal(sandbox.requests.length, 1);
@@ -856,13 +858,15 @@ test('a fetch that never settles times out and the automatic poll keeps running'
   await clock.advance(14_000);
   assert.equal(sandbox.requests.length, 1);
 
-  // 15초에서 시간초과 → 오류를 말하고 다음 주기를 예약한다.
+  // 15초에서 시간초과 → 사본을 한 번 확인하고, 없으면 오류를 말한 뒤 다음 주기를 예약한다.
   await clock.advance(2_000);
+  assert.equal(sandbox.requests.length, 2);
+  assert.equal(sandbox.requests[1].url, '/usage/pipeline-state.json');
   assert.match(sandbox.store.get('usageError').textContent, /응답이 없어/u);
 
-  // 유휴 주기(60초) 뒤 두 번째 요청이 실제로 나가고 화면이 채워진다.
+  // 유휴 주기(60초) 뒤 다음 피드 요청이 실제로 나가고 화면이 채워진다.
   await clock.advance(60_000);
-  assert.equal(sandbox.requests.length, 2);
+  assert.equal(sandbox.requests.length, 3);
   assert.match(sandbox.store.get('usageBody').innerHTML, /h-tree/u);
   assert.equal(sandbox.store.get('usageError').textContent, '');
 });
@@ -1134,4 +1138,109 @@ test('the board renders the approved vocabulary and names every stage state in t
   assert.match(markup, /진행 중 2\/8/u);
   // 옛 트리 조판이 되살아나면(중복 UI) 여기서 잡힌다.
   assert.doesNotMatch(markup, /h-node|h-org|data-org-canvas/u);
+});
+
+// ---- 정적 폴백 (usage/pipeline-state.json) --------------------------------
+//
+// 하네스 피드에 닿지 못한 첫 화면은 빈 채로 두지 않고, 저장소에 함께 배포되는 사본으로
+// 관제탑을 세운다. 계약 셋을 본다: ① 첫 화면 실패에서만 탄다 ② 사본임을 화면이 말한다
+// ③ 사본에 없는 판정('기록 없음')을 지어내지 않는다.
+// 이 테스트가 **못 보는 것**: 실제 HTTP 캐시 동작과 배포면에서의 파일 접근 권한.
+
+const settle = async (times = 6) => {
+  for (let index = 0; index < times; index += 1) {
+    await new Promise((resolve) => { setImmediate(resolve); });
+  }
+};
+
+const staticCopy = {
+  updated: '2026-08-27T11:00:00.000Z',
+  window: '10:07 → 17:00',
+  pipelines: [{
+    id: 'P-C',
+    name: '관제탑 이전',
+    orch: 'Fable 5',
+    task: '관제 페이지를 사이트에',
+    state: 'run',
+    meta: ['정본 = 사이트'],
+    stages: [
+      { n: '기획', who: 'Fable 5', st: 'ok', note: '계약 고정', t: '38m' },
+      { n: '구현', who: 'GPT 5.6 Sol xhigh', st: 'run', chips: ['GPT 5.6 Sol:Worker'] },
+      { n: '리뷰', who: 'Opus 5', st: 'wait' },
+    ],
+  }],
+};
+
+test('a first load that fails falls back to the shipped static copy and labels it as one', async () => {
+  const sandbox = await createUsageAppSandbox([new Error('network down'), staticCopy]);
+  await settle();
+
+  assert.equal(sandbox.requests.length, 2, '피드가 실패하면 사본을 한 번 읽는다');
+  assert.equal(sandbox.requests[1].url, '/usage/pipeline-state.json');
+  assert.equal(sandbox.requests[1].options.cache, 'no-store');
+  // 배포면의 정적 파일이라 인증 헤더를 붙이지 않는다.
+  assert.equal(sandbox.requests[1].options.headers, undefined);
+
+  const markup = sandbox.store.get('usageBody').innerHTML;
+  assert.match(markup, /class="pl-board"/u);
+  assert.match(markup, /P-C · 관제탑 이전/u);
+  assert.match(markup, /진행 중 1\/3/u);
+  assert.match(markup, /class="pl-chip"[^>]*>GPT 5\.6 Sol:Worker/u);
+  assert.match(markup, /class="pl-cost">38m/u);
+  // 사본임을 화면이 말한다 — 실시간처럼 보이게 두지 않는다.
+  assert.match(markup, /정적 사본/u);
+  // 사본이 언제 찍혔는지 상대 시각으로 말한다 (벽시계에 의존하지 않게 모양만 본다).
+  assert.match(markup, /사본 갱신 \d+[^<]*전/u);
+  assert.doesNotMatch(markup, /NaN|Invalid/u);
+  assert.match(sandbox.store.get('usageError').textContent, /저장된 사본을 대신 보여줍니다/u);
+  // 사본에는 단계 이벤트가 없다 — 없는 판정('기록 없음')을 만들어내지 않는다.
+  assert.doesNotMatch(markup, /class="pl-state is-skip"/u);
+});
+
+test('a live dashboard is never replaced by the static copy', async () => {
+  const sandbox = await createUsageAppSandbox([
+    { snapshots: [], tasks: [harnessTask()] },
+    new Error('network down'),
+  ]);
+  const before = sandbox.store.get('usageBody').innerHTML;
+  assert.match(before, /us-command-layout/u);
+
+  await sandbox.store.get('reload').listeners.click();
+  await settle();
+
+  // 사본을 묻지도 않았다: 요청은 최초 로드와 실패한 새로고침 둘뿐이다.
+  assert.equal(sandbox.requests.length, 2);
+  assert.equal(sandbox.store.get('usageBody').innerHTML, before);
+  assert.equal(sandbox.store.get('usageError').textContent, 'network down');
+});
+
+test('when the static copy is unreachable too, the screen says why instead of faking a board', async () => {
+  const sandbox = await createUsageAppSandbox([new Error('network down'), new Error('offline')]);
+  await settle();
+  assert.equal(sandbox.requests.length, 2);
+  assert.equal(sandbox.store.get('usageBody').innerHTML, '');
+  assert.equal(sandbox.store.get('usageError').textContent, 'network down');
+});
+
+test('an empty or malformed static copy is treated as no copy at all', async () => {
+  for (const body of [{}, { pipelines: [] }, { pipelines: 'nope' }, null]) {
+    const sandbox = await createUsageAppSandbox([new Error('network down'), body]);
+    await settle();
+    assert.equal(sandbox.store.get('usageBody').innerHTML, '');
+  }
+});
+
+test('the shipped static copy parses and actually renders a board', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const nodePath = await import('node:path');
+  const root = nodePath.dirname(nodePath.dirname(fileURLToPath(import.meta.url)));
+  const state = JSON.parse(readFileSync(nodePath.join(root, 'usage/pipeline-state.json'), 'utf8'));
+  assert.ok(Array.isArray(state.pipelines) && state.pipelines.length > 0, '사본에 파이프라인이 있어야 한다');
+
+  const markup = createUsageRenderers().buildFallbackBoard(state, NOW);
+  assert.equal((markup.match(/class="pl-card"/gu) || []).length, state.pipelines.length);
+  // 사본의 모든 단계가 마디를 차지한다 — 빈 보드가 배포되는 것을 막는다.
+  const stageCount = state.pipelines.reduce((total, item) => total + (item.stages || []).length, 0);
+  assert.equal((markup.match(/class="pl-stage /gu) || []).length, stageCount);
 });

@@ -1157,6 +1157,76 @@
       </div>`;
   }
 
+  // ---- 정적 폴백 -----------------------------------------------------------
+  //
+  // 하네스 피드(GET /api/usage)가 아직 배포되지 않았거나(404/403) 네트워크가 막혀 첫 화면을
+  // 세우지 못하면, 저장소에 함께 배포되는 사본(usage/pipeline-state.json)으로 관제탑만이라도
+  // 세운다. 빈 화면에 오류 한 줄만 남기는 것보다 "언제 찍힌 사본인지 밝힌 보드"가 낫다.
+  //
+  // 규칙 둘을 지킨다:
+  //   1. **살아 있는 응답이 언제나 이긴다.** 이 경로는 화면이 비어 있을 때만 탄다 — 이미
+  //      그려진 실시간 화면을 폴링 한 번 실패로 얼어붙은 사본이 덮지 않는다.
+  //   2. **사본임을 화면이 말한다.** 출처 줄과 오류 줄에 사본이라고 적는다. 실시간처럼
+  //      보이게 두면 이 화면이 하는 유일한 약속(지금 무엇이 도는가)이 거짓이 된다.
+  const STATIC_STATE_PATH = '/usage/pipeline-state.json';
+
+  async function staticBoardState() {
+    try {
+      // 배포면의 평범한 정적 파일이라 인증 헤더가 의미 없다. 캐시는 끈다 — 사본이 갱신돼도
+      // 브라우저가 옛 사본을 물고 있으면 폴백이 두 번 낡는다.
+      const response = await fetch(STATIC_STATE_PATH, { cache: 'no-store' });
+      if (!response.ok) return null;
+      const data = await response.json().catch(() => null);
+      return Array.isArray(data?.pipelines) && data.pipelines.length > 0 ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // 사본의 단계 상태(ok/run/wait)를 판독 어휘로 되돌린다. 사본에는 단계별 이벤트가 없어
+  // '기록 없음'(skipped)을 판정할 근거가 없다 — 그래서 만들어내지 않고 대기로 떨어뜨린다.
+  const STATIC_PHASE_STATE = { ok: 'done', run: 'current', wait: 'pending' };
+
+  function pipelineFromStatic(entry) {
+    const stages = Array.isArray(entry?.stages) ? entry.stages : [];
+    const state = ['ok', 'run', 'wait'].includes(entry?.state) ? entry.state : 'run';
+    return {
+      id: entry?.id || entry?.name || '',
+      name: [entry?.id, entry?.name].filter(Boolean).join(' · ') || '이름 없는 작업',
+      task: entry?.task || '',
+      state,
+      // 사본의 orch는 모델 이름 한 줄이다. 액터 id가 없으므로 붙이지 않는다.
+      orch: entry?.orch ? { label: String(entry.orch), model: '', actorId: '' } : null,
+      meta: (Array.isArray(entry?.meta) ? entry.meta : []).map((line) => String(line)),
+      stages: stages.map((stage) => ({
+        key: '',
+        state: STATIC_PHASE_STATE[stage?.st] || 'pending',
+        n: stage?.n || '단계',
+        st: BOARD_STATE_LABELS[stage?.st] ? stage.st : 'wait',
+        who: stage?.who || '',
+        note: stage?.note || '',
+        // t(소요)·tok(토큰)·pct는 전부 선택 필드다. 있는 것만 잇고, pct 0은 값이다.
+        cost: [
+          stage?.t,
+          stage?.tok,
+          stage?.pct === null || stage?.pct === undefined ? null : `${stage.pct}%`,
+        ].filter(Boolean).join(' · '),
+        chips: (Array.isArray(stage?.chips) ? stage.chips : [])
+          .map((chip) => ({ label: String(chip), actorId: '', percent: null })),
+      })),
+    };
+  }
+
+  function buildFallbackBoard(state, now) {
+    const pipelines = (Array.isArray(state?.pipelines) ? state.pipelines : []).map(pipelineFromStatic);
+    const updated = relativeTime(state?.updated, now) || state?.updated || '시각 없음';
+    return renderBoard(pipelines, {
+      window: state?.window || '',
+      summary: `세션 ${pipelines.length}개 · 사본 갱신 ${updated}`,
+      source: '정적 사본 — 실시간 피드에 닿지 못했습니다',
+    });
+  }
+
   function renderPortfolioBoard(inputTasks, now) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
     const activeCount = tasks.filter((task) => task.status !== 'complete').length;
@@ -1444,8 +1514,23 @@
       }
     } catch (error) {
       if (error.message === 'unauthorized') return;
-      if (!announce) elements.body.innerHTML = elements.body.innerHTML || '';
-      elements.error.textContent = error.message || '사용량을 불러오지 못했습니다.';
+      const reason = error.message || '사용량을 불러오지 못했습니다.';
+      // 화면이 아직 비어 있을 때만 사본으로 내려앉는다. 이미 실시간 화면이 있으면
+      // 그것을 그대로 두는 편이 항상 더 정확하다.
+      if (!elements.body.innerHTML) {
+        const fallback = await staticBoardState();
+        if (fallback) {
+          elements.body.innerHTML = buildFallbackBoard(fallback, Date.now());
+          wireDashboard(elements.body);
+          elements.error.textContent = `${reason} 저장된 사본을 대신 보여줍니다.`;
+          if (announce) {
+            elements.reload.textContent = '새로고침';
+            if (elements.refreshStatus) elements.refreshStatus.textContent = '저장된 사본을 보여주고 있습니다.';
+          }
+          return;
+        }
+      }
+      elements.error.textContent = reason;
       if (announce) {
         elements.reload.textContent = '새로고침';
         if (elements.refreshStatus) elements.refreshStatus.textContent = '업데이트하지 못했습니다.';
@@ -1474,7 +1559,7 @@
 
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
-    sessionTreeNodes, pipelineFromTask, renderBoard, phaseTimeline, sessionUsageDeltas,
+    sessionTreeNodes, pipelineFromTask, renderBoard, buildFallbackBoard, phaseTimeline, sessionUsageDeltas,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
     wireOrgViews, fitPendingOrgViews, fitOrgView, zoomOrgView, orgViewState, load,
   };
