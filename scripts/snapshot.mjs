@@ -20,7 +20,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer,
-  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderUsageDashboard, renderWordMasterHome,
+  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderGichulScreen, renderUsageDashboard, renderWordMasterHome,
 } from './render-sandbox.mjs';
 
 const ROOT = process.cwd();
@@ -35,6 +35,7 @@ export const SNAPSHOT_BY_SCREEN = {
   'smstudy/index.html': `${SNAPSHOT_DIR}/concept-sample.html`,
   'admin/index.html': `${SNAPSHOT_DIR}/admin.html`,
   'usage/index.html': `${SNAPSHOT_DIR}/usage.html`,
+  'gichul/index.html': `${SNAPSHOT_DIR}/gichul.html`,
 };
 
 export const SNAPSHOT_FILES = {
@@ -203,6 +204,45 @@ const USAGE_FIXTURE = {
     artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],
     },
   ],
+};
+
+// ---- 기출 화면 fixture ------------------------------------------------------
+// 기출 목록도 저장소에 원본이 없다(로그인 뒤 R2에서 온다). 표본의 **모양**은 손으로
+// 지어내지 않고 scripts/gichul/build-manifest.mjs가 실제로 쓰는 레코드 계약을 그대로
+// 따른다: id = `<시행년>-<회차>-<과목>[-<선택과목>]-<종류>`, 같은 파일에서 갈라진
+// 선택과목은 r2_key와 pages를 공유하고 sections.common도 같다.
+//
+// 표본은 계약의 갈래를 한 번씩 지난다: 신체제 국어(공통 + 화작·언매), 구체제 국어
+// (선택과목 없음 → 발췌 불가 행), 신체제 수학 3갈래, 단일 체제 영어·탐구 2과목,
+// 그리고 정답표(kind: 'answer').
+const GICHUL_FIXTURE = {
+  exams: [
+    { id: '2020-csat-korean-question', subject: 'korean', year: 2020, grade_year: 2021, round: 'csat', track: null, kind: 'question', r2_key: '2020-csat-korean-question.pdf', pages: 12 },
+    { id: '2020-csat-korean-answer', subject: 'korean', year: 2020, grade_year: 2021, round: 'csat', track: null, kind: 'answer', r2_key: '2020-csat-korean-answer.pdf', pages: 1 },
+    { id: '2023-06-korean-hwajak-question', subject: 'korean', year: 2023, grade_year: 2024, round: '06', track: 'hwajak', kind: 'question', r2_key: '2023-06-korean-question.pdf', pages: 16, sections: { common: [1, 8], selection: [9, 12] } },
+    { id: '2023-06-korean-eonmae-question', subject: 'korean', year: 2023, grade_year: 2024, round: '06', track: 'eonmae', kind: 'question', r2_key: '2023-06-korean-question.pdf', pages: 16, sections: { common: [1, 8], selection: [13, 16] } },
+    { id: '2023-06-korean-hwajak-answer', subject: 'korean', year: 2023, grade_year: 2024, round: '06', track: 'hwajak', kind: 'answer', r2_key: '2023-06-korean-answer.pdf', pages: 2 },
+    { id: '2023-06-korean-eonmae-answer', subject: 'korean', year: 2023, grade_year: 2024, round: '06', track: 'eonmae', kind: 'answer', r2_key: '2023-06-korean-answer.pdf', pages: 2 },
+    { id: '2023-csat-korean-hwajak-question', subject: 'korean', year: 2023, grade_year: 2024, round: 'csat', track: 'hwajak', kind: 'question', r2_key: '2023-csat-korean-question.pdf', pages: 16, sections: { common: [1, 8], selection: [9, 12] } },
+    { id: '2023-csat-korean-eonmae-question', subject: 'korean', year: 2023, grade_year: 2024, round: 'csat', track: 'eonmae', kind: 'question', r2_key: '2023-csat-korean-question.pdf', pages: 16, sections: { common: [1, 8], selection: [13, 16] } },
+    { id: '2023-csat-math-hwaktong-question', subject: 'math', year: 2023, grade_year: 2024, round: 'csat', track: 'hwaktong', kind: 'question', r2_key: '2023-csat-math-question.pdf', pages: 20, sections: { common: [1, 12], selection: [13, 15] } },
+    { id: '2023-csat-math-mijeok-question', subject: 'math', year: 2023, grade_year: 2024, round: 'csat', track: 'mijeok', kind: 'question', r2_key: '2023-csat-math-question.pdf', pages: 20, sections: { common: [1, 12], selection: [16, 18] } },
+    { id: '2023-csat-math-giha-question', subject: 'math', year: 2023, grade_year: 2024, round: 'csat', track: 'giha', kind: 'question', r2_key: '2023-csat-math-question.pdf', pages: 20, sections: { common: [1, 12], selection: [19, 20] } },
+    { id: '2023-csat-english-question', subject: 'english', year: 2023, grade_year: 2024, round: 'csat', track: null, kind: 'question', r2_key: '2023-csat-english-question.pdf', pages: 12 },
+    { id: '2023-csat-soc_culture-question', subject: 'soc_culture', year: 2023, grade_year: 2024, round: 'csat', track: null, kind: 'question', r2_key: '2023-csat-soc_culture-question.pdf', pages: 12 },
+    { id: '2023-csat-politics_law-question', subject: 'politics_law', year: 2023, grade_year: 2024, round: 'csat', track: null, kind: 'question', r2_key: '2023-csat-politics_law-question.pdf', pages: 12 },
+  ],
+};
+
+// 발췌 모드 + 공통 파트 포함 + 정답표 포함으로 얼린다. 이 조합이 화면의 갈래를 가장
+// 많이 지난다: 발췌 구간이 붙은 행, 선택과목 구간이 없어 비활성으로 내려앉는 구체제 행,
+// 그리고 발췌 모드에서만 살아나는 "공통 파트 포함" 옵션.
+const GICHUL_STATE = {
+  subject: 'korean',
+  mode: 'excerpt',
+  includeCommon: true,
+  includeAnswers: true,
+  selected: ['2023-06-korean-hwajak-question', '2023-csat-korean-hwajak-question'],
 };
 
 // 화면마다 얹히는 CSS가 다르다. 여기를 한 벌로 두면 WordMaster 스냅샷이 smstudy의
@@ -402,6 +442,28 @@ export function buildSnapshots() {
           '<div id="usageBody" class="us-body"></div>',
           `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,
         ),
+    }),
+    [SNAPSHOT_BY_SCREEN['gichul/index.html']]: documentSnapshot('gichul/index.html', {
+      note: '<strong>무엇인가</strong> — 기출(<code>/gichul/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 필터와 결과는 <code>gichul/app.js</code>의 <code>renderFilters()</code>·<code>renderBody()</code>를'
+        + ' <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>GICHUL_FIXTURE</code>)이고,'
+        + ' 과목은 국어 · 범위는 <strong>선택과목 발췌</strong> · 공통 파트 포함 · 정답표 포함 · 두 항목 선택 상태다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 필터가 표본에서 도출한 값(학년도 · 시행 · 선택과목)만 내는지,'
+        + ' 발췌 모드에서 선택과목 구간이 없는 2021학년도 수능 행이 <strong>비활성</strong>으로 내려앉고 체크박스가 잠기는지,'
+        + ' 행마다 발췌 구간과 공통 구간이 부제 한 줄로 읽히는지, 툴바의 선택 개수와 버튼 상태가 선택과 맞는지,'
+        + ' 그리고 그룹 리스트 · 세그먼티드 · 툴바가 전부 <code>system.css</code>의 프리미티브를 그대로 쓰는지.'
+        + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>account.js</code>와 <code>app.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
+        + ' 실제 시험 목록은 이 문서가 아니라 로그인 뒤 <code>GET /api/gichul/manifest</code>에서 온다 — 표본은 계약의 모양을 보여주기 위한 것이지 실제 수록 범위가 아니다.'
+        + ' 정적 사본이라 체크박스 · 버튼 · 병합 내려받기는 동작하지 않는다.'
+        + `\n  ${GENERATED_NOTE}`,
+      mutate: (html) => {
+        const { filters, body } = renderGichulScreen(GICHUL_FIXTURE, GICHUL_STATE);
+        return html
+          .replace('<aside id="gichulFilters" class="sidebar" aria-label="기출 필터"></aside>',
+            `<aside id="gichulFilters" class="sidebar" aria-label="기출 필터">${filters}</aside>`)
+          .replace('<div id="gichulBody" class="gi-body"></div>',
+            `<div id="gichulBody" class="gi-body">${body}</div>`);
+      },
     }),
   };
 }

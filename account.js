@@ -8,7 +8,12 @@
   const storageKey = script?.dataset.key;
   const apiUrl = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
 
-  if (!app || !storageKey) return;
+  // data-key가 없으면 **게이트 전용 모드**다: 로그인 리다이렉트와 인증 fetch만 제공하고
+  // 진도 동기화는 하지 않는다. 기출(/gichul/)처럼 계정에 저장할 학습 진도가 없는 화면이
+  // 여기에 해당한다 — 없는 진도를 /api/progress/<app>에 밀면 Worker의 VALID_APPS에 없는
+  // 앱 이름이라 404가 나고, 화면은 매번 실패한 동기화를 콘솔에 남긴다.
+  if (!app) return;
+  const syncsProgress = Boolean(storageKey);
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -22,7 +27,10 @@
     };
   }
 
-  async function api(path, options = {}) {
+  // 인증 요청의 단일 원본. 401이면 로컬 세션을 버리고 랜딩으로 되돌린다.
+  // 본문을 JSON으로 읽지 않고 Response를 그대로 돌려주므로 PDF 같은 바이너리도
+  // 같은 세션 규칙을 지나갈 수 있다 (기출 병합이 이것을 쓴다).
+  async function request(path, options = {}) {
     const response = await fetch(`${apiUrl}${path}`, {
       ...options,
       headers: {
@@ -37,6 +45,11 @@
       throw new Error('unauthorized');
     }
 
+    return response;
+  }
+
+  async function api(path, options = {}) {
+    const response = await request(path, options);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'sync failed');
     return data;
@@ -83,7 +96,7 @@
 
   // 학습 앱이 저장을 마친 시점에만 명시적으로 호출한다. 브라우저 전체의
   // Storage 프로토타입을 변경하지 않아 다른 기능의 저장 동작과 격리된다.
-  window.HvsAccount = { api, app, scheduleProgressSync };
+  window.HvsAccount = { api, request, app, scheduleProgressSync };
 
   async function hydrateFromAccount() {
     try {
@@ -128,5 +141,6 @@
     }
   }
 
-  hydrateFromAccount();
+  if (syncsProgress) hydrateFromAccount();
+  else document.documentElement.dataset.accountReady = 'true';
 })();

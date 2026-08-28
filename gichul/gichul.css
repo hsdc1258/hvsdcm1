@@ -1,0 +1,93 @@
+/* ==========================================================================
+   기출 화면 (gichul) — 화면 전용 글루만 담는다.
+   레퍼런스는 학습 화면과 같은 iOS 그룹 리스트 + 인셋(DESIGN.md §1)이고, 골격·행·툴바·
+   세그먼티드·배지는 전부 system.css의 프리미티브를 그대로 소비한다(§7). 여기 있는 것은
+   그 프리미티브가 다루지 않는 배치뿐이다: 결과 그룹의 세로 리듬, 행 우측의 두 컨트롤,
+   그리고 실패를 알리는 줄.
+   색 토큰을 정의하지 않는다 — 단일 원본은 assets/css/system.css다(§3).
+   깊이는 명도 단차 + 1px 헤어라인이며 그림자·그라디언트를 쓰지 않는다(§4).
+   ========================================================================== */
+.gi-body {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+/* 학년도 묶음. .list-group-head는 그룹 **바깥** 형제라 여기서 간격을 잡는다. */
+.gi-group {
+  display: grid;
+  gap: 0;
+}
+.gi-empty {
+  margin: 0;
+  padding: var(--space-5) var(--space-3);
+  color: var(--text-2);
+  /* on --bg 8.16:1 */
+  font-size: var(--fs-body-sm);
+}
+.gi-count {
+  color: var(--text-2);
+  /* on --surface 7.03:1 */
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+/* 행 우측에 "열기" 버튼과 체크박스가 함께 온다. .list-row-accessory는 기본이
+   place-items 격자라 두 컨트롤을 가로로 세우는 것만 여기서 한다. */
+.gi-accessory {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.gi-status:empty {
+  display: none;
+}
+.gi-progress {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-2);
+  /* on --bg 8.16:1 */
+  font-size: var(--fs-body-sm);
+}
+/* 실패·주의 줄. 상태색은 상태 표시에만 쓴다(§3) — 여기가 그 용도다. */
+.gi-alert {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.gi-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: var(--orange);
+  /* on --surface 8.80:1 */
+}
+.gi-alert-body {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.gi-alert-title {
+  margin: 0;
+  color: var(--text);
+  /* on --surface 16.61:1 */
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+}
+.gi-alert-list {
+  margin: 0;
+  padding-left: 1.1em;
+  color: var(--text-2);
+  /* on --surface 7.03:1 */
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+/* 좁은 화면에서는 사이드바가 본문 위로 접히므로(system.css @860px) 필터 그룹의
+   세로 길이를 줄인다. 행 높이는 터치 타깃 하한을 지키는 --row-min-h 그대로 둔다. */
+@media (max-width: 860px) {
+  .gi-body {
+    gap: var(--space-3);
+  }
+}

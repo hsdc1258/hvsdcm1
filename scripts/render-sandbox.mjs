@@ -403,6 +403,61 @@ export async function createUsageAppSandbox(responses = [], options = {}) {
   return { context, store, requests, renderers: context.USAGE_RENDER };
 }
 
+// 기출의 app.js도 IIFE다. 필터와 결과를 문자열로 만드는 렌더러를 window.GICHUL_RENDER에
+// 얹어 두었으므로, 소스를 **그대로** 평가하고 fixture로 부르면 실제 화면 마크업이 나온다.
+// 로그인 게이트 때문에 토큰을 미리 심고, 매니페스트 fetch는 영원히 대기하는 프라미스로
+// 둔다 — 스냅샷의 입력은 네트워크가 아니라 고정 표본이다.
+export const GICHUL_APP_SOURCE = 'gichul/app.js';
+export function createGichulRenderers() {
+  const store = new Map();
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = {
+    href: 'https://hvsdcm1.xyz/gichul/',
+    pathname: '/gichul/',
+    search: '',
+    hash: '',
+    replace() { throw new Error(`${GICHUL_APP_SOURCE}: the login gate fired inside the snapshot sandbox`); },
+    assign() {},
+    reload() {},
+  };
+  context.localStorage = {
+    store: new Map([['hvsdcm.token', 'gate-token']]),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  // account.js는 스냅샷 대상이 아니다 — 화면이 쓰는 계약(api/request)만 대신 세운다.
+  context.HvsAccount = { api: () => new Promise(() => {}), request: () => new Promise(() => {}) };
+  context.setTimeout = (callback) => { void callback; return 0; };
+  context.clearTimeout = () => {};
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  vm.runInContext(readSource(ICON_SOURCE), context, { filename: ICON_SOURCE });
+  vm.runInContext(readSource(GICHUL_APP_SOURCE), context, { filename: GICHUL_APP_SOURCE });
+
+  const renderers = context.GICHUL_RENDER;
+  if (typeof renderers?.renderFilters !== 'function'
+    || typeof renderers?.renderBody !== 'function'
+    || typeof renderers?.defaultState !== 'function') {
+    throw new Error(`${GICHUL_APP_SOURCE}: renderFilters/renderBody are not reachable — the gichul snapshot sandbox is broken`);
+  }
+  return renderers;
+}
+
+export function renderGichulScreen(manifest, state) {
+  const renderers = createGichulRenderers();
+  const merged = { ...renderers.defaultState(), ...state };
+  const filters = renderers.renderFilters(manifest, merged);
+  const body = renderers.renderBody(manifest, merged);
+  if (!filters.includes('sidebar-item') || !body.includes('list-group')) {
+    throw new Error(`${GICHUL_APP_SOURCE}: the gichul screen rendered without its filter or result contracts`);
+  }
+  return { filters, body };
+}
+
 export function renderUsageDashboard(input, now) {
   const build = createUsageRenderers().buildDashboard;
   const markup = build(input, now);

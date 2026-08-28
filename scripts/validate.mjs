@@ -571,6 +571,100 @@ function validateGichulBackend() {
     'docs/ARCHITECTURE.md: the authenticated gichul API surface is incomplete');
 }
 
+// ---- WP2. 기출 프런트 ----
+// 이 게이트가 **못 보는 것**을 먼저 적는다 (승격 규칙 "자동 게이트 사각지대 점검"):
+//   - 실제 병합 결과물. pdf-lib은 브라우저에서 돌고, 페이지 구간이 실 PDF와 맞는지는
+//     매니페스트 생성기가 실 PDF로 대조한다. 여기서는 "부분 병합 금지" 계약이 코드에
+//     남아 있는지까지만 본다.
+//   - R2·Worker 실접근, 그리고 화면의 시각 품질. 후자는 docs/_snapshots/gichul.html이
+//     사람 눈으로 볼 수 있게 남긴다.
+//   - 벤더 번들의 내용. 압축된 한 줄이라 읽을 수 없으므로 **바이트 해시로 잠근다** —
+//     번들을 갈아치우려면 이 해시를 같은 커밋에서 갱신해야 한다.
+function validateGichulFrontend() {
+  for (const file of ['gichul/index.html', 'gichul/app.js', 'gichul/gichul.css',
+    'assets/vendor/pdf-lib/pdf-lib.min.js', 'assets/vendor/pdf-lib/LICENSE']) {
+    check(existsSync(path.join(ROOT, file)), `${file}: gichul frontend artifact is missing`);
+    if (!existsSync(path.join(ROOT, file))) return;
+  }
+
+  const PDF_LIB_LOCK = {
+    version: 'pdf-lib@1.17.1',
+    sha256: '36f3a04b9f61f15bc06a32182cb576c4f188d88ed99427ee9857e59ba46a713d',
+  };
+  const bundle = readFileSync(path.join(ROOT, 'assets/vendor/pdf-lib/pdf-lib.min.js'), 'utf8');
+  check(createHash('sha256').update(readFileSync(path.join(ROOT, 'assets/vendor/pdf-lib/pdf-lib.min.js'))).digest('hex') === PDF_LIB_LOCK.sha256,
+    'assets/vendor/pdf-lib/pdf-lib.min.js: bytes do not match PDF_LIB_LOCK.sha256 — re-vendor from npm and update the lock in the same commit');
+  check(bundle.includes(PDF_LIB_LOCK.version) && bundle.includes('assets/vendor/pdf-lib/LICENSE'),
+    `assets/vendor/pdf-lib/pdf-lib.min.js: the provenance header must name ${PDF_LIB_LOCK.version} and point at the vendored LICENSE`);
+  check(readFileSync(path.join(ROOT, 'assets/vendor/pdf-lib/LICENSE'), 'utf8').includes('MIT License'),
+    'assets/vendor/pdf-lib/LICENSE: the upstream MIT text is missing');
+
+  // 과목·선택과목·시행의 어휘는 매니페스트 생성기가 단일 원본이다. 화면의 라벨 표를
+  // 손으로 적은 사본으로 두면, 백엔드가 과목을 늘려도 화면은 그 항목을 코드값 그대로
+  // 노출하거나 아예 빠뜨린다 (승격 규칙 "파생 가능한 것을 손으로 적지 않는다").
+  const backend = readFileSync(path.join(ROOT, 'scripts/gichul/build-manifest.mjs'), 'utf8');
+  const orderKeys = (name) => {
+    const block = new RegExp(`const ${name} = new Map\\(\\[([^]*?)\\]\\);`, 'u').exec(backend)?.[1] || '';
+    return [...block.matchAll(/\['(\w+)',/gu)].map(([, key]) => key);
+  };
+  const appSource = readFileSync(path.join(ROOT, 'gichul/app.js'), 'utf8');
+  const labelKeys = (name) => {
+    const block = new RegExp(`const ${name} = \\{([^}]*)\\}`, 'u').exec(appSource)?.[1] || '';
+    return [...block.matchAll(/(?:^|\s)([\w']+):/gu)].map(([, key]) => key.replaceAll("'", ''));
+  };
+  const vocabulary = [
+    { name: 'subject', keys: orderKeys('SUBJECT_ORDER'), maps: ['SUBJECT_LABEL'] },
+    { name: 'track', keys: orderKeys('TRACK_ORDER'), maps: ['TRACK_LABEL', 'TRACK_SHORT'] },
+    { name: 'round', keys: orderKeys('ROUND_ORDER'), maps: ['ROUND_LABEL', 'ROUND_FILE'] },
+  ];
+  for (const { name, keys, maps } of vocabulary) {
+    check(keys.length >= 3,
+      `gichul: only ${keys.length} ${name} keys were derived from scripts/gichul/build-manifest.mjs — this check is inert`);
+    for (const map of maps) {
+      const declared = labelKeys(map);
+      check(declared.length >= 3, `gichul/app.js: ${map} could not be parsed — the vocabulary check is inert`);
+      for (const key of keys) {
+        check(declared.includes(key),
+          `gichul/app.js: ${map} has no entry for ${name} "${key}", which scripts/gichul/build-manifest.mjs produces`);
+      }
+      for (const key of declared) {
+        check(keys.includes(key),
+          `gichul/app.js: ${map} carries "${key}", which the manifest generator never produces — dead label`);
+      }
+    }
+    // 그 어휘가 정적 문서에 있으면, 미로그인 방문자의 DOM에 시험 목록의 일부가 있는 것이다.
+    // 낱말 경계로 본다 — 'na'(나형) 같은 두 글자 키는 부분 문자열로 보면 'nav'에도 걸린다.
+    const staticDocument = readFileSync(path.join(ROOT, 'gichul/index.html'), 'utf8');
+    for (const key of keys) {
+      check(!new RegExp(`\\b${key}\\b`, 'u').test(staticDocument),
+        `gichul/index.html: the static document carries manifest vocabulary "${key}" — exam data must arrive only from GET /api/gichul/manifest`);
+    }
+  }
+
+  // 데이터 경로와 계약이 코드에 남아 있는지.
+  check(appSource.includes("'/api/gichul/manifest'"),
+    'gichul/app.js: the exam list must be fetched from /api/gichul/manifest');
+  check(appSource.includes('/api/gichul/pdf/'),
+    'gichul/app.js: PDFs must be fetched through the authenticated worker route');
+  check(/location\.replace\(loginPath\(\)\)/u.test(appSource) && appSource.includes('login=1'),
+    'gichul/app.js: the login redirect gate is missing — the screen must not render for anonymous visitors');
+  check(appSource.includes('window.GICHUL_RENDER'),
+    'gichul/app.js: renderers must be reachable as window.GICHUL_RENDER so the snapshot renders the real markup');
+  check(appSource.includes('window.PDFLib'),
+    'gichul/app.js: merging must use the vendored window.PDFLib');
+  // 부분 병합 금지 — 실패 목록을 만든 뒤 PDFDocument.create()에 도달하기 전에 되돌아야 한다.
+  check(appSource.includes('Promise.allSettled')
+    && appSource.indexOf('if (failures.length)') !== -1
+    && appSource.indexOf('if (failures.length)') < appSource.indexOf('PDFDocument.create()'),
+    'gichul/app.js: a failed fetch must abort before any merging — no partial merge may be produced (plan.md §4)');
+  check(appSource.includes('isExcerptable'),
+    'gichul/app.js: items without sections.selection must be rejected in excerpt mode (plan.md §4)');
+
+  const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
+  check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),
+    'gichul/gichul.css: shadows, blur and gradients are forbidden (DESIGN.md §3·§4)');
+}
+
 function validateDesignHeadingSequence() {
   const errors = findDesignHeadingSequenceErrors(
     readFileSync(DESIGN_HEADING_PATH, 'utf8'),
@@ -1997,6 +2091,9 @@ function validateGlobalsAndOrder() {
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
     'usage/index.html': ['/usage/assets/js/usage.js?v=20260828-usage-flow'],
+    // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
+    // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
+    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2020,6 +2117,7 @@ function validateGlobalsAndOrder() {
     'smstudy/index.html': [PRETENDARD_CDN, '/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260828-usage-flow', '/usage/assets/css/usage.css?v=20260828-usage-flow'],
+    'gichul/index.html': [PRETENDARD_CDN, '/assets/css/system.css', '/gichul/gichul.css'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2041,6 +2139,15 @@ function validateGlobalsAndOrder() {
   check(/<script\b[^>]*src="\/assets\/js\/home\.js"[^>]*\bdefer\b/u.test(homeHtml), 'index.html: home.js must load with defer');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-app="wordmaster"'), 'WordMaster: account.js must declare data-app="wordmaster"');
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-app="smstudy"'), 'smstudy: account.js must declare data-app="smstudy"');
+  // 기출은 계정에 저장할 진도가 없다 — account.js를 게이트 전용 모드(data-key 없음)로 싣는다.
+  // data-key가 붙는 순간 없는 진도를 /api/progress/gichul에 밀고, Worker의 VALID_APPS에
+  // 없는 앱이라 매 방문이 404가 된다.
+  {
+    const gichulHtml = readFileSync(path.join(ROOT, 'gichul/index.html'), 'utf8');
+    const accountTag = /<script\b[^>]*\bsrc="\/account\.js"[^>]*>/u.exec(gichulHtml)?.[0] || '';
+    check(accountTag.includes('data-app="gichul"'), 'gichul: account.js must declare data-app="gichul"');
+    check(!accountTag.includes('data-key'), 'gichul: account.js must load in gate-only mode (no data-key — there is no study progress to sync)');
+  }
 
   // 저장 키 보존 (§3.2 — 이름 변경 금지)
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
@@ -2345,6 +2452,7 @@ validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
 validateGichulBackend();
+validateGichulFrontend();
 validateWordMasterData();
 // M-6 — 스크린샷 대신 남긴 정적 스냅샷. 존재와 "파일 단독으로 열림"을 계약으로 건다.
 // 스냅샷이 조용히 사라지거나 외부 자산에 의존하게 되면 시각 확인 근거가 없어진다.

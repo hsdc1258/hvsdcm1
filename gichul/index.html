@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="평가원 6월·9월·수능 문제지를 골라 하나의 PDF로 내려받는 개인용 도구.">
+  <meta name="robots" content="noindex, nofollow">
+  <title>기출 — hvsdcm</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/assets/css/system.css">
+  <link rel="stylesheet" href="/gichul/gichul.css">
+</head>
+<body>
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/">hvsdcm</a>
+      <span class="topbar-crumb">기출</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/">홈</a>
+      </nav>
+    </div>
+  </header>
+  <div class="topbar-spacer"></div>
+
+  <div class="container-wide app-page">
+    <div class="app-shell">
+      <!-- 필터는 전부 app.js가 매니페스트에서 도출해 그린다. 과목·년도·시행 목록을 여기
+           마크업에 적으면 손으로 적은 사본이 되고(승격 규칙 "파생 가능한 것을 손으로
+           적지 않는다"), 미로그인 문서에 시험 목록이 남는다. -->
+      <aside id="gichulFilters" class="sidebar" aria-label="기출 필터"></aside>
+
+      <main id="app" class="app-main" tabindex="-1">
+        <div class="view-head">
+          <div class="view-head-main">
+            <div>
+              <h1>기출</h1>
+              <p>평가원 6월 · 9월 · 수능 문제지</p>
+            </div>
+          </div>
+        </div>
+        <div id="gichulBody" class="gi-body"></div>
+      </main>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <div class="container-wide app-footer-inner">
+      <span>문항 저작권은 한국교육과정평가원에 있으며 비상업적 개인 학습용으로만 씁니다.</span>
+      <span class="text-tertiary">hvsdcm</span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="/account.js" data-app="gichul"></script>
+  <script src="/assets/vendor/lucide/icons.js"></script>
+  <script src="/assets/vendor/pdf-lib/pdf-lib.min.js"></script>
+  <script src="/gichul/app.js"></script>
+</body>
+</html>

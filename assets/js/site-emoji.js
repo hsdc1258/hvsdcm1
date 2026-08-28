@@ -14,5 +14,6 @@
 window.SITE_EMOJI = {
   WordMaster: '📗',
   smstudy: '📘',
+  gichul: '📙',
   usage: '📶',
 };

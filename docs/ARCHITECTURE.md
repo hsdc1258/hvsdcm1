@@ -27,7 +27,8 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `smstudy/assets/js/data.js`: concept, source and question content only.
 - `smstudy/assets/js/app.js`: social-studies state, source error-rate sorting, grading and rendering.
 - `smstudy/assets/kice/`: question images referenced by stable question IDs.
-- `gichul/`: login-gated past-paper filtering, viewing, extraction and client-side merge UI. The data list itself is not checked into this directory.
+- `gichul/`: login-gated past-paper filtering, viewing, extraction and client-side merge UI. The data list itself is not checked into this directory. The screen loads `account.js` in gate-only mode (`data-app`, no `data-key` — there is no study progress to sync), then the vendored icon set, then `assets/vendor/pdf-lib/`, then `gichul/app.js`; filter options, labels and results are all derived from the manifest that `GET /api/gichul/manifest` returns after authentication.
+- `assets/vendor/pdf-lib/`: pinned pdf-lib UMD bundle plus its MIT text, used for in-browser merging and selection-section extraction. `scripts/validate.mjs` locks the bundle bytes with a sha256 so it cannot be swapped silently.
 
 ## Worker ownership
 
@@ -40,6 +41,8 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 The KICE ingestion pipeline is owned by `scripts/gichul/`. `fetch-kice.mjs` derives attachments and a current `fileSeq` inventory from the official list filters for academic years 2020-2027, refreshing an existing PDF when that sequence changes. `build-manifest.mjs` derives deterministic metadata and page sections from only the inventoried filesystem and rejects incomplete question/answer or track coverage. `upload-r2.mjs` uploads content-hash changes through the locally installed Wrangler CLI, placing changed PDFs before the manifest visibility switch and advancing its checkpoint only after success. `gichul-src/`, the crawl inventory, and the upload checkpoint are ignored. The checked-in `overrides.json` is only an exact `common`/`selection` correction layer keyed by final manifest ID; it is not a second source list.
 
 Sessions store SHA-256 token hashes rather than raw tokens. User passwords use PBKDF2-SHA-256 with per-user salts and 100,000 iterations. Admin authentication uses the `ADMIN_PASSWORD` Worker secret and receives a role-scoped session. Each authenticated request refreshes the session's last-seen time, Cloudflare client IP, IP fingerprint and user-agent; exact IP and user-agent fields are returned only by admin routes. Logout expires a session instead of deleting its audit row, and the admin session query prunes records after 90 days.
+
+Harness payload version 1 remains backward compatible while accepting an optional phase on each actor. The Worker owns lifecycle metadata rather than trusting reporters: it stamps a new actor's start time and initial remaining-limit snapshot, stamps `done`/`blocked` transitions, and records task completion time. These fields stay inside the existing `harness_tasks.payload` JSON, so migrations `0006` and `0007` remain unchanged. Owner lookup accepts `completed_limit=0..1000`; when present it keeps every active task and returns only the newest completed tasks by `completed_at` with `updated_at` as the legacy fallback. Omitting the parameter preserves the full response.
 
 ## API surface
 
@@ -59,7 +62,7 @@ Sessions store SHA-256 token hashes rather than raw tokens. User passwords use P
 | `GET /api/admin/answers` | admin | Review accepted answers |
 | `POST /api/usage/report` | ingest token | Replace the latest Codex limit snapshot |
 | `POST /api/harness/report` | harness ingest token | Merge a task, gate, actor and artifact report |
-| `GET /api/usage` | owner user | Read Codex limits and the latest harness tasks |
+| `GET /api/usage[?completed_limit=N]` | owner user | Read Codex limits and harness tasks; optionally cap completed tasks while retaining all active tasks |
 | `GET /api/gichul/manifest` | user | Read the R2 past-paper manifest with caching disabled |
 | `GET /api/gichul/pdf/:id` | user | Stream a manifest-mapped R2 PDF with caching disabled |
 
