@@ -112,7 +112,11 @@ test('0% renders as a zero gauge, not as a missing record', () => {
   })]);
   assert.match(markup, /width: 0\.0%/u);
   assert.match(markup, />0%</u);
-  assert.doesNotMatch(markup, /기록 없음/u);
+  // 검사 범위는 **게이지 행의 값**이다. 화면의 다른 곳(수집 건강 상태·보고되지 않은 단계)도
+  // 같은 말로 미기록을 판정하므로, 마크업 전체를 훑으면 이 계약과 무관한 문자열이 걸린다.
+  const values = [...markup.matchAll(/<span class="list-row-value">([^<]*)<\/span>/gu)].map(([, value]) => value);
+  assert.ok(values.length > 0, '게이지 행이 하나도 렌더되지 않으면 이 검사는 공허하게 통과한다.');
+  for (const value of values) assert.notEqual(value, '기록 없음');
 });
 
 test('a bucket without any percent field says so instead of drawing a 0% gauge', () => {
@@ -384,9 +388,11 @@ test('unreported stages before the current one read as no-record, never as done'
     approve: 'skipped',
     done: 'done',
   });
-  // 건너뛴 단계는 라벨로도 완료와 갈린다 — 노드는 그대로 서 있고 상태만 다르다.
   // 건너뛴 단계는 상태 라벨로도 완료와 갈린다 — 노드는 그대로 서 있고 상태만 다르다.
-  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, 6);
+  // 개수는 세지 않고 **도출**한다: 건너뛴 단계마다 하나, 그리고 요청 원문을 보고하지 않은
+  // 세션이 그 사실을 말하는 두 자리(입력 노드 · 상세의 요청 원문 블록)가 더해진다.
+  const skipped = (doneMarkup.match(/data-phase-state="skipped"/gu) || []).length;
+  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, skipped + 2);
   assert.match(doneMarkup, /data-phase-state="skipped"/u);
 });
 
@@ -443,9 +449,9 @@ test('parallel project, protocol, and visualization reports render as session ta
   }
   assert.match(markup, /role="tablist" aria-label="작업 상태별 보기"/u);
   assert.match(markup, /role="tablist" aria-label="진행 중인 Codex 세션"/u);
-  // 상위 탭은 둘, 그중 하나만 보인다 (계약 §A).
-  assert.equal((markup.match(/data-session-view="/gu) || []).length, 2);
-  assert.equal((markup.match(/data-session-view-panel="[^"]+" hidden/gu) || []).length, 1);
+  // 상위 탭은 상태 셋(진행 중·중단됨·완료)이고, 그중 하나만 보인다.
+  assert.equal((markup.match(/data-session-view="/gu) || []).length, 3);
+  assert.equal((markup.match(/data-session-view-panel="[^"]+" hidden/gu) || []).length, 2);
   assert.equal((markup.match(/data-task-tab="/gu) || []).length, 3);
   assert.equal((markup.match(/data-task-panel="\d+" hidden/gu) || []).length, 2);
   assert.doesNotMatch(markup, /작업 카테고리<\/span>/u);
@@ -458,6 +464,7 @@ test('session tabs carry no status dot and every remaining dot pairs with a text
     snapshots: [codexSnapshot({ primary: { used_percent: 12 } })],
     tasks: [
       harnessTask(),
+      harnessTask({ id: 'active-two', name: '둘째 진행 세션' }),
       harnessTask({ id: 'done-one', name: '완료 세션', status: 'complete', phase: 'done', progress: 100 }),
     ],
   }, NOW, 'org');
@@ -470,34 +477,44 @@ test('session tabs carry no status dot and every remaining dot pairs with a text
   assert.equal((markup.match(/status-dot[^"]*"[^>]*><\/(?:span|i)>\s*</gu) || []).length, 0);
 });
 
-test('active and completed tabs separate session state while the portfolio includes every reported actor', () => {
+test('active, stale, and completed tabs separate session state while the portfolio includes every reported actor', () => {
   const renderers = createUsageRenderers();
   const active = harnessTask({ id: 'active-one', name: '진행 세션' });
+  // 서버(worker effectiveHarnessStatus)가 하트비트 끊긴 active를 stale로 파생해 보낸다.
+  const stale = harnessTask({ id: 'stale-one', name: '중단 세션', status: 'stale' });
   const completed = harnessTask({
     id: 'complete-one', name: '완료 세션', status: 'complete', phase: 'done', progress: 100,
     actors: [],
   });
-  const tasks = [active, completed];
+  const tasks = [active, stale, completed];
   const views = renderers.renderSessionViews(tasks, NOW);
-  // 상위 탭은 **둘뿐**이다 (계약 §A). '관제탑' 상위 탭은 모드 토글로 내려갔다.
+  // 상위 탭은 **상태 셋**이다. '관제탑'은 상위 탭이 아니라 진행 중 패널의 모드 토글이다.
   assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="1"/u);
+  assert.match(views, /data-session-view="stale"[^>]*>[\s\S]*?data-view-count="1"/u);
   assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="1"/u);
-  assert.equal((views.match(/data-session-view="/gu) || []).length, 2);
+  assert.equal((views.match(/data-session-view="/gu) || []).length, 3);
   assert.doesNotMatch(views, /data-session-view="org"/u);
 
   const activeMarkup = renderers.renderSessionView(tasks, NOW, 'active', 'org');
   assert.match(activeMarkup, /진행 세션/u);
-  assert.doesNotMatch(activeMarkup, /완료 세션/u);
+  assert.doesNotMatch(activeMarkup, /완료 세션|중단 세션/u);
+
+  // 중단은 완료와 같은 게시글 목록이지만 상태 라벨이 다르다 — 끝난 것과 멎은 것은
+  // 같은 말로 불리면 안 된다.
+  const staleMarkup = renderers.renderSessionView(tasks, NOW, 'stale');
+  assert.match(staleMarkup, /중단 세션/u);
+  assert.match(staleMarkup, /status-dot is-warn[^>]*><\/span>중단됨/u);
+  assert.doesNotMatch(staleMarkup, /진행 세션|완료 세션/u);
 
   const completeMarkup = renderers.renderSessionView(tasks, NOW, 'complete');
   assert.match(completeMarkup, /완료 세션/u);
-  assert.doesNotMatch(completeMarkup, /진행 세션/u);
+  assert.doesNotMatch(completeMarkup, /진행 세션|중단 세션/u);
 
-  // 관제탑은 진행 중인 세션만 그린다 (계약 §A). 완료를 여는 범위 토글은 사라졌고,
-  // 그 일은 완료 탭이 통째로 맡는다 — 같은 선택지가 화면에 두 번 있지 않다.
+  // 관제탑은 **실제로 도는 세션**만 그린다. 하트비트가 끊긴 세션이 여기 서면 화면이
+  // 거짓말을 한다 (조사 §d의 false positive가 정확히 그 증상이었다).
   const board = renderers.renderPortfolioBoard(tasks, NOW);
   assert.match(board, /진행 세션/u);
-  assert.doesNotMatch(board, /완료 세션/u);
+  assert.doesNotMatch(board, /완료 세션|중단 세션/u);
   assert.equal((board.match(/data-portfolio-task=/gu) || []).length, 1);
   assert.doesNotMatch(board, /data-board-scope|pl-scope|접힘/u);
 
@@ -1454,22 +1471,22 @@ test('completed sessions are grouped by the Korean calendar day, not by UTC', ()
   assert.match(markup, /h-session-group-head">2026\.08\.28</u);
   assert.match(markup, /h-session-group-head">2026\.08\.27</u);
   // 자정 이후 세션은 08.28 그룹에 있고, 08.27 그룹에는 자정 이전 세션만 있다.
-  const late = /2026\.08\.28<\/p>[\s\S]*?<\/div>/u.exec(markup)[0];
+  const late = /2026\.08\.28<\/p>[\s\S]*?<\/section>/u.exec(markup)[0];
   assert.match(late, /자정 이후 완료/u);
   assert.doesNotMatch(late, /자정 이전 완료/u);
-  // 탭의 날짜 표기도 같은 축을 쓴다 — 그러지 않으면 08.28 그룹 안에 08.27 탭이 선다.
-  assert.match(markup, /datetime="2026-08-28">08\.28</u);
+  // 행의 시각 표기도 같은 축을 쓴다 — 그러지 않으면 08.28 그룹 안에 08.27 행이 선다.
+  // 게시글 행은 날짜만으로 같은 날 여러 세션을 가를 수 없어 시:분까지 적는다.
+  assert.match(markup, /datetime="2026-08-28T00:30\+09:00">08\.28 00:30</u);
 });
 
-// major 3 — 반례: 두 날짜 그룹에서 두 번째 tablist에는 tabindex="0"인 탭이 하나도 없어
-// 키보드 사용자가 그 그룹의 세션을 열 수 없었다(방향키 이동도 tablist 안으로 제한된다).
-const tabbableCounts = (markup) => [...markup.matchAll(/<div class="h-session-tabs"[\s\S]*?<\/div>/gu)]
-  .map(([block]) => ({
-    selected: (block.match(/aria-selected="true"/gu) || []).length,
-    tabbable: (block.match(/tabindex="0"/gu) || []).length,
-  }));
-
-test('every date group keeps a keyboard entry point while selection stays unique', () => {
+// 예전 완료 목록은 수평 tablist + 단일 visible panel이었다. 그 조판에서는 "그룹마다
+// 초점 진입점이 하나씩 있는가"가 계약이었고, 그것을 지키느라 roving tabindex를 날짜
+// 그룹 경계 너머까지 손으로 관리해야 했다.
+//
+// 게시글 목록은 그 문제 자체를 없앤다: 행은 네이티브 `<details>`이므로 모든 summary가
+// 그냥 초점을 받고, 선택 상태를 화면이 들고 있지 않으니 되살릴 진입점도 없다.
+// 그래서 검사도 바뀐다 — 진입점을 **세는** 대신 캐러셀 기계장치가 **없다는 것**을 잠근다.
+test('the finished list is a vertical post list with no carousel machinery', () => {
   const completed = [0, 30, 60, 90].map((hours, index) => harnessTask({
     id: `kbd-${index}`,
     name: `완료 세션 ${index}`,
@@ -1480,11 +1497,15 @@ test('every date group keeps a keyboard entry point while selection stays unique
     updated_at: iso(hours * HOUR),
   }));
   const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
-  const groups = tabbableCounts(markup);
-  assert.ok(groups.length >= 2, `날짜 그룹이 둘 이상이어야 반례가 재현된다: ${groups.length}`);
-  // 선택은 화면 전체에 하나뿐이고, 초점 진입점은 그룹마다 하나씩이다.
-  assert.equal(groups.reduce((total, group) => total + group.selected, 0), 1);
-  for (const group of groups) assert.equal(group.tabbable, 1);
+  // 날짜 그룹은 그대로 남는다 — 사라진 것은 그룹이 아니라 수평 탭이다.
+  assert.ok((markup.match(/h-session-group-head/gu) || []).length >= 2);
+  // 네 세션이 모두 **동시에** 서 있다. 하나만 보이는 패널도, 숨긴 패널도 없다.
+  assert.equal((markup.match(/data-task-post="/gu) || []).length, 4);
+  assert.doesNotMatch(markup, /h-session-tabs|data-task-tablist|data-task-tab=|data-task-panel=/u);
+  assert.doesNotMatch(markup, /role="tablist"|role="tabpanel"|aria-selected=|tabindex="-1"/u);
+  // 행은 네이티브 disclosure다 — 펼침은 브라우저가 맡고 화면은 선택 상태를 들지 않는다.
+  assert.equal((markup.match(/<details class="disclosure h-post"/gu) || []).length, 4);
+  assert.equal((markup.match(/<summary class="disclosure-head h-post-head">/gu) || []).length, 4);
 });
 
 test('activating a tab restores a keyboard entry point in the other tablists', () => {
@@ -1624,16 +1645,15 @@ test('the completed view shows the ten most recent sessions, grouped by date, wi
     updated_at: iso(index * 6 * HOUR),
   }));
   const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
-  assert.equal((markup.match(/data-task-tab="/gu) || []).length, 10);
-  assert.equal((markup.match(/data-task-panel="/gu) || []).length, 10);
-  assert.match(markup, /data-completed-more/u);
+  assert.equal((markup.match(/data-task-post="/gu) || []).length, 10);
+  assert.match(markup, /data-completed-more data-post-status="complete"/u);
   assert.match(markup, /남은 4개/u);
-  // 날짜 그룹 머리가 tablist 밖에 서고, 그룹마다 자기 tablist를 갖는다 (역할 계약).
+  // 날짜 그룹 머리가 목록 바깥에 서고, 그룹마다 자기 목록을 갖는다.
   assert.match(markup, /class="list-group-head h-session-group-head">2026\.08\.27</u);
-  assert.ok((markup.match(/data-task-tablist/gu) || []).length >= 2);
-  // 가장 최근 완료가 첫 탭이다.
+  assert.ok((markup.match(/class="h-post-group"/gu) || []).length >= 2);
+  // 최신이 위다 — 게시글 목록의 순서 계약.
   assert.ok(markup.indexOf('완료 세션 0') < markup.indexOf('완료 세션 9'));
-  // 열 개 안에 들지 못한 세션은 탭으로 서지 않는다 (지운 것이 아니라 접힌 것이다).
+  // 열 개 안에 들지 못한 세션은 행으로 서지 않는다 (지운 것이 아니라 접힌 것이다).
   assert.doesNotMatch(markup, /완료 세션 13/u);
 });
 
@@ -1644,6 +1664,111 @@ test('a completed list shorter than one page carries no more button', () => {
   const markup = createUsageRenderers().renderSessionView(completed, NOW, 'complete');
   assert.doesNotMatch(markup, /data-completed-more/u);
   assert.match(markup, /하나뿐인 완료/u);
+});
+
+// ---- 제목 · 요청 원문 계약 -------------------------------------------------
+//
+// 조사 §b·§c: 보고자가 요청 원문을 payload에 아예 싣지 않았고, 카드 제목은 세션 slug에서
+// 파생됐다. 기능 A가 `title`·`input`을 계약에 넣었으므로 화면이 그것을 정본으로 읽는다.
+
+test('a user-authored title is the card title, byte for byte', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'titled',
+    // 저장 이름은 여전히 파생값이다 (notify.mjs taskNameFromSession).
+    name: 'WP2 관제탑 (08-29)',
+    title: '관제탑 UI 개선',
+  });
+  const markup = renderers.renderSessionView([task], NOW, 'active', 'org');
+  assert.match(markup, /관제탑 UI 개선/u);
+  // 사람이 고른 표기에는 약어 확장도, 날짜 꼬리 제거도 걸지 않는다 — 이미 최종 표기다.
+  assert.doesNotMatch(markup, /작업 묶음 2/u);
+  assert.equal(renderers.taskPresentation(task).name, '관제탑 UI 개선');
+});
+
+test('a legacy report whose title is just the derived name keeps the old cleanup', () => {
+  const renderers = createUsageRenderers();
+  // Worker는 하위 호환으로 title이 없는 payload에 name을 그대로 채워 준다
+  // (router.js hydrated.title = payload.title || row.title || payload.name).
+  // 그것을 "사람이 지은 제목"으로 오인하면 구 세션의 제목이 갑자기 날짜 꼬리를 달고 선다.
+  const derived = 'WP2 관제탑 (08-29)';
+  const presentation = renderers.taskPresentation(harnessTask({
+    id: 'legacy-title', name: derived, title: derived,
+  }));
+  assert.equal(presentation.name, '작업 묶음 2 — 관제탑');
+  assert.equal(presentation.dateLabel, '08.29');
+});
+
+test('the reported request text is what the input node and the detail show', () => {
+  const renderers = createUsageRenderers();
+  const input = '완료된 파이프라인 목록을 게시글형으로 바꾸고\n한도 신선도를 보여 줘';
+  const markup = renderers.renderSessionView([harnessTask({
+    id: 'with-input', title: '관제탑 UI 개선', input,
+  })], NOW, 'active', 'org');
+  // 상세의 요청 원문 블록과 조직도의 입력 노드가 같은 값을 낸다.
+  assert.match(markup, /<section class="h-task-input"[\s\S]*?완료된 파이프라인 목록을 게시글형으로/u);
+  assert.match(markup, /h-node is-request[\s\S]*?완료된 파이프라인 목록을 게시글형으로/u);
+  // 예전에는 입력 노드가 제목을 대신 실었다 — 제목이 두 번 읽힐 뿐 요청은 어디에도 없었다.
+  assert.doesNotMatch(/<article class="h-node is-request[\s\S]*?<\/article>/u.exec(markup)[0], /관제탑 UI 개선/u);
+  assert.equal(renderers.taskInput({ input }), input);
+});
+
+test('a report with no request text says so instead of borrowing the title', () => {
+  const markup = createUsageRenderers().renderSessionView([harnessTask({
+    id: 'no-input', title: '관제탑 UI 개선',
+  })], NOW, 'active', 'org');
+  const reason = '이 세션은 요청 원문을 보고하지 않았습니다';
+  assert.match(markup, new RegExp(`h-task-input-empty">기록 없음 · ${reason}`, 'u'));
+  assert.match(markup, new RegExp(`h-node is-request[\\s\\S]*?${reason}`, 'u'));
+});
+
+// ---- 수집 건강 상태 (조사 §f) ---------------------------------------------
+
+test('each source names its last success, last attempt, and the reason it failed', () => {
+  const markup = dashboard({
+    snapshots: [{
+      ...codexSnapshot({ primary: { used_percent: 40 } }, iso(2 * 60_000)),
+      last_success_at: iso(2 * 60_000),
+      last_attempt_at: iso(60_000),
+      last_outcome: 'no-data',
+    }],
+    tasks: [],
+  });
+  assert.match(markup, /마지막 수집 성공<\/dt><dd>2분 전<\/dd>/u);
+  // 실패 원인은 시도 시각 옆에서 읽힌다 — 다른 화면으로 찾아가지 않는다.
+  assert.match(markup, /마지막 시도<\/dt><dd>1분 전 · 원본 없음<\/dd>/u);
+  // 마지막 **성공**이 SLO 안이면 고장 판정을 붙이지 않는다.
+  assert.doesNotMatch(markup, /us-health is-breached/u);
+});
+
+test('a source whose last success breached the SLO is marked, not just reported', () => {
+  const markup = dashboard({
+    snapshots: [{
+      ...codexSnapshot({ primary: { used_percent: 40 } }, iso(31 * 60_000)),
+      last_success_at: iso(31 * 60_000),
+      last_attempt_at: iso(60_000),
+      last_outcome: 'failed',
+    }],
+    tasks: [],
+  });
+  assert.match(markup, /us-health is-breached/u);
+  // 문턱 숫자는 상수에서 도출된다 — 화면이 옛 숫자를 말하지 않게.
+  assert.match(markup, /30분 넘게 수집 성공 없음/u);
+  assert.match(markup, /마지막 시도<\/dt><dd>1분 전 · 전송 실패<\/dd>/u);
+  // 색만으로 말하지 않는다: 점 뒤에 반드시 문장이 온다 (DESIGN.md §7.3 status-dot).
+  assert.match(markup, /status-dot is-warn" aria-hidden="true"><\/span>30분 넘게/u);
+});
+
+test('a source that has never reported a success is a breach, not a blank', () => {
+  const markup = dashboard({
+    snapshots: [{
+      source: 'codex', captured_at: iso(HOUR), payload: null,
+      last_success_at: null, last_attempt_at: iso(60_000), last_outcome: 'no-data',
+    }],
+    tasks: [],
+  });
+  assert.match(markup, /us-health is-breached/u);
+  assert.match(markup, /마지막 수집 성공<\/dt><dd>기록 없음<\/dd>/u);
 });
 
 // ---- 정적 폴백 (usage/pipeline-state.json) --------------------------------

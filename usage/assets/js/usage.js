@@ -70,6 +70,10 @@
   // 이 화면이 아는 사유는 하나뿐이다 — **보고가 오지 않았다**. 다른 사유(해당 없음·구형식)를
   // 지어내지 않는 이유는 그것을 판정할 근거가 payload에 없기 때문이다.
   const PHASE_SKIPPED_REASON = '이 단계는 보고가 전송되지 않았습니다';
+  // 요청 원문이 없는 세션의 판정과 그 사유. 판정('기록 없음')만 적으면 화면의 고장인지
+  // 보고가 안 온 것인지 구별되지 않으므로 사유를 짝지어 낸다(단계의 '기록 없음'과 같은 규칙).
+  const TASK_INPUT_EMPTY_LABEL = '기록 없음';
+  const TASK_INPUT_MISSING_REASON = '이 세션은 요청 원문을 보고하지 않았습니다';
   // 액터 종류 라벨은 **제품 이름**이다. 대문자로 소리치던 것을 원래 표기로 되돌린다
   // (사용자 지시 ③ — UI가 만드는 문구는 축약·약어 대신 그대로 읽히는 말).
   const ACTOR_KIND_LABELS = { codex: 'Codex', webgpt: 'WebGPT', claude: 'Claude' };
@@ -82,6 +86,27 @@
   // 오른쪽 rail이 그리는 수집 원본. **키 순서가 곧 표시 순서**이고, 여기 없는 source는
   // 그리지 않는다 — 원본이 늘면 이 사전 한 줄만 고친다.
   const SOURCE_LABELS = { codex: 'Codex', claude: 'Claude' };
+  // 세션 상태의 **단일 원본**. 서버는 `active|complete`만 저장하고, 조회 API가
+  // heartbeat가 끊긴 active를 `stale`로 파생해 돌려준다(worker effectiveHarnessStatus).
+  // 화면은 그 셋을 각각 다른 말로 부른다 — 예전에는 "complete가 아니면 전부 진행 중"이라
+  // 이틀 전에 멈춘 세션도 진행 중으로 서 있었다(조사 §d의 false positive).
+  const TASK_STATUS_LABELS = { active: '진행 중', stale: '중단됨', complete: '완료' };
+  // 상태 점의 색. 상태색은 상태 표시에만 쓴다(DESIGN.md §3) — 중단은 경고, 진행은 강조,
+  // 완료는 무채색이다.
+  const TASK_STATUS_TONE = { active: ' is-accent', stale: ' is-warn', complete: ' is-idle' };
+  // 수집 원본의 건강 상태. `outcome`이 가질 수 있는 값은 Worker가 닫아 둔 집합
+  // (`success|no-data|failed`)과 Worker 자신이 붙이는 `stale`, 그리고 health 행이 없는
+  // 구 스냅샷의 `legacy`뿐이다 — 여기 없는 값이 오면 서버 문자열을 그대로 보여 준다.
+  const HEALTH_OUTCOME_LABELS = {
+    success: '성공',
+    'no-data': '원본 없음',
+    failed: '전송 실패',
+    stale: '이전 값보다 오래됨',
+    legacy: '기록 이전',
+  };
+  // 수집 SLO. STALE_MS(15분)는 "값이 조금 낡았다"는 표시이고, 이쪽은 **수집이 멈췄다**는
+  // 판정이다. 두 문턱을 하나로 합치면 잠깐 늦은 것과 반나절 멎은 것이 같은 말로 나온다.
+  const HEALTH_SLO_MS = 30 * 60 * 1000;
   // 세션 한도 소모가 읽는 이벤트 필드 ↔ 표시 라벨. 위 SOURCE_LABELS와 짝을 이룬다.
   const USAGE_DELTA_FIELDS = [['usage_codex', 'Codex'], ['usage_claude', 'Claude']];
   // 알려진 버킷 키의 한국어 라벨. 렌더 대상 목록이 아니라 사전이다 — payload에 실제로
@@ -118,14 +143,18 @@
   // 계정의 **잔여(%)** 스냅샷이므로 소비는 `시작 − 종료`다(세션 소모와 같은 부호 계약).
   // 여러 세션이 같은 계정을 함께 쓰므로 이 값은 측정이 아니라 **추정**이고, 화면도 그렇게 말한다.
   const ACTOR_USAGE_SOURCE = { codex: 'codex', webgpt: 'codex', claude: 'claude' };
-  // 완료 목록은 기본 최근 10개만 세운다 (요구 6). 서버가 completed_limit로 잘라 주지
+  // 게시글 목록(완료·중단)은 기본 최근 10개만 세운다. 서버가 completed_limit로 잘라 주지
   // 않아도 화면이 스스로 접는다 — 클라이언트 접기가 1차 방어다.
-  const COMPLETED_PAGE_SIZE = 10;
+  const POST_PAGE_SIZE = 10;
   // 상위 탭은 **진행 중 / 완료** 둘뿐이다 (계약 §A). '관제탑'은 상위 탭이 아니라
   // 진행 중 패널 안의 **보기 모드**가 됐다 — 같은 세션 집합을 두 어법으로 볼 뿐이고,
   // 세션의 상태(진행/완료)와는 다른 축이기 때문이다. 예전처럼 셋을 한 줄에 늘어놓으면
   // "관제탑에는 완료도 들어 있다"는 세 번째 범위가 생겨 축이 뒤섞인다.
-  const SESSION_VIEWS = [{ key: 'active', label: '진행 중' }, { key: 'complete', label: '완료' }];
+  // 상위 탭은 **세션 상태 그 자체**다 — TASK_STATUS_LABELS에서 도출하므로 상태가 늘면
+  // 탭도 함께 는다(LESSONS "파생 가능한 것을 손으로 적지 않는다"). '관제탑'은 상위 탭이
+  // 아니라 진행 중 패널 안의 보기 모드다: 같은 세션 집합을 두 어법으로 볼 뿐이고,
+  // 세션의 상태와는 다른 축이기 때문이다.
+  const SESSION_VIEWS = Object.entries(TASK_STATUS_LABELS).map(([key, label]) => ({ key, label }));
   const SESSION_VIEW_KEYS = new Set(SESSION_VIEWS.map((view) => view.key));
   // 진행 중 패널의 보기 모드. 관제탑이 기본이다 — "지금 무엇이 도는가"를 한눈에 보는
   // 것이 이 화면의 첫 질문이고, 세션 하나를 파고드는 조직도는 그 다음이다.
@@ -145,7 +174,9 @@
   let selectedSessionView = 'active';
   const selectedTaskIds = { active: '', complete: '' };
   // 화면-로컬 상태. 폴링이 DOM을 갈아 끼워도 유지돼야 하므로 모듈 변수로 둔다.
-  let completedVisible = COMPLETED_PAGE_SIZE;
+  // 게시글 목록은 상태마다 따로 편다 — 하나의 카운터를 공유하면 완료에서 누른 '더 보기'가
+  // 중단 목록까지 함께 펴 버린다.
+  const postVisible = { stale: POST_PAGE_SIZE, complete: POST_PAGE_SIZE };
 
   // 저장된 모드를 읽는다. localStorage는 사파리 프라이빗 모드처럼 **접근 자체가 던지는**
   // 환경이 있으므로 읽기·쓰기를 모두 감싼다 — 저장이 안 되는 브라우저에서 화면이 통째로
@@ -409,6 +440,48 @@
     return `<span class="us-card-meta">${captured ? escapeHtml(`${captured} 수집`) : '수집 시각 없음'}${stale ? ' · 수집 지연' : ''}</span>`;
   }
 
+  // ---- 수집 건강 상태 (조사 §f) ---------------------------------------------
+  //
+  // 게이지의 숫자는 **원본이 살아 있을 때만** 참이다. 그런데 예전 화면에는 마지막 수집
+  // 시각 하나뿐이라, 수집기가 며칠 멎어도 "3일 전 수집"이라는 사실 문장만 있고 그것이
+  // 정상인지 고장인지 판정이 없었다. 이제 조회 API가 source마다 마지막 성공·마지막 시도·
+  // 그 시도의 결과를 함께 준다(worker usage_source_health). 셋을 그대로 보여 주고,
+  // 마지막 **성공**이 SLO를 넘기면 그것을 고장으로 판정해 눈에 띄게 가른다.
+  //
+  // 이 표시가 **못 보는 것**: 수집기가 아예 실행되지 않아 시도조차 기록되지 않은 경우와
+  // 성공했지만 값이 틀린 경우. 앞의 것은 '마지막 시도'가 함께 늙는 것으로만 드러난다.
+  function healthOutcomeLabel(outcome) {
+    const key = String(outcome ?? '').trim();
+    if (!key) return '';
+    return HEALTH_OUTCOME_LABELS[key] || key;
+  }
+
+  function renderQuotaHealth(snapshot, now) {
+    const success = parseTime(snapshot?.last_success_at);
+    const attempt = parseTime(snapshot?.last_attempt_at);
+    const outcome = healthOutcomeLabel(snapshot?.last_outcome);
+    // 성공 기록이 아예 없는 것도 SLO 위반이다 — "한 번도 못 받았다"가 "오래 못 받았다"보다
+    // 나은 상태일 수 없다.
+    const breached = success === null || now - success > HEALTH_SLO_MS;
+    const rows = [
+      ['마지막 수집 성공', success === null ? '기록 없음' : relativeTime(success, now)],
+      // 시도의 결과를 시각 옆에 붙인다. 실패 원인을 따로 찾아가지 않고 여기서 읽힌다.
+      ['마지막 시도', attempt === null
+        ? '기록 없음'
+        : [relativeTime(attempt, now), outcome].filter(Boolean).join(' · ')],
+    ];
+    // 문턱 문구는 상수에서 도출한다 — 숫자를 문장에 손으로 적으면 상수를 고쳐도 화면은
+    // 옛 숫자를 계속 말한다.
+    const alert = `${formatDuration(HEALTH_SLO_MS)} 넘게 수집 성공 없음`;
+    return `
+      <dl class="us-health${breached ? ' is-breached' : ''}">
+        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
+        ${breached
+    ? `<div class="us-health-alert"><dt>수집 상태</dt><dd><span class="status-dot is-warn" aria-hidden="true"></span>${escapeHtml(alert)}</dd></div>`
+    : ''}
+      </dl>`;
+  }
+
   function renderQuota(snapshot, now) {
     const label = SOURCE_LABELS[snapshot.source] || snapshot.source;
     const groups = groupsOf(snapshot.payload)
@@ -439,6 +512,7 @@
           <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">${escapeHtml(label)} 한도</h3></div>
           ${renderCaptureMeta(headCaptured, headStale)}
         </header>
+        ${renderQuotaHealth(snapshot, now)}
         ${body || `<p class="us-empty">읽을 수 있는 ${escapeHtml(label)} 한도 정보가 없습니다.</p>`}
       </article>`;
   }
@@ -703,11 +777,38 @@
     return expanded.trim();
   }
 
+  // 사람이 읽는 시각. 게시글 목록의 행은 날짜만으로는 같은 날 여러 세션을 가를 수 없어
+  // **시:분까지** 적는다. 축은 taskPresentation·groupTasksByDate와 같은 한국 시간이다.
+  function seoulStamp(time) {
+    if (time === null || !Number.isFinite(time)) return null;
+    const shifted = new Date(time + SEOUL_OFFSET_MS).toISOString();
+    return {
+      datetime: `${shifted.slice(0, 16)}+09:00`,
+      label: `${shifted.slice(5, 7)}.${shifted.slice(8, 10)} ${shifted.slice(11, 16)}`,
+    };
+  }
+
+  // 보고에 실린 요청 원문. 값이 없는 것과 빈 문자열을 같게 다룬다 — 어느 쪽이든 화면이
+  // 아는 사실은 "요청 원문이 오지 않았다" 하나뿐이다.
+  function taskInput(task) {
+    return typeof task?.input === 'string' ? task.input.trim() : '';
+  }
+
+  // 카드 제목의 **정본은 보고의 title**이다 (계약: 사용자 지정 프로젝트 제목).
+  //
+  // 다만 Worker는 하위 호환을 위해 title이 없는 구 payload에 `name`을 그대로 채워 준다
+  // (router.js hydrated.title = payload.title || row.title || payload.name). 그래서 title이
+  // 있다는 사실만으로는 사람이 지은 제목인지 세션 slug에서 파생된 이름인지 갈리지 않는다.
+  // 판정 기준은 **name과 다른가**이다: 다르면 사람이 지은 제목이므로 손대지 않고 그대로
+  // 세우고, 같으면 예전처럼 `(MM-DD)` 꼬리를 떼고 약어를 풀어 쓴다. 사람이 지은 제목에
+  // 약어 확장을 걸지 않는 이유는 그것이 이미 그 사람이 고른 최종 표기이기 때문이다.
   function taskPresentation(task) {
     const rawName = String(task?.name || '').trim();
+    const rawTitle = String(task?.title || '').trim();
+    const authored = rawTitle && rawTitle !== rawName ? rawTitle : '';
     const suffix = rawName.match(/\s*\((\d{2})-(\d{2})\)\s*$/u);
     const trimmed = suffix ? rawName.slice(0, suffix.index).trim() : rawName;
-    const name = expandAbbreviations(trimmed) || '이름 없는 작업';
+    const name = authored || expandAbbreviations(trimmed) || '이름 없는 작업';
     const time = parseTime(task?.updated_at);
     const dateTime = time === null ? '' : seoulDateKey(time);
     const dateLabel = suffix
@@ -732,6 +833,15 @@
       key: task.category_key || 'general',
       label: task.category || '기타 Codex 작업',
     };
+  }
+
+  // 세션 상태를 화면이 아는 셋 중 하나로 좁힌다. 조회 API가 이미 `active|stale|complete`로
+  // 파생해 주므로 여기서 시간을 다시 재지 않는다 — 문턱을 두 곳에서 계산하면 서버가
+  // 중단이라 부른 세션을 화면이 진행 중으로 그리는 어긋남이 생긴다. 모르는 값은
+  // 진행 중으로 떨어뜨린다: 보고가 살아 있다는 사실 자체는 참이기 때문이다.
+  function taskStatusKey(task) {
+    const status = String(task?.status ?? '').trim();
+    return Object.prototype.hasOwnProperty.call(TASK_STATUS_LABELS, status) ? status : 'active';
   }
 
   // 완료 시각. WP1이 붙이는 completed_at이 원본이고, 없으면 마지막 동기화 시각으로
@@ -980,11 +1090,17 @@
   function sessionFlowNodes(task, now) {
     const phases = phaseNodesOf(task, now);
     const main = mainActorOf(task);
+    // 입력 노드는 **보고가 실어 온 요청 원문**을 낸다. 예전에는 여기에 세션 제목을
+    // 얹었는데, 그러면 제목을 두 번 읽을 뿐 요청이 무엇이었는지는 화면 어디에도 없었다
+    // (조사 §b). 원문이 오지 않은 세션은 제목으로 자리를 메우지 않고 그 사실을 말한다.
+    const input = taskInput(task);
     const request = {
       kind: 'request',
       kindLabel: NODE_KIND_LABELS.request,
       name: '사용자 입력',
-      detail: taskPresentation(task).name,
+      detail: input,
+      status: input ? '' : TASK_INPUT_EMPTY_LABEL,
+      note: input ? '' : TASK_INPUT_MISSING_REASON,
     };
     // 액터를 하나도 보고하지 않은 세션도 자리를 비우지 않는다 — 축 모양을 같게 두고
     // "보고가 없다"를 말한다. 노드를 지우면 단계만 남아 원인이 보이지 않는다.
@@ -1063,6 +1179,20 @@
       </section>`;
   }
 
+  // 요청 원문 블록. 상세를 여는 사람의 첫 질문은 "이 세션이 무슨 요청이었나"이므로 본문
+  // 맨 위에 둔다. 원문은 줄바꿈이 의미를 갖는 사용자 글이라 그대로 접어 보여 준다(CSS
+  // pre-wrap) — 한 줄로 눌러 붙이면 목록·문단이 뭉개진다.
+  function renderTaskInput(task) {
+    const input = taskInput(task);
+    return `
+      <section class="h-task-input" aria-label="요청 원문">
+        <p class="us-eyebrow">요청 원문</p>
+        ${input
+    ? `<div class="inset h-task-input-body">${escapeHtml(input)}</div>`
+    : `<p class="h-task-input-empty">${escapeHtml(TASK_INPUT_EMPTY_LABEL)} · ${escapeHtml(TASK_INPUT_MISSING_REASON)}</p>`}
+      </section>`;
+  }
+
   function renderTaskFacts(task) {
     return `
       <dl class="h-task-facts">
@@ -1084,9 +1214,23 @@
       </footer>`;
   }
 
+  // 세션 상세의 **본문**. 머리(제목·상태·시각)와 나눠 둔 이유는 게시글 목록에서 그
+  // 머리가 이미 목록 행으로 서 있기 때문이다 — 펼친 자리에 같은 제목과 상태를 한 번 더
+  // 그리면 한 화면에 같은 사실이 두 번 나온다.
+  function renderTaskBody(task, now) {
+    const presentation = taskPresentation(task);
+    return `
+        ${renderTaskInput(task)}
+        ${renderTaskFacts(task)}
+        ${renderModules(task)}
+        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
+        ${renderArtifacts(task)}`;
+  }
+
   function renderTask(task, now) {
     const updated = relativeTime(task.updated_at, now);
-    const complete = task.status === 'complete';
+    const statusKey = taskStatusKey(task);
+    const complete = statusKey === 'complete';
     const presentation = taskPresentation(task);
     const progress = Math.round(clampPercent(Number(task.progress) || 0));
     const deltas = sessionUsageDeltas(task);
@@ -1107,13 +1251,10 @@
             ${deltas.length ? `<p class="h-task-usage">이 세션 소모 · ${escapeHtml(deltas.join(' · '))}</p>` : ''}
           </div>
           <div class="h-task-badges">
-            <span class="h-task-state"><span class="status-dot${complete ? ' is-idle' : ' is-accent'}" aria-hidden="true"></span>${complete ? '완료' : '진행 중'}</span>
+            <span class="h-task-state"><span class="status-dot${TASK_STATUS_TONE[statusKey]}" aria-hidden="true"></span>${TASK_STATUS_LABELS[statusKey]}</span>
           </div>
         </header>
-        ${renderTaskFacts(task)}
-        ${renderModules(task)}
-        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderFlow(sessionFlowNodes(task, now)))}
-        ${renderArtifacts(task)}
+        ${renderTaskBody(task, now)}
       </article>`;
   }
 
@@ -1425,7 +1566,9 @@
   // **무엇을 보는가 = 상위 탭 / 어떻게 보는가 = 모드 토글.**
   function renderPortfolioBoard(inputTasks, now) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    const shown = tasks.filter((task) => task.status !== 'complete');
+    // 관제탑은 **살아 있는 세션의 현재면**이다. 하트비트가 끊긴 세션은 지금 무엇을 하고
+    // 있지 않으므로 여기 서지 않고 '중단됨' 목록으로 간다.
+    const shown = tasks.filter((task) => taskStatusKey(task) === 'active');
     const actorCount = shown.reduce((total, task) => total + taskActors(task).length, 0);
     return renderBoard(shown.map((task) => pipelineFromTask(task, now)), {
       empty: '진행 중인 파이프라인이 없습니다.',
@@ -1492,6 +1635,45 @@
       </div>`;
   }
 
+  // ---- 게시글형 목록 (완료 · 중단) -----------------------------------------
+  //
+  // 끝난 세션은 **읽을거리**이지 조작 대상이 아니다. 예전에는 완료 목록도 진행 중과 같은
+  // 수평 tablist였고, CSS가 `overflow-x: auto`라 실질은 캐러셀이었다 — 스무 개가 쌓이면
+  // 옆으로 밀어야 보이고, 한 번에 한 세션의 상세만 열려 있었다(조사 §e).
+  //
+  // 이제는 최신이 위인 **세로 게시글 리스트**다. 한 행에 제목·상태·시각이 있고, 행을 펼치면
+  // 그 자리에서 요청 원문과 단계가 나온다. 접힘은 `<details>`이므로 선택 상태를 화면이
+  // 따로 들고 있지 않고(roving tabindex도, hidden 패널도 없다), 여러 개를 동시에 펼 수 있다.
+  // 모양은 system.css의 `.disclosure` 프리미티브를 그대로 소비한다(DESIGN.md §7.2).
+  function renderPostRow(task, now) {
+    const presentation = taskPresentation(task);
+    const statusKey = taskStatusKey(task);
+    const stamp = seoulStamp(completedTime(task) || null);
+    return `
+          <details class="disclosure h-post" data-task-post="${escapeHtml(task.id || '')}">
+            <summary class="disclosure-head h-post-head">
+              <span class="h-post-state"><span class="status-dot${TASK_STATUS_TONE[statusKey]}" aria-hidden="true"></span>${TASK_STATUS_LABELS[statusKey]}</span>
+              <span class="disclosure-title h-post-title">${escapeHtml(presentation.name)}</span>
+              <span class="disclosure-hint h-post-when">${stamp
+    ? `<time datetime="${escapeHtml(stamp.datetime)}">${escapeHtml(stamp.label)}</time>`
+    : '시각 기록 없음'}</span>
+            </summary>
+            <div class="disclosure-body">${renderTaskBody(task, now)}</div>
+          </details>`;
+  }
+
+  function renderPostList(groups, status, now, footer = '') {
+    return `
+      <div class="h-post-board" data-post-list="${escapeHtml(status)}">
+        ${groups.map((group) => `
+        ${group.label ? `<p class="list-group-head h-session-group-head">${escapeHtml(group.label)}</p>` : ''}
+        <section class="h-post-group" aria-label="${escapeHtml(group.ariaLabel)}">
+          ${group.tasks.map((task) => renderPostRow(task, now)).join('')}
+        </section>`).join('')}
+        ${footer}
+      </div>`;
+  }
+
   // 진행 중 패널의 보기 모드 토글. system.css의 `.segmented`가 모양을 그리고, 여기서는
   // 어느 모드가 눌려 있는지만 말한다. 상위 탭(tablist/tab)과 **다른 역할**을 쓴다 —
   // 같은 패널을 두 어법으로 그리는 것이지 다른 패널로 가는 것이 아니므로, 탭이 아니라
@@ -1510,11 +1692,11 @@
   // 때문이다 — 화면 상태(selectedActiveMode)에만 의존하면 검사가 기본값 하나만 본다.
   function renderSessionView(inputTasks, now, view, mode = selectedActiveMode) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    const status = view === 'complete' ? 'complete' : 'active';
-    const filtered = tasks.filter((task) => (status === 'complete'
-      ? task.status === 'complete'
-      : task.status !== 'complete'));
-    if (status !== 'complete') {
+    const status = SESSION_VIEW_KEYS.has(view) ? view : 'active';
+    // 상태별 필터는 **정확히 그 상태**다. 예전의 `!== 'complete'`는 중단된 세션까지
+    // 진행 중으로 끌어와 관제탑에 세웠다 (요구: 진행 중 표시는 실제 활성 세션만).
+    const filtered = tasks.filter((task) => taskStatusKey(task) === status);
+    if (status === 'active') {
       // 토글은 세션이 없어도 남는다 — 모드는 세션의 유무가 아니라 사람의 선택이고,
       // 빈 화면에서 토글이 사라지면 다음 세션이 뜰 때 모드가 어디로 갔는지 알 수 없다.
       const current = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
@@ -1525,29 +1707,32 @@
         : renderPortfolioBoard(tasks, now);
       return `${renderActiveModes(current)}${body}`;
     }
+    const label = TASK_STATUS_LABELS[status];
     if (filtered.length === 0) {
-      return '<p class="us-empty card">완료된 작업이 없습니다.</p>';
+      return `<p class="us-empty card">${escapeHtml(label)} 상태인 작업이 없습니다.</p>`;
     }
-    // 완료는 최근 완료순으로 세우고 기본 10개만 편다. 나머지는 '더 보기'로 열린다 —
-    // 목록을 지우는 것이 아니라 접는 것이므로 감춘 개수를 버튼이 그대로 말한다.
+    // 최근순으로 세우고 기본 10개만 편다. 나머지는 '더 보기'로 열린다 — 목록을 지우는
+    // 것이 아니라 접는 것이므로 감춘 개수를 버튼이 그대로 말한다.
     const ordered = [...filtered].sort((left, right) => completedTime(right) - completedTime(left));
-    const visible = ordered.slice(0, Math.max(COMPLETED_PAGE_SIZE, completedVisible));
+    const visible = ordered.slice(0, Math.max(POST_PAGE_SIZE, postVisible[status] || 0));
     const rest = ordered.length - visible.length;
     const groups = groupTasksByDate(visible).map((group) => ({
       label: group.label,
-      ariaLabel: `${group.label} 완료 세션`,
+      ariaLabel: `${group.label} ${label} 세션`,
       tasks: group.tasks,
     }));
     const footer = rest > 0
-      ? `<div class="h-session-more"><button class="btn btn-secondary btn-sm" type="button" data-completed-more>완료 세션 ${Math.min(COMPLETED_PAGE_SIZE, rest)}개 더 보기</button><span class="h-session-more-rest">남은 ${rest}개</span></div>`
+      ? `<div class="h-session-more"><button class="btn btn-secondary btn-sm" type="button" data-completed-more data-post-status="${escapeHtml(status)}">${escapeHtml(label)} 세션 ${Math.min(POST_PAGE_SIZE, rest)}개 더 보기</button><span class="h-session-more-rest">남은 ${rest}개</span></div>`
       : '';
-    return renderTaskTabs(groups, now, status, footer);
+    return renderPostList(groups, status, now, footer);
   }
 
   function renderSessionViews(inputTasks, now) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const counts = { active: activeCount, complete: tasks.length - activeCount };
+    // 개수도 상태 판정과 **같은 함수**에서 나온다. 탭의 숫자와 그 탭이 실제로 세우는
+    // 세션 수가 다른 화면은 둘 중 하나가 반드시 거짓말이다.
+    const counts = Object.fromEntries(SESSION_VIEWS.map((view) => [view.key, 0]));
+    for (const task of tasks) counts[taskStatusKey(task)] += 1;
     // 탭 목록은 SESSION_VIEWS 하나에서 도출한다 — 라벨·키를 여기 다시 적으면 상위 탭이
     // 바뀔 때 두 곳이 어긋난다 (LESSONS "파생 가능한 것을 손으로 적지 않는다").
     const views = SESSION_VIEWS.map((view) => ({ ...view, count: counts[view.key] ?? 0 }));
@@ -1705,10 +1890,14 @@
   // 화면-로컬 상태(완료 더 보기·보기 모드)를 바꾸는 컨트롤. 서버를 다시 부르지 않고
   // 마지막 응답으로 다시 그린다 — 접기/펴기와 모드 전환 때문에 한도를 쓰지 않는다.
   function wireLocalControls(root) {
-    const more = root?.querySelector?.('[data-completed-more]');
-    if (more && typeof more.addEventListener === 'function') {
+    // '더 보기'는 상태마다 하나씩 있을 수 있다 (완료 · 중단). 버튼이 자기 상태를 데이터로
+    // 들고 있으므로 카운터도 그 상태 것만 는다.
+    for (const more of [...(root?.querySelectorAll?.('[data-completed-more]') || [])]) {
+      if (typeof more.addEventListener !== 'function') continue;
       more.addEventListener('click', () => {
-        completedVisible += COMPLETED_PAGE_SIZE;
+        const status = more.dataset?.postStatus;
+        if (!Object.prototype.hasOwnProperty.call(postVisible, status)) return;
+        postVisible[status] += POST_PAGE_SIZE;
         rerenderDashboard();
       });
     }
@@ -1778,7 +1967,9 @@
 
   function renderDashboard(data, { announce }) {
     const tasks = sortTasks(Array.isArray(data?.tasks) ? data.tasks : []);
-    activeSessionCount = tasks.filter((task) => task.status !== 'complete').length;
+    // 빠른 폴링은 **실제로 도는 세션**이 있을 때만 한다. 중단된 세션을 진행 중으로 세면
+    // 아무도 보고하지 않는 화면이 5초마다 API를 두드린다.
+    activeSessionCount = tasks.filter((task) => taskStatusKey(task) === 'active').length;
     const signature = JSON.stringify(data ?? null);
     // 바뀐 것이 없으면 다시 그리지 않는다: 초점·선택 상태를 흔들지 않기 위해서다.
     // (예전에는 여기에 "조직도를 끌고 있는 중이면 건너뛴다"는 예외가 있었다. 끌기가
@@ -1862,6 +2053,7 @@
 
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
+    renderTaskBody, renderPostList, taskPresentation, taskStatusKey, taskInput,
     sessionFlowNodes, renderFlow, pipelineFromTask, renderBoard, buildFallbackBoard,
     phaseTimeline, sessionUsageDeltas, actorNodes,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,

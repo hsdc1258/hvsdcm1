@@ -109,6 +109,42 @@
   font-size: var(--fs-micro);
   text-align: right;
 }
+/* 수집 건강 상태 — 마지막 성공 · 마지막 시도 · 그 결과. 카드 머리와 게이지 사이에 두
+   줄로 눕는다: 게이지의 숫자를 믿어도 되는지가 그 숫자를 읽기 전에 판정돼야 한다.
+   장식(배너·타일)을 만들지 않고 라벨/값 정의 목록으로만 낸다 (DESIGN.md §6 장식 상한 —
+   이 뷰의 장식은 게이지 한 종뿐이다).
+   --text-3 on --surface 4.99 ✓ 캡션 · --text-2 on --surface 7.03 ✓ 본문 */
+.us-health {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.us-health > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+.us-health dd {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* SLO 초과는 **판정**이므로 사실 줄과 다르게 선다: 경고 상태색은 상태 표시에만 쓴다
+   (DESIGN.md §3). 색만으로 말하지 않게 점 옆에 문장이 항상 함께 온다.
+   --orange on --surface 8.80 ✓ 본문 */
+.us-health.is-breached {
+  border-bottom-color: var(--line);
+}
+.us-health-alert dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--orange);
+}
 /* 계정·모델 그룹 머리에 붙는 자기 수집 시각. rail은 좁아서 긴 모델 이름과 시각이
    한 줄에 다 들어가지 않는 조합이 나온다. 그때 이름을 'CLAUDE-/FABLE-5'처럼 쪼개는
    대신 시각을 아랫줄로 내린다 — 이름이 먼저이고 시각은 따라붙는 정보다
@@ -294,6 +330,83 @@
 }
 .h-session-panel[hidden] {
   display: none;
+}
+/* ==========================================================================
+   게시글형 목록 — 끝난 세션(완료 · 중단)
+   ==========================================================================
+   행 하나가 게시글 한 줄이다: 상태 · 제목 · 시각. 모양은 system.css의 .disclosure를
+   그대로 쓰고(DESIGN.md §7.2), 여기서는 낱개 컨테이너를 **하나의 목록으로 잇는** 일만
+   한다 — 둥근 카드가 세로로 열 개 쌓이면 카드 스택이 되고, 그것은 §6이 막는 조판이다.
+   그래서 그룹 안에서는 각 행의 테두리·곡률을 걷고 인셋 헤어라인으로만 가른다. */
+.h-post-board {
+  display: grid;
+  gap: var(--space-3);
+}
+.h-post-group {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.h-post-group > .h-post {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.h-post-group > .h-post + .h-post {
+  border-top: 1px solid var(--line-faint);
+}
+/* 행의 세 칸: 상태(고정폭) · 제목(남는 폭) · 시각(오른쪽). 제목은 nowrap을 걸지 않는다 —
+   좁은 폭에서는 접히는 편이 낫고, 한국어는 body의 keep-all이 어절을 지킨다. */
+.h-post-head {
+  align-items: start;
+  gap: var(--space-3);
+}
+.h-post-state {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 4.5em;
+  padding-top: 1px;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+.h-post-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* --text-3 on --surface 4.99 ✓ 캡션 */
+.h-post-when {
+  flex: none;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* 펼친 본문은 세션 상세와 같은 리듬을 쓴다. .disclosure-body가 이미 grid이므로
+   간격만 세션 카드(.h-task)와 맞춘다. */
+.h-post > .disclosure-body {
+  gap: var(--space-4);
+}
+/* ==========================================================================
+   요청 원문
+   ==========================================================================
+   사용자가 쓴 글이므로 줄바꿈이 의미다 — 한 줄로 눌러 붙이면 목록·문단이 뭉개진다.
+   길이 제한은 서버가 걸고(4KB 절단), 화면은 높이만 잡아 그 안에서 스크롤한다.
+   --text on --surface-2 15.46 ✓ 본문 · --text-3 on --bg 5.80 ✓ 캡션 */
+.h-task-input {
+  display: grid;
+  gap: var(--space-2);
+}
+.h-task-input-body {
+  max-height: 16em;
+  overflow-y: auto;
+  color: var(--text);
+  font-size: var(--fs-body-sm);
+  white-space: pre-wrap;
+}
+.h-task-input-empty {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }
 /* ==========================================================================
    선택된 세션 — header, 사실 3칸, 모듈, 조직도, artifact

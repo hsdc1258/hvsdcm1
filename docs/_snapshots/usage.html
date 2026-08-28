@@ -1590,6 +1590,42 @@ label.list-row {
   font-size: var(--fs-micro);
   text-align: right;
 }
+/* 수집 건강 상태 — 마지막 성공 · 마지막 시도 · 그 결과. 카드 머리와 게이지 사이에 두
+   줄로 눕는다: 게이지의 숫자를 믿어도 되는지가 그 숫자를 읽기 전에 판정돼야 한다.
+   장식(배너·타일)을 만들지 않고 라벨/값 정의 목록으로만 낸다 (DESIGN.md §6 장식 상한 —
+   이 뷰의 장식은 게이지 한 종뿐이다).
+   --text-3 on --surface 4.99 ✓ 캡션 · --text-2 on --surface 7.03 ✓ 본문 */
+.us-health {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.us-health > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+.us-health dd {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* SLO 초과는 **판정**이므로 사실 줄과 다르게 선다: 경고 상태색은 상태 표시에만 쓴다
+   (DESIGN.md §3). 색만으로 말하지 않게 점 옆에 문장이 항상 함께 온다.
+   --orange on --surface 8.80 ✓ 본문 */
+.us-health.is-breached {
+  border-bottom-color: var(--line);
+}
+.us-health-alert dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--orange);
+}
 /* 계정·모델 그룹 머리에 붙는 자기 수집 시각. rail은 좁아서 긴 모델 이름과 시각이
    한 줄에 다 들어가지 않는 조합이 나온다. 그때 이름을 'CLAUDE-/FABLE-5'처럼 쪼개는
    대신 시각을 아랫줄로 내린다 — 이름이 먼저이고 시각은 따라붙는 정보다
@@ -1775,6 +1811,83 @@ label.list-row {
 }
 .h-session-panel[hidden] {
   display: none;
+}
+/* ==========================================================================
+   게시글형 목록 — 끝난 세션(완료 · 중단)
+   ==========================================================================
+   행 하나가 게시글 한 줄이다: 상태 · 제목 · 시각. 모양은 system.css의 .disclosure를
+   그대로 쓰고(DESIGN.md §7.2), 여기서는 낱개 컨테이너를 **하나의 목록으로 잇는** 일만
+   한다 — 둥근 카드가 세로로 열 개 쌓이면 카드 스택이 되고, 그것은 §6이 막는 조판이다.
+   그래서 그룹 안에서는 각 행의 테두리·곡률을 걷고 인셋 헤어라인으로만 가른다. */
+.h-post-board {
+  display: grid;
+  gap: var(--space-3);
+}
+.h-post-group {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.h-post-group > .h-post {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.h-post-group > .h-post + .h-post {
+  border-top: 1px solid var(--line-faint);
+}
+/* 행의 세 칸: 상태(고정폭) · 제목(남는 폭) · 시각(오른쪽). 제목은 nowrap을 걸지 않는다 —
+   좁은 폭에서는 접히는 편이 낫고, 한국어는 body의 keep-all이 어절을 지킨다. */
+.h-post-head {
+  align-items: start;
+  gap: var(--space-3);
+}
+.h-post-state {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 4.5em;
+  padding-top: 1px;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+.h-post-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* --text-3 on --surface 4.99 ✓ 캡션 */
+.h-post-when {
+  flex: none;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* 펼친 본문은 세션 상세와 같은 리듬을 쓴다. .disclosure-body가 이미 grid이므로
+   간격만 세션 카드(.h-task)와 맞춘다. */
+.h-post > .disclosure-body {
+  gap: var(--space-4);
+}
+/* ==========================================================================
+   요청 원문
+   ==========================================================================
+   사용자가 쓴 글이므로 줄바꿈이 의미다 — 한 줄로 눌러 붙이면 목록·문단이 뭉개진다.
+   길이 제한은 서버가 걸고(4KB 절단), 화면은 높이만 잡아 그 안에서 스크롤한다.
+   --text on --surface-2 15.46 ✓ 본문 · --text-3 on --bg 5.80 ✓ 캡션 */
+.h-task-input {
+  display: grid;
+  gap: var(--space-2);
+}
+.h-task-input-body {
+  max-height: 16em;
+  overflow-y: auto;
+  color: var(--text);
+  font-size: var(--fs-body-sm);
+  white-space: pre-wrap;
+}
+.h-task-input-empty {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }
 /* ==========================================================================
    선택된 세션 — header, 사실 3칸, 모듈, 조직도, artifact
@@ -2728,6 +2841,10 @@ label.list-row {
               tabindex="0" data-session-view="active">
               <span>진행 중</span><strong data-view-count="2">2</strong>
             </button><button class="segmented-btn h-session-view-tab" type="button" role="tab"
+              id="hSessionViewTab-stale" aria-controls="hSessionViewPanel-stale" aria-selected="false"
+              tabindex="-1" data-session-view="stale">
+              <span>중단됨</span><strong data-view-count="0">0</strong>
+            </button><button class="segmented-btn h-session-view-tab" type="button" role="tab"
               id="hSessionViewTab-complete" aria-controls="hSessionViewPanel-complete" aria-selected="false"
               tabindex="-1" data-session-view="complete">
               <span>완료</span><strong data-view-count="1">1</strong>
@@ -2943,41 +3060,30 @@ label.list-row {
       </article></div>
       </div>
             </section>
+            <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-stale"
+              aria-labelledby="hSessionViewTab-stale" data-session-view-panel="stale" hidden>
+              <p class="us-empty card">중단됨 상태인 작업이 없습니다.</p>
+            </section>
             <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-complete"
               aria-labelledby="hSessionViewTab-complete" data-session-view-panel="complete" hidden>
 
-      <div class="h-session-switcher" data-session-switcher="complete">
+      <div class="h-post-board" data-post-list="complete">
 
-          <p class="list-group-head h-session-group-head">2026.08.27</p>
-          <div class="h-session-tabs" role="tablist" aria-label="2026.08.27 완료 세션" data-task-tablist>
+        <p class="list-group-head h-session-group-head">2026.08.27</p>
+        <section class="h-post-group" aria-label="2026.08.27 완료 세션">
 
-            <button class="h-session-tab is-selected" type="button" role="tab"
-              id="hSessionTab-complete-0" aria-controls="hSessionPanel-complete-0" aria-selected="true"
-              tabindex="0" data-task-tab="0" data-task-id="jimunhanjang-project" data-task-status="complete">
-              <span class="h-session-tab-copy">
-                <strong>프로젝트 지문한장</strong>
-                <small class="h-session-tab-meta"><span>지문한장 프로젝트 · 완료 100%</span><time class="h-task-date" datetime="2026-08-27">08.27</time></small>
-              </span>
-            </button>
-          </div>
+          <details class="disclosure h-post" data-task-post="jimunhanjang-project">
+            <summary class="disclosure-head h-post-head">
+              <span class="h-post-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</span>
+              <span class="disclosure-title h-post-title">프로젝트 지문한장</span>
+              <span class="disclosure-hint h-post-when"><time datetime="2026-08-27T20:50+09:00">08.27 20:50</time></span>
+            </summary>
+            <div class="disclosure-body">
 
-        <div class="h-session-panels">
-
-            <section class="h-session-panel" role="tabpanel" id="hSessionPanel-complete-0"
-              aria-labelledby="hSessionTab-complete-0" data-task-panel="0">
-
-      <article class="h-task is-complete">
-        <header class="h-task-head">
-          <div>
-            <p class="us-eyebrow">완료한 세션</p>
-            <h3>프로젝트 지문한장</h3>
-            <p class="h-task-meta">마지막 보고 10분 전 · 지문한장 프로젝트 · 진행 100% · 마감 20:20 KST</p>
-
-          </div>
-          <div class="h-task-badges">
-            <span class="h-task-state"><span class="status-dot is-idle" aria-hidden="true"></span>완료</span>
-          </div>
-        </header>
+      <section class="h-task-input" aria-label="요청 원문">
+        <p class="us-eyebrow">요청 원문</p>
+        <p class="h-task-input-empty">기록 없음 · 이 세션은 요청 원문을 보고하지 않았습니다</p>
+      </section>
 
       <dl class="h-task-facts">
         <div><dt>현재</dt><dd>배포 완료</dd></div>
@@ -2997,10 +3103,10 @@ label.list-row {
       <article class="h-node is-request">
         <p class="h-node-kind">사용자 요청</p>
         <h5 class="h-node-name">사용자 입력</h5>
-        <p class="h-node-detail">프로젝트 지문한장</p>
 
 
-
+        <p class="h-node-note">이 세션은 요청 원문을 보고하지 않았습니다</p>
+        <p class="h-node-state"><span class="status-dot is-idle" aria-hidden="true"></span>기록 없음</p>
 
       </article>
 
@@ -3130,10 +3236,10 @@ label.list-row {
         <div class="h-evidence-list">
           <span>제품 E2E 기준 고정</span>
         </div>
-      </footer>
-      </article>
-            </section>
-        </div>
+      </footer></div>
+          </details>
+        </section>
+
       </div>
             </section>
         </div>
@@ -3150,6 +3256,11 @@ label.list-row {
           <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">Codex 한도</h3></div>
           <span class="us-card-meta">12분 전 수집</span>
         </header>
+
+      <dl class="us-health is-breached">
+        <div><dt>마지막 수집 성공</dt><dd>기록 없음</dd></div><div><dt>마지막 시도</dt><dd>기록 없음</dd></div>
+        <div class="us-health-alert"><dt>수집 상태</dt><dd><span class="status-dot is-warn" aria-hidden="true"></span>30분 넘게 수집 성공 없음</dd></div>
+      </dl>
 
         <div class="us-group">
           <p class="list-group-head">ChatGPT Pro</p>
@@ -3185,6 +3296,11 @@ label.list-row {
           <div><p class="us-eyebrow">실시간 한도</p><h3 class="title-3">Claude 한도</h3></div>
           <span class="us-card-meta">8분 전 수집</span>
         </header>
+
+      <dl class="us-health is-breached">
+        <div><dt>마지막 수집 성공</dt><dd>기록 없음</dd></div><div><dt>마지막 시도</dt><dd>기록 없음</dd></div>
+        <div class="us-health-alert"><dt>수집 상태</dt><dd><span class="status-dot is-warn" aria-hidden="true"></span>30분 넘게 수집 성공 없음</dd></div>
+      </dl>
 
         <div class="us-group">
           <div class="list-group-head-row"><p class="list-group-head">claude-opus-5</p><span class="us-card-meta">8분 전 수집</span></div>

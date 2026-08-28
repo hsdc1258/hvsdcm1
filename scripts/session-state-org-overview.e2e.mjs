@@ -55,11 +55,12 @@ assert.equal(typeof renderers.renderSessionView, 'function', '상태별 세션 r
 assert.equal(typeof renderers.renderPortfolioBoard, 'function', '관제탑 renderer가 공개되어야 합니다.');
 
 const views = renderers.renderSessionViews(tasks, NOW);
-// 상위 탭은 진행 중 · 완료 둘뿐이다 (계약 §A). 관제탑은 상위 탭이 아니라 진행 중
-// 패널 안의 보기 모드가 됐다 — 아래 보드 검사가 그 모드를 직접 렌더해 본다.
+// 상위 탭은 세션 상태 셋(진행 중 · 중단됨 · 완료)이다. 관제탑은 상위 탭이 아니라 진행 중
+// 패널 안의 보기 모드다 — 아래 보드 검사가 그 모드를 직접 렌더해 본다.
 assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="2"/u);
+assert.match(views, /data-session-view="stale"[^>]*>[\s\S]*?data-view-count="0"/u);
 assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="2"/u);
-assert.equal((views.match(/data-session-view="/gu) || []).length, 2);
+assert.equal((views.match(/data-session-view="/gu) || []).length, 3);
 
 const active = renderers.renderSessionView(tasks, NOW, 'active', 'org');
 assert.match(active, /진행 Alpha/u);
@@ -157,7 +158,7 @@ assert.equal((retainedBoard.match(/data-portfolio-task=/gu) || []).length, 2);
 assert.match(retainedBoard, /보존 세션 01/u);
 
 const retainedComplete = renderers.renderSessionView(apiPayload.tasks, NOW, 'complete');
-assert.equal((retainedComplete.match(/data-task-tab=/gu) || []).length, 10);
+assert.equal((retainedComplete.match(/data-task-post=/gu) || []).length, 10);
 assert.match(retainedComplete, /남은 1개/u);
 assert.match(retainedComplete, /보존 세션 03/u);
 
