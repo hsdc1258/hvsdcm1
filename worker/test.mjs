@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import worker from './src/index.js';
+import { fixedTimeEqual, fixedTimeTextEqual } from './src/router.js';
 import {
   clientIp,
   createToken,
@@ -11,6 +13,138 @@ import {
   readJson,
   sha256,
 } from './src/lib.js';
+
+const ROUTER_SOURCE = readFileSync(new URL('./src/router.js', import.meta.url), 'utf8');
+
+function createLoginTestDb(user = null) {
+  const limits = new Map();
+  const sessions = [];
+  let userLookups = 0;
+
+  return {
+    limits,
+    sessions,
+    get userLookups() { return userLookups; },
+    resetMinuteWindows() {
+      for (const state of limits.values()) state.minuteStartedAt = Date.now() - 60_001;
+    },
+    prepare(sql) {
+      const query = sql.replace(/\s+/gu, ' ').trim();
+      return {
+        bind(...values) {
+          if (query.startsWith('INSERT INTO login_attempt_limits')) {
+            return {
+              async first() {
+                const [keyHash, attemptedAt, minuteCutoff] = values;
+                let state = limits.get(keyHash);
+                if (!state) {
+                  state = {
+                    minuteStartedAt: attemptedAt,
+                    minuteAttempts: 1,
+                    failureWindowStartedAt: null,
+                    failureCount: 0,
+                    lockedUntil: 0,
+                    updatedAt: attemptedAt,
+                  };
+                  limits.set(keyHash, state);
+                } else if (state.minuteStartedAt <= minuteCutoff) {
+                  state.minuteStartedAt = attemptedAt;
+                  state.minuteAttempts = 1;
+                  state.updatedAt = attemptedAt;
+                } else {
+                  state.minuteAttempts += 1;
+                  state.updatedAt = attemptedAt;
+                }
+                return {
+                  minute_started_at: state.minuteStartedAt,
+                  minute_attempts: state.minuteAttempts,
+                  locked_until: state.lockedUntil,
+                };
+              },
+            };
+          }
+
+          if (query.startsWith('UPDATE login_attempt_limits SET failure_window_started_at = CASE')) {
+            return {
+              async first() {
+                const [keyHash, attemptedAt, failureCutoff, lockUntil, failureLimit] = values;
+                const state = limits.get(keyHash);
+                assert.ok(state, 'attempt counter must exist before recording a failure');
+                const resetFailures = state.failureWindowStartedAt === null
+                  || state.failureWindowStartedAt <= failureCutoff;
+                state.failureWindowStartedAt = resetFailures
+                  ? attemptedAt
+                  : state.failureWindowStartedAt;
+                state.failureCount = resetFailures ? 1 : state.failureCount + 1;
+                if (state.failureCount >= failureLimit) {
+                  state.lockedUntil = Math.max(state.lockedUntil, lockUntil);
+                }
+                state.updatedAt = attemptedAt;
+                return {
+                  failure_count: state.failureCount,
+                  locked_until: state.lockedUntil,
+                };
+              },
+            };
+          }
+
+          if (query.startsWith('UPDATE login_attempt_limits SET failure_window_started_at = NULL')) {
+            return {
+              async run() {
+                const [keyHash, attemptedAt] = values;
+                const state = limits.get(keyHash);
+                assert.ok(state, 'attempt counter must exist before clearing failures');
+                state.failureWindowStartedAt = null;
+                state.failureCount = 0;
+                state.lockedUntil = 0;
+                state.updatedAt = attemptedAt;
+                return { success: true };
+              },
+            };
+          }
+
+          if (query.startsWith('SELECT * FROM users WHERE username = ?')) {
+            return {
+              async first() {
+                userLookups += 1;
+                return user && user.username.toLowerCase() === String(values[0]).toLowerCase()
+                  ? user
+                  : null;
+              },
+            };
+          }
+
+          if (query.startsWith('INSERT INTO sessions')) {
+            return {
+              async run() {
+                sessions.push(values);
+                return { success: true };
+              },
+            };
+          }
+
+          if (query.startsWith('UPDATE users SET last_login_at')
+            || query.startsWith('INSERT INTO activity')) {
+            return { async run() { return { success: true }; } };
+          }
+
+          throw new Error(`Unexpected login SQL in test: ${query}`);
+        },
+      };
+    },
+  };
+}
+
+function loginRequest(path, body, ip = '198.51.100.40') {
+  return new Request(`https://api.test${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'cf-connecting-ip': ip,
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 test('client IP uses the Cloudflare address and enforces a storage limit', () => {
   const request = new Request('https://api.test', {
@@ -69,6 +203,155 @@ test('hash helpers are deterministic and tokens are URL-safe', async () => {
   assert.match(createToken(), /^[A-Za-z0-9_-]{43}$/);
 });
 
+test('login text comparison uses fixed-length constant-time bytes', async () => {
+  assert.equal(fixedTimeEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2])), true);
+  assert.equal(fixedTimeEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3])), false);
+  assert.equal(await fixedTimeTextEqual('same password', 'same password'), true);
+  assert.equal(await fixedTimeTextEqual('short', 'a different-length password'), false);
+});
+
+test('login routes retain atomic D1 counters and fixed-time password calls', () => {
+  assert.match(ROUTER_SOURCE, /const LOGIN_ATTEMPTS_PER_MINUTE = 5;/u);
+  assert.match(ROUTER_SOURCE, /const LOGIN_FAILURES_PER_WINDOW = 10;/u);
+  assert.match(ROUTER_SOURCE, /const LOGIN_LOCK_MS = 15 \* LOGIN_MINUTE_MS;/u);
+  assert.match(
+    ROUTER_SOURCE,
+    /INSERT INTO login_attempt_limits[\s\S]*ON CONFLICT\(key_hash\) DO UPDATE SET[\s\S]*login_attempt_limits\.minute_attempts \+ 1[\s\S]*RETURNING minute_started_at, minute_attempts, locked_until/u,
+  );
+  assert.match(
+    ROUTER_SOURCE,
+    /UPDATE login_attempt_limits[\s\S]*SET failure_window_started_at = CASE[\s\S]*failure_count \+ 1[\s\S]*>= \?5 THEN MAX\(locked_until, \?4\)[\s\S]*RETURNING failure_count, locked_until/u,
+  );
+
+  const userLogin = /async function login\([\s\S]*?\n\}\n\nasync function adminLogin/u.exec(ROUTER_SOURCE)?.[0] || '';
+  const adminLogin = /async function adminLogin\([\s\S]*?\n\}\n\nasync function ingestTokenMatches/u.exec(ROUTER_SOURCE)?.[0] || '';
+  assert.match(userLogin, /await fixedTimeTextEqual\(suppliedHash, user\.password_hash\)/u);
+  assert.match(userLogin, /if \(!user \|\| user\.disabled \|\| !passwordMatches\)/u);
+  assert.match(adminLogin, /await fixedTimeTextEqual\([\s\S]*String\(env\.ADMIN_PASSWORD \|\| ''\)/u);
+  assert.match(adminLogin, /if \(!env\.ADMIN_PASSWORD \|\| !passwordMatches\)/u);
+});
+
+test('login limiter key combines route, normalized account, and client IP without raw metadata', async () => {
+  const db = createLoginTestDb();
+  const env = {
+    ADMIN_PASSWORD: 'correct-password',
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: db,
+  };
+  const userAttempt = (username, ip) => worker.fetch(loginRequest('/api/login', {
+    username, password: 'wrong',
+  }, ip), env);
+
+  assert.equal((await userAttempt('Student', '198.51.100.1')).status, 401);
+  assert.equal((await userAttempt('student', '198.51.100.1')).status, 401);
+  assert.equal(db.limits.size, 1, 'account case variants must share one counter');
+
+  assert.equal((await userAttempt('other', '198.51.100.1')).status, 401);
+  assert.equal((await userAttempt('student', '198.51.100.2')).status, 401);
+  assert.equal((await userAttempt('admin', '198.51.100.1')).status, 401);
+  assert.equal((await worker.fetch(loginRequest('/api/admin/login', {
+    password: 'wrong',
+  }, '198.51.100.1'), env)).status, 401);
+  assert.equal(db.limits.size, 5, 'account, IP, and route changes must each select a distinct counter');
+  for (const key of db.limits.keys()) assert.match(key, /^[a-f0-9]{64}$/u);
+});
+
+test('user and admin login allow five attempts per minute and reject the sixth', async () => {
+  const cases = [
+    { path: '/api/login', body: { username: 'student', password: 'wrong' } },
+    { path: '/api/admin/login', body: { password: 'wrong' } },
+  ];
+
+  for (const current of cases) {
+    const db = createLoginTestDb();
+    const env = {
+      ADMIN_PASSWORD: 'correct-password',
+      ALLOWED_ORIGIN: 'https://example.test',
+      DB: db,
+    };
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const response = await worker.fetch(loginRequest(current.path, current.body), env);
+      assert.equal(response.status, 401, `${current.path} attempt ${attempt}`);
+    }
+
+    const limited = await worker.fetch(loginRequest(current.path, current.body), env);
+    assert.equal(limited.status, 429, current.path);
+    assert.ok(Number(limited.headers.get('retry-after')) >= 1);
+    assert.ok(Number(limited.headers.get('retry-after')) <= 60);
+  }
+});
+
+test('user and admin login lock for fifteen minutes on the tenth hourly failure', async () => {
+  const cases = [
+    { path: '/api/login', body: { username: 'student', password: 'wrong' } },
+    { path: '/api/admin/login', body: { password: 'wrong' } },
+  ];
+
+  for (const current of cases) {
+    const db = createLoginTestDb();
+    const env = {
+      ADMIN_PASSWORD: 'correct-password',
+      ALLOWED_ORIGIN: 'https://example.test',
+      DB: db,
+    };
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const response = await worker.fetch(loginRequest(current.path, current.body), env);
+      assert.equal(response.status, 401, `${current.path} failure ${attempt}`);
+    }
+    db.resetMinuteWindows();
+    for (let attempt = 6; attempt <= 9; attempt += 1) {
+      const response = await worker.fetch(loginRequest(current.path, current.body), env);
+      assert.equal(response.status, 401, `${current.path} failure ${attempt}`);
+    }
+
+    const locked = await worker.fetch(loginRequest(current.path, current.body), env);
+    assert.equal(locked.status, 429, current.path);
+    assert.equal(Number(locked.headers.get('retry-after')), 900);
+
+    const lookupsBeforeLockedRetry = db.userLookups;
+    const lockedRetry = await worker.fetch(loginRequest(current.path, current.body), env);
+    assert.equal(lockedRetry.status, 429, current.path);
+    assert.ok(Number(lockedRetry.headers.get('retry-after')) >= 899);
+    assert.equal(db.userLookups, lookupsBeforeLockedRetry, 'locked requests must skip credential lookup');
+  }
+});
+
+test('successful user and admin login clear only their failure lock state', async () => {
+  const passwordSalt = 'test-salt';
+  const db = createLoginTestDb({
+    id: 7,
+    username: 'student',
+    password_salt: passwordSalt,
+    password_hash: await passwordHash('correct-password', passwordSalt),
+    disabled: 0,
+  });
+  const env = {
+    ADMIN_PASSWORD: 'correct-password',
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: db,
+  };
+
+  assert.equal((await worker.fetch(loginRequest('/api/login', {
+    username: 'student', password: 'wrong',
+  }), env)).status, 401);
+  assert.equal((await worker.fetch(loginRequest('/api/admin/login', {
+    password: 'wrong',
+  }), env)).status, 401);
+
+  assert.equal((await worker.fetch(loginRequest('/api/login', {
+    username: 'student', password: 'correct-password',
+  }), env)).status, 200);
+  assert.equal((await worker.fetch(loginRequest('/api/admin/login', {
+    password: 'correct-password',
+  }), env)).status, 200);
+
+  assert.equal(db.sessions.length, 2);
+  for (const state of db.limits.values()) {
+    assert.equal(state.failureCount, 0);
+    assert.equal(state.minuteAttempts, 2, 'a success must not reset the per-minute attempt counter');
+  }
+});
+
 test('invalid JSON request bodies resolve to an empty object', async () => {
   const request = new Request('https://example.test/api', {
     method: 'POST',
@@ -95,6 +378,7 @@ test('admin login rejects an incorrect password before issuing a session', async
   const env = {
     ADMIN_PASSWORD: 'correct-password',
     ALLOWED_ORIGIN: 'https://example.test',
+    DB: createLoginTestDb(),
   };
   const response = await worker.fetch(new Request('https://api.test/api/admin/login', {
     method: 'POST',

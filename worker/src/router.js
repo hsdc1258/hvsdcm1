@@ -39,38 +39,13 @@ const VALID_HARNESS_REASONING = new Set([
   '', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra',
 ]);
 const usageTokenEncoder = new TextEncoder();
+const LOGIN_MINUTE_MS = 60_000;
+const LOGIN_FAILURE_WINDOW_MS = 60 * LOGIN_MINUTE_MS;
+const LOGIN_LOCK_MS = 15 * LOGIN_MINUTE_MS;
+const LOGIN_ATTEMPTS_PER_MINUTE = 5;
+const LOGIN_FAILURES_PER_WINDOW = 10;
 
-async function login(request, env) {
-  const input = await readJson(request);
-  const username = String(input.username || '').trim();
-  const user = await env.DB.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE')
-    .bind(username)
-    .first();
-
-  const suppliedHash = user
-    ? await passwordHash(String(input.password || ''), user.password_salt)
-    : null;
-  if (!user || user.disabled || suppliedHash !== user.password_hash) {
-    return json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, 401);
-  }
-
-  const rawToken = await issueSession(env, user.id, 'user', request);
-  await env.DB.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-    .bind(now(), user.id)
-    .run();
-  await logActivity(env, user.id, 'login');
-  return json({ token: rawToken, user: { id: user.id, username: user.username } });
-}
-
-async function adminLogin(request, env) {
-  const input = await readJson(request);
-  if (!env.ADMIN_PASSWORD || String(input.password || '') !== env.ADMIN_PASSWORD) {
-    return json({ error: '비밀번호가 올바르지 않습니다.' }, 401);
-  }
-  return json({ token: await issueSession(env, null, 'admin', request) });
-}
-
-function fixedTimeEqual(left, right) {
+export function fixedTimeEqual(left, right) {
   if (typeof crypto.subtle.timingSafeEqual === 'function') {
     return crypto.subtle.timingSafeEqual(left, right);
   }
@@ -81,6 +56,152 @@ function fixedTimeEqual(left, right) {
     difference |= left[index] ^ right[index];
   }
   return difference === 0;
+}
+
+export async function fixedTimeTextEqual(left, right) {
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(String(left))),
+    crypto.subtle.digest('SHA-256', usageTokenEncoder.encode(String(right))),
+  ]);
+  return fixedTimeEqual(new Uint8Array(leftHash), new Uint8Array(rightHash));
+}
+
+function rateLimitResponse(retryAt, attemptedAt) {
+  const retryAfter = Math.max(1, Math.ceil((retryAt - attemptedAt) / 1_000));
+  return json(
+    { error: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.' },
+    429,
+    { 'retry-after': String(retryAfter) },
+  );
+}
+
+async function beginLoginAttempt(request, env, scope, account) {
+  const attemptedAt = now();
+  const normalizedAccount = String(account || '').normalize('NFKC').toLowerCase();
+  const keyHash = await sha256(JSON.stringify([scope, clientIp(request), normalizedAccount]));
+  const state = await env.DB.prepare(`
+    INSERT INTO login_attempt_limits(
+      key_hash, minute_started_at, minute_attempts,
+      failure_window_started_at, failure_count, locked_until, updated_at
+    ) VALUES (?1, ?2, 1, NULL, 0, 0, ?2)
+    ON CONFLICT(key_hash) DO UPDATE SET
+      minute_started_at = CASE
+        WHEN login_attempt_limits.minute_started_at <= ?3 THEN excluded.minute_started_at
+        ELSE login_attempt_limits.minute_started_at
+      END,
+      minute_attempts = CASE
+        WHEN login_attempt_limits.minute_started_at <= ?3 THEN 1
+        ELSE login_attempt_limits.minute_attempts + 1
+      END,
+      updated_at = excluded.updated_at
+    RETURNING minute_started_at, minute_attempts, locked_until
+  `).bind(keyHash, attemptedAt, attemptedAt - LOGIN_MINUTE_MS).first();
+
+  const lockedUntil = Number(state?.locked_until || 0);
+  const minuteRetryAt = Number(state?.minute_attempts || 0) > LOGIN_ATTEMPTS_PER_MINUTE
+    ? Number(state.minute_started_at) + LOGIN_MINUTE_MS
+    : 0;
+  const retryAt = Math.max(lockedUntil, minuteRetryAt);
+  return {
+    attemptedAt,
+    keyHash,
+    response: retryAt > attemptedAt ? rateLimitResponse(retryAt, attemptedAt) : null,
+  };
+}
+
+async function recordLoginFailure(env, attempt) {
+  const lockUntil = attempt.attemptedAt + LOGIN_LOCK_MS;
+  const state = await env.DB.prepare(`
+    UPDATE login_attempt_limits
+    SET failure_window_started_at = CASE
+          WHEN failure_window_started_at IS NULL OR failure_window_started_at <= ?3 THEN ?2
+          ELSE failure_window_started_at
+        END,
+        failure_count = CASE
+          WHEN failure_window_started_at IS NULL OR failure_window_started_at <= ?3 THEN 1
+          ELSE failure_count + 1
+        END,
+        locked_until = CASE
+          WHEN (CASE
+            WHEN failure_window_started_at IS NULL OR failure_window_started_at <= ?3 THEN 1
+            ELSE failure_count + 1
+          END) >= ?5 THEN MAX(locked_until, ?4)
+          ELSE locked_until
+        END,
+        updated_at = ?2
+    WHERE key_hash = ?1
+    RETURNING failure_count, locked_until
+  `).bind(
+    attempt.keyHash,
+    attempt.attemptedAt,
+    attempt.attemptedAt - LOGIN_FAILURE_WINDOW_MS,
+    lockUntil,
+    LOGIN_FAILURES_PER_WINDOW,
+  ).first();
+
+  return Number(state?.locked_until || 0) > attempt.attemptedAt
+    ? rateLimitResponse(Number(state.locked_until), attempt.attemptedAt)
+    : null;
+}
+
+async function clearLoginFailures(env, attempt) {
+  await env.DB.prepare(`
+    UPDATE login_attempt_limits
+    SET failure_window_started_at = NULL,
+        failure_count = 0,
+        locked_until = 0,
+        updated_at = ?2
+    WHERE key_hash = ?1
+  `).bind(attempt.keyHash, attempt.attemptedAt).run();
+}
+
+async function login(request, env) {
+  const input = await readJson(request);
+  const username = String(input.username || '').trim();
+  const attempt = await beginLoginAttempt(request, env, 'user', username);
+  if (attempt.response) return attempt.response;
+
+  const user = await env.DB.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE')
+    .bind(username)
+    .first();
+
+  const suppliedHash = user
+    ? await passwordHash(String(input.password || ''), user.password_salt)
+    : null;
+  const passwordMatches = user
+    ? await fixedTimeTextEqual(suppliedHash, user.password_hash)
+    : false;
+  if (!user || user.disabled || !passwordMatches) {
+    const locked = await recordLoginFailure(env, attempt);
+    if (locked) return locked;
+    return json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, 401);
+  }
+
+  await clearLoginFailures(env, attempt);
+  const rawToken = await issueSession(env, user.id, 'user', request);
+  await env.DB.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
+    .bind(now(), user.id)
+    .run();
+  await logActivity(env, user.id, 'login');
+  return json({ token: rawToken, user: { id: user.id, username: user.username } });
+}
+
+async function adminLogin(request, env) {
+  const input = await readJson(request);
+  const attempt = await beginLoginAttempt(request, env, 'admin', 'admin');
+  if (attempt.response) return attempt.response;
+
+  const passwordMatches = await fixedTimeTextEqual(
+    String(input.password || ''),
+    String(env.ADMIN_PASSWORD || ''),
+  );
+  if (!env.ADMIN_PASSWORD || !passwordMatches) {
+    const locked = await recordLoginFailure(env, attempt);
+    if (locked) return locked;
+    return json({ error: '비밀번호가 올바르지 않습니다.' }, 401);
+  }
+  await clearLoginFailures(env, attempt);
+  return json({ token: await issueSession(env, null, 'admin', request) });
 }
 
 async function ingestTokenMatches(request, expectedValue) {

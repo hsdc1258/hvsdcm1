@@ -6,9 +6,13 @@ import {
   APP_SOURCE, DIAGRAM_SOURCE, ICON_SOURCE,
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer, functionBody, readSource, trackReads,
 } from './render-sandbox.mjs';
+import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
 import { buildSnapshots, SNAPSHOT_BY_SCREEN, SNAPSHOT_FILES } from './snapshot.mjs';
 
 const ROOT = process.cwd();
+const DESIGN_HEADING_PATH = process.env.HVSDCM_VALIDATE_DESIGN_PATH
+  ? path.resolve(process.env.HVSDCM_VALIDATE_DESIGN_PATH)
+  : path.join(ROOT, 'docs/DESIGN.md');
 const failures = [];
 let checks = 0;
 
@@ -478,6 +482,22 @@ function validateMigrations() {
     /CREATE TABLE harness_tasks[\s\S]*task_id TEXT PRIMARY KEY[\s\S]*status TEXT NOT NULL[\s\S]*updated_at TEXT NOT NULL[\s\S]*payload TEXT NOT NULL/u
       .test(harnessMigration),
     'worker: migration 0006 must define the harness task contract',
+  );
+  const loginLimitsMigration = readFileSync(path.join(migrationDirectory, '0008_login_attempt_limits.sql'), 'utf8');
+  check(
+    /CREATE TABLE login_attempt_limits[\s\S]*key_hash TEXT PRIMARY KEY[\s\S]*minute_attempts INTEGER NOT NULL[\s\S]*failure_count INTEGER NOT NULL[\s\S]*locked_until INTEGER NOT NULL/u
+      .test(loginLimitsMigration),
+    'worker: migration 0008 must define hashed login attempt and lockout counters',
+  );
+}
+
+function validateDesignHeadingSequence() {
+  const errors = findDesignHeadingSequenceErrors(
+    readFileSync(DESIGN_HEADING_PATH, 'utf8'),
+  );
+  check(
+    errors.length === 0,
+    `docs/DESIGN.md: numbered headings must be continuous and nested under their current parent\n${errors.join('\n')}`,
   );
 }
 
@@ -2224,6 +2244,7 @@ validateLandingGating();
 validateStudyExposure();
 validateLabelledBy();
 validateContrastTable();
+validateDesignHeadingSequence();
 validateDesignTokens();
 validateBrandName();
 validateEmojiSystem();
