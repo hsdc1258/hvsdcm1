@@ -7,6 +7,10 @@ binding = "DB"
 database_name = "hvsdcm"
 database_id = "0a6320b7-e7b7-4c9d-b13e-cab8ef423dea"
 
+[[r2_buckets]]
+binding = "GICHUL"
+bucket_name = "hvsdcm-gichul"
+
 # Required runtime secrets:
 #   npx wrangler secret put USAGE_INGEST_TOKEN
 #   npx wrangler secret put HARNESS_INGEST_TOKEN

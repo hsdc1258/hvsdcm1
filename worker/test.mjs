@@ -374,6 +374,145 @@ test('OPTIONS and unknown routes include CORS headers', async () => {
   assert.equal(missing.headers.get('access-control-allow-origin'), env.ALLOWED_ORIGIN);
 });
 
+const GICHUL_USER_TOKEN_HASH = await sha256('user-token');
+const GICHUL_DISABLED_TOKEN_HASH = await sha256('disabled-token');
+
+function createGichulEnv({ exams = [], pdfs = new Map(), manifestExists = true } = {}) {
+  const r2Reads = [];
+  const manifest = { exams };
+  return {
+    ALLOWED_ORIGIN: 'https://hvsdcm1.xyz',
+    r2Reads,
+    DB: {
+      prepare(sql) {
+        const query = sql.replace(/\s+/gu, ' ').trim();
+        return {
+          bind(...values) {
+            if (query.startsWith('SELECT s.*, u.username, u.disabled FROM sessions')) {
+              return {
+                async first() {
+                  if (values[0] === GICHUL_DISABLED_TOKEN_HASH) {
+                    return {
+                      token_hash: values[0], user_id: 8, role: 'user', username: 'disabled', disabled: 1,
+                    };
+                  }
+                  if (values[0] !== GICHUL_USER_TOKEN_HASH) return null;
+                  return {
+                    token_hash: values[0], user_id: 7, role: 'user', username: 'learner', disabled: 0,
+                  };
+                },
+              };
+            }
+            if (query.startsWith('UPDATE sessions SET last_seen_at')) {
+              return { async run() { return { success: true }; } };
+            }
+            throw new Error(`Unexpected gichul SQL in test: ${query}`);
+          },
+        };
+      },
+    },
+    GICHUL: {
+      async get(key) {
+        r2Reads.push(key);
+        if (key === 'manifest.json') {
+          if (!manifestExists) return null;
+          return {
+            body: JSON.stringify(manifest),
+            async json() { return manifest; },
+          };
+        }
+        const body = pdfs.get(key);
+        return body === undefined ? null : { body };
+      },
+    },
+  };
+}
+
+test('gichul manifest and PDF routes reject anonymous requests before reading R2', async () => {
+  const env = createGichulEnv();
+  for (const authorization of [null, 'Bearer bogus-token', 'Bearer expired-token', 'Bearer disabled-token']) {
+    for (const path of ['/api/gichul/manifest', '/api/gichul/pdf/2024-06-korean-hwajak-question']) {
+      const headers = authorization ? { authorization } : undefined;
+      const response = await worker.fetch(new Request(`https://api.test${path}`, { headers }), env);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.equal(response.headers.get('access-control-allow-origin'), 'https://hvsdcm1.xyz');
+    }
+  }
+  assert.deepEqual(env.r2Reads, []);
+});
+
+test('authenticated gichul routes stream only manifest-mapped PDFs with no-store CORS', async () => {
+  const id = '2024-06-korean-hwajak-question';
+  const pdfBytes = new TextEncoder().encode('%PDF-fixture');
+  const env = createGichulEnv({
+    exams: [{ id, r2_key: 'papers/shared-korean.pdf' }],
+    pdfs: new Map([['papers/shared-korean.pdf', pdfBytes]]),
+  });
+  const headers = { authorization: 'Bearer user-token' };
+
+  const manifest = await worker.fetch(new Request('https://api.test/api/gichul/manifest', { headers }), env);
+  assert.equal(manifest.status, 200);
+  assert.equal(manifest.headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.equal(manifest.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await manifest.json(), { exams: [{ id, r2_key: 'papers/shared-korean.pdf' }] });
+
+  const pdf = await worker.fetch(new Request(`https://api.test/api/gichul/pdf/${id}`, { headers }), env);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.equal(pdf.headers.get('cache-control'), 'no-store');
+  assert.equal(pdf.headers.get('access-control-allow-origin'), 'https://hvsdcm1.xyz');
+  assert.deepEqual(new Uint8Array(await pdf.arrayBuffer()), pdfBytes);
+  assert.deepEqual(env.r2Reads, ['manifest.json', 'manifest.json', 'papers/shared-korean.pdf']);
+});
+
+test('authenticated gichul PDF lookup returns 404 without arbitrary R2 key access', async () => {
+  const env = createGichulEnv({
+    exams: [{ id: 'known-id', r2_key: 'paper.pdf' }],
+  });
+  const headers = { authorization: 'Bearer user-token' };
+  const missing = await worker.fetch(new Request('https://api.test/api/gichul/pdf/missing-id', { headers }), env);
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(env.r2Reads, ['manifest.json']);
+
+  const invalid = await worker.fetch(new Request('https://api.test/api/gichul/pdf/%2e%2e%2fsecret', { headers }), env);
+  assert.equal(invalid.status, 404);
+  assert.equal(invalid.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(env.r2Reads, ['manifest.json']);
+});
+
+test('authenticated gichul routes return 404 when the R2 manifest or mapped object is absent', async () => {
+  const headers = { authorization: 'Bearer user-token' };
+  const noManifest = createGichulEnv({ manifestExists: false });
+  assert.equal((await worker.fetch(new Request('https://api.test/api/gichul/manifest', { headers }), noManifest)).status, 404);
+
+  const noPdf = createGichulEnv({ exams: [{ id: 'known-id', r2_key: 'missing.pdf' }] });
+  const response = await worker.fetch(new Request('https://api.test/api/gichul/pdf/known-id', { headers }), noPdf);
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+});
+
+test('unexpected gichul storage failures stay generic, CORS-enabled, and no-store', async () => {
+  const env = createGichulEnv();
+  env.GICHUL.get = async () => ({
+    async json() { throw new Error('corrupt R2 manifest detail'); },
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await worker.fetch(new Request('https://api.test/api/gichul/pdf/known-id', {
+      headers: { authorization: 'Bearer user-token' },
+    }), env);
+    assert.equal(response.status, 500);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('access-control-allow-origin'), 'https://hvsdcm1.xyz');
+    assert.deepEqual(await response.json(), { error: '서버 오류' });
+  } finally {
+    console.error = originalError;
+  }
+});
+
 test('admin login rejects an incorrect password before issuing a session', async () => {
   const env = {
     ADMIN_PASSWORD: 'correct-password',

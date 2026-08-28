@@ -12,6 +12,7 @@ The front end is static and requires no bundler. GitHub Pages serves the reposit
 4. The app controller renders from static content plus that local record.
 5. Each app saves its local record and explicitly schedules a debounced 350 ms synchronization to `PUT /api/progress/:app`. Custom aliases are also sent to `/api/answers/accept`.
 6. The local Codex control plane sends one authenticated harness report alongside each Discord progress report. The Worker merges actors by stable ID and returns every retained harness task to the owner-only usage screen, which separates parallel tasks into `active` and `complete` tab views. A third portfolio view always exposes the complete `user input -> main orchestration -> input -> plan -> work -> gate -> review -> revise -> approve -> done` pipeline, places each retained session exactly once below its reported phase and highlights non-complete work. Each session connects to a compact hierarchy containing only the actors actually present in the report by stable parent ID; it never invents a Main Codex for a report with no actors. Display titles remove a trailing `(MM-DD)` suffix and demote that date to small metadata beside phase progress. A selected session still renders the canonical eight reported phases (legacy four-key reports stay valid as a subset; the screen's `PHASES` and the Worker's `VALID_HARNESS_PHASES` are cross-checked source-to-source by `scripts/validate.mjs`), module progress, evidence and its own reporting tree. Model plus reasoning, role, assignment, status and progress come directly from each actor report; gate and evidence remain non-person session metadata. A desktop `aside` shows only Codex account-limit snapshots and reflows below the pipeline on narrower screens.
+7. The past-paper screen fetches its R2-resident manifest and PDFs only through bearer-authenticated Worker routes. Selection extraction and merging remain in the browser; neither the static Pages deployment nor logged-out HTML contains the exam list.
 
 The local record is a fast browser cache, while D1 is the cross-device source of truth. The one-time session marker `hvsdcm.loaded.<app>` prevents repeated reloads during hydration.
 
@@ -26,6 +27,7 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `smstudy/assets/js/data.js`: concept, source and question content only.
 - `smstudy/assets/js/app.js`: social-studies state, source error-rate sorting, grading and rendering.
 - `smstudy/assets/kice/`: question images referenced by stable question IDs.
+- `gichul/`: login-gated past-paper filtering, viewing, extraction and client-side merge UI. The data list itself is not checked into this directory.
 
 ## Worker ownership
 
@@ -33,6 +35,9 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `worker/src/router.js`: endpoint matching and domain handlers.
 - `worker/src/lib.js`: HTTP, hashing, token, authentication and activity helpers.
 - `worker/migrations/`: append-only D1 schema history.
+- R2 binding `GICHUL`: generated `manifest.json` and KICE source PDFs. Both are private behind Worker session checks rather than static Pages assets.
+
+The KICE ingestion pipeline is owned by `scripts/gichul/`. `fetch-kice.mjs` derives attachments and a current `fileSeq` inventory from the official list filters for academic years 2020-2027, refreshing an existing PDF when that sequence changes. `build-manifest.mjs` derives deterministic metadata and page sections from only the inventoried filesystem and rejects incomplete question/answer or track coverage. `upload-r2.mjs` uploads content-hash changes through the locally installed Wrangler CLI, placing changed PDFs before the manifest visibility switch and advancing its checkpoint only after success. `gichul-src/`, the crawl inventory, and the upload checkpoint are ignored. The checked-in `overrides.json` is only an exact `common`/`selection` correction layer keyed by final manifest ID; it is not a second source list.
 
 Sessions store SHA-256 token hashes rather than raw tokens. User passwords use PBKDF2-SHA-256 with per-user salts and 100,000 iterations. Admin authentication uses the `ADMIN_PASSWORD` Worker secret and receives a role-scoped session. Each authenticated request refreshes the session's last-seen time, Cloudflare client IP, IP fingerprint and user-agent; exact IP and user-agent fields are returned only by admin routes. Logout expires a session instead of deleting its audit row, and the admin session query prunes records after 90 days.
 
@@ -55,7 +60,9 @@ Sessions store SHA-256 token hashes rather than raw tokens. User passwords use P
 | `POST /api/usage/report` | ingest token | Replace the latest Codex limit snapshot |
 | `POST /api/harness/report` | harness ingest token | Merge a task, gate, actor and artifact report |
 | `GET /api/usage` | owner user | Read Codex limits and the latest harness tasks |
+| `GET /api/gichul/manifest` | user | Read the R2 past-paper manifest with caching disabled |
+| `GET /api/gichul/pdf/:id` | user | Stream a manifest-mapped R2 PDF with caching disabled |
 
 ## Regression boundaries
 
-`scripts/validate.mjs` treats stable IDs, counts, source coverage, image presence and HTML asset paths as contracts. `worker/test.mjs` covers pure security helpers plus response/CORS behavior that can run without a live D1 database. A real D1 migration or query change should additionally be exercised with `wrangler dev --local`.
+`scripts/validate.mjs` treats stable IDs, counts, source coverage, image presence, HTML asset paths, and the KICE/R2 backend wiring as contracts. `worker/test.mjs` covers pure security helpers plus response/CORS behavior that can run without a live D1 database or R2 bucket. Script tests inject PDF text extraction, so real-PDF section accuracy remains a deployment gate. A real D1 migration or query change should additionally be exercised with `wrangler dev --local`; the past-paper feature additionally requires an authenticated live R2/CORS check after upload.

@@ -44,6 +44,9 @@ const LOGIN_FAILURE_WINDOW_MS = 60 * LOGIN_MINUTE_MS;
 const LOGIN_LOCK_MS = 15 * LOGIN_MINUTE_MS;
 const LOGIN_ATTEMPTS_PER_MINUTE = 5;
 const LOGIN_FAILURES_PER_WINDOW = 10;
+const GICHUL_HEADERS = Object.freeze({
+  'cache-control': 'no-store',
+});
 
 export function fixedTimeEqual(left, right) {
   if (typeof crypto.subtle.timingSafeEqual === 'function') {
@@ -683,6 +686,61 @@ async function usage(request, env) {
   });
 }
 
+function gichulError(message, status) {
+  return json({ error: message }, status, GICHUL_HEADERS);
+}
+
+async function gichulSession(request, env) {
+  const session = await authenticate(request, env);
+  return session || null;
+}
+
+async function storedGichulManifest(env) {
+  const object = await env.GICHUL.get('manifest.json');
+  if (!object) return null;
+  return object;
+}
+
+async function gichulManifest(request, env) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  const object = await storedGichulManifest(env);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'application/json; charset=utf-8',
+    },
+  });
+}
+
+async function gichulPdf(request, env, id) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  if (!/^[a-z0-9_-]{1,160}$/u.test(id)) return gichulError('Not found', 404);
+
+  const manifestObject = await storedGichulManifest(env);
+  if (!manifestObject) return gichulError('Not found', 404);
+  const manifest = await manifestObject.json();
+  if (!Array.isArray(manifest?.exams)) throw new Error('invalid_gichul_manifest');
+  const exam = manifest.exams.find((candidate) => candidate?.id === id);
+  const key = typeof exam?.r2_key === 'string' ? exam.r2_key : '';
+  if (!key || key.startsWith('/') || key.split('/').includes('..')) {
+    return gichulError('Not found', 404);
+  }
+
+  const object = await env.GICHUL.get(key);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'application/pdf',
+    },
+  });
+}
+
 async function logout(request, env) {
   const rawToken = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (rawToken) {
@@ -988,6 +1046,12 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/usage/report') return reportUsage(request, env);
   if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
+  if (method === 'GET' && path === '/api/gichul/manifest') return gichulManifest(request, env);
+
+  const gichulPdfMatch = path.match(/^\/api\/gichul\/pdf\/(.+)$/u);
+  if (method === 'GET' && gichulPdfMatch) {
+    return gichulPdf(request, env, gichulPdfMatch[1]);
+  }
 
   const progressMatch = path.match(/^\/api\/progress\/(wordmaster|smstudy)$/);
   if (progressMatch) {
