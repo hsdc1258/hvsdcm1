@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateRawSync } from 'node:zlib';
 
 const KICE_ORIGIN = 'https://www.suneung.re.kr';
 const LIST_PATH = '/boardCnts/list.do';
@@ -17,6 +18,9 @@ const MOCK_ROUNDS = Object.freeze([
   { query: '6월', round: '06' },
   { query: '9월', round: '09' },
 ]);
+const SOCIAL_SUBJECTS = Object.freeze(['soc_culture', 'politics_law']);
+const MAX_ZIP_ENTRY_BYTES = 128 * 1024 * 1024;
+const DEFAULT_ARCHIVE_FILE_OPERATIONS = Object.freeze({ rename, stat, unlink, writeFile });
 
 const ENTITY_VALUES = Object.freeze({
   amp: '&', apos: "'", gt: '>', lt: '<', nbsp: ' ', quot: '"',
@@ -49,6 +53,13 @@ function kindFromFilename(filename) {
   return null;
 }
 
+function formFromFilename(filename) {
+  const value = compact(filename);
+  if (value.includes('홀수형')) return 'odd';
+  if (value.includes('짝수형')) return 'even';
+  return null;
+}
+
 function socialSubjectFromFilename(filename) {
   const value = compact(filename).replaceAll('·', '');
   if (value.includes('사회문화')) return 'soc_culture';
@@ -67,9 +78,26 @@ function legacyMathTrackFromFilename(filename) {
 }
 
 export function classifyAttachment(filename, context) {
-  if (!/\.pdf$/iu.test(filename)) return null;
+  const isPdf = /\.pdf$/iu.test(filename);
+  const isSocialZip = context.subject === 'social' && /\.zip$/iu.test(filename);
+  if (!isPdf && !isSocialZip) return null;
   const kind = kindFromFilename(filename);
   if (!kind) return null;
+
+  const year = context.academicYear - 1;
+  if (isSocialZip) {
+    return {
+      archive: true,
+      archiveSubjects: SOCIAL_SUBJECTS,
+      subject: 'social',
+      track: null,
+      kind,
+      year,
+      gradeYear: context.academicYear,
+      round: context.round,
+      target: `${year}-${context.round}-social-${kind}.zip`,
+    };
+  }
 
   const subject = context.subject === 'social'
     ? socialSubjectFromFilename(filename)
@@ -79,12 +107,13 @@ export function classifyAttachment(filename, context) {
   const track = subject === 'math' && context.academicYear <= 2021
     ? legacyMathTrackFromFilename(filename)
     : null;
-  const year = context.academicYear - 1;
   const target = `${year}-${context.round}-${subject}${track ? `-${track}` : ''}-${kind}.pdf`;
   return {
+    archive: false,
     subject,
     track,
     kind,
+    form: kind === 'question' ? formFromFilename(filename) : null,
     year,
     gradeYear: context.academicYear,
     round: context.round,
@@ -108,13 +137,79 @@ function listPageAttachmentFingerprint(html) {
   return fileSeqs.length > 0 ? fileSeqs.sort().join(':') : null;
 }
 
-export function parseListPage(html, context) {
+function contextDescription(context) {
+  const round = { '06': '6월', '09': '9월', csat: '수능' }[context.round] || context.round;
+  return `학년도 ${context.academicYear} / 회차 ${round} / 영역 ${context.area || context.subject} / boardID ${context.boardID}`;
+}
+
+function originalFilename(attachment) {
+  return attachment.archiveEntry || attachment.filename;
+}
+
+function attachmentDescription(attachment) {
+  return `원본 파일명="${originalFilename(attachment)}", fileSeq=${attachment.fileSeq}, 게시판 문맥="${contextDescription(attachment.context)}"`;
+}
+
+function collisionError(target, first, second) {
+  return new Error(`서로 다른 첨부가 같은 파일명으로 정규화됩니다: ${target}; 첫 번째[${attachmentDescription(first)}]; 두 번째[${attachmentDescription(second)}]`);
+}
+
+function expectedArchiveOutputs(attachment) {
+  return attachment.archiveSubjects.map((subject) => ({
+    ...attachment,
+    archive: true,
+    subject,
+    target: `${attachment.year}-${attachment.round}-${subject}-${attachment.kind}.pdf`,
+  }));
+}
+
+function expectedOutputs(attachment) {
+  return attachment.archive ? expectedArchiveOutputs(attachment) : [attachment];
+}
+
+function registerDirectAssignment(assignments, attachment, log) {
+  const existing = assignments.get(attachment.target);
+  if (!existing) {
+    assignments.set(attachment.target, attachment);
+    return;
+  }
+  if (existing.fileSeq.toLowerCase() === attachment.fileSeq.toLowerCase()
+    && originalFilename(existing) === originalFilename(attachment)) return;
+
+  const isOddEvenPair = existing.kind === 'question'
+    && attachment.kind === 'question'
+    && new Set([existing.form, attachment.form]).size === 2
+    && [existing.form, attachment.form].every((form) => form === 'odd' || form === 'even');
+  if (!isOddEvenPair) throw collisionError(attachment.target, existing, attachment);
+
+  const odd = existing.form === 'odd' ? existing : attachment;
+  const even = existing.form === 'even' ? existing : attachment;
+  assignments.set(attachment.target, odd);
+  log(`skip even form ${originalFilename(even)}; keep odd form ${originalFilename(odd)} (${contextDescription(odd.context)})`);
+}
+
+function registerAssignment(assignments, attachment, log) {
+  if (!attachment.archive) {
+    registerDirectAssignment(assignments, attachment, log);
+    return;
+  }
+  for (const output of expectedArchiveOutputs(attachment)) {
+    const existing = assignments.get(output.target);
+    if (existing && existing.fileSeq.toLowerCase() !== attachment.fileSeq.toLowerCase()) {
+      throw collisionError(output.target, existing, attachment);
+    }
+  }
+  for (const output of expectedArchiveOutputs(attachment)) assignments.set(output.target, attachment);
+}
+
+export function parseListPage(html, context, { log } = {}) {
   const attachments = [];
   for (const { attributes, fileSeq } of attachmentAnchors(html)) {
     const filename = path.basename(attributes.get('title') || '');
     if (!filename) continue;
     const classified = classifyAttachment(filename, context);
-    if (classified) attachments.push({ fileSeq, filename, ...classified });
+    if (classified) attachments.push({ fileSeq, filename, context: { ...context }, ...classified });
+    else if (typeof log === 'function') log(`skip accessory ${filename} (${contextDescription(context)})`);
   }
   return attachments;
 }
@@ -189,6 +284,134 @@ async function responseText(fetchImpl, url) {
   return response.text();
 }
 
+const ZIP_CRC32_TABLE = Object.freeze(Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  return value >>> 0;
+}));
+
+function zipCrc32(bytes) {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = ZIP_CRC32_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function unicodeZipPath(extra, encodedName) {
+  for (let offset = 0; offset + 4 <= extra.length;) {
+    const type = extra.readUInt16LE(offset);
+    const size = extra.readUInt16LE(offset + 2);
+    const end = offset + 4 + size;
+    if (end > extra.length) throw new Error('ZIP extra field 길이가 잘못되었습니다.');
+    if (type === 0x7075 && size >= 5) {
+      const value = extra.subarray(offset + 4, end);
+      if (value[0] === 1 && value.readUInt32LE(1) === zipCrc32(encodedName)) {
+        return value.subarray(5).toString('utf8');
+      }
+    }
+    offset = end;
+  }
+  return null;
+}
+
+function decodeZipPath(encodedName, flags, extra) {
+  if (flags & 0x0800) return encodedName.toString('utf8');
+  const unicodePath = unicodeZipPath(extra, encodedName);
+  if (unicodePath) return unicodePath;
+  return new TextDecoder('euc-kr').decode(encodedName);
+}
+
+function findZipEnd(bytes) {
+  const minimum = Math.max(0, bytes.length - 65_557);
+  for (let offset = bytes.length - 22; offset >= minimum; offset -= 1) {
+    if (bytes.readUInt32LE(offset) === 0x06054b50
+      && offset + 22 + bytes.readUInt16LE(offset + 20) === bytes.length) return offset;
+  }
+  throw new Error('ZIP 중앙 디렉터리 끝 레코드를 찾을 수 없습니다.');
+}
+
+function zipEntries(input) {
+  const bytes = Buffer.from(input);
+  if (bytes.length < 22) throw new Error('ZIP 파일이 너무 짧습니다.');
+  const endOffset = findZipEnd(bytes);
+  const disk = bytes.readUInt16LE(endOffset + 4);
+  const centralDisk = bytes.readUInt16LE(endOffset + 6);
+  const diskEntries = bytes.readUInt16LE(endOffset + 8);
+  const entryCount = bytes.readUInt16LE(endOffset + 10);
+  const centralSize = bytes.readUInt32LE(endOffset + 12);
+  const centralOffset = bytes.readUInt32LE(endOffset + 16);
+  if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) {
+    throw new Error('분할 ZIP은 지원하지 않습니다.');
+  }
+  if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) {
+    throw new Error('ZIP64 형식은 지원하지 않습니다.');
+  }
+  if (centralOffset + centralSize > endOffset) throw new Error('ZIP 중앙 디렉터리 범위가 잘못되었습니다.');
+
+  const entries = [];
+  let offset = centralOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > bytes.length || bytes.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error(`ZIP 중앙 디렉터리 엔트리 ${index + 1}이 잘못되었습니다.`);
+    }
+    const flags = bytes.readUInt16LE(offset + 8);
+    const method = bytes.readUInt16LE(offset + 10);
+    const checksum = bytes.readUInt32LE(offset + 16);
+    const compressedSize = bytes.readUInt32LE(offset + 20);
+    const uncompressedSize = bytes.readUInt32LE(offset + 24);
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const extraLength = bytes.readUInt16LE(offset + 30);
+    const commentLength = bytes.readUInt16LE(offset + 32);
+    const localOffset = bytes.readUInt32LE(offset + 42);
+    const end = offset + 46 + nameLength + extraLength + commentLength;
+    if (end > bytes.length) throw new Error(`ZIP 중앙 디렉터리 엔트리 ${index + 1} 범위가 잘못되었습니다.`);
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localOffset === 0xffffffff) {
+      throw new Error('ZIP64 엔트리는 지원하지 않습니다.');
+    }
+    const encodedName = bytes.subarray(offset + 46, offset + 46 + nameLength);
+    const extra = bytes.subarray(offset + 46 + nameLength, offset + 46 + nameLength + extraLength);
+    entries.push({
+      name: decodeZipPath(encodedName, flags, extra),
+      flags,
+      method,
+      checksum,
+      compressedSize,
+      uncompressedSize,
+      localOffset,
+    });
+    offset = end;
+  }
+  if (offset !== centralOffset + centralSize) throw new Error('ZIP 중앙 디렉터리 크기가 일치하지 않습니다.');
+  return { bytes, entries };
+}
+
+function extractZipEntry(zip, entry) {
+  if (entry.flags & 0x0001) throw new Error(`암호화된 ZIP 엔트리는 지원하지 않습니다: ${entry.name}`);
+  if (entry.uncompressedSize > MAX_ZIP_ENTRY_BYTES) {
+    throw new Error(`ZIP 엔트리가 허용 크기를 초과합니다: ${entry.name}`);
+  }
+  if (entry.localOffset + 30 > zip.bytes.length || zip.bytes.readUInt32LE(entry.localOffset) !== 0x04034b50) {
+    throw new Error(`ZIP 로컬 엔트리가 잘못되었습니다: ${entry.name}`);
+  }
+  const nameLength = zip.bytes.readUInt16LE(entry.localOffset + 26);
+  const extraLength = zip.bytes.readUInt16LE(entry.localOffset + 28);
+  const start = entry.localOffset + 30 + nameLength + extraLength;
+  const end = start + entry.compressedSize;
+  if (end > zip.bytes.length) throw new Error(`ZIP 압축 데이터 범위가 잘못되었습니다: ${entry.name}`);
+  const compressed = zip.bytes.subarray(start, end);
+  let output;
+  if (entry.method === 0) output = Buffer.from(compressed);
+  else if (entry.method === 8) output = inflateRawSync(compressed, { maxOutputLength: MAX_ZIP_ENTRY_BYTES });
+  else throw new Error(`지원하지 않는 ZIP 압축 방식 ${entry.method}: ${entry.name}`);
+  if (output.length !== entry.uncompressedSize || zipCrc32(output) !== entry.checksum) {
+    throw new Error(`ZIP 엔트리 무결성 검사 실패: ${entry.name}`);
+  }
+  return output;
+}
+
+function archiveBasename(name) {
+  return String(name).replaceAll('\\', '/').split('/').at(-1) || '';
+}
+
 async function hasPdfMagic(file) {
   if (!existsSync(file) || (await stat(file)).size < 5) return false;
   const handle = await open(file, 'r');
@@ -227,6 +450,166 @@ async function savePdf(fetchImpl, attachment, outputDirectory, previousFiles) {
     throw error;
   }
   return { status: 'downloaded', target };
+}
+
+async function cachedArchiveOutputs(attachment, outputDirectory, previousFiles) {
+  const outputs = expectedArchiveOutputs(attachment).map((output) => ({
+    ...output,
+    archiveEntry: previousFiles.get(output.target)?.archiveEntry,
+  }));
+  for (const output of outputs) {
+    const previous = previousFiles.get(output.target);
+    if (previous?.fileSeq !== attachment.fileSeq
+      || !previous.archiveEntry
+      || !await hasPdfMagic(path.join(outputDirectory, output.target))) return null;
+  }
+  return {
+    outputs,
+    results: outputs.map((output) => ({ status: 'skipped', target: path.join(outputDirectory, output.target) })),
+  };
+}
+
+async function existingRegularFile(file, fileOperations) {
+  try {
+    const metadata = await fileOperations.stat(file);
+    if (!metadata.isFile()) throw new Error(`ZIP 추출 대상이 일반 파일 경로가 아닙니다: ${file}`);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function cleanFiles(files, fileOperations) {
+  await Promise.all(files.map((file) => fileOperations.unlink(file).catch(() => {})));
+}
+
+async function commitArchiveOutputs(prepared, fileOperations, log) {
+  for (const item of prepared) item.hadOriginal = await existingRegularFile(item.target, fileOperations);
+
+  const writes = await Promise.allSettled(prepared.map(({ bytes, temporary }) => (
+    fileOperations.writeFile(temporary, bytes)
+  )));
+  const writeFailure = writes.find(({ status }) => status === 'rejected');
+  if (writeFailure) {
+    await cleanFiles(prepared.map(({ temporary }) => temporary), fileOperations);
+    throw writeFailure.reason;
+  }
+
+  try {
+    for (const item of prepared) {
+      if (!item.hadOriginal) continue;
+      await fileOperations.rename(item.target, item.backup);
+      item.backupStaged = true;
+    }
+    for (const item of prepared) {
+      await fileOperations.rename(item.temporary, item.target);
+      item.outputInstalled = true;
+    }
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const item of [...prepared].reverse()) {
+      if (!item.outputInstalled) continue;
+      try {
+        await fileOperations.unlink(item.target);
+        item.outputInstalled = false;
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    for (const item of [...prepared].reverse()) {
+      if (!item.backupStaged) continue;
+      try {
+        await fileOperations.rename(item.backup, item.target);
+        item.backupStaged = false;
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    await cleanFiles(prepared.map(({ temporary }) => temporary), fileOperations);
+    if (rollbackErrors.length) {
+      throw new AggregateError([error, ...rollbackErrors], '탐구 ZIP 저장 실패 후 원본 복구도 완료하지 못했습니다.');
+    }
+    throw error;
+  }
+
+  const backupCleanup = await Promise.allSettled(prepared
+    .filter(({ backupStaged }) => backupStaged)
+    .map(({ backup }) => fileOperations.unlink(backup)));
+  if (backupCleanup.some(({ status }) => status === 'rejected')) {
+    log('warning stale ZIP backup file remains after successful extraction');
+  }
+}
+
+async function saveSocialArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
+  const cached = await cachedArchiveOutputs(attachment, outputDirectory, previousFiles);
+  if (cached) return cached;
+
+  const response = await fetchImpl(downloadUrl(attachment.fileSeq), {
+    headers: { accept: 'application/zip,application/octet-stream' },
+    redirect: 'follow',
+  });
+  if (!response.ok) throw new Error(`ZIP 요청 실패 ${response.status}: ${attachment.filename}`);
+  const archiveBytes = Buffer.from(await response.arrayBuffer());
+  const archive = zipEntries(archiveBytes);
+  const expected = new Map(expectedArchiveOutputs(attachment).map((output) => [output.subject, output]));
+  const selected = new Map();
+
+  for (const entry of archive.entries) {
+    const filename = archiveBasename(entry.name);
+    if (!filename || entry.name.endsWith('/')) continue;
+    const subject = /\.pdf$/iu.test(filename) ? socialSubjectFromFilename(filename) : null;
+    if (!subject || !expected.has(subject)) {
+      log(`skip archive entry ${filename} from ${attachment.filename} (${contextDescription(attachment.context)})`);
+      continue;
+    }
+    const output = expected.get(subject);
+    registerDirectAssignment(selected, {
+      ...output,
+      archiveEntry: entry.name,
+      form: output.kind === 'question' ? formFromFilename(filename) : null,
+      zipEntry: entry,
+    }, log);
+  }
+
+  const missing = [...expected.values()].filter((output) => !selected.has(output.target));
+  if (missing.length) {
+    const names = archive.entries.map(({ name }) => archiveBasename(name)).filter(Boolean);
+    throw new Error(`탐구 ZIP 결측 목록 (${missing.length}개): ${missing.map(({ target }) => target).join(', ')}; ${attachmentDescription(attachment)}; ZIP 엔트리=${names.join(', ')}`);
+  }
+
+  const prepared = [];
+  const transaction = `${process.pid}-${Date.now()}`;
+  for (const candidate of selected.values()) {
+    const bytes = extractZipEntry(archive, candidate.zipEntry);
+    if (bytes.length < 5 || bytes.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw new Error(`ZIP 엔트리가 PDF가 아닙니다: ${candidate.archiveEntry} (${attachment.filename})`);
+    }
+    const target = path.join(outputDirectory, candidate.target);
+    const temporary = `${target}.${transaction}.tmp`;
+    const backup = `${target}.${transaction}.bak`;
+    prepared.push({ bytes, candidate, target, temporary, backup });
+  }
+
+  await commitArchiveOutputs(prepared, fileOperations, log);
+
+  return {
+    outputs: prepared.map(({ candidate }) => {
+      const { zipEntry, ...output } = candidate;
+      return output;
+    }),
+    results: prepared.map(({ target }) => ({ status: 'downloaded', target })),
+  };
+}
+
+async function saveSource(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations) {
+  if (attachment.archive) {
+    return saveSocialArchive(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations);
+  }
+  return {
+    outputs: [attachment],
+    results: [await savePdf(fetchImpl, attachment, outputDirectory, previousFiles)],
+  };
 }
 
 function defaultOutputDirectory() {
@@ -290,6 +673,7 @@ async function writeInventory(file, attachments) {
       target: attachment.target,
       fileSeq: attachment.fileSeq,
       sourceFilename: attachment.filename,
+      archiveEntry: attachment.archiveEntry,
       grade_year: attachment.gradeYear,
       year: attachment.year,
       round: attachment.round,
@@ -310,8 +694,10 @@ export async function fetchKice({
   contexts = listContexts(),
   allowPartial = false,
   log = console.log,
+  archiveFileOperations = DEFAULT_ARCHIVE_FILE_OPERATIONS,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch 구현이 필요합니다.');
+  const fileOperations = { ...DEFAULT_ARCHIVE_FILE_OPERATIONS, ...archiveFileOperations };
   await mkdir(outputDirectory, { recursive: true });
   const previousFiles = await readInventory(inventoryPath);
   const assignments = new Map();
@@ -328,15 +714,11 @@ export async function fetchKice({
       if (pageFingerprint && seenPageFingerprints.has(pageFingerprint)) break;
       if (pageFingerprint) seenPageFingerprints.add(pageFingerprint);
 
-      for (const attachment of parseListPage(html, context)) {
+      for (const attachment of parseListPage(html, context, { log })) {
         const fileSeqKey = attachment.fileSeq.toLowerCase();
         if (seenFileSeqs.has(fileSeqKey)) continue;
-        const existing = assignments.get(attachment.target);
-        if (existing && existing.fileSeq !== attachment.fileSeq) {
-          throw new Error(`서로 다른 첨부가 같은 파일명으로 정규화됩니다: ${attachment.target}`);
-        }
+        registerAssignment(assignments, attachment, log);
         seenFileSeqs.add(fileSeqKey);
-        assignments.set(attachment.target, attachment);
       }
       if (delayMs > 0 && (page < lastPage || contextIndex < contexts.length - 1)) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -344,16 +726,25 @@ export async function fetchKice({
     }
   }
 
-  const attachments = [...assignments.values()].sort((left, right) => left.target.localeCompare(right.target));
-  if (!allowPartial) validateAssignmentCoverage(attachments);
+  const sources = [...new Map([...assignments.values()].map((attachment) => [
+    attachment.fileSeq.toLowerCase(), attachment,
+  ])).values()].sort((left, right) => left.target.localeCompare(right.target));
+  const plannedOutputs = sources.flatMap(expectedOutputs);
+  if (!allowPartial) validateAssignmentCoverage(plannedOutputs);
   const results = [];
-  for (const attachment of attachments) {
-    const result = await savePdf(fetchImpl, attachment, outputDirectory, previousFiles);
-    results.push(result);
-    log(`${result.status === 'skipped' ? 'skip' : 'download'} ${path.basename(result.target)}`);
+  const outputs = [];
+  for (const attachment of sources) {
+    const saved = await saveSource(fetchImpl, attachment, outputDirectory, previousFiles, log, fileOperations);
+    outputs.push(...saved.outputs);
+    for (const result of saved.results) {
+      results.push(result);
+      log(`${result.status === 'skipped' ? 'skip' : 'download'} ${path.basename(result.target)}`);
+    }
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  await writeInventory(inventoryPath, attachments);
+  if (!allowPartial) validateAssignmentCoverage(outputs);
+  outputs.sort((left, right) => left.target.localeCompare(right.target));
+  await writeInventory(inventoryPath, outputs);
   return results;
 }
 

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { deflateRawSync } from 'node:zlib';
 
 import {
   classifyAttachment,
@@ -25,6 +26,91 @@ async function temporaryDirectory(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'hvsdcm-gichul-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   return directory;
+}
+
+const ZIP_CRC32_TABLE = Object.freeze(Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  return value >>> 0;
+}));
+
+function zipCrc32(bytes) {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = ZIP_CRC32_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function unicodePathExtra(encodedName, unicodeName) {
+  const unicodeBytes = Buffer.from(unicodeName, 'utf8');
+  const extra = Buffer.alloc(9 + unicodeBytes.length);
+  extra.writeUInt16LE(0x7075, 0);
+  extra.writeUInt16LE(5 + unicodeBytes.length, 2);
+  extra[4] = 1;
+  extra.writeUInt32LE(zipCrc32(encodedName), 5);
+  unicodeBytes.copy(extra, 9);
+  return extra;
+}
+
+// The fixture writes a minimal standards-compliant ZIP so archive tests need no external process.
+function zipFixture(entries, { dataDescriptor = false, deflate = false } = {}) {
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  for (const [name, content, nameOptions = {}] of entries) {
+    const nameBytes = nameOptions.encodedNameHex
+      ? Buffer.from(nameOptions.encodedNameHex, 'hex')
+      : Buffer.from(name, 'utf8');
+    const extra = nameOptions.unicodePath ? unicodePathExtra(nameBytes, name) : Buffer.alloc(0);
+    const contentBytes = Buffer.from(content);
+    const compressedBytes = deflate ? deflateRawSync(contentBytes) : contentBytes;
+    const method = deflate ? 8 : 0;
+    const flags = (nameOptions.encodedNameHex ? 0 : 0x0800) | (dataDescriptor ? 0x0008 : 0);
+    const checksum = zipCrc32(contentBytes);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(flags, 6);
+    localHeader.writeUInt16LE(method, 8);
+    if (!dataDescriptor) {
+      localHeader.writeUInt32LE(checksum, 14);
+      localHeader.writeUInt32LE(compressedBytes.length, 18);
+      localHeader.writeUInt32LE(contentBytes.length, 22);
+    }
+    localHeader.writeUInt16LE(nameBytes.length, 26);
+    localHeader.writeUInt16LE(extra.length, 28);
+    const descriptor = dataDescriptor ? Buffer.alloc(16) : Buffer.alloc(0);
+    if (dataDescriptor) {
+      descriptor.writeUInt32LE(0x08074b50, 0);
+      descriptor.writeUInt32LE(checksum, 4);
+      descriptor.writeUInt32LE(compressedBytes.length, 8);
+      descriptor.writeUInt32LE(contentBytes.length, 12);
+    }
+    localParts.push(localHeader, nameBytes, extra, compressedBytes, descriptor);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(flags, 8);
+    centralHeader.writeUInt16LE(method, 10);
+    centralHeader.writeUInt32LE(checksum, 16);
+    centralHeader.writeUInt32LE(compressedBytes.length, 20);
+    centralHeader.writeUInt32LE(contentBytes.length, 24);
+    centralHeader.writeUInt16LE(nameBytes.length, 28);
+    centralHeader.writeUInt16LE(extra.length, 30);
+    centralHeader.writeUInt32LE(localOffset, 42);
+    centralParts.push(centralHeader, nameBytes, extra);
+    localOffset += localHeader.length + nameBytes.length + extra.length + compressedBytes.length + descriptor.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...localParts, centralDirectory, end]);
 }
 
 function completeCorpusFixtures() {
@@ -374,6 +460,215 @@ test('collector paginates, ignores unrelated files, and refreshes only a changed
   assert.equal(second[0].status, 'skipped');
 });
 
+test('collector keeps the odd form, logs the even form and accessories, and accepts year-specific single papers', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const contexts = [
+    { boardID: '1500234', academicYear: 2025, area: '국어', subject: 'korean', round: 'csat' },
+    { boardID: '1500234', academicYear: 2025, area: '영어', subject: 'english', round: 'csat' },
+    { boardID: '1500234', academicYear: 2024, area: '국어', subject: 'korean', round: 'csat' },
+  ];
+  const listHtml = new Map([
+    ['2025-국어', `
+      <a title='국어영역_문제지_짝수형.pdf' onclick="fn_fileDown('11111111111111111111111111111111')">짝수</a>
+      <a title='국어영역_문제지_홀수형.pdf' onclick="fn_fileDown('22222222222222222222222222222222')">홀수</a>
+      <a title='국어영역_정답표.pdf' onclick="fn_fileDown('33333333333333333333333333333333')">정답</a>
+    `],
+    ['2025-영어', `
+      <a title='영어영역_문제지_홀수형.pdf' onclick="fn_fileDown('44444444444444444444444444444444')">홀수</a>
+      <a title='영어영역_문제지_짝수형.pdf' onclick="fn_fileDown('55555555555555555555555555555555')">짝수</a>
+      <a title='영어영역_듣기평가음원.zip' onclick="fn_fileDown('66666666666666666666666666666666')">음원</a>
+      <a title='영어영역_듣기평가대본.pdf' onclick="fn_fileDown('77777777777777777777777777777777')">대본</a>
+      <a title='영어영역_정답표.pdf' onclick="fn_fileDown('88888888888888888888888888888888')">정답</a>
+    `],
+    ['2024-국어', `
+      <a title='국어영역_문제지.pdf' onclick="fn_fileDown('99999999999999999999999999999999')">문제</a>
+      <a title='국어영역_정답표.pdf' onclick="fn_fileDown('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')">정답</a>
+    `],
+  ]);
+  const downloads = [];
+  const logs = [];
+  const results = await fetchKice({
+    outputDirectory,
+    contexts,
+    delayMs: 0,
+    allowPartial: true,
+    log: (message) => logs.push(message),
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        return new Response(listHtml.get(`${parsed.searchParams.get('C01')}-${parsed.searchParams.get('C02')}`));
+      }
+      downloads.push(parsed.searchParams.get('fileSeq'));
+      return new Response('%PDF-fixture');
+    },
+  });
+
+  assert.equal(results.length, 6);
+  assert.deepEqual(downloads.sort(), [
+    '22222222222222222222222222222222',
+    '33333333333333333333333333333333',
+    '44444444444444444444444444444444',
+    '88888888888888888888888888888888',
+    '99999999999999999999999999999999',
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  ].sort());
+  assert.ok(logs.some((message) => message.includes('국어영역_문제지_짝수형.pdf')));
+  assert.ok(logs.some((message) => message.includes('영어영역_문제지_짝수형.pdf')));
+  assert.ok(logs.some((message) => message.includes('영어영역_듣기평가음원.zip')));
+  assert.ok(logs.some((message) => message.includes('영어영역_듣기평가대본.pdf')));
+  assert.equal(await readFile(path.join(outputDirectory, '2024-csat-korean-question.pdf'), 'utf8'), '%PDF-fixture');
+  assert.equal(await readFile(path.join(outputDirectory, '2023-csat-korean-question.pdf'), 'utf8'), '%PDF-fixture');
+  const inventory = JSON.parse(await readFile(path.join(outputDirectory, 'crawl-inventory.json'), 'utf8'));
+  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-korean-question.pdf').sourceFilename,
+    '국어영역_문제지_홀수형.pdf');
+});
+
+test('collector extracts Social and Culture plus Politics and Law PDFs from real-shape social ZIP bundles', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const context = {
+    boardID: '1500234', academicYear: 2025, area: '사회탐구', subject: 'social', round: 'csat',
+  };
+  const questionSeq = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const answerSeq = 'cccccccccccccccccccccccccccccccc';
+  const questionZip = zipFixture([
+    ['2025학년도/사회탐구영역_사회문화_문제지.pdf', '%PDF-social-question', {
+      encodedNameHex: '32303235c7d0b3e2b5b52fbbe7c8b8c5bdb1b8bfb5bfaa5fbbe7c8b8b9aec8ad5fb9aec1a6c1f62e706466',
+    }],
+    ['2025학년도/사회탐구영역_정치와 법_문제지.pdf', '%PDF-politics-question', {
+      encodedNameHex: '32303235c7d0b3e2b5b52fbbe7c8b8c5bdb1b8bfb5bfaa5fc1a4c4a1bfcdb9fd5fb9aec1a6c1f62e706466',
+      unicodePath: true,
+    }],
+    ['2025학년도/사회탐구영역_경제_문제지.pdf', '%PDF-economics-question'],
+  ], { dataDescriptor: true, deflate: true });
+  const answerZip = zipFixture([
+    ['사회탐구영역_사회문화_정답표.pdf', '%PDF-social-answer'],
+    ['사회탐구영역_법과 정치_정답표.pdf', '%PDF-politics-answer'],
+  ]);
+  const logs = [];
+  const results = await fetchKice({
+    outputDirectory,
+    contexts: [context],
+    delayMs: 0,
+    allowPartial: true,
+    log: (message) => logs.push(message),
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        return new Response(`
+          <a title='사회탐구영역_문제지.zip' onclick="fn_fileDown('${questionSeq}')">문제</a>
+          <a title='사회탐구영역_정답표.zip' onclick="fn_fileDown('${answerSeq}')">정답</a>
+        `);
+      }
+      return new Response(parsed.searchParams.get('fileSeq') === questionSeq ? questionZip : answerZip);
+    },
+  });
+
+  assert.equal(results.length, 4);
+  assert.equal(await readFile(path.join(outputDirectory, '2024-csat-soc_culture-question.pdf'), 'utf8'),
+    '%PDF-social-question');
+  assert.equal(await readFile(path.join(outputDirectory, '2024-csat-politics_law-question.pdf'), 'utf8'),
+    '%PDF-politics-question');
+  assert.equal(await readFile(path.join(outputDirectory, '2024-csat-soc_culture-answer.pdf'), 'utf8'),
+    '%PDF-social-answer');
+  assert.equal(await readFile(path.join(outputDirectory, '2024-csat-politics_law-answer.pdf'), 'utf8'),
+    '%PDF-politics-answer');
+  assert.ok(logs.some((message) => message.includes('사회탐구영역_경제_문제지.pdf')));
+  const inventory = JSON.parse(await readFile(path.join(outputDirectory, 'crawl-inventory.json'), 'utf8'));
+  assert.equal(inventory.files.length, 4);
+  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-soc_culture-question.pdf').archiveEntry,
+    '2025학년도/사회탐구영역_사회문화_문제지.pdf');
+  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-politics_law-question.pdf').archiveEntry,
+    '2025학년도/사회탐구영역_정치와 법_문제지.pdf');
+  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-politics_law-answer.pdf').archiveEntry,
+    '사회탐구영역_법과 정치_정답표.pdf');
+
+  const cached = await fetchKice({
+    outputDirectory,
+    contexts: [context],
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    fetchImpl: async (url) => {
+      if (!new URL(url).pathname.endsWith('/list.do')) throw new Error('cached ZIP must not be downloaded');
+      return new Response(`
+        <a title='사회탐구영역_문제지.zip' onclick="fn_fileDown('${questionSeq}')">문제</a>
+        <a title='사회탐구영역_정답표.zip' onclick="fn_fileDown('${answerSeq}')">정답</a>
+      `);
+    },
+  });
+  assert.equal(cached.length, 4);
+  assert.ok(cached.every(({ status }) => status === 'skipped'));
+});
+
+test('collector reports a target subject missing from a social ZIP as a concrete corpus gap', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const context = {
+    boardID: '1500234', academicYear: 2025, area: '사회탐구', subject: 'social', round: 'csat',
+  };
+  const archive = zipFixture([
+    ['사회탐구영역_사회문화_문제지.pdf', '%PDF-social-question'],
+    ['사회탐구영역_경제_문제지.pdf', '%PDF-economics-question'],
+  ]);
+
+  await assert.rejects(fetchKice({
+    outputDirectory,
+    contexts: [context],
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    fetchImpl: async (url) => new URL(url).pathname.endsWith('/list.do')
+      ? new Response('<a title="사회탐구영역_문제지.zip" onclick="fn_fileDown(\'dddddddddddddddddddddddddddddddd\')">문제</a>')
+      : new Response(archive),
+  }), (error) => {
+    assert.match(error.message, /탐구 ZIP 결측/u);
+    assert.match(error.message, /2024-csat-politics_law-question/u);
+    assert.match(error.message, /사회탐구영역_문제지\.zip/u);
+    return true;
+  });
+});
+
+test('collector rolls back every canonical PDF and temporary file when a social ZIP commit fails', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const socialTarget = path.join(outputDirectory, '2024-csat-soc_culture-question.pdf');
+  const politicsTarget = path.join(outputDirectory, '2024-csat-politics_law-question.pdf');
+  await writeFile(socialTarget, '%PDF-old-social');
+  await writeFile(politicsTarget, '%PDF-old-politics');
+  const archive = zipFixture([
+    ['사회탐구영역_사회문화_문제지.pdf', '%PDF-new-social'],
+    ['사회탐구영역_정치와 법_문제지.pdf', '%PDF-new-politics'],
+  ], { dataDescriptor: true, deflate: true });
+
+  await assert.rejects(fetchKice({
+    outputDirectory,
+    contexts: [{
+      boardID: '1500234', academicYear: 2025, area: '사회탐구', subject: 'social', round: 'csat',
+    }],
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    archiveFileOperations: {
+      rename: async (source, target) => {
+        if (source.endsWith('.tmp') && target === politicsTarget) {
+          const error = new Error('injected second-target rename failure');
+          error.code = 'EIO';
+          throw error;
+        }
+        return rename(source, target);
+      },
+    },
+    fetchImpl: async (url) => new URL(url).pathname.endsWith('/list.do')
+      ? new Response('<a title="사회탐구영역_문제지.zip" onclick="fn_fileDown(\'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\')">문제</a>')
+      : new Response(archive),
+  }), /injected second-target rename failure/u);
+
+  assert.equal(await readFile(socialTarget, 'utf8'), '%PDF-old-social');
+  assert.equal(await readFile(politicsTarget, 'utf8'), '%PDF-old-politics');
+  assert.deepEqual((await readdir(outputDirectory)).sort(), [
+    '2024-csat-politics_law-question.pdf',
+    '2024-csat-soc_culture-question.pdf',
+  ]);
+});
+
 test('collector stops when KICE repeats the real 2024 CSAT Korean attachment page', async (t) => {
   const outputDirectory = await temporaryDirectory(t);
   const context = {
@@ -460,9 +755,21 @@ test('collector stops on canonical target collisions before downloading', async 
       assert.ok(new URL(url).pathname.endsWith('/list.do'), 'collision must happen before download');
       call += 1;
       const seq = String(call).repeat(32);
-      return new Response(`<a title="영어영역_문제지.pdf" onclick="fn_fileDown('${seq}')">문제</a>`);
+      const filename = call === 1 ? '영어영역_문제지.pdf' : '영어영역_문제.pdf';
+      return new Response(`<a title="${filename}" onclick="fn_fileDown('${seq}')">문제</a>`);
     },
-  }), /서로 다른 첨부가 같은 파일명/u);
+  }), (error) => {
+    assert.match(error.message, /서로 다른 첨부가 같은 파일명/u);
+    assert.match(error.message, /영어영역_문제지\.pdf/u);
+    assert.match(error.message, /영어영역_문제\.pdf/u);
+    assert.match(error.message, /11111111111111111111111111111111/u);
+    assert.match(error.message, /22222222222222222222222222222222/u);
+    assert.match(error.message, /학년도 2024/u);
+    assert.match(error.message, /회차 수능/u);
+    assert.match(error.message, /영역 영어/u);
+    assert.match(error.message, /boardID 1500234/u);
+    return true;
+  });
 });
 
 test('collector default mode rejects an incomplete crawl before download or inventory write', async (t) => {
