@@ -92,6 +92,15 @@ test('KICE list parser derives filtered PDF assignments from attachment anchors'
     subject: 'math',
     round: 'csat',
   }).target, '2020-csat-math-answer.pdf');
+
+  assert.deepEqual(parseListPage(`
+    <a title='국어영역_문제지.pdf' onclick="fn_fileDown('c1f3da47c1f3da47c1f3da47c1f3da47')">문제</a>
+  `, { academicYear: 2024, subject: 'korean', round: 'csat' }).map(({ fileSeq, target }) => ({
+    fileSeq, target,
+  })), [{
+    fileSeq: 'c1f3da47c1f3da47c1f3da47c1f3da47',
+    target: '2023-csat-korean-question.pdf',
+  }]);
 });
 
 test('KICE list URLs encode the board-specific academic-year and area filters', () => {
@@ -363,6 +372,75 @@ test('collector paginates, ignores unrelated files, and refreshes only a changed
     log() {},
   });
   assert.equal(second[0].status, 'skipped');
+});
+
+test('collector stops when KICE repeats the real 2024 CSAT Korean attachment page', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const context = {
+    boardID: '1500234', academicYear: 2024, area: '국어', subject: 'korean', round: 'csat',
+  };
+  // Reduced from the live C01=2024 Korean row: exactly one question and one answer attachment.
+  const row = `
+    <a title='국어영역_문제지.pdf' onclick="fn_fileDown('c1f3da47c1f3da47c1f3da47c1f3da47')">문제</a>
+    <a title='국어영역_정답표.pdf' onclick="fn_fileDown('3186b86a3186b86a3186b86a3186b86a')">정답</a>
+  `;
+  let listCalls = 0;
+  const downloads = [];
+  const results = await fetchKice({
+    outputDirectory,
+    contexts: [context],
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        listCalls += 1;
+        const page = parsed.searchParams.get('page');
+        if (page === '1') return new Response(`<a onclick="fn_egov_link_page(3)">끝</a>${row}`);
+        if (page === '2') return new Response(row);
+        return new Response(`<a title='국어영역_문제지.pdf' onclick="fn_fileDown('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')">오래된 중복 행</a>`);
+      }
+      downloads.push(parsed.searchParams.get('fileSeq'));
+      return new Response('%PDF-fixture');
+    },
+  });
+
+  assert.equal(listCalls, 2);
+  assert.deepEqual(downloads.sort(), [
+    '3186b86a3186b86a3186b86a3186b86a',
+    'c1f3da47c1f3da47c1f3da47c1f3da47',
+  ].sort());
+  assert.equal(results.length, 2);
+});
+
+test('collector deduplicates a revisited fileSeq across filter contexts', async (t) => {
+  const outputDirectory = await temporaryDirectory(t);
+  const fileSeq = 'c1f3da47c1f3da47c1f3da47c1f3da47';
+  const contexts = [2024, 2025].map((academicYear) => ({
+    boardID: '1500234', academicYear, area: '국어', subject: 'korean', round: 'csat',
+  }));
+  let downloads = 0;
+  const results = await fetchKice({
+    outputDirectory,
+    contexts,
+    delayMs: 0,
+    allowPartial: true,
+    log() {},
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/list.do')) {
+        return new Response(`<a title='국어영역_문제지.pdf' onclick="fn_fileDown('${fileSeq}')">문제</a>`);
+      }
+      downloads += 1;
+      return new Response('%PDF-fixture');
+    },
+  });
+
+  assert.equal(results.length, 1);
+  assert.equal(downloads, 1);
+  assert.equal(JSON.parse(await readFile(path.join(outputDirectory, 'crawl-inventory.json'), 'utf8')).files[0].target,
+    '2023-csat-korean-question.pdf');
 });
 
 test('collector stops on canonical target collisions before downloading', async (t) => {

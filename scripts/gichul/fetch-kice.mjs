@@ -92,14 +92,27 @@ export function classifyAttachment(filename, context) {
   };
 }
 
-export function parseListPage(html, context) {
-  const attachments = [];
+function attachmentAnchors(html) {
+  const anchors = [];
   for (const [tag] of String(html).matchAll(/<a\b[^>]*>/giu)) {
     const attributes = attributesOf(tag);
     const onclick = attributes.get('onclick') || '';
     const fileSeq = /fn_fileDown\s*\(\s*['"]([\da-f]{32})['"]\s*\)/iu.exec(onclick)?.[1];
+    if (fileSeq) anchors.push({ attributes, fileSeq });
+  }
+  return anchors;
+}
+
+function listPageAttachmentFingerprint(html) {
+  const fileSeqs = [...new Set(attachmentAnchors(html).map(({ fileSeq }) => fileSeq.toLowerCase()))];
+  return fileSeqs.length > 0 ? fileSeqs.sort().join(':') : null;
+}
+
+export function parseListPage(html, context) {
+  const attachments = [];
+  for (const { attributes, fileSeq } of attachmentAnchors(html)) {
     const filename = path.basename(attributes.get('title') || '');
-    if (!fileSeq || !filename) continue;
+    if (!filename) continue;
     const classified = classifyAttachment(filename, context);
     if (classified) attachments.push({ fileSeq, filename, ...classified });
   }
@@ -302,17 +315,27 @@ export async function fetchKice({
   await mkdir(outputDirectory, { recursive: true });
   const previousFiles = await readInventory(inventoryPath);
   const assignments = new Map();
+  const seenFileSeqs = new Set();
 
   for (const [contextIndex, context] of contexts.entries()) {
     const firstHtml = await responseText(fetchImpl, listUrl(context, 1));
     const lastPage = lastPageFromHtml(firstHtml);
+    const seenPageFingerprints = new Set();
     for (let page = 1; page <= lastPage; page += 1) {
       const html = page === 1 ? firstHtml : await responseText(fetchImpl, listUrl(context, page));
+      // KICE can repeat a boundary page for an out-of-range number; stop cycles before stale rows are classified.
+      const pageFingerprint = listPageAttachmentFingerprint(html);
+      if (pageFingerprint && seenPageFingerprints.has(pageFingerprint)) break;
+      if (pageFingerprint) seenPageFingerprints.add(pageFingerprint);
+
       for (const attachment of parseListPage(html, context)) {
+        const fileSeqKey = attachment.fileSeq.toLowerCase();
+        if (seenFileSeqs.has(fileSeqKey)) continue;
         const existing = assignments.get(attachment.target);
         if (existing && existing.fileSeq !== attachment.fileSeq) {
           throw new Error(`서로 다른 첨부가 같은 파일명으로 정규화됩니다: ${attachment.target}`);
         }
+        seenFileSeqs.add(fileSeqKey);
         assignments.set(attachment.target, attachment);
       }
       if (delayMs > 0 && (page < lastPage || contextIndex < contexts.length - 1)) {
