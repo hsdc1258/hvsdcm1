@@ -544,6 +544,16 @@ function validateWordMasterData() {
   check(words.length === 2_000, `WordMaster: expected 2,000 words, found ${words.length}`);
   check(new Set(words.map((word) => word.id)).size === words.length, 'WordMaster: IDs must be unique');
 
+  // WordMaster content owner: audited stable IDs lock confirmed transcription repairs.
+  const auditedSpellings = new Map([
+    ['d46-15', 'cuisine'],
+    ['d50-15', 'insane'],
+  ]);
+  for (const [id, spelling] of auditedSpellings) {
+    const word = words.find((entry) => entry.id === id);
+    check(word?.word === spelling, `WordMaster: ${id} must remain ${spelling}`);
+  }
+
   for (let day = 1; day <= 50; day += 1) {
     const dailyWords = words.filter((word) => word.day === day);
     check(dailyWords.length === 40, `WordMaster: DAY ${day} must contain 40 words`);
