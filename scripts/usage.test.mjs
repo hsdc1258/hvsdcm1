@@ -1036,13 +1036,16 @@ function workerBoundaryEnv() {
         return results;
       },
       prepare(sql) {
+        if (sql.includes('INSERT INTO usage_source_health') || sql.includes('UPDATE usage_source_health')) {
+          return { bind() { return { async run() { return { success: true, meta: { changes: 1 } }; } }; } };
+        }
         if (sql.includes('INSERT INTO usage_snapshots')) {
           return {
             bind(source, capturedAt, payload) {
               return {
                 async run() {
                   state.snapshots.set(source, { source, captured_at: capturedAt, payload });
-                  return { success: true };
+                  return { success: true, meta: { changes: 1 } };
                 },
               };
             },

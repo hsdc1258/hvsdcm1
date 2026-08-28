@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import worker from './src/index.js';
-import { fixedTimeEqual, fixedTimeTextEqual } from './src/router.js';
+import {
+  HARNESS_STALE_MS,
+  effectiveHarnessStatus,
+  fixedTimeEqual,
+  fixedTimeTextEqual,
+} from './src/router.js';
 import {
   clientIp,
   createToken,
@@ -705,7 +710,7 @@ test('usage report rejects missing and incorrect ingest tokens', async () => {
 });
 
 test('usage report upserts the latest source snapshot', async () => {
-  let upsert;
+  const statements = [];
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
     USAGE_INGEST_TOKEN: 'correct-token',
@@ -713,8 +718,9 @@ test('usage report upserts the latest source snapshot', async () => {
       prepare(sql) {
         return {
           bind(...values) {
-            upsert = { sql, values };
-            return { async run() { return { success: true }; } };
+            const statement = { sql, values };
+            statements.push(statement);
+            return { async run() { return { success: true, meta: { changes: 1 } }; } };
           },
         };
       },
@@ -736,9 +742,62 @@ test('usage report upserts the latest source snapshot', async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
+  const upsert = statements.find(({ sql }) => sql.includes('INSERT INTO usage_snapshots'));
   assert.match(upsert.sql, /ON CONFLICT\(source\)/u);
   assert.match(upsert.sql, /DO UPDATE SET captured_at = excluded\.captured_at/u);
+  assert.match(upsert.sql, /datetime\(excluded\.captured_at\) >= datetime\(usage_snapshots\.captured_at\)/u);
   assert.deepEqual(upsert.values, ['codex', capturedAt, JSON.stringify(payload)]);
+  const health = statements.find(({ sql }) => sql.includes('INSERT INTO usage_source_health'));
+  assert.deepEqual(health.values, ['codex', capturedAt, capturedAt, 'success']);
+});
+
+test('usage report records no-data health without changing a snapshot and rejects stale captures', async () => {
+  const statements = [];
+  let rejectSnapshot = false;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    USAGE_INGEST_TOKEN: 'correct-token',
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...values) {
+            statements.push({ sql, values });
+            return {
+              async run() {
+                if (sql.includes('INSERT INTO usage_snapshots') && rejectSnapshot) {
+                  return { success: true, meta: { changes: 0 } };
+                }
+                return { success: true, meta: { changes: 1 } };
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+  const post = (body) => worker.fetch(new Request('https://api.test/api/usage/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer correct-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  const noData = await post({
+    source: 'claude', attempted_at: '2026-08-29T00:00:00.000Z', outcome: 'no-data',
+  });
+  assert.equal(noData.status, 200);
+  assert.deepEqual(await noData.json(), { ok: true, snapshot: false });
+  assert.equal(statements.some(({ sql }) => sql.includes('INSERT INTO usage_snapshots')), false);
+
+  rejectSnapshot = true;
+  const stale = await post({
+    source: 'codex',
+    attempted_at: '2026-08-29T00:01:00.000Z',
+    captured_at: '2026-08-28T00:00:00.000Z',
+    outcome: 'success',
+    payload: {},
+  });
+  assert.deepEqual(await stale.json(), { ok: true, stale: true });
+  assert.equal(statements.at(-1).values.at(-1), 'stale');
 });
 
 test('usage report rejects oversized payloads and non-object bodies', async () => {
@@ -828,7 +887,10 @@ test('usage report accepts the claude source and stores it beside codex', async 
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
-  assert.deepEqual(upserts.at(-1).values, ['claude', capturedAt, JSON.stringify(payload)]);
+  assert.deepEqual(
+    upserts.find(({ sql }) => sql.includes('INSERT INTO usage_snapshots')).values,
+    ['claude', capturedAt, JSON.stringify(payload)],
+  );
 });
 
 // review nit — ingest와 조회가 같은 행을 두고 실제로 이어지는지 한 흐름으로 고정한다.
@@ -841,13 +903,16 @@ test('a claude usage report posted through the API comes back from the usage loo
     USAGE_INGEST_TOKEN: 'correct-token',
     DB: {
       prepare(sql) {
+        if (sql.includes('INSERT INTO usage_source_health') || sql.includes('UPDATE usage_source_health')) {
+          return { bind() { return { async run() { return { success: true, meta: { changes: 1 } }; } }; } };
+        }
         if (sql.includes('INSERT INTO usage_snapshots')) {
           return {
             bind(source, capturedAt, payload) {
               return {
                 async run() {
                   snapshots.set(source, { source, captured_at: capturedAt, payload });
-                  return { success: true };
+                  return { success: true, meta: { changes: 1 } };
                 },
               };
             },
@@ -898,7 +963,10 @@ test('a claude usage report posted through the API comes back from the usage loo
   }), env);
   assert.equal(looked.status, 200);
   assert.deepEqual(await looked.json(), {
-    snapshots: [{ source: 'claude', captured_at: capturedAt, payload }],
+    snapshots: [{
+      source: 'claude', captured_at: capturedAt, payload,
+      last_success_at: capturedAt, last_attempt_at: capturedAt, last_outcome: 'legacy',
+    }],
     tasks: [],
   });
 });
@@ -1059,6 +1127,60 @@ test('harness report requires its own token and merges actors into one task', as
     task: { ...harnessInput().task, category_key: 'bad category!' },
   }));
   assert.equal(invalidCategory.status, 400);
+});
+
+test('harness title, 4KB input, and heartbeat survive normalization and stale is derived at lookup time', async () => {
+  let storedPayload = '';
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      batch: runFakeBatch,
+      prepare(sql) {
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return { bind() { return { async first() { return null; } }; } };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          return {
+            bind(_taskId, _status, _updatedAt, payload, title, input, heartbeatAt) {
+              assert.equal(title, '관제탑 UI 개선');
+              assert.equal(Buffer.byteLength(input, 'utf8'), 4_095);
+              assert.equal(heartbeatAt, '2026-08-27T09:00:00.000Z');
+              return { async run() { storedPayload = payload; return { success: true, meta: { changes: 1 } }; } };
+            },
+          };
+        }
+        const eventStatement = emptyHarnessEventStatement(sql);
+        if (eventStatement) return eventStatement;
+        throw new Error(`Unexpected SQL in contract test: ${sql}`);
+      },
+    },
+  };
+  const input = '한'.repeat(2_000);
+  const response = await worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(harnessInput({
+      task: {
+        ...harnessInput().task,
+        title: '관제탑 UI 개선',
+        input,
+        heartbeat_at: '2026-08-27T09:00:00.000Z',
+      },
+    })),
+  }), env);
+  assert.equal(response.status, 200);
+  const stored = JSON.parse(storedPayload);
+  assert.equal(stored.title, '관제탑 UI 개선');
+  assert.equal(Buffer.byteLength(stored.input, 'utf8'), 4_095);
+  assert.equal(
+    effectiveHarnessStatus(stored, 'active', Date.parse(stored.heartbeat_at) + HARNESS_STALE_MS),
+    'active',
+  );
+  assert.equal(
+    effectiveHarnessStatus(stored, 'active', Date.parse(stored.heartbeat_at) + HARNESS_STALE_MS + 1),
+    'stale',
+  );
 });
 
 test('accepted harness upserts append subject-aware events with remaining usage snapshots', async () => {
@@ -2008,7 +2130,7 @@ test('usage lookup survives a corrupted snapshot row', async () => {
           return { bind() { return { async run() { return { success: true }; } }; } };
         }
         if (sql.includes('FROM usage_snapshots')) {
-          assert.match(sql, /WHERE source IN \(\?, \?\)/u);
+          assert.match(sql, /WHERE snapshots\.source IN \(\?, \?\)/u);
           return {
             bind(...sources) {
               assert.deepEqual([...sources].sort(), ['claude', 'codex']);
@@ -2194,14 +2316,27 @@ test('usage lookup requires a session and returns parsed snapshots', async () =>
         source: 'claude',
         captured_at: '2026-08-27T01:04:05.000Z',
         payload: storedClaudePayload,
+        last_success_at: '2026-08-27T01:04:05.000Z',
+        last_attempt_at: '2026-08-27T01:04:05.000Z',
+        last_outcome: 'legacy',
       },
       {
         source: 'codex',
         captured_at: '2026-08-27T01:02:03.000Z',
         payload: storedPayload,
+        last_success_at: '2026-08-27T01:02:03.000Z',
+        last_attempt_at: '2026-08-27T01:02:03.000Z',
+        last_outcome: 'legacy',
       },
     ],
-    tasks: [{ ...storedTask, events: [] }],
+    tasks: [{
+      ...storedTask,
+      title: storedTask.name,
+      input: '',
+      heartbeat_at: storedTask.updated_at,
+      status: 'stale',
+      events: [],
+    }],
   });
 });
 
