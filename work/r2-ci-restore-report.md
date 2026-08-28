@@ -1,0 +1,16 @@
+# hvsdcm1 Worker CI R2 복구 보고서
+- 결과: 경로 1 성공. 경로 2·3은 실행하지 않았다.
+- 재확인 원인: 기존 CI의 Wrangler 4.125.0이 배포 전 R2 버킷 조회에서 권한 오류 10000으로 중단됐다.
+- 공식 수단: `--experimental-provision=false`로 자동 binding provisioning 검증을 비활성화했다.
+- 변경: `.github/workflows/deploy-worker.yml`의 Deploy Worker 명령 한 줄만 수정했다.
+- 보존: 테스트, ingest secret 설정, D1 migration, 실패 전파, 기존 DB/R2 binding은 그대로다.
+- 로컬 증거: Wrangler 4.125.0 dry-run exit 0, DB와 GICHUL binding 확인.
+- 회귀 증거: `npm test` 통과(13,591 checks, E2E 2종, 143/143 tests).
+- 정적 증거: `git diff --check` 통과.
+- 독립 검토: blocker 0, major 0, nit 0, verdict `accept`.
+- push 실행: https://github.com/hsdc1258/hvsdcm1/actions/runs/33188875119 — success.
+- 필수 수동 실행: https://github.com/hsdc1258/hvsdcm1/actions/runs/33188928929 — success.
+- 배포 결과: 두 실행 모두 Configure secrets, D1 migrations, Deploy Worker 전 단계 success.
+- 커밋: `7faa51d fix(ci): R2 자동 프로비저닝 검증을 건너뛴다`.
+- 자격증명: 경로 2를 시작하지 않아 로컬 자격증명을 탐색하지 않았고 GitHub secret도 교체하지 않았다.
+- 비차단 기록(out-of-scope nit): Actions v4의 Node.js 20 런타임 폐기 예정 경고가 있으나 현재 실행은 Node.js 24에서 성공했다.

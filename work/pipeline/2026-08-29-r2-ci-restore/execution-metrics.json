@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "kind": "pipeline-execution-metrics",
+  "actors": [
+    {
+      "role": "producer",
+      "actor": "r2-ci-writer",
+      "model": "gpt-5.6-sol",
+      "effort": "xhigh",
+      "mode": "standard",
+      "elapsed_ms": 600000,
+      "token_usage": { "status": "unavailable", "input_tokens": null, "output_tokens": null, "reasoning_tokens": null, "total_tokens": null },
+      "cost": { "status": "unavailable", "amount": null, "currency": null, "unit": null, "call_id": null, "source": "provider-not-exposed" },
+      "retries": 0,
+      "rework_count": 0,
+      "verdict": "accept",
+      "quality_evidence": [
+        "Wrangler 4.125.0 official flag and provisioning branch inspection",
+        "Wrangler dry-run exit 0",
+        "npm test and git diff --check pass"
+      ]
+    },
+    {
+      "role": "reviewer",
+      "actor": "r2-ci-reviewer",
+      "model": "gpt-5.6-sol",
+      "effort": "xhigh",
+      "mode": "standard",
+      "elapsed_ms": 420000,
+      "token_usage": { "status": "unavailable", "input_tokens": null, "output_tokens": null, "reasoning_tokens": null, "total_tokens": null },
+      "cost": { "status": "unavailable", "amount": null, "currency": null, "unit": null, "call_id": null, "source": "provider-not-exposed" },
+      "retries": 0,
+      "rework_count": 0,
+      "verdict": "accept",
+      "quality_evidence": [
+        "Fresh review of commit 265e7b6..7faa51d",
+        "blocker 0 major 0 nit 0",
+        "trusted reviewer receipt validated"
+      ]
+    },
+    {
+      "role": "orchestrator",
+      "actor": "codex-main",
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "mode": "standard",
+      "elapsed_ms": 1248562,
+      "token_usage": { "status": "unavailable", "input_tokens": null, "output_tokens": null, "reasoning_tokens": null, "total_tokens": null },
+      "cost": { "status": "unavailable", "amount": null, "currency": null, "unit": null, "call_id": null, "source": "provider-not-exposed" },
+      "retries": 2,
+      "rework_count": 0,
+      "verdict": "accept",
+      "quality_evidence": [
+        "Push run 33188875119 success",
+        "Workflow dispatch run 33188928929 success",
+        "No credential path was entered"
+      ]
+    }
+  ],
+  "webgpt": {
+    "status": "unavailable",
+    "route": "codex-direct",
+    "elapsed_ms": null,
+    "direct_elapsed_ms": null,
+    "token_usage": { "status": "unavailable", "input_tokens": null, "output_tokens": null, "reasoning_tokens": null, "total_tokens": null },
+    "cost": { "status": "unavailable", "amount": null, "currency": null, "unit": null, "call_id": null, "source": "provider-not-exposed" },
+    "retries": 0,
+    "rework_count": 0,
+    "verdict": "not-called",
+    "comparative_value": "not-measured"
+  }
+}

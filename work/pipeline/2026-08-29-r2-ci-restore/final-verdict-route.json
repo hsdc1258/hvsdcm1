@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "kind": "pipeline-task-route",
+  "task_class": "final-verdict",
+  "executor": "model",
+  "model": "gpt-5.6-sol",
+  "effort": "high",
+  "mode": "standard",
+  "review": "main-orchestrator-verdict",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_effort": "high",
+  "reviewer_mode": "standard",
+  "webgpt_eligible": false,
+  "escalation": { "kind": "none", "evidence": null },
+  "review_escalation": { "kind": "none", "evidence": null },
+  "lessons_fingerprint": null,
+  "lesson_decisions": [],
+  "routing_inputs": {
+    "webgpt_status": "unavailable",
+    "webgpt_history": [],
+    "deadline_remaining_ms": null,
+    "fallback_evidence": null
+  },
+  "selected_producer": {
+    "kind": "codex",
+    "actor": "codex-writer",
+    "model": "gpt-5.6-sol",
+    "effort": "high",
+    "mode": "standard"
+  },
+  "webgpt": {
+    "status": "unavailable",
+    "decision": "codex-direct",
+    "reason": "no-callable-executor"
+  }
+}

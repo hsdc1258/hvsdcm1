@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "pipeline-review-evidence",
+  "candidate_fingerprint": "git-sha:7faa51dc9cd26501122c46ecf0007347b0c531ed",
+  "artifact_fingerprint": "sha256:f585653354b091044817f527e57773ab797cbdad7124c235f9de5a9fccc3dfd1",
+  "reviewer_receipt": {
+    "actor": "codex-quality-verifier",
+    "model": "gpt-5.6-sol",
+    "run_id": "/root/r2_ci_reviewer",
+    "context_id": "/root/r2_ci_reviewer"
+  },
+  "receipt_path": "C:\\Users\\won\\AppData\\Local\\Temp\\codex-pipeline-receipts\\2026-08-29-r2-ci-restore\\receipt.json",
+  "review_path": "work/pipeline/2026-08-29-r2-ci-restore/review.md",
+  "verdict": "accept",
+  "blocker": 0,
+  "major": 0,
+  "nit": 0
+}
