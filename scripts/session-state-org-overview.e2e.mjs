@@ -98,12 +98,16 @@ assert.equal((complete.match(/data-actor-id=/gu) || []).length, 3);
 assert.match(complete, /완료 Delta[\s\S]*?에이전트 보고 없음/u);
 
 // 실제 owner API가 12개에서 자르지 않고 보존된 전체 task를 renderer까지 넘기는지 확인한다.
+const API_NOW = Date.now();
 const retainedTasks = Array.from({ length: 13 }, (_, index) => {
   const number = String(index + 1).padStart(2, '0');
   const id = `retained-${number}`;
-  return task(id, `보존 세션 ${number}`, index < 2 ? 'active' : 'complete', [
+  const retained = task(id, `보존 세션 ${number}`, index < 2 ? 'active' : 'complete', [
     actor(`${id}:main`, `보존 Main ${number}`),
   ]);
+  if (retained.status !== 'active') return retained;
+  const heartbeatAt = new Date(API_NOW).toISOString();
+  return { ...retained, updated_at: heartbeatAt, heartbeat_at: heartbeatAt };
 });
 const apiEnv = {
   ALLOWED_ORIGIN: 'https://example.test',
@@ -153,11 +157,11 @@ assert.equal(apiPayload.tasks.length, 13);
 // 진행 2 + 완료 11이 두 화면에 나뉘어 서고, **어느 쪽에서도 잘리지 않는다.**
 // 완료 탭은 기본 10개만 펴므로(요구 6) 남은 1개는 '더 보기'가 개수로 밝힌다 —
 // 접힌 것과 사라진 것을 구별하는 것이 이 검사의 요지다.
-const retainedBoard = renderers.renderPortfolioBoard(apiPayload.tasks, NOW);
+const retainedBoard = renderers.renderPortfolioBoard(apiPayload.tasks, API_NOW);
 assert.equal((retainedBoard.match(/data-portfolio-task=/gu) || []).length, 2);
 assert.match(retainedBoard, /보존 세션 01/u);
 
-const retainedComplete = renderers.renderSessionView(apiPayload.tasks, NOW, 'complete');
+const retainedComplete = renderers.renderSessionView(apiPayload.tasks, API_NOW, 'complete');
 assert.equal((retainedComplete.match(/data-task-post=/gu) || []).length, 10);
 assert.match(retainedComplete, /남은 1개/u);
 assert.match(retainedComplete, /보존 세션 03/u);
