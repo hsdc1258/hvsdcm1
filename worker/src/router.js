@@ -25,6 +25,14 @@ const VALID_APPS = new Set(['wordmaster', 'smstudy']);
 // 수집 원본. 이 집합이 ingest 허용 목록이자 조회 필터의 단일 원본이다 — 한쪽만 고치면
 // 받아 놓고 못 읽는(또는 그 반대의) 상태가 생긴다.
 const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
+export const USAGE_SNAPSHOT_UPSERT_SQL = `
+  INSERT INTO usage_snapshots(source, captured_at, payload)
+  VALUES (?1, ?2, ?3)
+  ON CONFLICT(source)
+  DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
+  WHERE julianday(excluded.captured_at) > julianday(usage_snapshots.captured_at)
+    OR julianday(usage_snapshots.captured_at) IS NULL
+`;
 // 파이프라인 단계 집합. **순서가 곧 진행 방향**이고, 화면(usage/assets/js/usage.js의
 // PHASES)이 같은 키를 같은 순서로 그린다 — scripts/validate.mjs가 두 원본을 대조해
 // 어긋나면 게이트를 깨뜨린다. 구 4단계(plan/work/review/done)는 이 집합의 부분집합이라
@@ -283,21 +291,16 @@ async function reportUsage(request, env) {
     return json({ ok: true, snapshot: false });
   }
 
-  const snapshot = await env.DB.prepare(`
-    INSERT INTO usage_snapshots(source, captured_at, payload)
-    VALUES (?1, ?2, ?3)
-    ON CONFLICT(source)
-    DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
-    WHERE datetime(excluded.captured_at) >= datetime(usage_snapshots.captured_at)
-      OR datetime(usage_snapshots.captured_at) IS NULL
-  `).bind(source, capturedAt, serialized).run();
+  const normalizedCapturedAt = new Date(capturedAt).toISOString();
+  const snapshot = await env.DB.prepare(USAGE_SNAPSHOT_UPSERT_SQL)
+    .bind(source, normalizedCapturedAt, serialized).run();
   if (snapshot?.meta?.changes === 0) {
     await writeUsageHealth(env, source, normalizedAttemptedAt, 'stale');
-    return json({ ok: true, stale: true });
+    return json({ ok: true, advanced: false, stale: true });
   }
 
   await writeUsageHealth(env, source, normalizedAttemptedAt, 'success', normalizedAttemptedAt);
-  return json({ ok: true });
+  return json({ ok: true, advanced: true });
 }
 
 function harnessText(value, maxLength, required = false) {
@@ -471,6 +474,15 @@ function harnessActorUsageStamp(usage, actor) {
 
 export function mergeHarnessReport(previous, incoming, usage = null) {
   const current = previous && typeof previous === 'object' ? previous : {};
+  const heartbeatOnly = incoming.task.phase === 'heartbeat';
+  if (heartbeatOnly && Object.keys(current).length > 0) {
+    return {
+      ...current,
+      id: incoming.task_id,
+      heartbeat_at: incoming.task.heartbeat_at || incoming.occurred_at,
+      updated_at: incoming.occurred_at,
+    };
+  }
   const actorMap = new Map(
     Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
   );
@@ -528,7 +540,6 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     });
     modules = modules.map((module) => ({ ...module, status: 'done', progress: 100 }));
   }
-  const heartbeatOnly = incoming.task.phase === 'heartbeat';
   const merged = {
     version: 1,
     ...current,
@@ -536,11 +547,6 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     title: incoming.task.title || current.title || incoming.task.name,
     input: incoming.task.input || current.input || '',
     heartbeat_at: incoming.task.heartbeat_at || current.heartbeat_at || incoming.occurred_at,
-    ...(heartbeatOnly ? {
-      phase: current.phase || 'input',
-      progress: Number.isFinite(current.progress) ? current.progress : incoming.task.progress,
-      status: current.status || incoming.task.status,
-    } : {}),
     // 잠긴 태스크의 머리글 수치(상태·단계·진행률)는 늦은 보고를 따라 뒤로 가지 않는다.
     ...(terminalHold ? {
       status: 'complete',
@@ -807,14 +813,24 @@ async function usage(request, env) {
 
   // 필터 목록을 손으로 적지 않는다 — ingest 허용 집합에서 그대로 도출한다.
   const sources = [...VALID_USAGE_SOURCES];
+  const sourcePlaceholders = sources.map(() => '?').join(', ');
   const rows = await env.DB.prepare(`
-    SELECT snapshots.source, snapshots.captured_at, snapshots.payload,
-      health.last_success_at, health.last_attempt_at, health.last_outcome
-    FROM usage_snapshots AS snapshots
-    LEFT JOIN usage_source_health AS health ON health.source = snapshots.source
-    WHERE snapshots.source IN (${sources.map(() => '?').join(', ')})
-    ORDER BY snapshots.source
-  `).bind(...sources).all();
+    SELECT source, captured_at, payload, last_success_at, last_attempt_at, last_outcome
+    FROM (
+      SELECT snapshots.source, snapshots.captured_at, snapshots.payload,
+        health.last_success_at, health.last_attempt_at, health.last_outcome
+      FROM usage_snapshots AS snapshots
+      LEFT JOIN usage_source_health AS health ON health.source = snapshots.source
+      WHERE snapshots.source IN (${sourcePlaceholders})
+      UNION ALL
+      SELECT health.source, NULL AS captured_at, NULL AS payload,
+        health.last_success_at, health.last_attempt_at, health.last_outcome
+      FROM usage_source_health AS health
+      LEFT JOIN usage_snapshots AS snapshots ON snapshots.source = health.source
+      WHERE health.source IN (${sourcePlaceholders}) AND snapshots.source IS NULL
+    )
+    ORDER BY source
+  `).bind(...sources, ...sources).all();
   const taskRows = await env.DB.prepare(`
     SELECT task_id, status, updated_at, payload, title, input, heartbeat_at
     FROM harness_tasks

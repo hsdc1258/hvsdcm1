@@ -5,9 +5,11 @@ import test from 'node:test';
 import worker from './src/index.js';
 import {
   HARNESS_STALE_MS,
+  USAGE_SNAPSHOT_UPSERT_SQL,
   effectiveHarnessStatus,
   fixedTimeEqual,
   fixedTimeTextEqual,
+  mergeHarnessReport,
 } from './src/router.js';
 import {
   clientIp,
@@ -741,11 +743,11 @@ test('usage report upserts the latest source snapshot', async () => {
   }), env);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(await response.json(), { ok: true, advanced: true });
   const upsert = statements.find(({ sql }) => sql.includes('INSERT INTO usage_snapshots'));
   assert.match(upsert.sql, /ON CONFLICT\(source\)/u);
   assert.match(upsert.sql, /DO UPDATE SET captured_at = excluded\.captured_at/u);
-  assert.match(upsert.sql, /datetime\(excluded\.captured_at\) >= datetime\(usage_snapshots\.captured_at\)/u);
+  assert.match(upsert.sql, /julianday\(excluded\.captured_at\) > julianday\(usage_snapshots\.captured_at\)/u);
   assert.deepEqual(upsert.values, ['codex', capturedAt, JSON.stringify(payload)]);
   const health = statements.find(({ sql }) => sql.includes('INSERT INTO usage_source_health'));
   assert.deepEqual(health.values, ['codex', capturedAt, capturedAt, 'success']);
@@ -796,7 +798,7 @@ test('usage report records no-data health without changing a snapshot and reject
     outcome: 'success',
     payload: {},
   });
-  assert.deepEqual(await stale.json(), { ok: true, stale: true });
+  assert.deepEqual(await stale.json(), { ok: true, advanced: false, stale: true });
   assert.equal(statements.at(-1).values.at(-1), 'stale');
 });
 
@@ -886,7 +888,7 @@ test('usage report accepts the claude source and stores it beside codex', async 
   }), env);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(await response.json(), { ok: true, advanced: true });
   assert.deepEqual(
     upserts.find(({ sql }) => sql.includes('INSERT INTO usage_snapshots')).values,
     ['claude', capturedAt, JSON.stringify(payload)],
@@ -969,6 +971,58 @@ test('a claude usage report posted through the API comes back from the usage loo
     }],
     tasks: [],
   });
+});
+
+test('usage lookup exposes health for a source that has never produced a snapshot', async () => {
+  const attemptedAt = '2026-08-29T00:00:00.000Z';
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    DB: {
+      prepare(sql) {
+        if (sql.includes('FROM usage_snapshots')) {
+          assert.match(sql, /UNION ALL/u);
+          assert.match(sql, /FROM usage_source_health AS health/u);
+          return {
+            bind(...values) {
+              assert.deepEqual(values, ['codex', 'claude', 'codex', 'claude']);
+              return {
+                async all() {
+                  return { results: [{
+                    source: 'claude', captured_at: null, payload: null,
+                    last_success_at: null, last_attempt_at: attemptedAt, last_outcome: 'no-data',
+                  }] };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('SELECT s.*, u.username')) {
+          return {
+            bind() {
+              return { async first() { return { token_hash: 'stored-user-hash', role: 'user', disabled: 0, username: 'hvsdcm' }; } };
+            },
+          };
+        }
+        if (sql.includes('UPDATE sessions')) {
+          return { bind() { return { async run() { return { success: true }; } }; } };
+        }
+        if (sql.includes('FROM harness_tasks') || sql.includes('FROM harness_events')) {
+          return { async all() { return { results: [] }; } };
+        }
+        throw new Error(`Unexpected SQL in health-only lookup test: ${sql}`);
+      },
+    },
+  };
+
+  const response = await worker.fetch(new Request('https://api.test/api/usage', {
+    headers: { authorization: 'Bearer user-token', 'cf-connecting-ip': '198.51.100.7' },
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).snapshots, [{
+    source: 'claude', captured_at: null, payload: null,
+    last_success_at: null, last_attempt_at: attemptedAt, last_outcome: 'no-data',
+  }]);
 });
 
 function harnessInput(overrides = {}) {
@@ -1181,6 +1235,53 @@ test('harness title, 4KB input, and heartbeat survive normalization and stale is
     effectiveHarnessStatus(stored, 'active', Date.parse(stored.heartbeat_at) + HARNESS_STALE_MS + 1),
     'stale',
   );
+});
+
+test('heartbeat-only reports preserve task meaning, actors, modules, and artifacts', () => {
+  const current = {
+    version: 1,
+    id: 'usage-harness',
+    name: '기존 이름',
+    title: '관제탑 UI 개선',
+    input: '원래 요청',
+    phase: 'work',
+    progress: 73,
+    status: 'active',
+    current: '실제 Worker 수정',
+    created_at: '2026-08-27T09:00:00.000Z',
+    updated_at: '2026-08-27T09:01:00.000Z',
+    heartbeat_at: '2026-08-27T09:01:00.000Z',
+    actors: [{ id: 'usage-harness:main', assignment: '실제 Worker 수정', progress: 73 }],
+    modules: [{ id: 'worker', name: 'Worker', progress: 73 }],
+    artifacts: ['npm test'],
+  };
+  const incoming = harnessInput({
+    occurred_at: '2026-08-27T09:05:00.000Z',
+    task: {
+      ...harnessInput().task,
+      phase: 'heartbeat',
+      progress: 0,
+      current: '진행 중',
+      heartbeat_at: '2026-08-27T09:05:00.000Z',
+    },
+    actors: [{
+      ...harnessInput().actors[0],
+      assignment: '진행 중',
+      progress: 0,
+    }],
+    modules: [],
+    artifacts: [],
+  });
+
+  const merged = mergeHarnessReport(current, incoming);
+  for (const field of ['name', 'title', 'input', 'phase', 'progress', 'status', 'current']) {
+    assert.deepEqual(merged[field], current[field]);
+  }
+  assert.deepEqual(merged.actors, current.actors);
+  assert.deepEqual(merged.modules, current.modules);
+  assert.deepEqual(merged.artifacts, current.artifacts);
+  assert.equal(merged.heartbeat_at, '2026-08-27T09:05:00.000Z');
+  assert.equal(merged.updated_at, '2026-08-27T09:05:00.000Z');
 });
 
 test('accepted harness upserts append subject-aware events with remaining usage snapshots', async () => {
@@ -1703,23 +1804,21 @@ test('two reports from separate harnesses keep both actors on the shared task', 
 
 // 위 가짜 D1은 "SQLite datetime()이 Date.parse와 같은 순서를 본다"는 전제 위에 서 있다.
 // 그 전제를 실제 SQLite로 잠근다 — node:sqlite가 없는 런타임(Node 20)에서는 건너뛴다.
-test('SQLite datetime() converts +09:00 offsets to UTC for the UPSERT ordering guard', async (t) => {
+test('the real SQLite UPSERT preserves milliseconds and advances strictly', async (t) => {
   let DatabaseSync;
   try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
   if (!DatabaseSync) return t.skip('node:sqlite unavailable');
   const db = new DatabaseSync(':memory:');
-  const value = (expression) => db.prepare(`SELECT ${expression} AS v`).get().v;
-  const offset = "'2026-08-27T10:00:00+09:00'";
-  const utc = "'2026-08-27T01:30:00.000Z'";
-
-  // 사전순 비교는 뒤집히고, datetime() 비교는 바로 선다.
-  assert.equal(value(`(${utc} >= ${offset})`), 0);
-  assert.equal(value(`(datetime(${utc}) >= datetime(${offset}))`), 1);
-  assert.equal(value(`(datetime('2026-08-27T00:30:00.000Z') >= datetime(${offset}))`), 0);
-  // 같은 순간은 통과한다(재전송 멱등).
-  assert.equal(value(`(datetime('2026-08-27T01:00:00.000Z') >= datetime(${offset}))`), 1);
-  // 읽을 수 없는 값은 NULL이므로 IS NULL 폴백이 필요하다.
-  assert.equal(value("datetime('not-a-time') IS NULL"), 1);
+  db.exec('CREATE TABLE usage_snapshots(source TEXT PRIMARY KEY, captured_at TEXT, payload TEXT)');
+  const upsert = db.prepare(USAGE_SNAPSHOT_UPSERT_SQL);
+  assert.equal(upsert.run('codex', '2026-08-27T01:00:00.900Z', 'newest').changes, 1);
+  assert.equal(upsert.run('codex', '2026-08-27T01:00:00.100Z', 'older-same-second').changes, 0);
+  assert.equal(upsert.run('codex', '2026-08-27T01:00:00.900Z', 'equal').changes, 0);
+  assert.equal(upsert.run('codex', '2026-08-27T10:00:01+09:00', 'newer-offset').changes, 1);
+  assert.deepEqual({ ...db.prepare('SELECT captured_at, payload FROM usage_snapshots').get() }, {
+    captured_at: '2026-08-27T10:00:01+09:00',
+    payload: 'newer-offset',
+  });
   db.close();
 });
 
@@ -2133,7 +2232,7 @@ test('usage lookup survives a corrupted snapshot row', async () => {
           assert.match(sql, /WHERE snapshots\.source IN \(\?, \?\)/u);
           return {
             bind(...sources) {
-              assert.deepEqual([...sources].sort(), ['claude', 'codex']);
+              assert.deepEqual([...sources].sort(), ['claude', 'claude', 'codex', 'codex']);
               return {
                 async all() {
                   return {
