@@ -18,11 +18,21 @@ const MAX_PROGRESS_BYTES = 800_000;
 // 수집기 버그 하나로 D1 행이 무제한으로 부푼다.
 const MAX_USAGE_BYTES = 64_000;
 const MAX_HARNESS_BYTES = 64_000;
+const MAX_HARNESS_INPUT_BYTES = 4_096;
+export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
 // 수집 원본. 이 집합이 ingest 허용 목록이자 조회 필터의 단일 원본이다 — 한쪽만 고치면
 // 받아 놓고 못 읽는(또는 그 반대의) 상태가 생긴다.
 const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
+export const USAGE_SNAPSHOT_UPSERT_SQL = `
+  INSERT INTO usage_snapshots(source, captured_at, payload)
+  VALUES (?1, ?2, ?3)
+  ON CONFLICT(source)
+  DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
+  WHERE julianday(excluded.captured_at) > julianday(usage_snapshots.captured_at)
+    OR julianday(usage_snapshots.captured_at) IS NULL
+`;
 // 파이프라인 단계 집합. **순서가 곧 진행 방향**이고, 화면(usage/assets/js/usage.js의
 // PHASES)이 같은 키를 같은 순서로 그린다 — scripts/validate.mjs가 두 원본을 대조해
 // 어긋나면 게이트를 깨뜨린다. 구 4단계(plan/work/review/done)는 이 집합의 부분집합이라
@@ -30,6 +40,7 @@ const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
 const VALID_HARNESS_PHASES = new Set([
   'input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done',
 ]);
+const VALID_HARNESS_REPORT_PHASES = new Set([...VALID_HARNESS_PHASES, 'heartbeat']);
 const VALID_HARNESS_TASK_STATES = new Set(['active', 'complete']);
 const VALID_HARNESS_ACTOR_KINDS = new Set(['codex', 'webgpt', 'claude']);
 const VALID_HARNESS_ACTOR_STATES = new Set([
@@ -219,6 +230,28 @@ async function ingestTokenMatches(request, expectedValue) {
   return Boolean(supplied && expected && matches);
 }
 
+async function writeUsageHealth(env, source, attemptedAt, outcome, successAt = null) {
+  await env.DB.prepare(`
+    INSERT INTO usage_source_health(source, last_success_at, last_attempt_at, last_outcome)
+    VALUES (?1, ?2, ?3, ?4)
+    ON CONFLICT(source)
+    DO UPDATE SET
+      last_success_at = CASE
+        WHEN excluded.last_success_at IS NOT NULL
+          AND (datetime(excluded.last_attempt_at) >= datetime(usage_source_health.last_attempt_at)
+            OR datetime(usage_source_health.last_attempt_at) IS NULL)
+        THEN excluded.last_success_at ELSE usage_source_health.last_success_at END,
+      last_attempt_at = CASE
+        WHEN datetime(excluded.last_attempt_at) >= datetime(usage_source_health.last_attempt_at)
+          OR datetime(usage_source_health.last_attempt_at) IS NULL
+        THEN excluded.last_attempt_at ELSE usage_source_health.last_attempt_at END,
+      last_outcome = CASE
+        WHEN datetime(excluded.last_attempt_at) >= datetime(usage_source_health.last_attempt_at)
+          OR datetime(usage_source_health.last_attempt_at) IS NULL
+        THEN excluded.last_outcome ELSE usage_source_health.last_outcome END
+  `).bind(source, successAt, attemptedAt, outcome).run();
+}
+
 async function reportUsage(request, env) {
   if (!(await ingestTokenMatches(request, env.USAGE_INGEST_TOKEN))) {
     return json({ error: '인증이 필요합니다.' }, 401);
@@ -228,28 +261,46 @@ async function reportUsage(request, env) {
   const input = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const source = String(input.source || '');
   const capturedAt = typeof input.captured_at === 'string' ? input.captured_at : '';
+  const attemptedAt = typeof input.attempted_at === 'string'
+    ? input.attempted_at
+    : (capturedAt || new Date().toISOString());
+  const requestedOutcome = typeof input.outcome === 'string' ? input.outcome.trim() : '';
+  const outcome = requestedOutcome || 'success';
   const payloadIsObject = input.payload !== null
     && typeof input.payload === 'object'
     && !Array.isArray(input.payload);
   if (!VALID_USAGE_SOURCES.has(source)
-    || !capturedAt
-    || !Number.isFinite(Date.parse(capturedAt))
-    || !payloadIsObject) {
+    || !Number.isFinite(Date.parse(attemptedAt))
+    || !['success', 'no-data', 'failed'].includes(outcome)
+    || (outcome === 'success' && (
+      !capturedAt
+      || !Number.isFinite(Date.parse(capturedAt))
+      || !payloadIsObject
+    ))) {
     return json({ error: '잘못된 사용량 보고입니다.' }, 400);
   }
 
-  const serialized = JSON.stringify(input.payload);
-  if (serialized.length > MAX_USAGE_BYTES) {
+  const serialized = payloadIsObject ? JSON.stringify(input.payload) : '';
+  if (usageTokenEncoder.encode(serialized).byteLength > MAX_USAGE_BYTES) {
     return json({ error: '사용량 보고가 너무 큽니다.' }, 413);
   }
 
-  await env.DB.prepare(`
-    INSERT INTO usage_snapshots(source, captured_at, payload)
-    VALUES (?1, ?2, ?3)
-    ON CONFLICT(source)
-    DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
-  `).bind(source, capturedAt, serialized).run();
-  return json({ ok: true });
+  const normalizedAttemptedAt = new Date(attemptedAt).toISOString();
+  if (outcome !== 'success') {
+    await writeUsageHealth(env, source, normalizedAttemptedAt, outcome);
+    return json({ ok: true, snapshot: false });
+  }
+
+  const normalizedCapturedAt = new Date(capturedAt).toISOString();
+  const snapshot = await env.DB.prepare(USAGE_SNAPSHOT_UPSERT_SQL)
+    .bind(source, normalizedCapturedAt, serialized).run();
+  if (snapshot?.meta?.changes === 0) {
+    await writeUsageHealth(env, source, normalizedAttemptedAt, 'stale');
+    return json({ ok: true, advanced: false, stale: true });
+  }
+
+  await writeUsageHealth(env, source, normalizedAttemptedAt, 'success', normalizedAttemptedAt);
+  return json({ ok: true, advanced: true });
 }
 
 function harnessText(value, maxLength, required = false) {
@@ -257,6 +308,23 @@ function harnessText(value, maxLength, required = false) {
   const normalized = value.replace(/\s+/gu, ' ').trim();
   if ((required && !normalized) || normalized.length > maxLength) return null;
   return normalized;
+}
+
+function harnessInputText(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  const codePoints = [...value.trim()];
+  let low = 0;
+  let high = codePoints.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (usageTokenEncoder.encode(codePoints.slice(0, middle).join('')).byteLength <= MAX_HARNESS_INPUT_BYTES) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return codePoints.slice(0, low).join('');
 }
 
 function normalizeHarnessReport(input) {
@@ -283,6 +351,11 @@ function normalizeHarnessReport(input) {
     ? '기타 Codex 작업'
     : harnessText(task.category, 80, true);
   const progress = Number(task.progress);
+  const title = task.title === undefined ? undefined : harnessText(task.title, 120);
+  const originalInput = harnessInputText(task.input);
+  const heartbeatAt = task.heartbeat_at === undefined
+    ? occurredAt
+    : harnessText(task.heartbeat_at, 40, true);
   const normalizedTask = {
     name: harnessText(task.name, 120, true),
     phase,
@@ -296,9 +369,14 @@ function normalizeHarnessReport(input) {
     done: harnessText(task.done, 240),
     next: harnessText(task.next, 240),
     deadline: harnessText(task.deadline, 80),
+    ...(title === undefined ? {} : { title }),
+    ...(originalInput === undefined ? {} : { input: originalInput }),
+    heartbeat_at: heartbeatAt && Number.isFinite(Date.parse(heartbeatAt))
+      ? new Date(heartbeatAt).toISOString()
+      : null,
   };
   if (Object.values(normalizedTask).some((value) => value === null)
-    || !VALID_HARNESS_PHASES.has(phase)
+    || !VALID_HARNESS_REPORT_PHASES.has(phase)
     || !VALID_HARNESS_TASK_STATES.has(status)
     || !VALID_HARNESS_REASONING.has(reasoning)
     || !/^[\p{L}\p{N}][\p{L}\p{N}-]*$/u.test(normalizedTask.category_key)
@@ -396,6 +474,15 @@ function harnessActorUsageStamp(usage, actor) {
 
 export function mergeHarnessReport(previous, incoming, usage = null) {
   const current = previous && typeof previous === 'object' ? previous : {};
+  const heartbeatOnly = incoming.task.phase === 'heartbeat';
+  if (heartbeatOnly && Object.keys(current).length > 0) {
+    return {
+      ...current,
+      id: incoming.task_id,
+      heartbeat_at: incoming.task.heartbeat_at || incoming.occurred_at,
+      updated_at: incoming.occurred_at,
+    };
+  }
   const actorMap = new Map(
     Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
   );
@@ -457,6 +544,9 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     version: 1,
     ...current,
     ...incoming.task,
+    title: incoming.task.title || current.title || incoming.task.name,
+    input: incoming.task.input || current.input || '',
+    heartbeat_at: incoming.task.heartbeat_at || current.heartbeat_at || incoming.occurred_at,
     // 잠긴 태스크의 머리글 수치(상태·단계·진행률)는 늦은 보고를 따라 뒤로 가지 않는다.
     ...(terminalHold ? {
       status: 'complete',
@@ -478,6 +568,14 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     delete merged.completed_at;
   }
   return merged;
+}
+
+export function effectiveHarnessStatus(task, storedStatus = '', nowMs = Date.now()) {
+  const status = storedStatus || task?.status || 'active';
+  if (status === 'complete') return 'complete';
+  const heartbeatAt = Date.parse(task?.heartbeat_at || task?.updated_at || '');
+  if (Number.isFinite(heartbeatAt) && nowMs - heartbeatAt > HARNESS_STALE_MS) return 'stale';
+  return 'active';
 }
 
 function remainingUsagePercent(bucket) {
@@ -631,14 +729,23 @@ async function reportHarness(request, env) {
   const subject = isActorReport ? lastActor : merged;
   const kind = previous && previous.phase !== merged.phase ? 'phase-change' : 'report';
   const upsertStatement = env.DB.prepare(`
-    INSERT INTO harness_tasks(task_id, status, updated_at, payload)
-    VALUES (?1, ?2, ?3, ?4)
+    INSERT INTO harness_tasks(task_id, status, updated_at, payload, title, input, heartbeat_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
     ON CONFLICT(task_id)
-    DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload
+    DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload,
+      title = excluded.title, input = excluded.input, heartbeat_at = excluded.heartbeat_at
     WHERE (datetime(excluded.updated_at) >= datetime(harness_tasks.updated_at)
         OR datetime(harness_tasks.updated_at) IS NULL)
       ${guardsTerminal ? "AND harness_tasks.status != 'complete'" : ''}
-  `).bind(incoming.task_id, merged.status, merged.updated_at, serialized);
+  `).bind(
+    incoming.task_id,
+    merged.status,
+    merged.updated_at,
+    serialized,
+    merged.title,
+    merged.input,
+    merged.heartbeat_at,
+  );
   const eventStatement = env.DB.prepare(`
     INSERT INTO harness_events(
       task_id, ts, kind, actor_id, phase, percent, model, reasoning, status,
@@ -706,14 +813,26 @@ async function usage(request, env) {
 
   // 필터 목록을 손으로 적지 않는다 — ingest 허용 집합에서 그대로 도출한다.
   const sources = [...VALID_USAGE_SOURCES];
+  const sourcePlaceholders = sources.map(() => '?').join(', ');
   const rows = await env.DB.prepare(`
-    SELECT source, captured_at, payload
-    FROM usage_snapshots
-    WHERE source IN (${sources.map(() => '?').join(', ')})
+    SELECT source, captured_at, payload, last_success_at, last_attempt_at, last_outcome
+    FROM (
+      SELECT snapshots.source, snapshots.captured_at, snapshots.payload,
+        health.last_success_at, health.last_attempt_at, health.last_outcome
+      FROM usage_snapshots AS snapshots
+      LEFT JOIN usage_source_health AS health ON health.source = snapshots.source
+      WHERE snapshots.source IN (${sourcePlaceholders})
+      UNION ALL
+      SELECT health.source, NULL AS captured_at, NULL AS payload,
+        health.last_success_at, health.last_attempt_at, health.last_outcome
+      FROM usage_source_health AS health
+      LEFT JOIN usage_snapshots AS snapshots ON snapshots.source = health.source
+      WHERE health.source IN (${sourcePlaceholders}) AND snapshots.source IS NULL
+    )
     ORDER BY source
-  `).bind(...sources).all();
+  `).bind(...sources, ...sources).all();
   const taskRows = await env.DB.prepare(`
-    SELECT task_id, status, updated_at, payload
+    SELECT task_id, status, updated_at, payload, title, input, heartbeat_at
     FROM harness_tasks
     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, datetime(updated_at) DESC
   `).all();
@@ -749,12 +868,21 @@ async function usage(request, env) {
   const parsedTasks = taskRows.results.flatMap((row) => {
     try {
       const payload = JSON.parse(row.payload);
-      return payload && typeof payload === 'object'
-        ? [{
-          row,
-          payload: { ...payload, events: eventsByTask.get(row.task_id) || [] },
-        }]
-        : [];
+      if (!payload || typeof payload !== 'object') return [];
+      const hydrated = {
+        ...payload,
+        title: payload.title || row.title || payload.name,
+        input: payload.input || row.input || '',
+        heartbeat_at: payload.heartbeat_at || row.heartbeat_at || payload.updated_at || row.updated_at,
+      };
+      return [{
+        row,
+        payload: {
+          ...hydrated,
+          status: effectiveHarnessStatus(hydrated, row.status),
+          events: eventsByTask.get(row.task_id) || [],
+        },
+      }];
     } catch {
       return [];
     }
@@ -777,7 +905,14 @@ async function usage(request, env) {
       // 손상된 행 하나가 조회 전체를 500으로 만들지 않게 한다 — 그 행만 payload를 낮춘다.
       let payload = null;
       try { payload = JSON.parse(row.payload); } catch { payload = null; }
-      return { source: row.source, captured_at: row.captured_at, payload };
+      return {
+        source: row.source,
+        captured_at: row.captured_at,
+        payload,
+        last_success_at: row.last_success_at || row.captured_at,
+        last_attempt_at: row.last_attempt_at || row.captured_at,
+        last_outcome: row.last_outcome || 'legacy',
+      };
     }),
     tasks: limitedTasks.map(({ payload }) => payload),
   });
