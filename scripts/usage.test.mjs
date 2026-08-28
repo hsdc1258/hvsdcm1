@@ -1158,6 +1158,7 @@ function workerBoundaryEnv() {
 test('consumption rendered in the browser matches what the Worker actually records', async () => {
   const { default: worker } = await import('../worker/src/index.js');
   const { env, state } = workerBoundaryEnv();
+  const liveNow = Date.now();
   const postSnapshot = (usedPercent) => worker.fetch(new Request('https://api.test/api/usage/report', {
     method: 'POST',
     headers: { authorization: 'Bearer usage-token', 'content-type': 'application/json' },
@@ -1183,9 +1184,9 @@ test('consumption rendered in the browser matches what the Worker actually recor
 
   // 사용량 20% → 잔여 80, 이어서 사용량 40% → 잔여 60. 이 세션이 쓴 것은 20%p다.
   assert.equal((await postSnapshot(20)).status, 200);
-  assert.equal((await postReport('2026-08-27T09:00:00.000Z')).status, 200);
+  assert.equal((await postReport(new Date(liveNow - 60_000).toISOString())).status, 200);
   assert.equal((await postSnapshot(40)).status, 200);
-  assert.equal((await postReport('2026-08-27T10:00:00.000Z')).status, 200);
+  assert.equal((await postReport(new Date(liveNow).toISOString())).status, 200);
 
   // Worker가 적는 것은 **잔여**다 — 이 전제가 깨지면 아래 렌더 기대값도 함께 깨진다.
   assert.deepEqual(state.events.map((event) => event.usage_codex), [80, 60]);
@@ -1199,7 +1200,7 @@ test('consumption rendered in the browser matches what the Worker actually recor
   assert.equal(data.tasks.length, 1);
   assert.equal(data.tasks[0].events.length, 2);
 
-  const markup = createUsageRenderers().renderPortfolioBoard(data.tasks, NOW);
+  const markup = createUsageRenderers().renderPortfolioBoard(data.tasks, liveNow);
   assert.match(markup, /한도 소모 Codex 20\.0%p/u);
   // Claude 스냅샷이 없어 두 이벤트 모두 null이다 — 0%p 소모를 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Claude/u);
