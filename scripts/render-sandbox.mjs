@@ -316,7 +316,7 @@ export function createUsageRenderers() {
   const renderers = context.USAGE_RENDER;
   if (typeof renderers?.buildDashboard !== 'function'
     || typeof renderers?.renderSessionViews !== 'function'
-    || typeof renderers?.renderPortfolioOrg !== 'function'
+    || typeof renderers?.renderPortfolioBoard !== 'function'
     || typeof renderers?.activateTaskTab !== 'function'
     || typeof renderers?.wireTaskTabs !== 'function') {
     throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);

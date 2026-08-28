@@ -1,4 +1,4 @@
-// 사용량 화면(usage/assets/js/usage.js)의 렌더 계약 단위 테스트.
+﻿// 사용량 화면(usage/assets/js/usage.js)의 렌더 계약 단위 테스트.
 //
 // 왜 있는가 (review WP1 M-2)
 //   이전에는 validate.mjs가 소스 **문자열**을 grep해 계약을 지켰다. 그 검사는 변수명만
@@ -397,11 +397,15 @@ test('overall, module, and actor progress render only from reported artifacts', 
   });
   const markup = dashboard({ snapshots: [], tasks: [task] });
   // 진행도 바는 실제로 보고된 수치에만 붙는다: 총괄(64) + progress를 보고한 액터(37).
-  // 나머지 액터는 수치가 없으므로 0% 바를 그리지 않는다. 대시보드는 세션 탭과 전체
-  // 조직도 두 곳에 같은 세션을 그리므로 2 × 2 = 4가 계약값이다.
-  assert.equal((markup.match(/진행도<\/span>/gu) || []).length, 4);
+  // 나머지 액터는 수치가 없으므로 0% 바를 그리지 않는다. 세션 탭의 트리에 둘이다
+  // (전체 보기는 2026-08-28 통합에서 관제탑 보드로 바뀌어 게이지 바 대신 수치를 낸다).
+  assert.equal((markup.match(/진행도<\/span>/gu) || []).length, 2);
   assert.match(markup, /class="h-node is-lead[^"]*"[^>]*>[\s\S]*?<strong>64%<\/strong>/u);
   assert.match(markup, /계산 작업[\s\S]*?<strong>37%<\/strong>/u);
+  // 관제탑 카드도 같은 두 수치만 낸다: 카드 메타의 총괄 진행도와, 진행도를 보고한
+  // 액터의 칩 하나. 보고가 없는 액터의 칩에는 수치 자체가 붙지 않는다.
+  assert.match(markup, /class="pl-meta">[\s\S]*?진행 64%/u);
+  assert.equal((markup.match(/class="pl-chip"[^>]*>[^<]*<strong>/gu) || []).length, 1);
   for (const expected of ['검증 단계', '80%', 'CSS 구현', '88%']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
@@ -478,7 +482,7 @@ test('active and completed tabs separate session state while the portfolio inclu
   assert.match(completeMarkup, /완료 세션/u);
   assert.doesNotMatch(completeMarkup, /진행 세션/u);
 
-  const org = renderers.renderPortfolioOrg(tasks, NOW);
+  const org = renderers.renderPortfolioBoard(tasks, NOW);
   assert.match(org, /진행 세션/u);
   assert.match(org, /완료 세션[\s\S]*에이전트 보고 없음/u);
   assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 2);
@@ -877,7 +881,7 @@ test('null usage snapshots and a null actor percent stay unmeasured instead of b
       { ts: iso(0), kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: null, usage_claude: null },
     ],
   });
-  const markup = renderers.renderPortfolioOrg([task], NOW);
+  const markup = renderers.renderPortfolioBoard([task], NOW);
   assert.match(markup, /한도 소모 Claude 10\.0%p/u);
   // Codex는 측정값이 하나도 없다 — 0%p로 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Codex/u);
@@ -898,7 +902,7 @@ test('a quota window reset is excluded from consumption and marked', () => {
       { ts: iso(HOUR), kind: 'phase-change', phase: 'review', usage_codex: 93 },
     ],
   });
-  const markup = renderers.renderPortfolioOrg([task], NOW);
+  const markup = renderers.renderPortfolioBoard([task], NOW);
   // 18 + 7 = 25%p. 12 → 100의 상승(+88)은 소모가 아니다.
   assert.match(markup, /한도 소모 Codex 25\.0%p \(한도 초기화 1회\)/u);
 });
@@ -1105,8 +1109,29 @@ test('consumption rendered in the browser matches what the Worker actually recor
   assert.equal(data.tasks.length, 1);
   assert.equal(data.tasks[0].events.length, 2);
 
-  const markup = createUsageRenderers().renderPortfolioOrg(data.tasks, NOW);
+  const markup = createUsageRenderers().renderPortfolioBoard(data.tasks, NOW);
   assert.match(markup, /한도 소모 Codex 20\.0%p/u);
   // Claude 스냅샷이 없어 두 이벤트 모두 null이다 — 0%p 소모를 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Claude/u);
+});
+
+// ---- 관제탑 보드 조판 계약 (2026-08-28 통합) -------------------------------
+// 데이터 계약은 위 e2e·테스트가 잠근다. 여기서 보는 것은 **승인된 조판 어휘**가 실제
+// 마크업으로 나오는지다: 카드 · 세로 단계 레일 · 상태 라벨 · 모노 담당 라벨 · 칩.
+// 조판이 조용히 옛 트리로 되돌아가거나 상태 라벨이 사라지면 여기서 깨진다.
+test('the board renders the approved vocabulary and names every stage state in text', () => {
+  const markup = createUsageRenderers().renderPortfolioBoard([harnessTask()], NOW);
+  for (const vocabulary of ['pl-card', 'pl-stage', 'pl-badge', 'pl-who', 'pl-chip', 'pl-orch']) {
+    assert.ok(markup.includes(`class="${vocabulary}`), `${vocabulary}가 조판에서 사라졌습니다.`);
+  }
+  // 카드 하나에 여덟 단계가 상시 선다 — 대기·기록 없음도 마디를 차지한다.
+  const stages = markup.match(/class="pl-stage /gu) || [];
+  assert.equal(stages.length, 8);
+  // 상태를 색으로만 말하지 않는다: 마디마다 글자 라벨이 짝을 이룬다.
+  assert.equal((markup.match(/class="pl-state /gu) || []).length, stages.length);
+  // 구 4단계만 보고한 세션이므로 신설 단계는 '기록 없음'이고, 완료로 날조되지 않는다.
+  assert.match(markup, /기록 없음/u);
+  assert.match(markup, /진행 중 2\/8/u);
+  // 옛 트리 조판이 되살아나면(중복 UI) 여기서 잡힌다.
+  assert.doesNotMatch(markup, /h-node|h-org|data-org-canvas/u);
 });

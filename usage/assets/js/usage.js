@@ -748,46 +748,6 @@
     }];
   }
 
-  // 전체 조직도 — 사용자 입력 → 하네스 → 세션들 → 각 세션의 단계·에이전트.
-  function portfolioTreeNodes(tasks, now) {
-    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
-    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
-    return [{
-      kind: 'request',
-      kindLabel: 'REQUEST',
-      name: '사용자 입력',
-      detail: '요청 · 목표 · 제약',
-      children: [{
-        kind: 'harness',
-        kindLabel: 'HARNESS',
-        name: '메인 오케스트레이션',
-        detail: `세션 ${tasks.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명`,
-        children: tasks.map((task) => {
-          const complete = task.status === 'complete';
-          const presentation = taskPresentation(task);
-          const deltas = sessionUsageDeltas(task);
-          return {
-            kind: 'session',
-            kindLabel: 'SESSION',
-            name: presentation.name,
-            detail: [taskCategory(task).label, presentation.dateLabel].filter(Boolean).join(' · '),
-            // 한 줄 모노 슬롯(model)에 넣으면 말줄임으로 잘린다 — 줄바꿈하는 note로 낸다.
-            note: deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
-            status: complete ? '완료' : '진행 중',
-            tone: complete ? ' is-idle' : ' is-accent',
-            progress: finiteNumber(task.progress),
-            current: !complete,
-            attributes: {
-              'data-portfolio-task': task.id || '',
-              'data-session-active': String(!complete),
-            },
-            children: sessionSubtreeNodes(task, now, { leadProgress: false }),
-          };
-        }),
-      }],
-    }];
-  }
-
   // ---- 조직도 캔버스(확대·이동) --------------------------------------------
 
   function renderOrgCanvas(key, label, treeMarkup) {
@@ -1044,13 +1004,167 @@
       </article>`;
   }
 
-  function renderPortfolioOrg(inputTasks, now) {
-    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    if (tasks.length === 0) return '<p class="us-empty card">아직 동기화된 파이프라인이 없습니다.</p>';
+  // ---- 관제탑 보드 ---------------------------------------------------------
+  //
+  // 전체 세션을 한눈에 보는 조판은 **하나뿐**이다: 사용자가 승인한 관제탑
+  // (카드 = 파이프라인, 카드 안 세로 레일 = 단계, 마디 = 상태, 모노 라벨 = 담당 모델,
+  // 칩 = 그 단계에 붙은 서브에이전트, 코스트 줄 = 그 단계에 쓴 시간).
+  // 같은 정보를 두 번째 조판(전체 조직도 캔버스)으로도 그리던 것은 걷어냈다 — 세션 하나를
+  // 파고드는 트리 캔버스는 세션 탭 안에 그대로 있고, 거기서만 확대·이동이 필요하다.
+  //
+  // **데이터는 그대로 하네스 피드다.** 단계 상태·소요시간·액터를 여기서 다시 계산하지 않고
+  // phaseStates()·phaseTimeline()·actorNodes()가 낸 값을 조판 어휘로 옮기기만 한다.
+  // 그래서 "보고된 적 없는 단계를 완료로 날조하지 않는다"는 계약이 이 조판에서도 그대로다:
+  // skipped는 '기록 없음'으로, 색이 아니라 **점선 마디 + 글자 라벨**로 구분된다.
+
+  const BOARD_STATE_LABELS = { ok: '완료', run: '진행 중', wait: '대기', skip: '기록 없음' };
+  // 단계 상태(phaseStates) → 레일 마디 상태. 여기 없는 값은 대기로 떨어져 마디가 사라지지 않는다.
+  const PHASE_RAIL_STATE = { done: 'ok', current: 'run', pending: 'wait', skipped: 'skip' };
+
+  // 액터 노드 숲을 평평하게 편다 — 손자 액터까지 칩 하나씩 받는다. 트리에서 접혀 있던
+  // 서브에이전트가 보드에서 사라지면 "누가 붙어 있는지"를 화면이 거짓말하게 된다.
+  function flattenAgentNodes(nodes) {
+    return (nodes || []).flatMap((node) => [node, ...flattenAgentNodes(node.children)]);
+  }
+
+  // 하네스 세션 하나 → 관제탑 카드 하나.
+  function pipelineFromTask(task, now) {
+    const timeline = phaseTimeline(task, now);
+    const states = phaseStates(task, timeline);
+    const { main, byPhase } = actorNodes(task);
+    const presentation = taskPresentation(task);
+    const complete = task.status === 'complete';
+    const progress = finiteNumber(task.progress);
+    const deltas = sessionUsageDeltas(task);
+    const updated = relativeTime(task.updated_at, now);
+    return {
+      id: task.id || presentation.name,
+      name: presentation.name,
+      task: [taskCategory(task).label, presentation.dateLabel].filter(Boolean).join(' · '),
+      state: complete ? 'ok' : 'run',
+      // 총괄은 카드 머리의 한 줄이다. 액터를 하나도 보고하지 않은 세션은 자리를 비우지 않고
+      // "보고 없음"이라고 말한다 — 줄을 지우면 원인이 보이지 않는다.
+      orch: main
+        ? {
+          // 이름과 모델을 **둘 다** 낸다. 모델만 내면 같은 모델을 쓰는 총괄이 서로
+          // 구분되지 않고, 보고된 액터가 화면에서 사라진 것처럼 보인다.
+          label: main.name || '이름 미기록',
+          model: modelAndReasoning(main.model, main.reasoning),
+          actorId: main.id || '',
+        }
+        : null,
+      meta: [
+        updated ? `${updated} 동기화` : '동기화 시각 없음',
+        progress === null ? '' : `진행 ${Math.round(clampPercent(progress))}%`,
+        task.deadline ? `마감 ${task.deadline}` : '',
+        deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
+      ].filter(Boolean),
+      stages: PHASES.map((phase) => {
+        const stat = timeline.stats.get(phase.key);
+        const state = states.get(phase.key);
+        const isCurrent = state === 'current';
+        return {
+          key: phase.key,
+          // 마크업에는 조판 어휘(st)와 **판독 어휘(state)** 를 둘 다 싣는다. 상태 판정의
+          // 단일 원본은 phaseStates()이고, 게이트는 그 원본 어휘(done/current/pending/
+          // skipped)로 검사해야 조판을 바꿔도 "날조 금지" 계약이 계속 검사된다.
+          state,
+          n: phase.label,
+          st: PHASE_RAIL_STATE[state] || 'wait',
+          // 모노 라벨은 그 단계를 실제로 보고한 모델이다. 진행 중인 단계에 한해 payload의
+          // 현재 모델로 메운다 — 지나간 단계를 현재 모델 이름으로 덮지 않는다.
+          who: modelAndReasoning(
+            stat?.model || (isCurrent ? task.model : ''),
+            stat?.reasoning || (isCurrent ? task.reasoning : ''),
+          ),
+          note: phase.detail,
+          cost: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
+          // 칩은 **이름:역할**이다. 모델로 이름을 대신하지 않는다 — 같은 모델을 쓰는
+          // 서브에이전트가 둘이면 화면에서 구분이 사라지고, 보고된 액터가 사라진 것처럼
+          // 보인다. 그 단계의 모델은 위 모노 라벨(who)이 이미 말한다.
+          chips: flattenAgentNodes(byPhase.get(phase.key)).map((node) => ({
+            label: [node.name, node.detail || node.status].filter(Boolean).join(':'),
+            actorId: node.attributes?.['data-actor-id'] || '',
+            // 측정된 진행도만 싣는다. 보고가 없으면 칩에 수치가 아예 붙지 않는다 —
+            // 없는 값을 0%로 그리면 "아직 시작 못 했다"는 거짓말이 된다.
+            percent: Number.isFinite(node.progress) ? clampPercent(node.progress) : null,
+          })),
+        };
+      }),
+    };
+  }
+
+  function renderBoardStage(stage) {
+    const state = BOARD_STATE_LABELS[stage.st] ? stage.st : 'wait';
+    const chips = Array.isArray(stage.chips) ? stage.chips : [];
     return `
-      <div class="h-portfolio">
-        ${renderOrgCanvas('portfolio', '전체 세션과 실제 에이전트 조직도', renderTree(portfolioTreeNodes(tasks, now)))}
+      <div class="pl-stage is-${escapeHtml(state)}" data-org-phase="${escapeHtml(stage.key || '')}" data-phase-state="${escapeHtml(stage.state || 'pending')}">
+        <div class="pl-stage-main">
+          <div class="pl-stage-name">${escapeHtml(stage.n)}${stage.who ? `<span class="pl-who">${escapeHtml(stage.who)}</span>` : ''}</div>
+          ${stage.note ? `<div class="pl-note">${escapeHtml(stage.note)}</div>` : ''}
+          ${stage.cost ? `<div class="pl-cost">${escapeHtml(stage.cost)}</div>` : ''}
+          ${chips.length > 0
+    ? `<div class="pl-chips">${chips.map((chip) => `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}">${escapeHtml(chip.label)}${chip.percent === null || chip.percent === undefined ? '' : `<strong>${Math.round(chip.percent)}%</strong>`}</span>`).join('')}</div>`
+    : ''}
+        </div>
+        <span class="pl-state is-${escapeHtml(state)}">${escapeHtml(BOARD_STATE_LABELS[state])}</span>
       </div>`;
+  }
+
+  function renderBoardCard(pipeline) {
+    const stages = Array.isArray(pipeline.stages) ? pipeline.stages : [];
+    const done = stages.filter((stage) => stage.st === 'ok').length;
+    const state = BOARD_STATE_LABELS[pipeline.state] ? pipeline.state : 'wait';
+    const meta = Array.isArray(pipeline.meta) ? pipeline.meta : [];
+    const orchId = pipeline.orch?.actorId ? ` data-actor-id="${escapeHtml(pipeline.orch.actorId)}"` : '';
+    return `
+      <article class="pl-card" data-portfolio-task="${escapeHtml(pipeline.id || '')}" data-session-active="${String(state !== 'ok')}">
+        <div class="pl-card-head">
+          <div>
+            <h3 class="pl-card-title">${escapeHtml(pipeline.name || '이름 없는 작업')}</h3>
+            ${pipeline.task ? `<p class="pl-task">${escapeHtml(pipeline.task)}</p>` : ''}
+          </div>
+          <span class="pl-badge is-${escapeHtml(state)}">${escapeHtml(BOARD_STATE_LABELS[state])} ${done}/${stages.length}</span>
+        </div>
+        <div class="pl-orch"${orchId}>오케스트레이터 <b>${escapeHtml(pipeline.orch ? pipeline.orch.label : '에이전트 보고 없음')}</b>${pipeline.orch?.model ? `<span class="pl-who">${escapeHtml(pipeline.orch.model)}</span>` : ''}</div>
+        ${stages.map(renderBoardStage).join('')}
+        ${meta.length > 0 ? `<div class="pl-meta">${meta.map((line) => escapeHtml(line)).join('<br>')}</div>` : ''}
+      </article>`;
+  }
+
+  // 보드 전체. 입력은 이미 정규화된 파이프라인 배열이라, 하네스 피드에서 왔든 정적 사본에서
+  // 왔든 같은 조판이 나온다.
+  function renderBoard(pipelines, meta = {}) {
+    if (!Array.isArray(pipelines) || pipelines.length === 0) {
+      return '<p class="pl-empty">아직 동기화된 파이프라인이 없습니다.</p>';
+    }
+    const sub = [meta.summary, meta.source].filter(Boolean).join(' · ');
+    return `
+      <div class="pl-board">
+        <div class="pl-head">
+          <h2 class="pl-title">파이프라인 관제탑</h2>
+          ${meta.window ? `<span class="pl-window">${escapeHtml(meta.window)}</span>` : ''}
+        </div>
+        ${sub ? `<p class="pl-sub">${escapeHtml(sub)}</p>` : ''}
+        <div class="pl-legend">
+          <span><span class="pl-dot is-ok" aria-hidden="true"></span>완료</span>
+          <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
+          <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
+          <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
+          <span>칩 = 단계에 붙은 서브에이전트(이름:역할)</span>
+        </div>
+        <div class="pl-grid">${pipelines.map(renderBoardCard).join('')}</div>
+      </div>`;
+  }
+
+  function renderPortfolioBoard(inputTasks, now) {
+    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+    const activeCount = tasks.filter((task) => task.status !== 'complete').length;
+    const actorCount = tasks.reduce((total, task) => total + taskActors(task).length, 0);
+    return renderBoard(tasks.map((task) => pipelineFromTask(task, now)), {
+      summary: `세션 ${tasks.length}개 · 진행 ${activeCount}개 · 에이전트 ${actorCount}명`,
+      source: '하네스 실시간 보고',
+    });
   }
 
   function renderTaskTabs(tasks, now, status) {
@@ -1089,7 +1203,7 @@
 
   function renderSessionView(inputTasks, now, view) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    if (view === 'org') return renderPortfolioOrg(tasks, now);
+    if (view === 'org') return renderPortfolioBoard(tasks, now);
     const status = view === 'complete' ? 'complete' : 'active';
     const filtered = tasks.filter((task) => (status === 'complete'
       ? task.status === 'complete'
@@ -1107,7 +1221,7 @@
     const views = [
       { key: 'active', label: '진행 중', count: activeCount },
       { key: 'complete', label: '완료', count: completeCount },
-      { key: 'org', label: '전체 조직도', count: tasks.length },
+      { key: 'org', label: '관제탑', count: tasks.length },
     ];
     return `
       <div class="h-session-views">
@@ -1359,8 +1473,8 @@
   load();
 
   window.USAGE_RENDER = {
-    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioOrg, renderTask,
-    sessionTreeNodes, portfolioTreeNodes, phaseTimeline, sessionUsageDeltas,
+    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
+    sessionTreeNodes, pipelineFromTask, renderBoard, phaseTimeline, sessionUsageDeltas,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
     wireOrgViews, fitPendingOrgViews, fitOrgView, zoomOrgView, orgViewState, load,
   };

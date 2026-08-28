@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { createUsageRenderers } from './render-sandbox.mjs';
 import worker from '../worker/src/index.js';
 
@@ -52,7 +52,7 @@ const tasks = [
 const renderers = createUsageRenderers();
 assert.equal(typeof renderers.renderSessionViews, 'function', '상태 탭 renderer가 공개되어야 합니다.');
 assert.equal(typeof renderers.renderSessionView, 'function', '상태별 세션 renderer가 공개되어야 합니다.');
-assert.equal(typeof renderers.renderPortfolioOrg, 'function', '전체 조직도 renderer가 공개되어야 합니다.');
+assert.equal(typeof renderers.renderPortfolioBoard, 'function', '관제탑 renderer가 공개되어야 합니다.');
 
 const views = renderers.renderSessionViews(tasks, NOW);
 assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="2"/u);
@@ -69,13 +69,13 @@ assert.match(complete, /완료 Gamma/u);
 assert.match(complete, /완료 Delta/u);
 assert.doesNotMatch(complete, /진행 Alpha|진행 Beta/u);
 
-const org = renderers.renderPortfolioOrg(tasks, NOW);
+const org = renderers.renderPortfolioBoard(tasks, NOW);
 for (const expected of [
   '진행 Alpha', '진행 Beta', '완료 Gamma', '완료 Delta',
   'Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main',
   'Gamma Main', 'Gamma 검토 서브에이전트', 'Gamma WebGPT',
 ]) {
-  assert.equal((org.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected}는 전체 조직도에 한 번만 있어야 합니다.`);
+  assert.equal((org.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected}는 관제탑에 한 번만 있어야 합니다.`);
 }
 assert.equal((org.match(/data-portfolio-task=/gu) || []).length, 4);
 assert.equal((org.match(/data-actor-id=/gu) || []).length, 6);
@@ -136,7 +136,7 @@ const apiResponse = await worker.fetch(new Request('https://api.test/api/usage',
 assert.equal(apiResponse.status, 200);
 const apiPayload = await apiResponse.json();
 assert.equal(apiPayload.tasks.length, 13);
-const retainedOrg = renderers.renderPortfolioOrg(apiPayload.tasks, NOW);
+const retainedOrg = renderers.renderPortfolioBoard(apiPayload.tasks, NOW);
 assert.equal((retainedOrg.match(/data-portfolio-task=/gu) || []).length, 13);
 assert.equal((retainedOrg.match(/data-actor-id=/gu) || []).length, 13);
 assert.match(retainedOrg, /보존 세션 01/u);

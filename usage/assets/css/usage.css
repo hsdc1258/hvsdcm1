@@ -681,3 +681,299 @@
     display: none;
   }
 }
+/* ==========================================================================
+   관제탑 (.pl-*) — 파이프라인 진행 보드
+   ==========================================================================
+   출처와 예외: 이 블록은 사용자가 승인한 관제탑 원본
+   `Claude/sessions/2026-08-28-자율-멀티파이프라인/orgchart.html`의 조판을 **그대로**
+   이식한 것이다 (P-C plan.md §1b: "DESIGN.md 재해석 금지"). 그래서 이 블록만은 사이트
+   토큰이 아니라 원본의 팔레트·서체·px 치수를 쓴다. 나머지 화면(사용량 뷰·셸)은 그대로
+   system.css의 토큰을 소비한다.
+
+   사이트 셸과 충돌해 조정한 것은 셋뿐이다:
+     1) 라이트 팔레트를 뺐다 — 이 사이트는 <meta name="color-scheme" content="dark">의
+        다크 전용이라 라이트 분기는 도달할 수 없는 코드가 된다. 원본의 다크 값만 남겼다.
+     2) 색을 커스텀 프로퍼티로 정의하지 않고 리터럴로 적었다 — 토큰 *정의*의 단일 원본은
+        system.css이고 그 규칙은 게이트가 강제한다 (DESIGN.md §3 마지막 줄).
+     3) 보드 바깥 배경(원본 --bg #14151B)을 깔지 않는다 — 페이지 캔버스가 이미 --bg(#000)다.
+
+   대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"). 위 이식 팔레트가 만드는 조합 전부:
+     #E8E9EE on #1D1F28 (카드 본문)        13.54:1
+     #E8E9EE on #000    (보드 제목)        17.32:1
+     #9A9CAC on #1D1F28 (부제·노트·메타)    6.04:1
+     #9A9CAC on #000    (보드 부제·범례)    7.73:1
+     #8B9AF2 on #1D1F28 (담당 모델 라벨)    6.26:1
+     #8B9AF2 on #272B44 (서브에이전트 칩)   5.28:1
+     #5FBF8A on #1E3328 (완료 뱃지)         5.97:1
+     #E0A94F on #3A2F1B (진행 뱃지)         6.21:1
+     #8D8F9E on #262833 (대기 뱃지)         4.57:1
+     #5FBF8A on #1D1F28 (단계 상태 '완료')   7.28:1
+     #E0A94F on #1D1F28 (단계 상태 '진행 중') 7.79:1
+     #8D8F9E on #1D1F28 (단계 상태 '대기'·'기록 없음') 5.13:1
+   본문 하한 4.5:1을 전부 넘는다. 레일 점(그래픽, 하한 3:1)은 카드 면 #1D1F28 위에서
+     #5FBF8A 7.28 / #E0A94F 7.79 / #8D8F9E 5.13 이다.
+
+   하네스 피드 통합에서 더한 것 (2026-08-28):
+     - 단계 상태가 넷이 됐다. 원본의 완료·진행·대기에 **기록 없음**(보고된 적 없는 단계)이
+       붙는다. 색만으로 넷을 가르지 않는다 — 기록 없음은 마디를 **점선 빈 원**으로 그리고,
+       모든 단계가 `.pl-state` 글자 라벨을 함께 낸다. 색각·흑백 인쇄에서도 구분된다.
+     - `.pl-state`는 새 색을 만들지 않는다. 위 표의 마디 색을 그대로 글자에 쓰므로
+       대비는 이미 실측된 값이고, 셋 다 본문 하한 4.5:1을 넘는다.
+   ========================================================================== */
+.pl-board {
+  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #e8e9ee;
+}
+.pl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 20px;
+  margin-bottom: 6px;
+}
+.pl-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.pl-window {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  color: #9a9cac;
+}
+.pl-sub {
+  margin: 0 0 22px;
+  font-size: 14px;
+  color: #9a9cac;
+}
+.pl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  color: #9a9cac;
+}
+.pl-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8d8f9e;
+}
+.pl-dot.is-ok {
+  background: #5fbf8a;
+}
+.pl-dot.is-run {
+  background: #e0a94f;
+}
+.pl-dot.is-skip {
+  background: transparent;
+  border: 1.5px dashed #8d8f9e;
+}
+.pl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.pl-card {
+  padding: 18px 18px 14px;
+  background: #1d1f28;
+  border: 1px solid #333542;
+  border-radius: 10px;
+}
+.pl-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pl-card-title {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: normal;
+}
+.pl-task {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: #9a9cac;
+}
+.pl-badge {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: #262833;
+  color: #8d8f9e;
+}
+.pl-badge.is-ok {
+  background: #1e3328;
+  color: #5fbf8a;
+}
+.pl-badge.is-run {
+  background: #3a2f1b;
+  color: #e0a94f;
+}
+.pl-orch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border: 1px dashed #333542;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #9a9cac;
+}
+/* 총괄 줄은 이름(본문색)과 모델(모노 강조색) 둘로 갈린다 — 모델만 적으면 같은 모델을
+   쓰는 총괄이 서로 구분되지 않는다. 이름은 #E8E9EE on #1D1F28 13.54:1. */
+.pl-orch b {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #e8e9ee;
+}
+/* 세로 단계 레일 — 선은 ::before, 마디는 ::after. 첫·마지막 단계에서 선을 마디까지만
+   그려 레일이 카드 밖으로 새지 않는다. */
+.pl-stage {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 7px 0 7px 22px;
+}
+.pl-stage::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 2px;
+  background: #333542;
+}
+.pl-stage::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 2.5px;
+  width: 11px;
+  height: 11px;
+  border: 2.5px solid #8d8f9e;
+  border-radius: 50%;
+  background: #1d1f28;
+}
+.pl-stage.is-ok::after {
+  border-color: #5fbf8a;
+  background: #5fbf8a;
+}
+.pl-stage.is-run::after {
+  border-color: #e0a94f;
+}
+/* 기록 없음 — 보고된 적이 없어 "지나갔다"고 말할 근거가 없는 단계. 대기와 같은 회색이지만
+   마디가 점선 빈 원이라 색을 못 보는 조건에서도 갈린다 (옆의 .pl-state 글자가 짝을 이룬다). */
+.pl-stage.is-skip::after {
+  border-style: dashed;
+  border-color: #8d8f9e;
+  background: transparent;
+}
+.pl-state {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 12px;
+  font-size: 11px;
+  color: #8d8f9e;
+  white-space: nowrap;
+}
+.pl-state.is-ok {
+  color: #5fbf8a;
+}
+.pl-state.is-run {
+  color: #e0a94f;
+}
+.pl-stage:first-of-type::before {
+  top: 14px;
+}
+.pl-stage:last-of-type::before {
+  bottom: calc(100% - 14px);
+}
+.pl-stage-main {
+  flex: 1;
+  min-width: 0;
+}
+.pl-stage-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+.pl-who {
+  margin-left: 7px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11.5px;
+  color: #8b9af2;
+}
+.pl-note {
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: #9a9cac;
+}
+.pl-cost {
+  margin-top: 2px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10.5px;
+  color: #9a9cac;
+  font-variant-numeric: tabular-nums;
+}
+.pl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.pl-chip {
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10.5px;
+  background: #272b44;
+  color: #8b9af2;
+}
+/* 측정된 진행도. 보고가 없는 칩에는 이 요소 자체가 없다 (0%로 그리지 않는다). */
+.pl-chip strong {
+  margin-left: 5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pl-meta {
+  padding-top: 8px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #9a9cac;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pl-foot {
+  margin-top: 26px;
+  font-size: 12.5px;
+  color: #9a9cac;
+}
+.pl-empty {
+  padding: var(--space-6) var(--space-4);
+  border: 1px solid #333542;
+  border-radius: 10px;
+  color: #9a9cac;
+  text-align: center;
+}
+@media (max-width: 420px) {
+  .pl-meta {
+    display: none;
+  }
+}
