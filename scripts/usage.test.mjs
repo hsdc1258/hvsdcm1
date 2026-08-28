@@ -199,7 +199,7 @@ test('the card head follows the freshest group, not the oldest or the row time',
     'claude-opus-5': { at: iso(2 * 60_000), buckets: { five_hour: { used_percentage: 44 } } },
     'claude-fable-5': { at: iso(4 * HOUR), buckets: { five_hour: { used_percentage: 12 } } },
   }, iso(4 * HOUR))]);
-  const head = markup.match(/Claude 한도<\/h3><\/div>\s*<span class="us-card-meta">([^<]*)</u);
+  const head = markup.match(/Claude 한도<\/h3>\s*<span class="us-card-meta">([^<]*)</u);
   assert.ok(head, '카드 머리의 수집 시각 메타를 찾지 못했다');
   assert.equal(head[1], '2분 전 수집');
 });
@@ -247,16 +247,24 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
   assert.doesNotMatch(markup, /summary-strip|활성 작업|작업 카테고리|작업 중 AI|Codex 최고 사용률/u);
 });
 
-// 세션 트리는 "지금 어디"가 아니라 **전 단계 + 실제 액터**를 항상 그린다 (plan §4-1).
+// 조직도는 **보고된 단계 + 실제 액터**를 그린다. 여덟 단계가 화면에서 사라지지는 않지만,
+// 보고가 없는 단계는 카드가 아니라 한 줄의 라벨-값으로 선다 (review-visual B2 — 빈 카드로
+// 골격을 채우던 조판을 걷어냈다). 판독 어휘(data-org-phase·data-phase-state)는 그대로다.
 test('the session tree always renders every phase plus the reported actors', () => {
   const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active', 'org');
-  for (const expected of ['사용자 입력', '요청 접수 · 범위 확인', '계약 · 증거 고정', '격리 구현 · 검증', '빌드 · 린트 · 테스트', '독립 반증 · 지적', '지적 반영 · 재검증', '판정 · 릴리스 결정', '배포 · 기록', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
+  for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 지적', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
-  // 여덟 단계가 모두 노드로 서고, 진행 단계는 상태만 다르다.
+  // 여덟 단계가 하나도 빠지지 않는다 — 카드가 된 것과 rest 줄로 내려간 것을 합쳐서다.
   assert.deepEqual(
-    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]),
-    ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'],
+    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]).sort(),
+    ['approve', 'done', 'gate', 'input', 'plan', 'review', 'revise', 'work'],
+  );
+  // 카드가 되는 것은 보고된 단계뿐이고, 그 순서는 여전히 사슬 순서다.
+  assert.deepEqual(
+    [...markup.matchAll(/data-org-phase="([a-z]+)" data-phase-state="(?:done|current)"/gu)]
+      .map((match) => match[1]),
+    ['plan', 'work', 'review'],
   );
   assert.match(markup, /data-org-phase="review" data-phase-state="current"/u);
   // 이벤트가 없는 세션이라 구 4단계 키만 완료로 접히고, 확장으로 생긴 gate·input은
@@ -266,10 +274,12 @@ test('the session tree always renders every phase plus the reported actors', () 
   assert.match(markup, /data-org-phase="input" data-phase-state="skipped"/u);
   assert.match(markup, /data-org-phase="revise" data-phase-state="pending"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
-  // 뿌리 → 총괄 → 단계 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
+  // 뿌리(총괄) → 단계 분기 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
   assert.match(markup, /<ul class="h-tree">/u);
-  assert.match(markup, /class="h-node is-request"/u);
-  assert.match(markup, /class="h-node is-lead/u);
+  assert.match(markup, /class="h-orgchart-root">\s*<article class="h-node is-lead/u);
+  // 사용자 입력은 조직도 노드가 아니다 — 요청 원문은 상세 머리의 inset 하나가 정본이다
+  // (review-visual M4 · DESIGN.md §1.1 "그 밖의 노드를 추측해 추가하지 않는다").
+  assert.doesNotMatch(markup, /h-node is-request/u);
   assert.doesNotMatch(markup, /<svg/u);
   // 보고된 액터 3명이 전부 자기 노드를 갖는다.
   assert.equal((markup.match(/data-actor-id=/gu) || []).length, 3);
@@ -388,12 +398,15 @@ test('unreported stages before the current one read as no-record, never as done'
     approve: 'skipped',
     done: 'done',
   });
-  // 건너뛴 단계는 상태 라벨로도 완료와 갈린다 — 노드는 그대로 서 있고 상태만 다르다.
-  // 개수는 세지 않고 **도출**한다: 건너뛴 단계마다 하나, 그리고 요청 원문을 보고하지 않은
-  // 세션이 그 사실을 말하는 두 자리(입력 노드 · 상세의 요청 원문 블록)가 더해진다.
+  // 건너뛴 단계는 카드가 아니라 rest 줄에 선다(review-visual B2). 판정 라벨은 **그 줄에
+  // 한 번** 나오고, 단계 자체는 개수만큼 span으로 남는다 — 여섯 장의 빈 카드가 여섯 번
+  // '기록 없음'을 반복하던 조판이 사라진 자리다.
   const skipped = (doneMarkup.match(/data-phase-state="skipped"/gu) || []).length;
-  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, skipped + 2);
-  assert.match(doneMarkup, /data-phase-state="skipped"/u);
+  assert.equal(skipped, 6);
+  assert.match(doneMarkup, /<dt>기록 없음<\/dt>/u);
+  // 남은 '기록 없음'은 둘뿐이다: rest 줄의 판정 라벨과, 요청 원문을 보고하지 않은
+  // 세션이 그 사실을 말하는 자리.
+  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, 2);
 });
 
 test('overall, module, and actor progress render only from reported artifacts', () => {
@@ -499,11 +512,13 @@ test('active, stale, and completed tabs separate session state while the portfol
   assert.match(activeMarkup, /진행 세션/u);
   assert.doesNotMatch(activeMarkup, /완료 세션|중단 세션/u);
 
-  // 중단은 완료와 같은 게시글 목록이지만 상태 라벨이 다르다 — 끝난 것과 멎은 것은
-  // 같은 말로 불리면 안 된다.
+  // 중단은 완료와 같은 게시글 목록이다. 끝난 것과 멎은 것을 가르는 말은 **상위 탭**이
+  // 낸다 — 목록이 한 상태로 고정돼 있으면 행마다 같은 배지를 되풀이하지 않는다
+  // (review-visual M3: 완료 10건 목록에서 '완료'가 필터·행·요약 셋으로 열 번 넘게 반복됐다).
   const staleMarkup = renderers.renderSessionView(tasks, NOW, 'stale');
   assert.match(staleMarkup, /중단 세션/u);
-  assert.match(staleMarkup, /status-dot is-warn[^>]*><\/span>중단됨/u);
+  assert.doesNotMatch(staleMarkup, /status-dot is-warn[^>]*><\/span>중단됨/u);
+  assert.match(views, /data-session-view="stale"[^>]*>\s*<span>중단됨<\/span>/u);
   assert.doesNotMatch(staleMarkup, /진행 세션|완료 세션/u);
 
   const completeMarkup = renderers.renderSessionView(tasks, NOW, 'complete');
@@ -618,18 +633,18 @@ test('the active panel carries a board/org mode toggle and remembers the choice'
   assert.match(board, /aria-pressed="true" data-active-mode="board"/u);
   assert.match(board, /aria-pressed="false" data-active-mode="org"/u);
   assert.match(board, /class="pl-board"/u);
-  assert.doesNotMatch(board, /class="h-flow"/u);
+  assert.doesNotMatch(board, /class="h-orgchart"/u);
 
   // 조직도 모드는 같은 세션 집합을 상세 트리로 그린다. 토글은 두 모드 모두에 남는다.
   const org = renderers.renderSessionView(tasks, NOW, 'active', 'org');
   assert.match(org, /aria-pressed="true" data-active-mode="org"/u);
-  assert.match(org, /class="h-flow"/u);
+  assert.match(org, /class="h-orgchart"/u);
   assert.doesNotMatch(org, /class="pl-board"/u);
 
   // 선택은 localStorage에 남아 새로고침·폴링을 넘어 유지된다 (계약 §A).
   renderers.writeActiveMode('org');
   assert.equal(renderers.readActiveMode(), 'org');
-  assert.match(renderers.renderSessionView(tasks, NOW, 'active'), /class="h-flow"/u);
+  assert.match(renderers.renderSessionView(tasks, NOW, 'active'), /class="h-orgchart"/u);
   // 모르는 값은 기본값으로 떨어진다 — 저장소가 오염돼도 화면이 비지 않는다.
   renderers.writeActiveMode('nonsense');
   assert.equal(renderers.readActiveMode(), 'board');
@@ -1275,16 +1290,32 @@ const wp3Task = () => harnessTask({
   ],
 });
 
-test('the detail org chart runs top-down on one axis and branches subagents to the right', () => {
+// 조직도는 **고전 조직도**다: 총괄이 뿌리로 서고 단계가 수평 trunk에서 갈라진다
+// (DESIGN.md §1.1 v9 · review-visual B1 — 데스크톱에 모바일 세로 직렬화가 나와 컨테이너
+// 오른쪽 62%가 빈 검은 면이던 것을 고쳤다).
+test('the detail org chart branches horizontally from one root, not down a single column', () => {
   const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active', 'org');
-  // 축은 입력 + 총괄 + 여덟 단계 = 열 단이다. 좌→우 트리(h-tree 뿌리)가 축을 대신하지 않는다.
-  assert.match(markup, /<div class="h-flow">/u);
-  assert.equal((markup.match(/class="h-flow-step"/gu) || []).length, 2 + 8);
+  assert.match(markup, /<div class="h-orgchart">/u);
+  // 뿌리는 하나(총괄)이고, 단계는 그 아래 분기로 갈라진다.
+  assert.equal((markup.match(/class="h-orgchart-root"/gu) || []).length, 1);
+  assert.match(markup, /class="h-orgchart-branches"/u);
+  // 카드가 되는 단계는 **근거가 있는 단계**뿐이다: 보고된 단계(done·current)이거나
+  // 액터가 실제로 붙은 단계. 여덟 장을 상시 세우던 골격이 아니다.
+  const blocks = markup.split(/<div class="h-orgchart-branch">/u).slice(1);
+  assert.ok(blocks.length < 8, '보고되지 않은 단계까지 카드로 세우면 다시 세로 적층이 된다');
+  assert.ok(blocks.length > 0, '분기가 하나도 없으면 이 검사는 공허하게 통과한다');
+  for (const block of blocks) {
+    assert.ok(
+      /data-phase-state="(?:done|current)"/u.test(block) || /class="h-branch"/u.test(block),
+      '보고도 액터도 없는 단계가 카드로 섰습니다',
+    );
+  }
+  // 그래도 여덟 단계는 화면에서 사라지지 않는다 — 나머지는 rest 줄이 받는다.
   assert.deepEqual(
-    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]),
-    ['input', 'plan', 'work', 'gate', 'review', 'revise', 'approve', 'done'],
+    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]).sort(),
+    ['approve', 'done', 'gate', 'input', 'plan', 'review', 'revise', 'work'],
   );
-  // 분기는 액터가 있는 단계에만 생긴다 (구현·게이트 둘).
+  // 액터 줄기는 액터가 있는 단계에만 생긴다 (구현·게이트 둘).
   assert.equal((markup.match(/class="h-branch"/gu) || []).length, 2);
   // 손계산 좌표가 아니라 CSS 조판이다 (DESIGN.md §10).
   assert.doesNotMatch(markup, /<svg/u);
@@ -1395,11 +1426,12 @@ test('a child actor keeps the phase the API gave it, and still names its parent'
   const renderers = createUsageRenderers();
   const markup = renderers.renderSessionView([crossPhaseTask()], NOW, 'active', 'org');
 
-  // 검토자는 부모(work)를 따라가지 않고 자기 단계(review)에 선다.
-  const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
+  // 검토자는 부모(work)를 따라가지 않고 자기 단계(review)에 선다. 경계는 **다음 단계
+  // 노드**다 — 어느 단계가 카드가 되는지는 보고 이력에 달렸으므로 키를 고정하지 않는다.
+  const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="/u.exec(markup)[0];
   assert.match(workBlock, /data-actor-id="cross:impl"/u);
   assert.doesNotMatch(workBlock, /data-actor-id="cross:reviewer"/u);
-  const reviewBlock = /data-org-phase="review"[\s\S]*?data-org-phase="revise"/u.exec(markup)[0];
+  const reviewBlock = /data-org-phase="review"[\s\S]*?data-org-phase="/u.exec(markup)[0];
   assert.match(reviewBlock, /data-actor-id="cross:reviewer"/u);
 
   // 배치가 옮겨져도 계층은 사라지지 않는다 — 부모를 이름으로 명시한다.
@@ -1556,13 +1588,14 @@ test('a stage with no report explains why it has no record', () => {
   const tree = renderers.renderSessionView([task], NOW, 'active', 'org');
   const board = renderers.renderPortfolioBoard([task], NOW);
   const reason = '이 단계는 보고가 전송되지 않았습니다';
-  // 보고된 적 없는 앞 단계(input·work·gate)마다 사유가 붙는다.
-  assert.match(tree, new RegExp(`data-phase-state="skipped"[\\s\\S]*?${reason}`, 'u'));
-  assert.equal((tree.match(new RegExp(reason, 'gu')) || []).length,
-    (tree.match(/data-phase-state="skipped"/gu) || []).length);
+  // 조직도에서 보고 없는 단계는 카드가 아니라 rest 줄이다. 판정('기록 없음')은 그 줄이
+  // 내고, **사유 문장은 관제탑이 낸다** — 밀집 카드 안의 서술문을 걷어낸 결과다
+  // (review-visual B2: 좁은 카드 폭에서 "전송되지 / 않았습니다"로 어색하게 접혔다).
+  assert.match(tree, /<dt>기록 없음<\/dt>[\s\S]*?data-phase-state="skipped"/u);
+  assert.doesNotMatch(tree, new RegExp(reason, 'u'));
   assert.match(board, new RegExp(`data-phase-state="skipped"[\\s\\S]*?${reason}`, 'u'));
   // 보고된 단계에는 사유를 붙이지 않는다 — 사유가 상태와 짝을 이룬다.
-  const planBlock = /data-org-phase="plan"[\s\S]*?data-org-phase="work"/u.exec(tree)[0];
+  const planBlock = /data-org-phase="plan"[\s\S]*?data-org-phase="/u.exec(board)[0];
   assert.doesNotMatch(planBlock, new RegExp(reason, 'u'));
 });
 
@@ -1591,7 +1624,6 @@ test('abbreviations are spelled out, in the UI chrome and in reported names alik
   for (const abbreviation of ['>REQUEST<', '>MAIN<', '>PHASE<', '>AGENT<', '>NODE<', 'ORG CHART', '>CODEX<', '>WEBGPT<', 'ARTIFACT']) {
     assert.ok(!markup.includes(abbreviation), `UI가 만든 약어가 남아 있습니다: ${abbreviation}`);
   }
-  assert.match(markup, />사용자 요청</u);
   assert.match(markup, />총괄</u);
   assert.match(markup, />단계</u);
   // 보고가 실어 온 약어는 풀어 쓴 형태로만 나온다 — 원문은 내부 필드에만 남는다.
@@ -1661,6 +1693,23 @@ test('the completed view shows the ten most recent sessions, grouped by date, wi
   assert.doesNotMatch(markup, /완료 세션 13/u);
 });
 
+// review-visual M3 — 상태 배지는 판단을 도울 때만 낸다. 한 상태로 고정된 목록에서는
+// 사라지고(위 'active, stale, and completed tabs…'), 혼재 목록에서만 다시 나온다.
+test('the post list shows a status badge only when the listed sessions differ in state', () => {
+  const renderers = createUsageRenderers();
+  const group = (tasks) => [{ label: '2026.08.27', ariaLabel: '테스트 목록', tasks }];
+  const complete = harnessTask({ id: 'mix-done', name: '완료 하나', status: 'complete', phase: 'done' });
+  const stale = harnessTask({ id: 'mix-stale', name: '중단 하나', status: 'stale' });
+
+  const single = renderers.renderPostList(group([complete]), 'complete', NOW);
+  assert.doesNotMatch(single, /class="h-post-state"/u);
+
+  const mixed = renderers.renderPostList(group([complete, stale]), 'complete', NOW);
+  assert.equal((mixed.match(/class="h-post-state"/gu) || []).length, 2);
+  assert.match(mixed, /h-post-state[\s\S]*?완료</u);
+  assert.match(mixed, /status-dot is-warn[^>]*><\/span>중단됨/u);
+});
+
 test('a completed list shorter than one page carries no more button', () => {
   const completed = [harnessTask({
     id: 'done-only', name: '하나뿐인 완료', status: 'complete', phase: 'done', progress: 100,
@@ -1690,6 +1739,33 @@ test('a user-authored title is the card title, byte for byte', () => {
   assert.equal(renderers.taskPresentation(task).name, '관제탑 UI 개선');
 });
 
+// review 기능 B M-2 — **반례: 지정한 제목이 마침 name과 같은 경우.**
+// 값만으로는 "사람이 지었다"와 "하위 호환으로 name을 물려받았다"가 갈리지 않아, 화면이
+// 지정 제목을 파생값으로 오판해 날짜 꼬리를 떼고 약어를 풀어 버렸다. 이제 Worker가
+// `title_authored`로 출처를 말하고, 그 값이 참이면 화면은 한 글자도 손대지 않는다.
+test('an authored title that happens to equal the name is still preserved byte for byte', () => {
+  const renderers = createUsageRenderers();
+  const task = harnessTask({
+    id: 'authored-equals-name',
+    name: 'WP2 관제탑 (08-29)',
+    title: 'WP2 관제탑 (08-29)',
+    title_authored: true,
+  });
+  assert.equal(renderers.taskPresentation(task).name, 'WP2 관제탑 (08-29)');
+  const markup = renderers.renderSessionView([task], NOW, 'active', 'org');
+  assert.match(markup, /WP2 관제탑 \(08-29\)/u);
+  assert.doesNotMatch(markup, /작업 묶음 2/u);
+});
+
+// 같은 값이라도 출처가 거짓이면(구 행에서 name을 물려받은 title) 예전 손질이 그대로다 —
+// 새 계약이 옛 화면의 결과를 바꾸지 않는다.
+test('the same title with a false provenance flag still gets the legacy cleanup', () => {
+  const renderers = createUsageRenderers();
+  assert.equal(renderers.taskPresentation({
+    name: 'WP2 관제탑 (08-29)', title: 'WP2 관제탑 (08-29)', title_authored: false,
+  }).name, '작업 묶음 2 — 관제탑');
+});
+
 test('a legacy report whose title is just the derived name keeps the old cleanup', () => {
   const renderers = createUsageRenderers();
   // Worker는 하위 호환으로 title이 없는 payload에 name을 그대로 채워 준다
@@ -1703,17 +1779,18 @@ test('a legacy report whose title is just the derived name keeps the old cleanup
   assert.equal(presentation.dateLabel, '08.29');
 });
 
-test('the reported request text is what the input node and the detail show', () => {
+// 요청 원문은 **한 면에서만** 난다 (review-visual M4). 예전에는 상단 inset과 조직도의
+// '사용자 입력' 카드가 완전히 같은 문장을 한 화면에 두 번 출력했고, 그 카드는 §1.1이
+// 만들지 말라고 한 "사람이 아닌 노드"이기도 했다. 남긴 쪽은 inset이다.
+test('the reported request text is shown once, in the detail inset', () => {
   const renderers = createUsageRenderers();
   const input = '완료된 파이프라인 목록을 게시글형으로 바꾸고\n한도 신선도를 보여 줘';
   const markup = renderers.renderSessionView([harnessTask({
     id: 'with-input', title: '관제탑 UI 개선', input,
   })], NOW, 'active', 'org');
-  // 상세의 요청 원문 블록과 조직도의 입력 노드가 같은 값을 낸다.
   assert.match(markup, /<section class="h-task-input"[\s\S]*?완료된 파이프라인 목록을 게시글형으로/u);
-  assert.match(markup, /h-node is-request[\s\S]*?완료된 파이프라인 목록을 게시글형으로/u);
-  // 예전에는 입력 노드가 제목을 대신 실었다 — 제목이 두 번 읽힐 뿐 요청은 어디에도 없었다.
-  assert.doesNotMatch(/<article class="h-node is-request[\s\S]*?<\/article>/u.exec(markup)[0], /관제탑 UI 개선/u);
+  assert.equal((markup.match(/완료된 파이프라인 목록을 게시글형으로/gu) || []).length, 1);
+  assert.doesNotMatch(markup, /h-node is-request/u);
   assert.equal(renderers.taskInput({ input }), input);
 });
 
@@ -1723,7 +1800,8 @@ test('a report with no request text says so instead of borrowing the title', () 
   })], NOW, 'active', 'org');
   const reason = '이 세션은 요청 원문을 보고하지 않았습니다';
   assert.match(markup, new RegExp(`h-task-input-empty">기록 없음 · ${reason}`, 'u'));
-  assert.match(markup, new RegExp(`h-node is-request[\\s\\S]*?${reason}`, 'u'));
+  // 사유도 한 번만 난다 — 조직도가 같은 문장을 되풀이하지 않는다.
+  assert.equal((markup.match(new RegExp(reason, 'gu')) || []).length, 1);
 });
 
 // ---- 수집 건강 상태 (조사 §f) ---------------------------------------------
@@ -1743,6 +1821,39 @@ test('each source names its last success, last attempt, and the reason it failed
   assert.match(markup, /마지막 시도<\/dt><dd>1분 전 · 원본 없음<\/dd>/u);
   // 마지막 **성공**이 SLO 안이면 고장 판정을 붙이지 않는다.
   assert.doesNotMatch(markup, /us-health is-breached/u);
+});
+
+// review 기능 B M-1 — **필드 부재와 명시적 null은 다른 사실이다.**
+// 예전에는 둘 다 parseTime(undefined|null) === null로 접혀, health를 아예 싣지 않는 구
+// Worker 응답이 2분 전에 수집됐어도 곧장 '30분 넘게 수집 성공 없음'으로 고발됐다.
+// 이 화면이 실제 배포보다 앞서 나갈 수 있는 한(정적 파일과 Worker의 배포 시점이 다르다)
+// 이 분기는 가정이 아니라 상시 조건이다.
+test('a snapshot from a Worker that predates health fields falls back to its row time', () => {
+  const markup = dashboard({
+    // health 세 필드가 **없다**. 구 Worker의 GET /api/usage가 정확히 이 모양이었다.
+    snapshots: [codexSnapshot({ primary: { used_percent: 40 } }, iso(2 * 60_000))],
+    tasks: [],
+  });
+  assert.doesNotMatch(markup, /us-health is-breached/u);
+  assert.match(markup, /마지막 수집 성공<\/dt><dd>2분 전<\/dd>/u);
+  // 결과 라벨은 지어내지 않는다 — 구 응답은 시도의 결과를 말한 적이 없다.
+  assert.match(markup, /마지막 시도<\/dt><dd>2분 전<\/dd>/u);
+});
+
+// 반대 방향의 반례: 같은 행 시각이어도 서버가 **명시적으로** "성공 기록 없음"이라고
+// 말했으면 그 판정을 화면이 행 시각으로 덮지 않는다.
+test('an explicit null last success stays a breach even when the row time is fresh', () => {
+  const markup = dashboard({
+    snapshots: [{
+      ...codexSnapshot({ primary: { used_percent: 40 } }, iso(2 * 60_000)),
+      last_success_at: null,
+      last_attempt_at: iso(60_000),
+      last_outcome: 'no-data',
+    }],
+    tasks: [],
+  });
+  assert.match(markup, /us-health is-breached/u);
+  assert.match(markup, /마지막 수집 성공<\/dt><dd>기록 없음<\/dd>/u);
 });
 
 test('a source whose last success breached the SLO is marked, not just reported', () => {
