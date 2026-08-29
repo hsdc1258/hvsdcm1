@@ -22,6 +22,14 @@
 /* rail 폭을 264~296에서 올렸다. 좁은 폭 스크린샷에서는 한 줄에 들어가는 문자열
    ("16분 전 수집 · 수집 지연")이 데스크톱 rail에서만 두 줄로 깨지며 '지연'만 다음
    줄에 홀로 남았다 — 데이터가 아니라 **폭 배분**의 문제였다 (review-visual M1). */
+/* 이 화면만 --container-wide(1200)보다 넓다. 탐색 사이드바가 생기면서 한 줄에 서는
+   열이 셋이 됐기 때문이다: 사이드바 244 + 세션 본문 + 한도 rail 340. 1200 안에서
+   셋을 나누면 본문이 560px로 떨어지고, 그 폭에서는 조직도 카드의 모델명이 세 줄로
+   접힌다(실측). 폭을 아끼는 대신 여백을 쓴다 — 토큰은 정의하지 않고 .container-wide의
+   여백 공식을 그대로 소비한다(system.css가 단일 원본이다). */
+.us-wide {
+  width: min(1480px, 100% - clamp(32px, 5vw, 56px));
+}
 .us-command-layout {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   align-items: start;
@@ -517,22 +525,22 @@
    §1.1은 usage가 요약 스트립을 쓰지 않는다고 못 박았다. 면·테두리·칸 구분선을 걷고
    노드의 사실 목록(.h-node-facts)과 같은 2열 그리드로 낮춘다 — 값은 그대로다.
    --text-3 on --bg 5.80 ✓ 캡션 · --text on --bg 17.32 ✓ */
-.h-task-facts {
+.h-task-facts, .md-facts {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 3px var(--space-3);
   align-items: baseline;
 }
-.h-task-facts > div {
+.h-task-facts > div, .md-facts > div {
   display: contents;
 }
-.h-task-facts dt {
+.h-task-facts dt, .md-facts dt {
   color: var(--text-3);
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
 }
-.h-task-facts dd {
+.h-task-facts dd, .md-facts dd {
   min-width: 0;
   margin: 0;
   color: var(--text);
@@ -979,14 +987,19 @@
   font-size: var(--fs-micro);
 }
 /* ==========================================================================
-   반응형 — 1100(rail 아래로) / 768(**조직도 분기를 축 아래로**) / 700(여백·탭) / 430(여백 압축)
+   반응형 — 1400(rail 아래로) / 768(**조직도 분기를 축 아래로**) / 700(여백·탭) / 430(여백 압축)
    좁은 화면에서는 트리를 **다시 조판한다**. 축소하지 않는다 (계약 §C).
    좌→우 분기는 트리 폭을 900px대로 부풀리는데, 그 폭을 300px대 화면에 넣는 방법은 둘뿐이다:
    ① 배율을 0.35 아래로 떨어뜨려 12px 글자를 4px로 만들거나(직전 리뷰 major 1이 잡은 결함),
    ② 분기를 축 아래로 내려 폭 자체를 '노드 하나 + 들여쓰기'로 줄이거나.
    여기서는 ②만 쓴다 — 이 화면에 `transform: scale`은 존재하지 않는다.
+
+   rail 접힘 기준은 1100에서 **1400**으로 올렸다. 탐색 사이드바가 244+32px를 먼저
+   가져가므로 예전 기준으로는 1101px 뷰포트에서 본문이 470px까지 내려간다 — 같은
+   숫자가 사이드바 이전과 이후에 서로 다른 폭을 뜻하게 된 것이다. 기준을 옮겨
+   본문이 예전과 비슷한 폭을 유지하게 한다.
    ========================================================================== */
-@media (max-width: 1100px) {
+@media (max-width: 1400px) {
   .us-command-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1441,5 +1454,292 @@
 @media (max-width: 420px) {
   .pl-meta {
     display: none;
+  }
+}
+/* ==========================================================================
+   모더 뷰 (.md-*) — 직접 명령 · 중요/제안/검토 · 실제 사용 모델
+   ==========================================================================
+   레퍼런스는 나머지 운영 화면과 같은 클라우드 콘솔 대시보드다(DESIGN.md §1.1).
+   새 색 토큰을 만들지 않았다 — 아래 대비 주석은 전부 system.css 상단 전수표의
+   실측값을 인용한 것이다.
+
+   조판 규칙
+   - 뷰는 한 번에 하나다. 기본 display가 none이어야 hidden 속성이 저자 규칙을 이긴다.
+   - 항목은 낱개 카드가 아니라 **하나의 목록**이다(§6 카드 스택 금지). .disclosure의
+     모양은 system.css가 갖고, 여기서는 그룹 안 테두리·곡률만 걷어 잇는다 —
+     끝난 세션 목록(.h-post-group)과 같은 처리다.
+   - 행은 **문제 한 줄 + 조치 한 줄**로 높이를 고르게 둔다. 원시 로그를 펼치지 않는다.
+   - 장식 프리미티브는 이 뷰에도 게이지가 없고 배지 하나뿐이다(§6 상한 2종).
+   - 강조색은 --accent 하나다. 상태색은 상태 배지에만 쓴다(§3).
+   ========================================================================== */
+.us-view {
+  display: none;
+}
+.us-view:not([hidden]) {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+/* 뇌·요약 모델과 대기열. 라벨-값 목록이므로 통계 타일을 만들지 않는다(§6). */
+.md-brain {
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.md-brain > .us-eyebrow {
+  margin-bottom: var(--space-3);
+}
+/* 모델 사실은 짧은 값 일곱 개다. 한 벌로 세로로 세우면 오른쪽 3분의 2가 빈 면으로
+   남고 화면이 그만큼 길어진다 — 폭이 있으면 **쌍을 두 벌씩** 흘려 밀도를 올린다
+   (§6 "미감과 컴팩트함을 동시에"). 값이 아니라 조판만 바뀐다. */
+@media (min-width: 701px) {
+  .md-brain .md-facts {
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+    column-gap: var(--space-5);
+  }
+}
+/* 모델 이름·ID는 글자 모양이 값의 일부다 — 조직도 노드(.h-node-fact-mono)와 같은 처리.
+   --text on --surface 16.61 ✓ */
+.md-fact-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  overflow-wrap: anywhere;
+}
+/* 확인되지 않은 값. 값이 있는 줄과 눈으로 갈려야 지어낸 값으로 읽히지 않는다.
+   --text-3 on --surface 4.99 ✓ 캡션 */
+.md-fact-unknown {
+  color: var(--text-3);
+}
+/* ---- 직접 명령 ---- */
+.md-composer {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.md-composer-input {
+  min-height: 88px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+  resize: vertical;
+}
+.md-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+/* --text-2 on --surface 7.03 ✓ */
+.md-composer-status {
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.md-composer-status:empty {
+  display: none;
+}
+/* ---- 분류 필터 ---- */
+.md-filter-set {
+  max-width: 100%;
+  overflow: hidden;
+}
+.md-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+}
+/* 개수는 라벨과 다른 무게로 낸다 — 숫자 배지를 따로 만들지 않는다(§6 장식 상한).
+   --text-3 on --surface-2 4.65 ✓ 캡션 · 선택 시 --surface-4 위 --text-2 4.41 ✓ 캡션 */
+.md-filter-count {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.md-filter-btn[aria-pressed="true"] .md-filter-count {
+  color: var(--text-2);
+}
+/* ---- 그룹 머리 ---- */
+.md-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.md-group-count {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+/* 분류가 무엇을 뜻하는지 한 문장. 제안 그룹에서는 이 줄이 "승인 전에는 실행되지
+   않는다"는 계약을 말한다 — 버튼 옆 힌트로만 두면 목록을 훑는 사람이 못 읽는다.
+   --text-2 on --bg 8.16 ✓ */
+.md-lead {
+  margin-top: calc(var(--space-2) * -1);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+/* ---- 항목 · 명령 목록 ---- */
+.md-items, .md-commands {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* 항목 목록과 명령 기록은 서로 다른 이야기다 — 붙여 두면 한 흐름으로 읽힌다. */
+.md-commands {
+  margin-top: var(--space-3);
+}
+.md-list {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+}
+.md-list > .md-item {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.md-list > .md-item + .md-item {
+  border-top: 1px solid var(--line-faint);
+}
+.md-item-head {
+  align-items: center;
+  gap: var(--space-3);
+}
+/* 상태 배지는 좁은 폭에서도 한 낱말이다. 줄이면 '승인 / 대기'로 쪼개져 상태가 두 줄이 된다. */
+.md-item-head > .badge {
+  flex: none;
+  white-space: nowrap;
+}
+.md-item-body {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+/* 문제 한 줄 · 조치 한 줄. 둘 다 한 줄 말줄임이라 행 높이가 하나로 모인다
+   (끝난 세션 목록의 .h-post-title과 같은 이유). 전문은 펼친 본문에 있다. */
+.md-item-issue, .md-item-action {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 펼치면 말줄임을 푼다. 접힌 행은 목록의 리듬을 위해 한 줄이지만, 표시하되 읽을 수
+   없으면 표시하지 않은 것과 같다(DESIGN.md §1.1 v10) — 그래서 전문을 되찾는 자리를
+   같은 줄에 둔다. 본문에 같은 문장을 한 벌 더 적으면 한 화면에 같은 문자열이 두 번 선다. */
+.md-item[open] > .md-item-head .md-item-issue, .md-item[open] > .md-item-head .md-item-action {
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-line-clamp: none;
+}
+/* --text-2 on --surface 7.03 ✓ */
+.md-item-action {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 400;
+}
+/* 명령 ID는 접힌 행에서도 보여야 한다 — 웹에서 보낸 명령과 D1·로컬 증거를 같은
+   문자열로 맞추는 것이 이 화면의 쓸모다. --text-3 on --surface 4.99 ✓ 캡션 */
+.md-item-id {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+/* ---- 펼친 본문 ---- */
+.md-quote {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-m);
+}
+/* --text-3 on --surface-2 4.65 ✓ 캡션 */
+.md-quote-label {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+}
+/* 명령은 사람이 쓴 글이라 줄바꿈이 의미다 — 요청 원문(.h-task-input-body)과 같은 처리.
+   --text on --surface-2 15.46 ✓ */
+.md-quote-body {
+  max-height: 14em;
+  overflow-y: auto;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 승인 전 실행 금지를 행 안에서 한 번 더 못박는다. 경고가 아니라 사실이므로
+   상태색을 칠하지 않는다(§3 — 상태색은 상태 표시 전용).
+   --text-2 on --surface-2 6.54 ✓ */
+.md-quote-note {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.md-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.md-edit {
+  display: grid;
+  gap: var(--space-2);
+}
+.md-edit-input {
+  min-height: 96px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  resize: vertical;
+}
+/* ---- 반응형 ---- */
+/* 좁은 폭에서는 한 줄에 세 가지(요약 · ID · 상태)를 나눠 담을 폭이 없다. 셋을 다 두면
+   요약이 열 몇 글자에서 잘려 목록이 읽히지 않는다. ID는 펼친 본문의 '명령 ID'가 이미
+   같은 값을 갖고 있으므로 여기서만 접고, 요약은 두 줄까지 허용해 폭 대신 높이를 쓴다.
+   전문은 그래도 행을 펼치면 나온다. */
+@media (max-width: 560px) {
+  .md-item-id {
+    display: none;
+  }
+  .md-item-issue {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  /* 펼침의 '전문을 되찾는다'는 계약은 좁은 폭에서도 그대로다 — 이 규칙이 뒤에 오므로
+     위 두 줄 자르기를 이긴다. */
+  .md-item[open] > .md-item-head .md-item-issue {
+    display: block;
+    -webkit-line-clamp: none;
+  }
+}
+@media (max-width: 700px) {
+  .md-brain, .md-composer {
+    padding: var(--space-3);
+  }
+  .md-composer-foot {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .md-composer-foot > .btn {
+    width: 100%;
+  }
+  .md-actions > .btn {
+    flex: 1 1 auto;
   }
 }

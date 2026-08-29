@@ -5,6 +5,10 @@ import test from 'node:test';
 import worker from './src/index.js';
 import {
   HARNESS_STALE_MS,
+  MODERATOR_COMMAND_CLAIM_SQL,
+  MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL,
+  MODERATOR_PROPOSAL_APPROVE_SQL,
+  MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL,
   USAGE_SNAPSHOT_UPSERT_SQL,
   effectiveHarnessStatus,
   fixedTimeEqual,
@@ -13,6 +17,7 @@ import {
   mergeHarnessReport,
 } from './src/router.js';
 import {
+  DAY_MS,
   clientIp,
   createToken,
   issueSession,
@@ -2969,6 +2974,571 @@ test('explicit project keys return one persisted project snapshot with monotonic
   assert.equal(secondBody.project_snapshot.usage.codex.measured_at, '2026-08-29T05:05:00.000Z');
   assert.deepEqual(secondBody.project_snapshot.delivery.changes, ['Bot worker 연결']);
   assert.deepEqual(secondBody.project_snapshot.delivery.verification, ['Worker API 200']);
+});
+
+function sqliteD1(database) {
+  let batchTail = Promise.resolve();
+  const wrap = (statement, values = []) => ({
+    bind(...nextValues) { return wrap(statement, nextValues); },
+    async first() {
+      const row = statement.get(...values);
+      return row === undefined ? null : { ...row };
+    },
+    async all() {
+      return { results: statement.all(...values).map((row) => ({ ...row })) };
+    },
+    async run() {
+      const result = statement.run(...values);
+      return {
+        success: true,
+        meta: {
+          changes: Number(result.changes),
+          last_row_id: Number(result.lastInsertRowid || 0),
+        },
+      };
+    },
+  });
+  return {
+    prepare(sql) { return wrap(database.prepare(sql)); },
+    batch(statements) {
+      const execute = async () => {
+        database.exec('BEGIN IMMEDIATE');
+        try {
+          const results = [];
+          for (const statement of statements) results.push(await statement.run());
+          database.exec('COMMIT');
+          return results;
+        } catch (error) {
+          database.exec('ROLLBACK');
+          throw error;
+        }
+      };
+      const result = batchTail.then(execute, execute);
+      batchTail = result.catch(() => {});
+      return result;
+    },
+  };
+}
+
+async function moderatorTestContext(t) {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) {
+    t.skip('node:sqlite unavailable');
+    return null;
+  }
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  for (let number = 1; number <= 11; number += 1) {
+    const prefix = String(number).padStart(4, '0');
+    const migrationNames = {
+      '0001': 'init',
+      '0002': 'answer_labels',
+      '0003': 'answer_context',
+      '0004': 'session_ip_address',
+      '0005': 'usage_snapshots',
+      '0006': 'harness_tasks',
+      '0007': 'harness_events',
+      '0008': 'login_attempt_limits',
+      '0009': 'usage_health_harness_heartbeat',
+      '0010': 'harness_project_snapshots',
+      '0011': 'moderator_control_plane',
+    };
+    const sql = readFileSync(
+      new URL(`./migrations/${prefix}_${migrationNames[prefix]}.sql`, import.meta.url),
+      'utf8',
+    );
+    database.exec(sql);
+  }
+  const createdAt = Date.now();
+  const owner = database.prepare(`
+    INSERT INTO users(username, password_hash, password_salt, created_at, disabled)
+    VALUES ('hvsdcm', 'unused', 'unused', ?, 0)
+  `).run(createdAt);
+  const student = database.prepare(`
+    INSERT INTO users(username, password_hash, password_salt, created_at, disabled)
+    VALUES ('student', 'unused', 'unused', ?, 0)
+  `).run(createdAt);
+  const insertSession = database.prepare(`
+    INSERT INTO sessions(token_hash, user_id, role, created_at, expires_at, last_seen_at)
+    VALUES (?, ?, 'user', ?, ?, ?)
+  `);
+  insertSession.run(
+    await sha256('owner-token'),
+    Number(owner.lastInsertRowid),
+    createdAt,
+    createdAt + DAY_MS,
+    createdAt,
+  );
+  insertSession.run(
+    await sha256('student-token'),
+    Number(student.lastInsertRowid),
+    createdAt,
+    createdAt + DAY_MS,
+    createdAt,
+  );
+  return {
+    database,
+    env: {
+      ALLOWED_ORIGIN: 'https://example.test',
+      OWNER_USERNAME: 'hvsdcm',
+      MODERATOR_DAEMON_TOKEN: 'daemon-token',
+      DB: sqliteD1(database),
+    },
+  };
+}
+
+function moderatorRequest(env, path, { method = 'GET', token = '', body } = {}) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  return worker.fetch(new Request(`https://api.test${path}`, {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), env);
+}
+
+test('moderator migration enforces kind states, proposal separation, and one active review', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database } = context;
+  const tables = database.prepare(`
+    SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name LIKE 'moderator_%'
+    ORDER BY name
+  `).all().map((row) => row.name);
+  assert.deepEqual(tables, ['moderator_commands', 'moderator_item_events', 'moderator_items']);
+  assert.throws(() => database.prepare(`
+    INSERT INTO moderator_items(
+      item_id, kind, status, issue_summary, action_summary, created_at, updated_at
+    ) VALUES ('bad-important', 'important', 'pending', 'issue', 'action', '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z')
+  `).run(), /CHECK constraint failed/u);
+  const insertReview = database.prepare(`
+    INSERT INTO moderator_items(
+      item_id, kind, status, issue_summary, action_summary,
+      lease_id, lease_until, created_at, updated_at
+    ) VALUES (?, 'review', 'running', 'issue', 'action', ?, '2026-08-29T01:00:00Z',
+      '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z')
+  `);
+  insertReview.run('review-one', 'lease-one');
+  assert.throws(() => insertReview.run('review-two', 'lease-two'), /UNIQUE constraint failed/u);
+  assert.match(MODERATOR_PROPOSAL_APPROVE_SQL, /status = 'pending'/u);
+  assert.match(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL, /changes\(\) > 0/u);
+  assert.match(MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL, /source_item_id/u);
+  assert.match(MODERATOR_COMMAND_CLAIM_SQL, /UPDATE moderator_commands[\s\S]*status = 'queued'/u);
+});
+
+test('moderator owner and daemon boundaries protect an atomic direct-command lease flow', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const anonymous = await moderatorRequest(env, '/api/moderator');
+  assert.equal(anonymous.status, 401);
+  assert.deepEqual(await anonymous.json(), { error: 'authentication_required' });
+  const nonOwner = await moderatorRequest(env, '/api/moderator', { token: 'student-token' });
+  assert.equal(nonOwner.status, 404);
+  assert.deepEqual(await nonOwner.json(), { error: 'Not found' });
+  const invalidPage = await moderatorRequest(env, '/api/moderator?limit=0', { token: 'owner-token' });
+  assert.equal(invalidPage.status, 400);
+  const duplicateCursor = await moderatorRequest(
+    env,
+    '/api/moderator?cursor=first&cursor=second',
+    { token: 'owner-token' },
+  );
+  assert.equal(duplicateCursor.status, 400);
+  const wrongDaemon = await moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'wrong-token',
+  });
+  assert.equal(wrongDaemon.status, 401);
+  assert.deepEqual(await wrongDaemon.json(), { error: 'daemon_unauthorized' });
+
+  const nullCommand = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token', body: null,
+  });
+  assert.equal(nullCommand.status, 400);
+  assert.deepEqual(await nullCommand.json(), { error: 'invalid_json' });
+  const oversized = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token',
+    body: { command: 'canary', idempotency_key: 'oversized', ignored: 'x'.repeat(64_001) },
+  });
+  assert.equal(oversized.status, 413);
+  assert.deepEqual(await oversized.json(), { error: 'request_too_large' });
+  const overlongCommand = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token',
+    body: { command: 'x'.repeat(8_193), idempotency_key: 'overlong-command' },
+  });
+  assert.equal(overlongCommand.status, 400);
+  const malformed = await worker.fetch(new Request('https://api.test/api/moderator/commands', {
+    method: 'POST',
+    headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json' },
+    body: '{',
+  }), env);
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(await malformed.json(), { error: 'invalid_json' });
+
+  const directBody = { command: 'write canary artifact', idempotency_key: 'direct-canary-1' };
+  const created = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token', body: directBody,
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get('access-control-allow-origin'), env.ALLOWED_ORIGIN);
+  const createdBody = await created.json();
+  assert.equal(createdBody.command.status, 'queued');
+  assert.equal(createdBody.command.requested_model, 'gpt-5.6-sol');
+  assert.equal(createdBody.duplicate, false);
+  const repeated = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token', body: directBody,
+  });
+  assert.equal(repeated.status, 200);
+  assert.equal((await repeated.json()).duplicate, true);
+  const conflicting = await moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST', token: 'owner-token',
+    body: { ...directBody, command: 'different command' },
+  });
+  assert.equal(conflicting.status, 409);
+
+  const claimed = await moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+  assert.equal(claimed.status, 200);
+  const claimBody = await claimed.json();
+  assert.equal(claimBody.command.command_id, createdBody.command.command_id);
+  assert.equal(claimBody.command.status, 'claimed');
+  assert.equal(claimBody.command.attempts, 1);
+  assert.match(claimBody.command.lease_id, /^lease_/u);
+  assert.equal(claimBody.active_task_count, 0);
+  assert.deepEqual(claimBody.counts, {
+    version: 1,
+    effective_active_tasks: 0,
+    active_commands: 1,
+    review_leases: 0,
+  });
+  const emptyClaim = await moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const emptyClaimBody = await emptyClaim.json();
+  assert.equal(emptyClaimBody.command, null);
+  assert.equal(emptyClaimBody.counts.active_commands, 1);
+
+  const statePath = `/api/moderator/daemon/commands/${claimBody.command.command_id}/state`;
+  const nullState = await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token', body: null,
+  });
+  assert.equal(nullState.status, 400);
+  const wrongLease = await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token', body: { state: 'running', lease_id: 'lease_wrong' },
+  });
+  assert.equal(wrongLease.status, 409);
+  const running = await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token',
+    body: { state: 'running', lease_id: claimBody.command.lease_id },
+  });
+  assert.equal(running.status, 200);
+  assert.equal((await running.json()).command.status, 'running');
+  const completed = await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token',
+    body: {
+      state: 'succeeded',
+      lease_id: claimBody.command.lease_id,
+      actual_model: 'gpt-5.6-sol',
+      actual_reasoning: 'xhigh',
+      issue_summary: 'Canary requested',
+      action_summary: 'Canary written',
+    },
+  });
+  assert.equal(completed.status, 200);
+  assert.equal((await completed.json()).command.status, 'succeeded');
+  const regression = await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token',
+    body: { state: 'running', lease_id: claimBody.command.lease_id },
+  });
+  assert.equal(regression.status, 409);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM moderator_commands').get().count, 1);
+});
+
+test('expired command leases recover once, exhaust safely, and fail an abandoned running command', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const create = (key) => moderatorRequest(env, '/api/moderator/commands', {
+    method: 'POST',
+    token: 'owner-token',
+    body: { command: `run ${key}`, idempotency_key: key },
+  });
+  const claim = () => moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+
+  const firstCreated = await create('claimed-crash');
+  const firstId = (await firstCreated.json()).command.command_id;
+  const firstClaim = (await (await claim()).json()).command;
+  assert.equal(firstClaim.command_id, firstId);
+  database.prepare(`
+    UPDATE moderator_commands SET lease_until = '2000-01-01T00:00:00.000Z'
+    WHERE command_id = ?
+  `).run(firstId);
+  const secondClaim = (await (await claim()).json()).command;
+  assert.equal(secondClaim.command_id, firstId);
+  assert.equal(secondClaim.attempts, 2);
+  database.prepare(`
+    UPDATE moderator_commands SET lease_until = '2000-01-01T00:00:00.000Z'
+    WHERE command_id = ?
+  `).run(firstId);
+  assert.equal((await (await claim()).json()).command, null);
+  const exhausted = database.prepare(`
+    SELECT status, attempts, issue_summary, action_summary
+    FROM moderator_commands WHERE command_id = ?
+  `).get(firstId);
+  assert.deepEqual({ ...exhausted }, {
+    status: 'failed',
+    attempts: 2,
+    issue_summary: 'Command lease expired',
+    action_summary: 'Execution stopped without a valid lease',
+  });
+
+  const runningCreated = await create('running-crash');
+  const runningId = (await runningCreated.json()).command.command_id;
+  const runningClaim = (await (await claim()).json()).command;
+  const statePath = `/api/moderator/daemon/commands/${runningId}/state`;
+  assert.equal((await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token',
+    body: { state: 'running', lease_id: runningClaim.lease_id },
+  })).status, 200);
+  database.prepare(`
+    UPDATE moderator_commands SET lease_until = '2000-01-01T00:00:00.000Z'
+    WHERE command_id = ?
+  `).run(runningId);
+  assert.equal((await (await claim()).json()).command, null);
+  assert.equal(
+    database.prepare('SELECT status FROM moderator_commands WHERE command_id = ?').get(runningId).status,
+    'failed',
+  );
+  assert.equal(moderatorActiveCommandsForTest(database), 0);
+});
+
+function moderatorActiveCommandsForTest(database) {
+  return database.prepare(`
+    SELECT COUNT(*) AS count FROM moderator_commands
+    WHERE status IN ('queued', 'claimed', 'running')
+  `).get().count;
+}
+
+test('simultaneous proposal approvals and command claims each produce one winner', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const proposal = await moderatorRequest(env, '/api/moderator/daemon/items', {
+    method: 'POST',
+    token: 'daemon-token',
+    body: {
+      item_id: 'proposal-race',
+      kind: 'proposal',
+      issue_summary: 'Race approval',
+      action_summary: 'Approve exactly once',
+      proposed_command: 'write race canary',
+    },
+  });
+  assert.equal(proposal.status, 201);
+  const approve = () => moderatorRequest(env, '/api/moderator/items/proposal-race/decision', {
+    method: 'POST', token: 'owner-token', body: { action: 'approve' },
+  });
+  const approvals = await Promise.all([approve(), approve()]);
+  assert.deepEqual(approvals.map((response) => response.status).sort(), [200, 409]);
+  assert.equal(
+    database.prepare('SELECT COUNT(*) AS count FROM moderator_commands WHERE source_item_id = ?')
+      .get('proposal-race').count,
+    1,
+  );
+  assert.equal(
+    database.prepare(`
+      SELECT COUNT(*) AS count FROM moderator_item_events
+      WHERE item_id = ? AND event = 'approved'
+    `).get('proposal-race').count,
+    1,
+  );
+
+  const claim = () => moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const claims = await Promise.all([claim(), claim()]);
+  const claimedCommands = await Promise.all(claims.map((response) => response.json()));
+  assert.equal(claimedCommands.filter((body) => body.command !== null).length, 1);
+  assert.equal(claimedCommands.filter((body) => body.command === null).length, 1);
+  assert.equal(
+    database.prepare('SELECT attempts FROM moderator_commands WHERE source_item_id = ?')
+      .get('proposal-race').attempts,
+    1,
+  );
+});
+
+test('proposal approval queues exactly once and idle review leases remain exclusive', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const daemonItem = (body) => moderatorRequest(env, '/api/moderator/daemon/items', {
+    method: 'POST', token: 'daemon-token', body,
+  });
+  const overlongSummary = await daemonItem({
+    item_id: 'important-too-long',
+    kind: 'important',
+    issue_summary: 'x'.repeat(241),
+    action_summary: 'Reject this item',
+  });
+  assert.equal(overlongSummary.status, 400);
+  const bypassedReview = await daemonItem({
+    item_id: 'review-bypass',
+    kind: 'review',
+    status: 'done',
+    issue_summary: 'No lease was acquired',
+    action_summary: 'This must be rejected',
+  });
+  assert.equal(bypassedReview.status, 400);
+  const proposal = await daemonItem({
+    item_id: 'proposal-canary',
+    kind: 'proposal',
+    issue_summary: 'A canary is needed',
+    action_summary: 'Approve the canary command',
+    proposed_command: 'write proposal canary',
+    brain_model: 'gpt-5.6-sol',
+    brain_reasoning: 'xhigh',
+  });
+  assert.equal(proposal.status, 201);
+  assert.equal((await proposal.json()).item.status, 'pending');
+  assert.equal(
+    database.prepare('SELECT COUNT(*) AS count FROM moderator_commands WHERE source_item_id = ?').get('proposal-canary').count,
+    0,
+  );
+  const nullDecision = await moderatorRequest(env, '/api/moderator/items/proposal-canary/decision', {
+    method: 'POST', token: 'owner-token', body: null,
+  });
+  assert.equal(nullDecision.status, 400);
+  const edit = await moderatorRequest(env, '/api/moderator/items/proposal-canary/decision', {
+    method: 'POST', token: 'owner-token',
+    body: { action: 'edit', edited_command: 'write edited proposal canary' },
+  });
+  assert.equal(edit.status, 200);
+  assert.equal((await edit.json()).item.status, 'pending');
+  assert.equal(
+    database.prepare('SELECT COUNT(*) AS count FROM moderator_commands WHERE source_item_id = ?').get('proposal-canary').count,
+    0,
+  );
+  const approve = await moderatorRequest(env, '/api/moderator/items/proposal-canary/decision', {
+    method: 'POST', token: 'owner-token', body: { action: 'approve' },
+  });
+  assert.equal(approve.status, 200);
+  const approvedBody = await approve.json();
+  assert.equal(approvedBody.item.status, 'approved');
+  assert.equal(approvedBody.command.command_text, 'write edited proposal canary');
+  const secondApprove = await moderatorRequest(env, '/api/moderator/items/proposal-canary/decision', {
+    method: 'POST', token: 'owner-token', body: { action: 'approve' },
+  });
+  assert.equal(secondApprove.status, 409);
+  assert.equal(
+    database.prepare('SELECT COUNT(*) AS count FROM moderator_commands WHERE source_item_id = ?').get('proposal-canary').count,
+    1,
+  );
+
+  const important = await daemonItem({
+    item_id: 'important-canary',
+    kind: 'important',
+    issue_summary: 'Owner attention needed',
+    action_summary: 'Acknowledge only',
+  });
+  assert.equal(important.status, 201);
+  const acknowledged = await moderatorRequest(env, '/api/moderator/items/important-canary/acknowledge', {
+    method: 'POST', token: 'owner-token', body: {},
+  });
+  assert.equal(acknowledged.status, 200);
+  assert.equal((await acknowledged.json()).item.status, 'acknowledged');
+  const secondAcknowledge = await moderatorRequest(env, '/api/moderator/items/important-canary/acknowledge', {
+    method: 'POST', token: 'owner-token', body: {},
+  });
+  assert.equal(secondAcknowledge.status, 409);
+
+  const deniedReview = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
+    method: 'POST', token: 'daemon-token',
+  });
+  assert.equal((await deniedReview.json()).lease, null, 'a queued proposal command blocks idle review');
+  const claim = await moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const claimed = (await claim.json()).command;
+  const statePath = `/api/moderator/daemon/commands/${claimed.command_id}/state`;
+  assert.equal((await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token', body: { state: 'running', lease_id: claimed.lease_id },
+  })).status, 200);
+  assert.equal((await moderatorRequest(env, statePath, {
+    method: 'POST', token: 'daemon-token',
+    body: {
+      state: 'succeeded', lease_id: claimed.lease_id,
+      issue_summary: 'Proposal approved', action_summary: 'Canary written',
+    },
+  })).status, 200);
+
+  const acquired = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const lease = (await acquired.json()).lease;
+  assert.match(lease.item_id, /^review_/u);
+  assert.equal(lease.project_key, 'claude-workspace');
+  assert.equal(Object.hasOwn(lease, 'allowed_paths'), false, 'server cannot authorize local paths');
+  const duplicateLease = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
+    method: 'POST', token: 'daemon-token',
+  });
+  assert.equal((await duplicateLease.json()).lease, null);
+  const finishedReview = await daemonItem({
+    item_id: lease.item_id,
+    kind: 'review',
+    status: 'done',
+    issue_summary: 'No blocker found',
+    action_summary: 'Review completed',
+    review_lease_id: lease.lease_id,
+  });
+  assert.equal(finishedReview.status, 200);
+  assert.equal((await finishedReview.json()).item.status, 'done');
+  const nextReview = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const staleLease = (await nextReview.json()).lease;
+  assert.ok(staleLease);
+  database.prepare(`
+    UPDATE moderator_items SET lease_until = '2000-01-01T00:00:00.000Z'
+    WHERE item_id = ?
+  `).run(staleLease.item_id);
+  const recoveredReview = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const recoveredLease = (await recoveredReview.json()).lease;
+  assert.ok(recoveredLease);
+  assert.notEqual(recoveredLease.item_id, staleLease.item_id);
+  const staleRow = database.prepare(`
+    SELECT status, action_summary FROM moderator_items WHERE item_id = ?
+  `).get(staleLease.item_id);
+  assert.equal(staleRow.status, 'failed');
+  assert.equal(staleRow.action_summary, 'Review lease expired before completion');
+
+  const firstPage = await moderatorRequest(env, '/api/moderator?limit=1', { token: 'owner-token' });
+  assert.equal(firstPage.status, 200);
+  const firstPageBody = await firstPage.json();
+  assert.equal(firstPageBody.items.length, 1);
+  assert.ok(firstPageBody.next_cursor);
+  const secondPage = await moderatorRequest(
+    env,
+    `/api/moderator?limit=1&cursor=${encodeURIComponent(firstPageBody.next_cursor)}`,
+    { token: 'owner-token' },
+  );
+  assert.equal(secondPage.status, 200);
+  const secondPageBody = await secondPage.json();
+  assert.notEqual(secondPageBody.items[0].item_id, firstPageBody.items[0].item_id);
+  const allItems = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
+  const allBody = await allItems.json();
+  const storedProposal = allBody.items.find((item) => item.item_id === 'proposal-canary');
+  assert.deepEqual(storedProposal.events.map((event) => event.event), ['created', 'edited', 'approved']);
+  assert.equal(storedProposal.worker_model, null);
+  assert.equal(JSON.stringify(allBody).includes('student-token'), false);
+  assert.equal(JSON.stringify(allBody).includes('ip_address'), false);
+  assert.equal(JSON.stringify(allBody).includes('user_agent'), false);
 });
 
 test('unexpected server errors do not expose internal details', async () => {

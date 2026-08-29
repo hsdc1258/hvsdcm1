@@ -2148,7 +2148,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/usage.js?v=20260829-orgchart-v10'],
+    'usage/index.html': ['/usage/assets/js/usage.js?v=20260829-moder-v11'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n6'],
@@ -2173,7 +2173,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'smstudy/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260829-orgchart-v10', '/usage/assets/css/usage.css?v=20260829-orgchart-v10'],
+    'usage/index.html': ['/assets/css/system.css?v=20260829-moder-v11', '/usage/assets/css/usage.css?v=20260829-moder-v11'],
     'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
