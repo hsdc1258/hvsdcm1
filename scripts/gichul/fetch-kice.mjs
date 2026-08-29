@@ -63,6 +63,10 @@ function formFromFilename(filename) {
   return null;
 }
 
+export function canonicalFormFromProvenance(sourceFilename, archiveEntry) {
+  return formFromFilename(archiveEntry || sourceFilename) || 'single';
+}
+
 function socialSubjectFromFilename(filename) {
   const value = compact(filename).replaceAll('·', '');
   if (value.includes('사회문화')) return 'soc_culture';
@@ -762,6 +766,9 @@ async function writeInventory(file, attachments) {
       fileSeq: attachment.fileSeq,
       sourceFilename: attachment.filename,
       archiveEntry: attachment.archiveEntry,
+      canonical_form: attachment.kind === 'question'
+        ? canonicalFormFromProvenance(attachment.filename, attachment.archiveEntry)
+        : 'single',
       grade_year: attachment.gradeYear,
       year: attachment.year,
       round: attachment.round,

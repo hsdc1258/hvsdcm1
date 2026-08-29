@@ -6,6 +6,7 @@ import test from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 
 import {
+  canonicalFormFromProvenance,
   classifyAttachment,
   fetchKice,
   lastPageFromHtml,
@@ -467,6 +468,7 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
     { boardID: '1500234', academicYear: 2025, area: '국어', subject: 'korean', round: 'csat' },
     { boardID: '1500234', academicYear: 2025, area: '영어', subject: 'english', round: 'csat' },
     { boardID: '1500234', academicYear: 2024, area: '국어', subject: 'korean', round: 'csat' },
+    { boardID: '1500234', academicYear: 2024, area: '영어', subject: 'english', round: 'csat' },
   ];
   const listHtml = new Map([
     ['2025-국어', `
@@ -484,6 +486,10 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
     ['2024-국어', `
       <a title='국어영역_문제지.pdf' onclick="fn_fileDown('99999999999999999999999999999999')">문제</a>
       <a title='국어영역_정답표.pdf' onclick="fn_fileDown('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')">정답</a>
+    `],
+    ['2024-영어', `
+      <a title='영어영역_문제지_짝수형.pdf' onclick="fn_fileDown('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')">짝수</a>
+      <a title='영어영역_정답표.pdf' onclick="fn_fileDown('cccccccccccccccccccccccccccccccc')">정답</a>
     `],
   ]);
   const downloads = [];
@@ -504,7 +510,7 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
     },
   });
 
-  assert.equal(results.length, 6);
+  assert.equal(results.length, 8);
   assert.deepEqual(downloads.sort(), [
     '22222222222222222222222222222222',
     '33333333333333333333333333333333',
@@ -512,6 +518,8 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
     '88888888888888888888888888888888',
     '99999999999999999999999999999999',
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    'cccccccccccccccccccccccccccccccc',
   ].sort());
   assert.ok(logs.some((message) => message.includes('국어영역_문제지_짝수형.pdf')));
   assert.ok(logs.some((message) => message.includes('영어영역_문제지_짝수형.pdf')));
@@ -520,8 +528,14 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
   assert.equal(await readFile(path.join(outputDirectory, '2024-csat-korean-question.pdf'), 'utf8'), '%PDF-fixture');
   assert.equal(await readFile(path.join(outputDirectory, '2023-csat-korean-question.pdf'), 'utf8'), '%PDF-fixture');
   const inventory = JSON.parse(await readFile(path.join(outputDirectory, 'crawl-inventory.json'), 'utf8'));
-  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-korean-question.pdf').sourceFilename,
-    '국어영역_문제지_홀수형.pdf');
+  const odd = inventory.files.find(({ target }) => target === '2024-csat-korean-question.pdf');
+  assert.equal(odd.sourceFilename, '국어영역_문제지_홀수형.pdf');
+  assert.equal(odd.canonical_form, 'odd');
+  assert.equal(inventory.files.find(({ target }) => target === '2023-csat-korean-question.pdf').canonical_form,
+    'single');
+  assert.equal(inventory.files.find(({ target }) => target === '2023-csat-english-question.pdf').canonical_form,
+    'even');
+  assert.equal(canonicalFormFromProvenance('국어영역.zip', '문제지_홀수형.pdf'), 'odd');
 });
 
 test('collector extracts live 2020-2022 CSAT subject ZIP naming variants in their area context', async (t) => {
