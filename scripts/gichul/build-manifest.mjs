@@ -297,7 +297,11 @@ export function detectAnswerTableLayout({ data, width, height }) {
     .filter(({ x }) => x >= selectionLeft - 2 && x <= right + 2)
     .map(({ x }) => ({ x: x / width, end: lineEnd(x) / height }));
   if (selectionLines.length < 2) throw new Error('이미지형 답안에서 선택과목 열 경계를 찾지 못했습니다.');
-  return { top: header.top / height, selection_lines: selectionLines };
+  return {
+    top: header.top / height,
+    common_lines: [left, selectionLeft].map((x) => ({ x: x / width, end: lineEnd(x) / height })),
+    selection_lines: selectionLines,
+  };
 }
 
 function explicitAnswerPageForms(pageTexts, label) {
@@ -388,13 +392,16 @@ export function deriveAnswerMetadata({
   gradeYear, subject, answerFormOrder,
 }) {
   const answerPages = answerFormPages(pageTexts, canonicalForm, label, answerFormOrder);
+  const firstSelectionQuestion = availability.subjects
+    .find(({ id }) => id === subject)?.selection_first_question;
   const definitions = trackDescriptorsFor(availability, gradeYear, subject)
     .filter(({ id, section_header: header }) => tracks.includes(id) && header)
     .map(({ id: track, section_header: header }) => ({ track, header }));
-  if (!definitions.length) return { answer_pages: answerPages, selections: new Map() };
+  if (!definitions.length) return { answer_pages: answerPages, common: [], selections: new Map() };
   if (!Array.isArray(pageLayouts) || pageLayouts.length !== pageTexts.length || definitions.length < 2) {
     throw new Error(`${label}: 선택과목 답안 열 좌표를 도출할 PDF layout이 없습니다.`);
   }
+  const common = [];
   const selections = new Map(definitions.map(({ track }) => [track, []]));
   for (const pageNumber of answerPages) {
     const layout = pageLayouts[pageNumber - 1];
@@ -413,6 +420,10 @@ export function deriveAnswerMetadata({
     }
     if (!present.length && pageRasterLayouts?.[pageNumber - 1]) {
       const raster = pageRasterLayouts[pageNumber - 1];
+      if (!Array.isArray(raster.common_lines) || raster.common_lines.length !== 2
+        || raster.common_lines.some(({ x, end }) => !Number.isFinite(x) || !Number.isFinite(end))) {
+        throw new Error(`${label}: ${pageNumber}쪽 이미지형 공통 답안 경계가 잘못되었습니다.`);
+      }
       const candidates = raster.selection_lines;
       const left = candidates[0].x;
       const right = candidates.at(-1).x;
@@ -427,6 +438,14 @@ export function deriveAnswerMetadata({
       }
       const bottom = Math.max(0, 1 - Math.min(...chosen.slice(1).map(({ end }) => end)) - 0.003);
       const top = Math.min(1, 1 - raster.top + 0.003);
+      common.push({
+        page: pageNumber,
+        x: raster.common_lines.map(({ x }) => Number(x.toFixed(6))),
+        y: [
+          Number(Math.max(0, 1 - Math.min(...raster.common_lines.map(({ end }) => end)) - 0.003).toFixed(6)),
+          Number(top.toFixed(6)),
+        ],
+      });
       definitions.forEach(({ track }, index) => {
         selections.get(track).push({
           page: pageNumber,
@@ -446,6 +465,34 @@ export function deriveAnswerMetadata({
         throw new Error(`${label}: ${pageNumber}쪽 선택과목 열 순서가 잘못되었습니다.`);
       }
     }
+    const firstSelectionLeft = centers[0].center - (centers[1].center - centers[0].center) / 2;
+    const commonHeader = headerBox(layout.items, '공통 과목');
+    const lastCommonQuestion = firstSelectionQuestion - 1;
+    const commonNumber = (number, descending) => {
+      const candidates = layout.items.filter((item) => compact(item.text) === String(number)
+        && item.y < commonHeader?.y
+        && item.x + item.width / 2 < firstSelectionLeft);
+      candidates.sort((left, right) => descending ? right.y - left.y : left.y - right.y);
+      return candidates[0] || null;
+    };
+    const firstCommon = commonNumber(1, true);
+    const lastCommon = commonNumber(lastCommonQuestion, false);
+    if (!commonHeader || !firstCommon || !lastCommon) {
+      throw new Error(`${label}: ${pageNumber}쪽 공통 답안 첫/마지막 문항을 찾지 못했습니다.`);
+    }
+    const commonTop = Math.min(layout.height, commonHeader.y + commonHeader.height + 36);
+    const commonBottom = Math.max(0, lastCommon.y - 12);
+    if (!(commonBottom < commonTop) || !(firstSelectionLeft > 0)) {
+      throw new Error(`${label}: ${pageNumber}쪽 공통 답안 crop이 잘못되었습니다.`);
+    }
+    common.push({
+      page: pageNumber,
+      x: [0, Number((firstSelectionLeft / layout.width).toFixed(6))],
+      y: [
+        Number((commonBottom / layout.height).toFixed(6)),
+        Number((commonTop / layout.height).toFixed(6)),
+      ],
+    });
     centers.forEach((entry, index) => {
       const left = index === 0
         ? entry.center - (centers[1].center - entry.center) / 2
@@ -475,7 +522,8 @@ export function deriveAnswerMetadata({
   for (const [track, regions] of selections) {
     if (!regions.length) throw new Error(`${label}: ${track} 답안 열을 찾지 못했습니다.`);
   }
-  return { answer_pages: answerPages, selections };
+  if (!common.length) throw new Error(`${label}: 공통 답안 영역을 찾지 못했습니다.`);
+  return { answer_pages: answerPages, common, selections };
 }
 
 async function readOverrides(file) {
@@ -559,11 +607,12 @@ export function validateManifest(exams, availability = DEFAULT_AVAILABILITY) {
         }
       }
     }
-    if (exam.answer_selection !== undefined) {
-      if (exam.kind !== 'answer' || !Array.isArray(exam.answer_selection) || !exam.answer_selection.length) {
-        throw new Error(`${exam.id}: answer_selection 값이 잘못되었습니다.`);
+    for (const field of ['answer_common', 'answer_selection']) {
+      if (exam[field] === undefined) continue;
+      if (exam.kind !== 'answer' || !Array.isArray(exam[field]) || !exam[field].length) {
+        throw new Error(`${exam.id}: ${field} 값이 잘못되었습니다.`);
       }
-      for (const region of exam.answer_selection) {
+      for (const region of exam[field]) {
         if (!region || !Number.isInteger(region.page) || !exam.answer_pages?.includes(region.page)
           || !Array.isArray(region.x) || region.x.length !== 2
           || !region.x.every(Number.isFinite) || region.x[0] < 0 || region.x[1] > 1
@@ -571,7 +620,7 @@ export function validateManifest(exams, availability = DEFAULT_AVAILABILITY) {
           || !Array.isArray(region.y) || region.y.length !== 2
           || !region.y.every(Number.isFinite) || region.y[0] < 0 || region.y[1] > 1
           || region.y[0] >= region.y[1]) {
-          throw new Error(`${exam.id}: answer_selection crop이 잘못되었습니다.`);
+          throw new Error(`${exam.id}: ${field} crop이 잘못되었습니다.`);
         }
       }
     }
@@ -624,8 +673,9 @@ export function validateManifest(exams, availability = DEFAULT_AVAILABILITY) {
     if (answer.canonical_form !== question.canonical_form || !Array.isArray(answer.answer_pages)) {
       throw new Error(`${answer.id}: 문제지 canonical_form과 답안 출력 메타데이터가 일치하지 않습니다.`);
     }
-    if (question.sections?.selection && !Array.isArray(answer.answer_selection)) {
-      throw new Error(`${answer.id}: 선택과목 발췌 답안 crop이 없습니다.`);
+    if (question.sections?.selection
+      && (!Array.isArray(answer.answer_common) || !Array.isArray(answer.answer_selection))) {
+      throw new Error(`${answer.id}: 공통/선택 답안 crop이 없습니다.`);
     }
   }
   return exams;
@@ -891,6 +941,7 @@ export async function buildManifest({
         } : {}),
         ...(sections.has(track) ? { sections: sections.get(track) } : {}),
         ...(answerMetadata ? { answer_pages: answerMetadata.answer_pages } : {}),
+        ...(answerMetadata?.common.length ? { answer_common: answerMetadata.common } : {}),
         ...(answerMetadata?.selections.has(track)
           ? { answer_selection: answerMetadata.selections.get(track) } : {}),
       });

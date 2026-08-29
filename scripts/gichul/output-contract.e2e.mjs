@@ -195,7 +195,13 @@ function canonicalAnswerPages(extracted, canonicalForm, formOrders, key) {
 function joinedHeaderBox(items, header) {
   const wanted = compact(header);
   const direct = items.find(({ text }) => compact(text) === wanted);
-  if (direct) return { center: direct.x + direct.width / 2 };
+  if (direct) return {
+    x: direct.x,
+    y: direct.y,
+    width: direct.width,
+    height: direct.height,
+    center: direct.x + direct.width / 2,
+  };
   const ordered = items.filter(({ text }) => compact(text)).sort((left, right) => left.x - right.x);
   for (let start = 0; start < ordered.length; start += 1) {
     let value = '';
@@ -207,8 +213,18 @@ function joinedHeaderBox(items, header) {
       if (maxY - minY > 4) break;
       value += compact(ordered[end].text);
       if (value === wanted) {
+        const parts = ordered.slice(start, end + 1);
+        const left = Math.min(...parts.map(({ x }) => x));
         const right = ordered[end].x + ordered[end].width;
-        return { center: (ordered[start].x + right) / 2 };
+        const bottom = Math.min(...parts.map(({ y }) => y));
+        const top = Math.max(...parts.map(({ y, height = 0 }) => y + height));
+        return {
+          x: left,
+          y: bottom,
+          width: right - left,
+          height: top - bottom,
+          center: (left + right) / 2,
+        };
       }
       if (!wanted.startsWith(value)) break;
     }
@@ -216,118 +232,271 @@ function joinedHeaderBox(items, header) {
   return null;
 }
 
-function textualTrackColumns(layout, definitions) {
-  const centers = definitions.map((definition) => ({
+function answerLastQuestion(firstQuestion) {
+  if (firstQuestion === 35) return 45;
+  if (firstQuestion === 23) return 30;
+  throw new Error(`답안 oracle이 지원하지 않는 선택 첫 문항입니다: ${firstQuestion}`);
+}
+
+function normalizedBox(box, layout) {
+  return {
+    x: [box.x / layout.width, (box.x + box.width) / layout.width],
+    y: [box.y / layout.height, (box.y + box.height) / layout.height],
+  };
+}
+
+function boxInsideClip(box, clip, layout, tolerance = 0.002) {
+  const normalized = normalizedBox(box, layout);
+  return normalized.x[0] >= clip.x[0] - tolerance
+    && normalized.x[1] <= clip.x[1] + tolerance
+    && normalized.y[0] >= clip.y[0] - tolerance
+    && normalized.y[1] <= clip.y[1] + tolerance;
+}
+
+function printedQuestionBox(items, number, headerBox) {
+  const wanted = String(number);
+  const candidates = items.filter((item) => compact(item.text) === wanted
+    && item.y < headerBox.y
+    && item.x + item.width / 2 <= headerBox.center + 2);
+  candidates.sort((left, right) => (
+    Math.abs((left.x + left.width / 2) - headerBox.center)
+      - Math.abs((right.x + right.width / 2) - headerBox.center)
+  ));
+  return candidates[0] || null;
+}
+
+function printedCommonQuestionBox(items, number, commonHeader, selectionHeaders, descending) {
+  const ordered = [...selectionHeaders].sort((left, right) => left.center - right.center);
+  const selectionLeft = ordered[0].center - (ordered[1].center - ordered[0].center) / 2;
+  const candidates = items.filter((item) => compact(item.text) === String(number)
+    && item.y < commonHeader.y
+    && item.x + item.width / 2 < selectionLeft);
+  candidates.sort((left, right) => descending ? right.y - left.y : left.y - right.y);
+  return candidates[0] || null;
+}
+
+function pointInsideClip(point, clip, tolerance = 0.002) {
+  return point.x >= clip.x[0] - tolerance && point.x <= clip.x[1] + tolerance
+    && point.y >= clip.y[0] - tolerance && point.y <= clip.y[1] + tolerance;
+}
+
+function textualAnswerSemantics(layout, definitions, clip) {
+  const headers = definitions.map((definition) => ({
     ...definition,
-    center: joinedHeaderBox(layout.items, definition.header)?.center,
+    headerBox: joinedHeaderBox(layout.items, definition.header),
   }));
-  if (centers.every(({ center }) => !Number.isFinite(center))) return null;
-  if (centers.some(({ center }) => !Number.isFinite(center))) {
-    throw new Error('답안 선택과목 헤더 일부만 판독됐습니다.');
+  if (headers.some(({ headerBox }) => !headerBox)) {
+    throw new Error('답안 의미 oracle이 선택과목 헤더 일부를 찾지 못했습니다.');
   }
-  centers.sort((left, right) => left.center - right.center);
-  return new Map(centers.map((entry, index) => {
-    const left = index === 0
-      ? entry.center - (centers[1].center - entry.center) / 2
-      : (centers[index - 1].center + entry.center) / 2;
-    const right = index === centers.length - 1
-      ? entry.center + (entry.center - centers[index - 1].center) / 2
-      : (entry.center + centers[index + 1].center) / 2;
-    return [entry.track, [Math.max(0, left / layout.width), Math.min(1, right / layout.width)]];
-  }));
-}
-
-function rasterTrackColumns(raster, definitions) {
-  if (!raster || raster.error || !Array.isArray(raster.selection_lines)) {
-    throw new Error(`이미지형 답안 표 판독 실패: ${raster?.error || 'raster 없음'}`);
-  }
-  const lines = raster.selection_lines;
-  const left = lines[0].x;
-  const right = lines.at(-1).x;
-  const chosen = Array.from({ length: definitions.length + 1 }, (_, index) => {
-    const target = left + (right - left) * index / definitions.length;
-    return [...lines].sort((a, b) => Math.abs(a.x - target) - Math.abs(b.x - target))[0];
+  const landmarks = headers.map((definition) => {
+    const header = definition.headerBox;
+    const first = printedQuestionBox(layout.items, definition.firstQuestion, header);
+    const last = printedQuestionBox(layout.items, answerLastQuestion(definition.firstQuestion), header);
+    if (!first || !last) {
+      throw new Error(`답안 의미 oracle이 ${definition.track} 첫/마지막 문항 행을 찾지 못했습니다.`);
+    }
+    const inside = [header, first, last].map((box) => boxInsideClip(box, clip, layout));
+    return {
+      track: definition.track,
+      complete: inside.every(Boolean),
+      partial: inside.some(Boolean) && !inside.every(Boolean),
+    };
   });
-  if (new Set(chosen).size !== chosen.length) throw new Error('이미지형 답안 열 경계가 중복됩니다.');
-  return new Map(definitions.map(({ track }, index) => (
-    [track, [chosen[index].x, chosen[index + 1].x]]
-  )));
+  const commonHeader = joinedHeaderBox(layout.items, '공통 과목');
+  if (!commonHeader) throw new Error('답안 의미 oracle이 공통 과목 헤더를 찾지 못했습니다.');
+  const firstCommon = printedCommonQuestionBox(layout.items, 1, commonHeader,
+    headers.map(({ headerBox }) => headerBox), true);
+  const lastCommon = printedCommonQuestionBox(layout.items,
+    definitions[0].firstQuestion - 1, commonHeader, headers.map(({ headerBox }) => headerBox), false);
+  if (!firstCommon || !lastCommon) {
+    throw new Error('답안 의미 oracle이 공통 첫/마지막 문항 행을 찾지 못했습니다.');
+  }
+  const commonInside = [commonHeader, firstCommon, lastCommon]
+    .map((box) => boxInsideClip(box, clip, layout));
+  return {
+    parts: [
+      ...(commonInside.every(Boolean) ? ['common'] : []),
+      ...landmarks.filter(({ complete }) => complete).map(({ track }) => track),
+    ],
+    partial_part_count: landmarks.filter(({ partial }) => partial).length
+      + (commonInside.some(Boolean) && !commonInside.every(Boolean) ? 1 : 0),
+  };
 }
 
-function nearPair(actual, expected, tolerance = 0.012) {
-  return Array.isArray(actual) && actual.length === 2
-    && Math.abs(actual[0] - expected[0]) <= tolerance
-    && Math.abs(actual[1] - expected[1]) <= tolerance;
+function rasterAnswerSemantics(raster, definitions, clip) {
+  if (!raster || raster.error || !Array.isArray(raster.selection_lines)) {
+    throw new Error(`이미지형 답안 의미 oracle 판독 실패: ${raster?.error || 'raster 없음'}`);
+  }
+  const lines = [...raster.selection_lines].sort((left, right) => left.x - right.x);
+  if (lines.length !== definitions.length + 1
+    || !Array.isArray(raster.common_lines) || raster.common_lines.length !== 2
+    || !Number.isFinite(raster.top)
+    || [...lines, ...raster.common_lines]
+      .some(({ x, end }) => !Number.isFinite(x) || !Number.isFinite(end))) {
+    throw new Error('이미지형 답안 의미 oracle의 표 경계 수가 선택과목 수와 다릅니다.');
+  }
+  const landmarks = definitions.map(({ track }, index) => {
+    const left = lines[index];
+    const right = lines[index + 1];
+    const x = (left.x + right.x) / 2;
+    const top = 1 - raster.top - 0.006;
+    const bottom = 1 - Math.min(left.end, right.end) + 0.006;
+    const inside = [
+      pointInsideClip({ x, y: top }, clip),
+      pointInsideClip({ x, y: bottom }, clip),
+    ];
+    return {
+      track,
+      complete: inside.every(Boolean),
+      partial: inside.some(Boolean) && !inside.every(Boolean),
+    };
+  });
+  const commonLines = [...raster.common_lines].sort((left, right) => left.x - right.x);
+  const commonX = (commonLines[0].x + commonLines[1].x) / 2;
+  const commonInside = [
+    pointInsideClip({ x: commonX, y: 1 - raster.top - 0.006 }, clip),
+    pointInsideClip({ x: commonX, y: 1 - Math.min(...commonLines.map(({ end }) => end)) + 0.006 }, clip),
+  ];
+  return {
+    parts: [
+      ...(commonInside.every(Boolean) ? ['common'] : []),
+      ...landmarks.filter(({ complete }) => complete).map(({ track }) => track),
+    ],
+    partial_part_count: landmarks.filter(({ partial }) => partial).length
+      + (commonInside.some(Boolean) && !commonInside.every(Boolean) ? 1 : 0),
+  };
+}
+
+export function inspectAnswerClip({ clip, layout, raster, definitions }) {
+  if (!clip || !Array.isArray(clip.x) || !Array.isArray(clip.y)
+    || clip.x.length !== 2 || clip.y.length !== 2
+    || !(clip.x[0] < clip.x[1]) || !(clip.y[0] < clip.y[1])) {
+    throw new Error('답안 crop 좌표가 잘못되었습니다.');
+  }
+  if (layout?.items?.some(({ text }) => compact(text))) {
+    return textualAnswerSemantics(layout, definitions, clip);
+  }
+  return rasterAnswerSemantics(raster, definitions, clip);
+}
+
+function answerPartsFromQuestionPages(questionPages, oracle) {
+  const pages = new Set(questionPages);
+  return [
+    ...(oracle.common.every((page) => pages.has(page)) ? ['common'] : []),
+    ...oracle.definitions.filter(({ track }) => (
+      oracle.selections.get(track).every((page) => pages.has(page))
+    )).map(({ track }) => track),
+  ];
+}
+
+function sameRegion(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function answerCounts({
-  segments, answerKey, answerEntryByTrack, selectedTracks, extracted, oracle, formOrders, mutation,
+  segments, answerKey, expectedParts, extracted, oracle, formOrders, mutation, mode,
+  answerPageCount, commonRegions = [], foreignRegions = [],
 }) {
   const matches = segments.filter(({ key }) => key === answerKey);
   if (matches.length !== 1) {
     return {
       noncanonical_form_page_count: 0,
-      common_entry_count: 0,
+      missing_common_count: expectedParts.includes('common') ? 1 : 0,
+      foreign_common_count: 0,
       foreign_track_entry_count: 0,
       dual_form_count: 0,
-      missing_track_count: selectedTracks.length,
+      missing_track_count: expectedParts.filter((part) => part !== 'common').length,
+      duplicate_entry_count: 0,
+      partial_entry_count: 0,
       segment_count_error: Math.abs(matches.length - 1),
     };
   }
   const segment = structuredClone(matches[0]);
   if (mutation === 'full-answer') {
-    segment.ranges = [[1, answerEntryByTrack.get(selectedTracks[0]).pages]];
+    segment.ranges = [[1, answerPageCount]];
     delete segment.clips;
+  } else if (mutation === 'answer-remove-common' && mode === 'full') {
+    segment.clips = (segment.clips || []).filter((clip) => (
+      !commonRegions.some((region) => sameRegion(clip, region))
+    ));
+  } else if (mutation === 'answer-empty') {
+    segment.ranges = [];
+    segment.clips = [];
+  } else if (mutation === 'answer-partial') {
+    segment.ranges = [];
+    segment.clips = (segment.clips || []).slice(0, 1);
+  } else if (mutation === 'answer-add-common' && mode === 'excerpt' && commonRegions[0]) {
+    segment.clips = [...(segment.clips || []), commonRegions[0]];
+  } else if (mutation === 'answer-add-foreign' && foreignRegions[0]) {
+    segment.clips = [...(segment.clips || []), foreignRegions[0]];
   }
   const canonicalPages = canonicalAnswerPages(extracted, oracle.canonicalForm, formOrders, answerKey);
   const explicitForms = explicitAnswerForms(extracted.pageTexts);
   const forms = explicitForms.every((form) => form === 'single') && oracle.canonicalForm !== 'single'
     ? formOrders.get(explicitForms.length) : explicitForms;
+  if (mutation === 'answer-dual-form') {
+    const otherPage = forms?.findIndex((form) => form !== oracle.canonicalForm);
+    const sourceRegion = segment.clips?.[0];
+    if (otherPage >= 0 && sourceRegion) {
+      segment.clips.push({ ...sourceRegion, page: otherPage + 1 });
+    }
+  }
   const wholePages = (segment.ranges || []).flatMap(([from, to]) => (
     Array.from({ length: to - from + 1 }, (_, index) => from + index)
   ));
-  if (wholePages.length) {
-    const actualForms = new Set(wholePages.map((page) => forms?.[page - 1] || 'single'));
-    return {
-      noncanonical_form_page_count: wholePages.filter((page) => !canonicalPages.includes(page)).length,
-      common_entry_count: wholePages.length,
-      foreign_track_entry_count: Math.max(0, oracle.definitions.length - selectedTracks.length),
-      dual_form_count: actualForms.size > 1 ? 1 : 0,
-      missing_track_count: 0,
-      segment_count_error: 0,
-    };
-  }
-
-  const found = new Set();
-  let foreign = 0;
+  const regions = [
+    ...wholePages.map((page) => ({ page, x: [0, 1], y: [0, 1] })),
+    ...(segment.clips || []),
+  ];
+  const found = new Map();
   let noncanonical = 0;
-  for (const clip of segment.clips || []) {
+  let partial = 0;
+  let segmentErrors = 0;
+  const clippedForms = new Set();
+  for (const clip of regions) {
     if (!canonicalPages.includes(clip.page)) noncanonical += 1;
+    clippedForms.add(forms?.[clip.page - 1] || 'single');
     const layout = extracted.pageLayouts?.[clip.page - 1];
     if (!layout) {
-      foreign += 1;
+      segmentErrors += 1;
       continue;
     }
-    const columns = textualTrackColumns(layout, oracle.definitions)
-      || rasterTrackColumns(extracted.pageRasterLayouts?.[clip.page - 1], oracle.definitions);
-    const matched = [...columns].find(([, expected]) => nearPair(clip.x, expected));
-    if (!matched || !selectedTracks.includes(matched[0])) foreign += 1;
-    else found.add(matched[0]);
+    const inspected = inspectAnswerClip({
+      clip,
+      layout,
+      raster: extracted.pageRasterLayouts?.[clip.page - 1],
+      definitions: oracle.definitions,
+    });
+    partial += inspected.partial_part_count;
+    for (const part of inspected.parts) {
+      found.set(part, (found.get(part) || 0) + 1);
+    }
   }
+  const expected = new Set(expectedParts);
+  const foreignCommon = expected.has('common') ? 0 : (found.get('common') || 0);
+  const foreignTracks = [...found].filter(([part]) => part !== 'common' && !expected.has(part))
+    .reduce((sum, [, count]) => sum + count, 0);
   return {
     noncanonical_form_page_count: noncanonical,
-    common_entry_count: 0,
-    foreign_track_entry_count: foreign,
-    dual_form_count: 0,
-    missing_track_count: selectedTracks.filter((track) => !found.has(track)).length,
-    segment_count_error: 0,
+    missing_common_count: expected.has('common') && !found.has('common') ? 1 : 0,
+    foreign_common_count: foreignCommon,
+    foreign_track_entry_count: foreignTracks,
+    dual_form_count: clippedForms.size > 1 ? 1 : 0,
+    missing_track_count: expectedParts.filter((part) => part !== 'common' && !found.has(part)).length,
+    duplicate_entry_count: [...found.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0),
+    partial_entry_count: partial,
+    segment_count_error: segmentErrors,
   };
 }
 
+function numericTotal(value) {
+  if (typeof value === 'number') return value;
+  if (!value || typeof value !== 'object') return 0;
+  return Object.values(value).reduce((sum, child) => sum + numericTotal(child), 0);
+}
+
 function anomalyTotal(result) {
-  return Object.values(result.full).reduce((sum, value) => sum + value, 0)
-    + Object.values(result.excerpt).reduce((sum, value) => sum + value, 0)
-    + Object.values(result.answer).reduce((sum, value) => sum + value, 0);
+  return numericTotal(result.full) + numericTotal(result.excerpt);
 }
 
 function mutateManifest(manifest, mutation) {
@@ -362,7 +531,23 @@ function mutateManifest(manifest, mutation) {
         answer.canonical_form = 'single';
       }
     }
-  } else if (mutation && mutation !== 'full-answer') {
+  } else if (mutation === 'answer-crop-empty') {
+    for (const exam of result.exams.filter(({ kind }) => kind === 'answer')) {
+      for (const field of ['answer_common', 'answer_selection']) {
+        if (Array.isArray(exam[field])) {
+          exam[field] = exam[field].map((clip) => ({ ...clip, y: [0, 0.01] }));
+        }
+      }
+    }
+  } else if (mutation && !new Set([
+    'full-answer',
+    'answer-remove-common',
+    'answer-empty',
+    'answer-partial',
+    'answer-add-common',
+    'answer-add-foreign',
+    'answer-dual-form',
+  ]).has(mutation)) {
     throw new Error(`알 수 없는 mutation: ${mutation}`);
   }
   return result;
@@ -397,11 +582,41 @@ async function mergeSegments(PDFDocument, sourceDirectory, segments) {
   return Buffer.from(await output.save({ useObjectStreams: false }));
 }
 
+async function inspectMergedCropBoxes(PDFDocument, bytes, segments) {
+  const output = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const pages = output.getPages();
+  const crops = [];
+  let pageIndex = 0;
+  for (const segment of segments) {
+    for (const [from, to] of segment.ranges || []) pageIndex += to - from + 1;
+    for (const clip of segment.clips || []) {
+      const page = pages[pageIndex];
+      assert.ok(page, `${segment.key}: 병합 답안 crop 페이지가 없습니다.`);
+      const { width, height } = page.getSize();
+      const actual = page.getCropBox();
+      const normalized = {
+        x: [actual.x / width, (actual.x + actual.width) / width],
+        y: [actual.y / height, (actual.y + actual.height) / height],
+      };
+      for (const axis of ['x', 'y']) {
+        assert.ok(Math.abs(normalized[axis][0] - clip[axis][0]) <= 0.00001
+          && Math.abs(normalized[axis][1] - clip[axis][1]) <= 0.00001,
+        `${segment.key}: 실제 병합 PDF의 ${axis} CropBox가 계획과 다릅니다.`);
+      }
+      crops.push({ page: pageIndex + 1, source_page: clip.page, x: normalized.x, y: normalized.y });
+      pageIndex += 1;
+    }
+  }
+  assert.equal(pageIndex, pages.length, '병합 PDF 페이지 수와 계획한 range/crop 수가 다릅니다.');
+  return crops;
+}
+
 async function writeRepresentativeOutputs({ manifest, groups, planner, sourceDirectory, outDirectory }) {
   const representatives = [
-    { key: '2025-06-math-question.pdf', track: 'hwaktong', mode: 'excerpt' },
     { key: '2022-csat-korean-question.pdf', track: 'hwajak', mode: 'full' },
+    { key: '2025-06-math-question.pdf', track: 'hwaktong', mode: 'full' },
     { key: '2024-csat-korean-question.pdf', track: 'hwajak', mode: 'excerpt' },
+    { key: '2024-csat-math-question.pdf', track: 'hwaktong', mode: 'excerpt' },
   ];
   const { PDFDocument } = await loadPdfLib();
   const files = [];
@@ -413,10 +628,12 @@ async function writeRepresentativeOutputs({ manifest, groups, planner, sourceDir
       ...planner.defaultState(), mode: representative.mode, includeAnswers: true,
     });
     const bytes = await mergeSegments(PDFDocument, sourceDirectory, plan.segments);
+    const answerCrops = await inspectMergedCropBoxes(PDFDocument, bytes, plan.segments);
+    assert.ok(answerCrops.length > 0, `${representative.key}: 실제 병합 답안 crop이 없습니다.`);
     const file = path.join(outDirectory,
       `${representative.key.replace(/-question[.]pdf$/u, '')}-${representative.track}-${representative.mode}.pdf`);
     await writeFile(file, bytes);
-    files.push({ file: path.basename(file), sha256: sha256(bytes) });
+    files.push({ file: path.basename(file), sha256: sha256(bytes), answer_crops: answerCrops });
   }
   return files;
 }
@@ -447,7 +664,10 @@ function validateAllAnswerPlans(manifest, planner) {
       const matchingAnswers = answers.filter(({ r2_key: key }) => key === segment.key);
       const selectionAnswer = matchingAnswers.some(({ answer_selection: regions }) => Array.isArray(regions));
       if (selectionAnswer) {
-        const expected = matchingAnswers.flatMap(({ answer_selection: regions = [] }) => regions)
+        const expected = [
+          ...matchingAnswers.flatMap(({ answer_common: regions = [] }) => regions),
+          ...matchingAnswers.flatMap(({ answer_selection: regions = [] }) => regions),
+        ]
           .map((region) => JSON.stringify(region));
         const actual = Array.from(segment.clips || [], (region) => JSON.stringify(region));
         assert.deepEqual(actual, [...new Set(expected)], `${questionKey}: 선택 답안 crop이 맞지 않습니다.`);
@@ -524,22 +744,41 @@ export async function runFullCorpusContract({
       const excerptPlan = planner.planSegments(selected, manifest, {
         ...planner.defaultState(), mode: 'excerpt', includeAnswers: true,
       });
-      const full = questionCounts('full', expandQuestionPages(fullPlan.segments, key), tracks, oracle);
-      const excerpt = questionCounts('excerpt', expandQuestionPages(excerptPlan.segments, key), tracks, oracle);
+      const fullQuestionPages = expandQuestionPages(fullPlan.segments, key);
+      const excerptQuestionPages = expandQuestionPages(excerptPlan.segments, key);
+      const fullQuestion = questionCounts('full', fullQuestionPages, tracks, oracle);
+      const excerptQuestion = questionCounts('excerpt', excerptQuestionPages, tracks, oracle);
       const answerEntries = new Map(selected.map((question) => {
         const answer = answerById.get(question.id.replace(/-question$/u, '-answer'));
         return [question.track, answer];
       }));
-      const answerKey = answerEntries.values().next().value?.r2_key;
-      const answer = answerCounts({
-        segments: excerptPlan.segments,
+      const firstAnswer = answerEntries.values().next().value;
+      const answerKey = firstAnswer?.r2_key;
+      const commonRegions = firstAnswer?.answer_common || [];
+      const foreignAnswer = group.filter((question) => !tracks.includes(question.track))
+        .map((question) => answerById.get(question.id.replace(/-question$/u, '-answer')))
+        .find((answer) => answer?.r2_key === answerKey);
+      const sharedAnswerInput = {
         answerKey,
-        answerEntryByTrack: answerEntries,
-        selectedTracks: tracks,
         extracted: answerExtractions.get(answerKey),
         oracle,
         formOrders,
         mutation,
+        answerPageCount: firstAnswer?.pages,
+        commonRegions,
+        foreignRegions: foreignAnswer?.answer_selection || [],
+      };
+      const fullAnswer = answerCounts({
+        ...sharedAnswerInput,
+        segments: fullPlan.segments,
+        expectedParts: answerPartsFromQuestionPages(fullQuestionPages, oracle),
+        mode: 'full',
+      });
+      const excerptAnswer = answerCounts({
+        ...sharedAnswerInput,
+        segments: excerptPlan.segments,
+        expectedParts: answerPartsFromQuestionPages(excerptQuestionPages, oracle),
+        mode: 'excerpt',
       });
       const result = {
         key,
@@ -547,27 +786,22 @@ export async function runFullCorpusContract({
         grade_year: group[0].grade_year,
         round: group[0].round,
         tracks,
-        full,
-        excerpt,
-        answer,
+        full: { question: fullQuestion, answer: fullAnswer },
+        excerpt: { question: excerptQuestion, answer: excerptAnswer },
       };
       if (anomalyTotal(result) !== 0) anomalous += 1;
       results.push(result);
     }
   }
   if (results.length !== 160) throw new Error(`전수 조합 수가 ${results.length}입니다.`);
-  if (anomalous !== 0) {
-    const first = results.find((result) => anomalyTotal(result) !== 0);
-    throw new Error(`${mutation || 'normal'}: 이상 조합 ${anomalous}/160; 첫 오류 ${JSON.stringify(first)}`);
-  }
 
   await mkdir(outDirectory, { recursive: true });
-  const representativeFiles = mutation ? [] : await writeRepresentativeOutputs({
+  const representativeFiles = mutation || anomalous ? [] : await writeRepresentativeOutputs({
     manifest, groups, planner, sourceDirectory, outDirectory,
   });
   const evidence = {
     schema: 'gichul-full-corpus-output-contract',
-    version: 1,
+    version: 2,
     generated_at: new Date().toISOString(),
     source_manifest_sha256: sha256(manifestBytes),
     shared_question_pdfs: groups.size,
@@ -579,6 +813,10 @@ export async function runFullCorpusContract({
     representative_files: representativeFiles,
   };
   await writeFile(path.join(outDirectory, 'output-contract.json'), `${JSON.stringify(evidence, null, 2)}\n`);
+  if (anomalous !== 0) {
+    const first = results.find((result) => anomalyTotal(result) !== 0);
+    throw new Error(`${mutation || 'normal'}: 이상 조합 ${anomalous}/160; 첫 오류 ${JSON.stringify(first)}`);
+  }
   return evidence;
 }
 
