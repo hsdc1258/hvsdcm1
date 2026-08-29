@@ -47,22 +47,6 @@
   };
   const ROUND_LABEL = { '06': '6월', '09': '9월', csat: '수능' };
   const ROUND_FILE = { '06': '06', '09': '09', csat: '수능' };
-  const SUBJECT_ORDER = ['korean', 'math', 'english', 'soc_culture', 'politics_law'];
-  const TRACK_ORDER = [null, 'hwajak', 'eonmae', 'hwaktong', 'mijeok', 'giha', 'ga', 'na'];
-  const ROUND_ORDER = ['06', '09', 'csat'];
-
-  const subjectRank = (value) => {
-    const index = SUBJECT_ORDER.indexOf(value);
-    return index === -1 ? SUBJECT_ORDER.length : index;
-  };
-  const trackRank = (value) => {
-    const index = TRACK_ORDER.indexOf(value || null);
-    return index === -1 ? TRACK_ORDER.length : index;
-  };
-  const roundRank = (value) => {
-    const index = ROUND_ORDER.indexOf(value);
-    return index === -1 ? ROUND_ORDER.length : index;
-  };
 
   function escapeHtml(value) {
     return String(value)
@@ -84,11 +68,33 @@
 
   const questionsOf = (manifest) => (manifest?.exams || []).filter((exam) => exam?.kind === 'question');
 
-  function compareExams(left, right) {
+  function preferredValues(manifest, type, subject) {
+    const availability = manifest?.availability;
+    if (type === 'subjects') return (availability?.subjects || []).map(({ id }) => id);
+    if (type === 'rounds') return (availability?.rounds || []).map(({ id }) => id);
+    if (type === 'tracks') {
+      return (availability?.subjects || []).find(({ id }) => id === subject)?.tracks?.map(({ id }) => id) || [];
+    }
+    return [];
+  }
+
+  function comparePreferred(left, right, preferred) {
+    const leftIndex = preferred.indexOf(left);
+    const rightIndex = preferred.indexOf(right);
+    const leftRank = leftIndex === -1 ? preferred.length : leftIndex;
+    const rightRank = rightIndex === -1 ? preferred.length : rightIndex;
+    return leftRank - rightRank || String(left ?? '').localeCompare(String(right ?? ''));
+  }
+
+  function orderedDistinct(values, preferred) {
+    return [...new Set(values)].sort((left, right) => comparePreferred(left, right, preferred));
+  }
+
+  function compareExams(left, right, manifest) {
     return left.grade_year - right.grade_year
-      || roundRank(left.round) - roundRank(right.round)
-      || subjectRank(left.subject) - subjectRank(right.subject)
-      || trackRank(left.track) - trackRank(right.track);
+      || comparePreferred(left.round, right.round, preferredValues(manifest, 'rounds'))
+      || comparePreferred(left.subject, right.subject, preferredValues(manifest, 'subjects'))
+      || comparePreferred(left.track, right.track, preferredValues(manifest, 'tracks', left.subject));
   }
 
   // 필터 선택지. 하드코딩하면 매니페스트가 늘어도 화면은 모른다.
@@ -96,10 +102,13 @@
     const questions = questionsOf(manifest);
     const forSubject = questions.filter((exam) => exam.subject === subject);
     return {
-      subjects: SUBJECT_ORDER.filter((key) => questions.some((exam) => exam.subject === key)),
+      subjects: orderedDistinct(questions.map((exam) => exam.subject), preferredValues(manifest, 'subjects')),
       years: [...new Set(forSubject.map((exam) => exam.grade_year))].sort((a, b) => a - b),
-      rounds: ROUND_ORDER.filter((key) => forSubject.some((exam) => exam.round === key)),
-      tracks: TRACK_ORDER.filter((key) => key !== null && forSubject.some((exam) => exam.track === key)),
+      rounds: orderedDistinct(forSubject.map((exam) => exam.round), preferredValues(manifest, 'rounds')),
+      tracks: orderedDistinct(
+        forSubject.map((exam) => exam.track).filter((track) => track !== null),
+        preferredValues(manifest, 'tracks', subject),
+      ),
     };
   }
 
@@ -112,7 +121,7 @@
         && passes(state.years, exam.grade_year)
         && passes(state.rounds, exam.round)
         && (exam.track === null || passes(state.tracks, exam.track)))
-      .sort(compareExams);
+      .sort((left, right) => compareExams(left, right, manifest));
   }
 
   const examLabel = (exam) => `${exam.grade_year}학년도 ${ROUND_LABEL[exam.round] || exam.round}`
@@ -148,13 +157,6 @@
 
     const downloadRows = [
       {
-        key: 'includeCommon',
-        title: '공통 파트 포함',
-        sub: '발췌할 때 공통 과목 페이지도 함께 담습니다.',
-        disabled: state.mode !== 'excerpt',
-        checked: state.includeCommon,
-      },
-      {
         key: 'includeAnswers',
         title: '정답표 포함',
         sub: '문제지 뒤에 해당 회차 정답표를 붙입니다.',
@@ -189,12 +191,8 @@
     if (state.mode === 'excerpt') {
       if (blocked) sub = '선택과목 구간이 없어 발췌할 수 없습니다';
       else {
-        // 순서는 병합 결과의 순서와 같게 읽힌다 — 공통 파트가 앞, 선택과목 발췌가 뒤다.
         const [from, to] = exam.sections.selection;
-        const common = state.includeCommon && Array.isArray(exam.sections.common)
-          ? `공통 ${exam.sections.common[0]}–${exam.sections.common[1]}쪽 · `
-          : '';
-        sub = `${common}발췌 ${from}–${to}쪽`;
+        sub = `선택과목만 ${from}–${to}쪽`;
       }
     }
     const id = `gi-pick-${exam.id}`;
@@ -262,30 +260,37 @@
   //
   // 같은 PDF를 두 번 담지 않는다: 2022학년도 이후 국어·수학은 화작/언매(확통/미적/기하)가
   // **같은 파일**의 다른 페이지 구간이므로, 전체 모드에서 둘을 함께 고르면 같은 시험지가
-  // 두 벌 들어간다. 발췌 모드의 공통 파트와 정답표도 같은 이유로 파일당 한 번만 담는다.
+  // 두 벌 들어간다. 공통 파트와 정답표도 같은 이유로 파일당 한 번만 담는다.
   function planSegments(exams, manifest, state) {
     const byId = new Map((manifest?.exams || []).map((exam) => [exam.id, exam]));
     const papers = [];
     const answerByPaper = new Map();
     const missingAnswers = [];
-    const seenFull = new Set();
+    const seenWhole = new Set();
     const seenCommon = new Set();
     const reportedMissing = new Set();
 
     for (const exam of exams) {
       if (state.mode === 'full') {
-        if (!seenFull.has(exam.r2_key)) {
-          seenFull.add(exam.r2_key);
+        if (isExcerptable(exam) && Array.isArray(exam.sections.common)) {
+          const ranges = [];
+          if (!seenCommon.has(exam.r2_key)) {
+            seenCommon.add(exam.r2_key);
+            ranges.push(exam.sections.common);
+          }
+          ranges.push(exam.sections.selection);
+          papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges });
+        } else if (!seenWhole.has(exam.r2_key)) {
+          seenWhole.add(exam.r2_key);
           papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges: [[1, exam.pages]] });
         }
       } else if (isExcerptable(exam)) {
-        const ranges = [];
-        if (state.includeCommon && Array.isArray(exam.sections.common) && !seenCommon.has(exam.r2_key)) {
-          seenCommon.add(exam.r2_key);
-          ranges.push(exam.sections.common);
-        }
-        ranges.push(exam.sections.selection);
-        papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges });
+        papers.push({
+          id: exam.id,
+          key: exam.r2_key,
+          label: examLabel(exam),
+          ranges: [exam.sections.selection],
+        });
       }
 
       if (!state.includeAnswers || answerByPaper.has(exam.r2_key)) continue;
@@ -334,8 +339,7 @@
     const subjects = [...new Set(exams.map((exam) => SUBJECT_LABEL[exam.subject] || exam.subject))];
     const tracks = [...new Set(exams.map((exam) => exam.track).filter(Boolean))]
       .map((track) => TRACK_SHORT[track] || track);
-    const rounds = ROUND_ORDER.filter((round) => exams.some((exam) => exam.round === round))
-      .map((round) => ROUND_FILE[round] || round);
+    const rounds = [...new Set(exams.map((exam) => exam.round))].map((round) => ROUND_FILE[round] || round);
     const head = subjects.length === 1
       ? `${subjects[0]}${tracks.length === 1 ? `-${tracks[0]}` : ''}`
       : '기출';
@@ -355,7 +359,6 @@
     rounds: [],
     tracks: [],
     mode: 'full',
-    includeCommon: true,
     includeAnswers: false,
     selected: [],
   });
@@ -393,12 +396,16 @@
       const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null');
       if (!saved || typeof saved !== 'object') return;
       const merged = { ...defaultState(), ...saved, selected: [] };
+      // v1 저장값의 includeCommon은 발췌 계약에서 삭제됐다. 펼쳐 합친 뒤에도 명시적으로
+      // 지워 오래된 localStorage가 planner나 화면에 다시 들어올 여지를 없앤다.
+      delete merged.includeCommon;
       merged.years = Array.isArray(merged.years) ? merged.years.map(Number).filter(Number.isFinite) : [];
-      merged.rounds = Array.isArray(merged.rounds) ? merged.rounds.filter((value) => ROUND_ORDER.includes(value)) : [];
-      merged.tracks = Array.isArray(merged.tracks) ? merged.tracks.filter((value) => value in TRACK_LABEL) : [];
-      if (!SUBJECT_ORDER.includes(merged.subject)) merged.subject = 'korean';
+      merged.rounds = Array.isArray(merged.rounds)
+        ? merged.rounds.filter((value) => typeof value === 'string' && value) : [];
+      merged.tracks = Array.isArray(merged.tracks)
+        ? merged.tracks.filter((value) => typeof value === 'string' && value) : [];
+      if (typeof merged.subject !== 'string' || !merged.subject) merged.subject = 'korean';
       if (merged.mode !== 'excerpt') merged.mode = 'full';
-      merged.includeCommon = merged.includeCommon !== false;
       merged.includeAnswers = merged.includeAnswers === true;
       state = merged;
     } catch {
@@ -619,7 +626,16 @@
     elements.body.innerHTML = '<p class="gi-empty">시험 목록을 불러오는 중입니다…</p>';
     try {
       const data = await window.HvsAccount.api('/api/gichul/manifest');
-      manifest = { exams: Array.isArray(data?.exams) ? data.exams : [] };
+      manifest = {
+        availability: data?.availability,
+        exams: Array.isArray(data?.exams) ? data.exams : [],
+      };
+      const subjects = facetsOf(manifest, state.subject).subjects;
+      if (subjects.length && !subjects.includes(state.subject)) state.subject = subjects[0];
+      const facets = facetsOf(manifest, state.subject);
+      state.years = state.years.filter((value) => facets.years.includes(value));
+      state.rounds = state.rounds.filter((value) => facets.rounds.includes(value));
+      state.tracks = state.tracks.filter((value) => facets.tracks.includes(value));
       paint();
       if (!manifest.exams.length) {
         status(failureBanner('아직 올라온 시험지가 없습니다.', ['매니페스트가 비어 있습니다.']));

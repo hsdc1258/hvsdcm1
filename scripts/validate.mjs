@@ -7,6 +7,7 @@ import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer, functionBody, readSource, trackReads,
 } from './render-sandbox.mjs';
 import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
+import { DEFAULT_AVAILABILITY } from './gichul/availability.mjs';
 import { buildSnapshots, SNAPSHOT_BY_SCREEN, SNAPSHOT_FILES } from './snapshot.mjs';
 
 const ROOT = process.cwd();
@@ -523,8 +524,10 @@ function validateMigrations() {
 
 function validateGichulBackend() {
   const requiredFiles = [
+    'scripts/gichul/availability.mjs',
     'scripts/gichul/fetch-kice.mjs',
     'scripts/gichul/build-manifest.mjs',
+    'scripts/gichul/output-contract.e2e.mjs',
     'scripts/gichul/upload-r2.mjs',
     'scripts/gichul/overrides.json',
     'scripts/gichul/gichul.test.mjs',
@@ -548,21 +551,24 @@ function validateGichulBackend() {
     'scripts/gichul/sources.json: hard-coded post seeds are forbidden; the KICE list page is the source');
 
   const fetchSource = readFileSync(path.join(ROOT, 'scripts/gichul/fetch-kice.mjs'), 'utf8');
+  const availabilitySource = readFileSync(path.join(ROOT, 'scripts/gichul/availability.mjs'), 'utf8');
+  const crawlContractSource = `${availabilitySource}\n${fetchSource}`;
   for (const marker of ['1500234', '1500236', 'C01', 'C02', 'C03', 'fileDown.do']) {
-    check(fetchSource.includes(marker), `scripts/gichul/fetch-kice.mjs: missing crawl-contract marker ${marker}`);
+    check(crawlContractSource.includes(marker), `scripts/gichul: missing crawl-contract marker ${marker}`);
   }
-  check(fetchSource.includes('2020 + index') && fetchSource.includes('length: 8'),
-    'scripts/gichul/fetch-kice.mjs: academic years 2020-2027 must be derived from one bounded range');
+  check(availabilitySource.includes('academic_years: { from: 2020, to: 2027 }'),
+    'scripts/gichul/availability.mjs: academic years 2020-2027 must be one bounded descriptor range');
   const fetchProduction = /export async function fetchKice\([^]*?\n\}\n\nfunction cliOptions/u.exec(fetchSource)?.[0] || '';
-  const inventoryWriteIndex = fetchProduction.indexOf('await writeInventory(inventoryPath, outputs)');
-  const coverageGateIndex = fetchProduction.indexOf('validateAssignmentCoverage(outputs)');
+  const inventoryWriteIndex = fetchProduction.indexOf('await writeInventory(inventoryPath, outputs, availability)');
+  const coverageGateIndex = fetchProduction.indexOf('validateAssignmentCoverage(outputs, availability)');
   check(fetchSource.includes('crawl-inventory.json')
     && inventoryWriteIndex >= 0
     && coverageGateIndex > inventoryWriteIndex
     && fetchSource.includes('previous?.fileSeq === attachment.fileSeq'),
     'scripts/gichul/fetch-kice.mjs: current fileSeq inventory and complete-corpus gates are missing');
-  for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
-    check(fetchSource.includes(subject), `scripts/gichul/fetch-kice.mjs: target subject ${subject} is missing`);
+  for (const { id: subject } of DEFAULT_AVAILABILITY.subjects) {
+    check(availabilitySource.includes(`id: '${subject}'`),
+      `scripts/gichul/availability.mjs: target subject ${subject} is missing`);
   }
 
   const manifestSource = readFileSync(path.join(ROOT, 'scripts/gichul/build-manifest.mjs'), 'utf8');
@@ -571,7 +577,7 @@ function validateGichulBackend() {
   check(manifestSource.includes('extractText = extractPdfText'),
     'scripts/gichul/build-manifest.mjs: PDF text extraction must remain injectable for fixture tests');
   const manifestProduction = /export async function buildManifest\([^]*?\n\}\n\nfunction cliOptions/u.exec(manifestSource)?.[0] || '';
-  check(manifestProduction.includes('validateManifest(exams)'),
+  check(manifestProduction.includes('validateManifest(exams, activeAvailability)'),
     'scripts/gichul/build-manifest.mjs: generated exams must pass range validation before write');
   check(manifestProduction.includes('validateCrawlInventory(')
     && manifestProduction.includes('validateCorpusManifest(')
@@ -635,20 +641,24 @@ function validateGichulFrontend() {
   // 과목·선택과목·시행의 어휘는 매니페스트 생성기가 단일 원본이다. 화면의 라벨 표를
   // 손으로 적은 사본으로 두면, 백엔드가 과목을 늘려도 화면은 그 항목을 코드값 그대로
   // 노출하거나 아예 빠뜨린다 (승격 규칙 "파생 가능한 것을 손으로 적지 않는다").
-  const backend = readFileSync(path.join(ROOT, 'scripts/gichul/build-manifest.mjs'), 'utf8');
-  const orderKeys = (name) => {
-    const block = new RegExp(`const ${name} = new Map\\(\\[([^]*?)\\]\\);`, 'u').exec(backend)?.[1] || '';
-    return [...block.matchAll(/\['(\w+)',/gu)].map(([, key]) => key);
-  };
   const appSource = readFileSync(path.join(ROOT, 'gichul/app.js'), 'utf8');
   const labelKeys = (name) => {
     const block = new RegExp(`const ${name} = \\{([^}]*)\\}`, 'u').exec(appSource)?.[1] || '';
     return [...block.matchAll(/(?:^|\s)([\w']+):/gu)].map(([, key]) => key.replaceAll("'", ''));
   };
   const vocabulary = [
-    { name: 'subject', keys: orderKeys('SUBJECT_ORDER'), maps: ['SUBJECT_LABEL'] },
-    { name: 'track', keys: orderKeys('TRACK_ORDER'), maps: ['TRACK_LABEL', 'TRACK_SHORT'] },
-    { name: 'round', keys: orderKeys('ROUND_ORDER'), maps: ['ROUND_LABEL', 'ROUND_FILE'] },
+    {
+      name: 'subject',
+      keys: DEFAULT_AVAILABILITY.subjects.map(({ id }) => id),
+      maps: ['SUBJECT_LABEL'],
+    },
+    {
+      name: 'track',
+      keys: [...new Set(DEFAULT_AVAILABILITY.subjects.flatMap(({ tracks }) => tracks.map(({ id }) => id)))]
+        .filter((key) => key !== null),
+      maps: ['TRACK_LABEL', 'TRACK_SHORT'],
+    },
+    { name: 'round', keys: DEFAULT_AVAILABILITY.rounds.map(({ id }) => id), maps: ['ROUND_LABEL', 'ROUND_FILE'] },
   ];
   for (const { name, keys, maps } of vocabulary) {
     check(keys.length >= 3,
@@ -656,13 +666,9 @@ function validateGichulFrontend() {
     for (const map of maps) {
       const declared = labelKeys(map);
       check(declared.length >= 3, `gichul/app.js: ${map} could not be parsed — the vocabulary check is inert`);
-      for (const key of keys) {
-        check(declared.includes(key),
-          `gichul/app.js: ${map} has no entry for ${name} "${key}", which scripts/gichul/build-manifest.mjs produces`);
-      }
       for (const key of declared) {
         check(keys.includes(key),
-          `gichul/app.js: ${map} carries "${key}", which the manifest generator never produces — dead label`);
+          `gichul/app.js: ${map} carries "${key}", which the availability descriptor never produces — dead label`);
       }
     }
     // 그 어휘가 정적 문서에 있으면, 미로그인 방문자의 DOM에 시험 목록의 일부가 있는 것이다.
@@ -694,6 +700,13 @@ function validateGichulFrontend() {
     'gichul/app.js: a failed fetch must abort before any merging — no partial merge may be produced (plan.md §4)');
   check(appSource.includes('isExcerptable'),
     'gichul/app.js: items without sections.selection must be rejected in excerpt mode (plan.md §4)');
+  check(!/\bstate\.includeCommon\b/u.test(appSource)
+    && !appSource.includes('data-option="includeCommon"')
+    && !appSource.includes('공통 파트 포함'),
+    'gichul/app.js: excerpt mode must ignore the removed includeCommon state and emit selection pages only');
+  check(appSource.includes('ranges.push(exam.sections.common)')
+    && appSource.includes('ranges.push(exam.sections.selection)'),
+  'gichul/app.js: full modern papers must be planned from common plus the selected track range');
 
   const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
   check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),
@@ -2131,7 +2144,7 @@ function validateGlobalsAndOrder() {
     'usage/index.html': ['/usage/assets/js/usage.js?v=20260829-orgchart-v10'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n4'],
+    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n5'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);

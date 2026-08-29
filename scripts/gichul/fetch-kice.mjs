@@ -4,19 +4,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 
+import {
+  academicYears,
+  DEFAULT_AVAILABILITY,
+  expectedCorpusEntries,
+  roundDescriptorsFor,
+  trackDescriptorsFor,
+  validateAvailability,
+} from './availability.mjs';
+
 const KICE_ORIGIN = 'https://www.suneung.re.kr';
 const LIST_PATH = '/boardCnts/list.do';
 const DOWNLOAD_PATH = '/boardCnts/fileDown.do';
-const ACADEMIC_YEARS = Object.freeze(Array.from({ length: 8 }, (_, index) => 2020 + index));
 const AREAS = Object.freeze([
   { query: '국어', subject: 'korean' },
   { query: '수학', subject: 'math' },
   { query: '영어', subject: 'english' },
   { query: '사회탐구', subject: 'social' },
-]);
-const MOCK_ROUNDS = Object.freeze([
-  { query: '6월', round: '06' },
-  { query: '9월', round: '09' },
 ]);
 const SOCIAL_SUBJECTS = Object.freeze(['soc_culture', 'politics_law']);
 const MAX_ZIP_ENTRY_BYTES = 128 * 1024 * 1024;
@@ -61,6 +65,10 @@ function formFromFilename(filename) {
   if (value.includes('홀수형') || /홀pdf$/u.test(value)) return 'odd';
   if (value.includes('짝수형') || /짝pdf$/u.test(value)) return 'even';
   return null;
+}
+
+export function canonicalFormFromProvenance(sourceFilename, archiveEntry) {
+  return formFromFilename(archiveEntry || sourceFilename) || 'single';
 }
 
 function socialSubjectFromFilename(filename) {
@@ -265,26 +273,21 @@ export function lastPageFromHtml(html) {
   return lastPage;
 }
 
-function listContexts() {
+function listContexts(availability = DEFAULT_AVAILABILITY) {
+  validateAvailability(availability);
   const contexts = [];
-  for (const academicYear of ACADEMIC_YEARS) {
+  for (const academicYear of academicYears(availability)) {
     for (const area of AREAS) {
-      contexts.push({
-        boardID: '1500234',
-        academicYear,
-        area: area.query,
-        subject: area.subject,
-        round: 'csat',
-      });
-      for (const mock of MOCK_ROUNDS) {
-        contexts.push({
-          boardID: '1500236',
+      for (const round of roundDescriptorsFor(availability, academicYear)) {
+        const context = {
+          boardID: round.board_id,
           academicYear,
-          month: mock.query,
           area: area.query,
           subject: area.subject,
-          round: mock.round,
-        });
+          round: round.id,
+        };
+        if (round.query) context.month = round.query;
+        contexts.push(context);
       }
     }
   }
@@ -704,39 +707,21 @@ function defaultOutputDirectory() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'gichul-src');
 }
 
-function expectedTracks(academicYear, subject) {
-  if (subject === 'korean' && academicYear >= 2022) return ['hwajak', 'eonmae'];
-  if (subject === 'math' && academicYear >= 2022) return ['hwaktong', 'mijeok', 'giha'];
-  if (subject === 'math') return ['ga', 'na'];
-  return [null];
-}
-
-function requiredRounds(academicYear) {
-  return academicYear === 2027 ? ['06'] : ['06', '09', 'csat'];
-}
-
-export function validateAssignmentCoverage(attachments) {
+export function validateAssignmentCoverage(attachments, availability = DEFAULT_AVAILABILITY) {
+  validateAvailability(availability);
   const coverage = new Set();
   for (const attachment of attachments) {
     const tracks = attachment.track === null
-      ? expectedTracks(attachment.gradeYear, attachment.subject)
+      ? trackDescriptorsFor(availability, attachment.gradeYear, attachment.subject).map(({ id }) => id)
       : [attachment.track];
     for (const track of tracks) {
       coverage.add(`${attachment.gradeYear}-${attachment.round}-${attachment.subject}${track ? `-${track}` : ''}-${attachment.kind}`);
     }
   }
   const missing = [];
-  for (const academicYear of ACADEMIC_YEARS) {
-    for (const round of requiredRounds(academicYear)) {
-      for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
-        for (const track of expectedTracks(academicYear, subject)) {
-          for (const kind of ['question', 'answer']) {
-            const key = `${academicYear}-${round}-${subject}${track ? `-${track}` : ''}-${kind}`;
-            if (!coverage.has(key)) missing.push(key);
-          }
-        }
-      }
-    }
+  for (const { gradeYear, round, subject, track, kind } of expectedCorpusEntries(availability)) {
+    const key = `${gradeYear}-${round}-${subject}${track ? `-${track}` : ''}-${kind}`;
+    if (!coverage.has(key)) missing.push(key);
   }
   if (missing.length) {
     throw new Error(`평가원 코퍼스가 불완전합니다 (${missing.length}개 누락): ${missing.join(', ')}`);
@@ -753,15 +738,19 @@ async function readInventory(file) {
   return new Map(parsed.files.map((entry) => [entry.target, entry]));
 }
 
-async function writeInventory(file, attachments) {
+async function writeInventory(file, attachments, availability) {
   const temporary = `${file}.${process.pid}.tmp`;
   const inventory = {
     version: 1,
+    availability,
     files: attachments.map((attachment) => ({
       target: attachment.target,
       fileSeq: attachment.fileSeq,
       sourceFilename: attachment.filename,
       archiveEntry: attachment.archiveEntry,
+      canonical_form: attachment.kind === 'question'
+        ? canonicalFormFromProvenance(attachment.filename, attachment.archiveEntry)
+        : 'single',
       grade_year: attachment.gradeYear,
       year: attachment.year,
       round: attachment.round,
@@ -779,12 +768,15 @@ export async function fetchKice({
   outputDirectory = defaultOutputDirectory(),
   inventoryPath = path.join(outputDirectory, 'crawl-inventory.json'),
   delayMs = 250,
-  contexts = listContexts(),
+  availability = DEFAULT_AVAILABILITY,
+  contexts = null,
   allowPartial = false,
   log = console.log,
   archiveFileOperations = DEFAULT_ARCHIVE_FILE_OPERATIONS,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch 구현이 필요합니다.');
+  validateAvailability(availability);
+  contexts ??= listContexts(availability);
   const fileOperations = { ...DEFAULT_ARCHIVE_FILE_OPERATIONS, ...archiveFileOperations };
   await mkdir(outputDirectory, { recursive: true });
   const previousFiles = await readInventory(inventoryPath);
@@ -829,8 +821,8 @@ export async function fetchKice({
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   outputs.sort((left, right) => left.target.localeCompare(right.target));
-  await writeInventory(inventoryPath, outputs);
-  if (!allowPartial) validateAssignmentCoverage(outputs);
+  await writeInventory(inventoryPath, outputs, availability);
+  if (!allowPartial) validateAssignmentCoverage(outputs, availability);
   return results;
 }
 
