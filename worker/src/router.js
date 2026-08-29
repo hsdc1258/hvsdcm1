@@ -70,6 +70,9 @@ const MAX_MODERATOR_SUMMARY_LENGTH = 240;
 const MAX_MODERATOR_CURSOR_LENGTH = 512;
 const MODERATOR_COMMAND_LEASE_MS = 60_000;
 const MODERATOR_REVIEW_LEASE_MS = 15 * 60_000;
+const MODERATOR_REVIEW_PROJECT = Object.freeze({
+  project_key: 'claude-workspace',
+});
 const MODERATOR_REQUESTED_MODEL = 'gpt-5.6-sol';
 const MODERATOR_REQUESTED_REASONING = 'xhigh';
 const VALID_MODERATOR_KINDS = new Set(['important', 'proposal', 'review']);
@@ -1953,7 +1956,12 @@ async function acquireModeratorReviewLease(request, env) {
   }
   const item = moderatorChanges(results[0]) === 1 ? await moderatorItemById(env, itemId) : null;
   return json({
-    lease: item ? { item_id: item.item_id, lease_id: item.lease_id, lease_until: item.lease_until } : null,
+    lease: item ? {
+      item_id: item.item_id,
+      lease_id: item.lease_id,
+      lease_until: item.lease_until,
+      project_key: MODERATOR_REVIEW_PROJECT.project_key,
+    } : null,
     active_task_count: await moderatorActiveTaskCount(env, timestamp),
     active_command_count: await moderatorActiveCommandCount(env),
   });

@@ -3481,6 +3481,8 @@ test('proposal approval queues exactly once and idle review leases remain exclus
   });
   const lease = (await acquired.json()).lease;
   assert.match(lease.item_id, /^review_/u);
+  assert.equal(lease.project_key, 'claude-workspace');
+  assert.equal(Object.hasOwn(lease, 'allowed_paths'), false, 'server cannot authorize local paths');
   const duplicateLease = await moderatorRequest(env, '/api/moderator/daemon/review-lease', {
     method: 'POST', token: 'daemon-token',
   });
