@@ -393,6 +393,16 @@ function normalizeHarnessReport(input) {
     normalizedTask.progress = 100;
   }
 
+  const projectKeyExplicit = input.project_key !== undefined;
+  const projectKey = projectKeyExplicit
+    ? harnessText(input.project_key, 120, true)
+    : taskId;
+  const projectTitle = input.project_title === undefined
+    ? (normalizedTask.title || normalizedTask.name)
+    : harnessText(input.project_title, 120, true);
+  if (!projectKey || !projectTitle
+    || (projectKeyExplicit && !/^[a-z0-9][a-z0-9-]{0,119}$/u.test(projectKey))) return null;
+
   const normalizedActors = [];
   const ids = new Set();
   for (const actor of actors) {
@@ -454,6 +464,9 @@ function normalizeHarnessReport(input) {
   return {
     version: 1,
     task_id: taskId,
+    project_key: projectKey,
+    project_title: projectTitle,
+    project_key_explicit: projectKeyExplicit,
     // 새로 들어오는 시각은 정규 ISO(UTC)로 통일한다. 다만 정규화 이전에 저장된 행에는
     // 오프셋 표기('2026-08-27T10:00:00+09:00')가 그대로 남아 있으므로, 순서 판정은
     // 양쪽 모두 시각으로 한다 — JS는 Date.parse, SQL은 datetime() (사전순 비교 금지).
@@ -565,6 +578,9 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     version: 1,
     ...current,
     ...incoming.task,
+    project_key: incoming.project_key || current.project_key || incoming.task_id,
+    project_title: incoming.project_title || current.project_title
+      || incoming.task.title || incoming.task.name,
     // 사람이 **지정한** 제목과 하위 호환으로 name을 물려받은 제목을 나눠 둔다
     // (review 기능 B M-2). 예전에는 둘 다 `title`에 담겨, 지정한 제목이 마침 name과
     // 같으면 화면이 그것을 "지정한 적 없음"으로 오판해 날짜 꼬리를 떼고 약어를 풀었다.
@@ -657,15 +673,18 @@ function claudeRemainingPercent(payload, subjectModel) {
 
 async function harnessUsageContext(env) {
   const snapshots = await env.DB.prepare(`
-    SELECT source, payload
+    SELECT source, captured_at, payload
     FROM usage_snapshots
     WHERE source IN (?1, ?2)
   `).bind('codex', 'claude').all();
-  const context = { codex: null, claude: null };
+  const context = { codex: null, claude: null, captured_at: { codex: null, claude: null } };
   for (const row of snapshots.results || []) {
     let payload = null;
     try { payload = JSON.parse(row.payload); } catch { payload = null; }
-    if (row.source === 'codex' || row.source === 'claude') context[row.source] = payload;
+    if (row.source === 'codex' || row.source === 'claude') {
+      context[row.source] = payload;
+      context.captured_at[row.source] = optionalEventText(row.captured_at);
+    }
   }
   return context;
 }
@@ -679,6 +698,111 @@ function harnessUsageForModel(context, subjectModel) {
 
 function optionalEventText(value) {
   return typeof value === 'string' && value ? value : null;
+}
+
+function projectUsageSummary(source, eventRows, usageContext) {
+  const column = source === 'codex' ? 'usage_codex' : 'usage_claude';
+  const observations = eventRows
+    .map((row) => ({
+      remaining: typeof row[column] === 'number' ? row[column] : null,
+      measured_at: optionalEventText(row.ts),
+    }))
+    .filter(({ remaining }) => Number.isFinite(remaining) && remaining >= 0 && remaining <= 100);
+  let consumed = 0;
+  let resets = 0;
+  for (let index = 1; index < observations.length; index += 1) {
+    const delta = observations[index - 1].remaining - observations[index].remaining;
+    if (delta > 0) consumed += delta;
+    else if (delta < 0) resets += 1;
+  }
+  const currentRemaining = source === 'codex'
+    ? codexRemainingPercent(usageContext.codex)
+    : claudeRemainingPercent(usageContext.claude);
+  const measuredAt = usageContext.captured_at[source]
+    || observations.at(-1)?.measured_at
+    || null;
+  return {
+    source: 'D1 usage_snapshots + harness_events',
+    measured_at: measuredAt,
+    remaining_percent: Number.isFinite(currentRemaining) ? currentRemaining : null,
+    used_percent: Number.isFinite(currentRemaining) ? 100 - currentRemaining : null,
+    consumed_percentage_points: observations.length >= 2 ? consumed : null,
+    reset_count: observations.length >= 2 ? resets : null,
+    observation_count: observations.length,
+  };
+}
+
+async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageContext) {
+  const [taskRows, eventRows] = await Promise.all([
+    env.DB.prepare(`
+      SELECT task_id, status, updated_at, payload, project_title
+      FROM harness_tasks
+      WHERE project_key = ?1
+      ORDER BY datetime(updated_at) ASC, task_id ASC
+    `).bind(projectKey).all(),
+    env.DB.prepare(`
+      SELECT events.id, events.task_id, events.ts, events.kind, events.actor_id,
+        events.phase, events.percent, events.model, events.reasoning, events.status,
+        events.usage_codex, events.usage_claude
+      FROM harness_events AS events
+      INNER JOIN harness_tasks AS tasks ON tasks.task_id = events.task_id
+      WHERE tasks.project_key = ?1
+      ORDER BY events.id ASC
+    `).bind(projectKey).all(),
+  ]);
+  const tasks = (taskRows.results || []).flatMap((row) => {
+    try {
+      const payload = JSON.parse(row.payload);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+      return [{
+        ...payload,
+        id: payload.id || row.task_id,
+        project_key: projectKey,
+        project_title: payload.project_title || row.project_title || projectTitle,
+        status: effectiveHarnessStatus(payload, row.status),
+        updated_at: payload.updated_at || row.updated_at,
+      }];
+    } catch {
+      return [];
+    }
+  });
+  const events = eventRows.results || [];
+  const validTimes = (field) => tasks
+    .map((task) => optionalEventText(task[field]))
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort((left, right) => Date.parse(left) - Date.parse(right));
+  const starts = validTimes('created_at');
+  const updates = validTimes('updated_at');
+  const completions = validTimes('completed_at');
+  const complete = tasks.length > 0 && tasks.every((task) => task.status === 'complete');
+  return {
+    version: 1,
+    project_key: projectKey,
+    project_title: tasks.find((task) => task.project_title)?.project_title || projectTitle,
+    revision: events.reduce((maximum, event) => Math.max(maximum, Number(event.id) || 0), 0),
+    started_at: starts[0] || null,
+    updated_at: updates.at(-1) || null,
+    completed_at: complete ? (completions.at(-1) || null) : null,
+    tasks,
+    events: events.map((event) => ({
+      id: Number(event.id),
+      task_id: event.task_id,
+      ts: event.ts,
+      kind: event.kind,
+      actor_id: event.actor_id,
+      phase: event.phase,
+      percent: event.percent,
+      model: event.model,
+      reasoning: event.reasoning,
+      status: event.status,
+      usage_codex: event.usage_codex,
+      usage_claude: event.usage_claude,
+    })),
+    usage: {
+      codex: projectUsageSummary('codex', events, usageContext),
+      claude: projectUsageSummary('claude', events, usageContext),
+    },
+  };
 }
 
 async function reportHarness(request, env) {
@@ -706,7 +830,14 @@ async function reportHarness(request, env) {
   // 순서를 본다. 읽을 수 없는 옛 값은 양쪽 모두 순서 판정을 포기하고 통과시킨다.
   const storedAt = Date.parse(previous?.updated_at ?? '');
   if (Number.isFinite(storedAt) && Date.parse(incoming.occurred_at) < storedAt) {
-    return json({ ok: true, task_id: incoming.task_id, stale: true });
+    const response = { ok: true, task_id: incoming.task_id, stale: true };
+    if (incoming.project_key_explicit) {
+      const usageContext = await harnessUsageContext(env);
+      response.project_snapshot = await buildHarnessProjectSnapshot(
+        env, incoming.project_key, incoming.project_title, usageContext,
+      );
+    }
+    return json(response);
   }
   const mergedActorIds = new Set([
     ...(Array.isArray(previous?.actors) ? previous.actors : []),
@@ -756,11 +887,14 @@ async function reportHarness(request, env) {
   const subject = isActorReport ? lastActor : merged;
   const kind = previous && previous.phase !== merged.phase ? 'phase-change' : 'report';
   const upsertStatement = env.DB.prepare(`
-    INSERT INTO harness_tasks(task_id, status, updated_at, payload, title, input, heartbeat_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    INSERT INTO harness_tasks(
+      task_id, status, updated_at, payload, title, input, heartbeat_at, project_key, project_title
+    )
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
     ON CONFLICT(task_id)
     DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, payload = excluded.payload,
-      title = excluded.title, input = excluded.input, heartbeat_at = excluded.heartbeat_at
+      title = excluded.title, input = excluded.input, heartbeat_at = excluded.heartbeat_at,
+      project_key = excluded.project_key, project_title = excluded.project_title
     WHERE (datetime(excluded.updated_at) >= datetime(harness_tasks.updated_at)
         OR datetime(harness_tasks.updated_at) IS NULL)
       ${guardsTerminal ? "AND harness_tasks.status != 'complete'" : ''}
@@ -772,6 +906,8 @@ async function reportHarness(request, env) {
     merged.title,
     merged.input,
     merged.heartbeat_at,
+    merged.project_key,
+    merged.project_title,
   );
   const eventStatement = env.DB.prepare(`
     INSERT INTO harness_events(
@@ -798,7 +934,13 @@ async function reportHarness(request, env) {
   // immediately preceding conditional upsert, so a rejected task write cannot append an event.
   const [upsert] = await env.DB.batch([upsertStatement, eventStatement]);
   if (upsert?.meta?.changes === 0) {
-    return json({ ok: true, task_id: incoming.task_id });
+    const response = { ok: true, task_id: incoming.task_id };
+    if (incoming.project_key_explicit) {
+      response.project_snapshot = await buildHarnessProjectSnapshot(
+        env, incoming.project_key, incoming.project_title, usageContext,
+      );
+    }
+    return json(response);
   }
 
   if (Math.random() < 0.05) {
@@ -809,7 +951,13 @@ async function reportHarness(request, env) {
       `).run();
     } catch { /* Retention is opportunistic and must not reject an accepted report. */ }
   }
-  return json({ ok: true, task_id: incoming.task_id });
+  const response = { ok: true, task_id: incoming.task_id };
+  if (incoming.project_key_explicit) {
+    response.project_snapshot = await buildHarnessProjectSnapshot(
+      env, incoming.project_key, incoming.project_title, usageContext,
+    );
+  }
+  return json(response);
 }
 
 // 사용량은 소유자 한 사람의 운영 데이터다. 소유자 이름은 wrangler.toml의

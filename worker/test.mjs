@@ -2774,6 +2774,151 @@ test('usage lookup returns each task latest three hundred events in ascending or
   ]);
 });
 
+test('explicit project keys return one persisted project snapshot with monotonic revision and measured usage', async () => {
+  let storedPayload = '';
+  let storedStatus = 'active';
+  let storedUpdatedAt = '';
+  let storedProjectKey = '';
+  let storedProjectTitle = '';
+  let nextEventId = 1;
+  const events = [];
+  const usageRows = [
+    {
+      source: 'codex',
+      captured_at: '2026-08-29T05:00:00.000Z',
+      payload: JSON.stringify({ rate_limits: { secondary: { remaining_percent: 80 } } }),
+    },
+    {
+      source: 'claude',
+      captured_at: '2026-08-29T05:00:00.000Z',
+      payload: JSON.stringify({
+        models: {
+          'claude-opus-5': {
+            captured_at: '2026-08-29T05:00:00.000Z',
+            rate_limits: { seven_day: { remaining_percent: 70 } },
+          },
+        },
+      }),
+    },
+  ];
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    HARNESS_INGEST_TOKEN: 'harness-token',
+    DB: {
+      batch: runFakeBatch,
+      prepare(sql) {
+        if (sql.includes('FROM usage_snapshots')) {
+          return { bind() { return { async all() { return { results: usageRows }; } }; } };
+        }
+        if (sql.includes('SELECT payload FROM harness_tasks')) {
+          return {
+            bind() {
+              return { async first() { return storedPayload ? { payload: storedPayload } : null; } };
+            },
+          };
+        }
+        if (sql.includes('INSERT INTO harness_tasks')) {
+          assert.match(sql, /project_key = excluded\.project_key/u);
+          return {
+            bind(taskId, status, updatedAt, payload, title, input, heartbeatAt, projectKey, projectTitle) {
+              return {
+                async run() {
+                  storedPayload = payload;
+                  storedStatus = status;
+                  storedUpdatedAt = updatedAt;
+                  storedProjectKey = projectKey;
+                  storedProjectTitle = projectTitle;
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('INSERT INTO harness_events')) {
+          return {
+            bind(taskId, ts, kind, actorId, phase, percent, model, reasoning, status,
+              usageCodex, usageClaude) {
+              return {
+                async run() {
+                  events.push({
+                    id: nextEventId++, task_id: taskId, ts, kind, actor_id: actorId,
+                    phase, percent, model, reasoning, status,
+                    usage_codex: usageCodex, usage_claude: usageClaude,
+                  });
+                  return { success: true, meta: { changes: 1 } };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('FROM harness_tasks') && sql.includes('WHERE project_key = ?1')) {
+          return {
+            bind(projectKey) {
+              assert.equal(projectKey, storedProjectKey);
+              return {
+                async all() {
+                  return {
+                    results: [{
+                      task_id: 'usage-harness', status: storedStatus, updated_at: storedUpdatedAt,
+                      payload: storedPayload, project_title: storedProjectTitle,
+                    }],
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (sql.includes('INNER JOIN harness_tasks')) {
+          return {
+            bind(projectKey) {
+              assert.equal(projectKey, storedProjectKey);
+              return { async all() { return { results: events }; } };
+            },
+          };
+        }
+        if (sql.includes('DELETE FROM harness_events')) {
+          return { async run() { return { success: true, meta: { changes: 0 } }; } };
+        }
+        throw new Error(`Unexpected SQL in project snapshot test: ${sql}`);
+      },
+    },
+  };
+  const post = (occurredAt) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(harnessInput({
+      project_key: 'discord-bot-a1b2c3d4e5f6',
+      project_title: '디스코드 봇 전환',
+      occurred_at: occurredAt,
+    })),
+  }), env);
+
+  const first = await post('2026-08-29T05:00:00.000Z');
+  assert.equal(first.status, 200);
+  const firstBody = await first.json();
+  assert.equal(firstBody.task_id, 'usage-harness');
+  assert.equal(firstBody.project_snapshot.project_key, 'discord-bot-a1b2c3d4e5f6');
+  assert.equal(firstBody.project_snapshot.project_title, '디스코드 봇 전환');
+  assert.equal(firstBody.project_snapshot.revision, 1);
+  assert.equal(firstBody.project_snapshot.tasks.length, 1);
+  assert.equal(firstBody.project_snapshot.usage.codex.used_percent, 20);
+  assert.equal(firstBody.project_snapshot.usage.codex.consumed_percentage_points, null);
+
+  usageRows[0] = {
+    ...usageRows[0],
+    captured_at: '2026-08-29T05:05:00.000Z',
+    payload: JSON.stringify({ rate_limits: { secondary: { remaining_percent: 75 } } }),
+  };
+  const second = await post('2026-08-29T05:05:00.000Z');
+  assert.equal(second.status, 200);
+  const secondBody = await second.json();
+  assert.equal(secondBody.project_snapshot.revision, 2);
+  assert.equal(secondBody.project_snapshot.events.length, 2);
+  assert.equal(secondBody.project_snapshot.usage.codex.used_percent, 25);
+  assert.equal(secondBody.project_snapshot.usage.codex.consumed_percentage_points, 5);
+  assert.equal(secondBody.project_snapshot.usage.codex.measured_at, '2026-08-29T05:05:00.000Z');
+});
+
 test('unexpected server errors do not expose internal details', async () => {
   const env = {
     ALLOWED_ORIGIN: 'https://example.test',
