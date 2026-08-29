@@ -14,6 +14,7 @@ bucket_name = "hvsdcm-gichul"
 # Required runtime secrets:
 #   npx wrangler secret put USAGE_INGEST_TOKEN
 #   npx wrangler secret put HARNESS_INGEST_TOKEN
+#   npx wrangler secret put MODERATOR_DAEMON_TOKEN
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"
 # GET /api/usage를 볼 수 있는 유일한 계정. 이 값이 소유자 판정의 단일 원본이며,
