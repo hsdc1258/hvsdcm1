@@ -2890,6 +2890,13 @@ test('explicit project keys return one persisted project snapshot with monotonic
       project_key: 'discord-bot-a1b2c3d4e5f6',
       project_title: '디스코드 봇 전환',
       occurred_at: occurredAt,
+      delivery: {
+        request: '프로젝트별 Discord 보고 전환',
+        plan: occurredAt.endsWith('00:00.000Z') ? ['D1 단일 원본'] : [],
+        changes: occurredAt.endsWith('05:00.000Z') ? ['Bot worker 연결'] : [],
+        verification: occurredAt.endsWith('05:00.000Z') ? ['Worker API 200'] : [],
+        approval: null,
+      },
     })),
   }), env);
 
@@ -2901,6 +2908,8 @@ test('explicit project keys return one persisted project snapshot with monotonic
   assert.equal(firstBody.project_snapshot.project_title, '디스코드 봇 전환');
   assert.equal(firstBody.project_snapshot.revision, 1);
   assert.equal(firstBody.project_snapshot.tasks.length, 1);
+  assert.equal(firstBody.project_snapshot.delivery.request, '프로젝트별 Discord 보고 전환');
+  assert.deepEqual(firstBody.project_snapshot.delivery.plan, ['D1 단일 원본']);
   assert.equal(firstBody.project_snapshot.usage.codex.used_percent, 20);
   assert.equal(firstBody.project_snapshot.usage.codex.consumed_percentage_points, null);
 
@@ -2917,6 +2926,8 @@ test('explicit project keys return one persisted project snapshot with monotonic
   assert.equal(secondBody.project_snapshot.usage.codex.used_percent, 25);
   assert.equal(secondBody.project_snapshot.usage.codex.consumed_percentage_points, 5);
   assert.equal(secondBody.project_snapshot.usage.codex.measured_at, '2026-08-29T05:05:00.000Z');
+  assert.deepEqual(secondBody.project_snapshot.delivery.changes, ['Bot worker 연결']);
+  assert.deepEqual(secondBody.project_snapshot.delivery.verification, ['Worker API 200']);
 });
 
 test('unexpected server errors do not expose internal details', async () => {

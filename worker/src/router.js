@@ -332,6 +332,32 @@ function harnessInputText(value) {
   return codePoints.slice(0, low).join('');
 }
 
+function normalizeHarnessDelivery(value) {
+  if (value === undefined) return { request: '', plan: [], changes: [], verification: [], approval: null };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const list = (key) => {
+    const values = value[key] === undefined ? [] : value[key];
+    if (!Array.isArray(values) || values.length > 4) return null;
+    const normalized = values.map((entry) => harnessText(entry, 220, true));
+    return normalized.some((entry) => entry === null) ? null : normalized;
+  };
+  const request = value.request === undefined ? '' : harnessText(value.request, 700);
+  const plan = list('plan');
+  const changes = list('changes');
+  const verification = list('verification');
+  if (request === null || plan === null || changes === null || verification === null) return null;
+  let approval = null;
+  if (value.approval !== undefined && value.approval !== null) {
+    if (typeof value.approval !== 'object' || Array.isArray(value.approval)) return null;
+    approval = {};
+    for (const key of ['needed', 'reason', 'minimum', 'tabs', 'steps', 'secret_notice', 'completion', 'continuation']) {
+      approval[key] = harnessText(value.approval[key], 500, true);
+      if (approval[key] === null) return null;
+    }
+  }
+  return { request, plan, changes, verification, approval };
+}
+
 function normalizeHarnessReport(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || input.version !== 1) return null;
   const taskId = harnessText(input.task_id, 120, true);
@@ -340,11 +366,12 @@ function normalizeHarnessReport(input) {
   const actors = input.actors;
   const artifacts = input.artifacts;
   const modules = input.modules === undefined ? [] : input.modules;
+  const delivery = normalizeHarnessDelivery(input.delivery);
   if (!taskId || !occurredAt || !Number.isFinite(Date.parse(occurredAt))) return null;
   if (!task || typeof task !== 'object' || Array.isArray(task)) return null;
   if (!Array.isArray(actors) || actors.length < 1 || actors.length > 20) return null;
   if (!Array.isArray(modules) || modules.length > 20) return null;
-  if (!Array.isArray(artifacts) || artifacts.length > 10) return null;
+  if (!Array.isArray(artifacts) || artifacts.length > 10 || !delivery) return null;
 
   const phase = harnessText(task.phase, 16, true);
   const status = harnessText(task.status, 16, true);
@@ -476,6 +503,7 @@ function normalizeHarnessReport(input) {
     actors: normalizedActors,
     modules: normalizedModules,
     artifacts: normalizedArtifacts,
+    delivery,
   };
 }
 
@@ -505,6 +533,19 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
       updated_at: incoming.occurred_at,
     };
   }
+  const currentDelivery = current.delivery || {};
+  const incomingDelivery = incoming.delivery || {};
+  const mergeDeliveryList = (key) => [...new Set([
+    ...(Array.isArray(currentDelivery[key]) ? currentDelivery[key] : []),
+    ...(Array.isArray(incomingDelivery[key]) ? incomingDelivery[key] : []),
+  ])].slice(-4);
+  const delivery = {
+    request: incomingDelivery.request || currentDelivery.request || incoming.task.input || current.input || '',
+    plan: mergeDeliveryList('plan'),
+    changes: mergeDeliveryList('changes'),
+    verification: mergeDeliveryList('verification'),
+    approval: incomingDelivery.approval || currentDelivery.approval || null,
+  };
   const actorMap = new Map(
     Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
   );
@@ -602,6 +643,7 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     actors,
     modules,
     artifacts: [...new Set([...(current.artifacts || []), ...incoming.artifacts])].slice(-10),
+    delivery,
   };
   if (incoming.task.status === 'complete') {
     merged.completed_at = current.status === 'complete' && current.completed_at
@@ -775,6 +817,13 @@ async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageC
   const updates = validTimes('updated_at');
   const completions = validTimes('completed_at');
   const complete = tasks.length > 0 && tasks.every((task) => task.status === 'complete');
+  const delivery = {
+    request: tasks.map((task) => optionalEventText(task.delivery?.request) || optionalEventText(task.input)).find(Boolean) || '',
+    plan: [...new Set(tasks.flatMap((task) => task.delivery?.plan || []))].slice(-3),
+    changes: [...new Set(tasks.flatMap((task) => task.delivery?.changes || []))].slice(-4),
+    verification: [...new Set(tasks.flatMap((task) => task.delivery?.verification || []))].slice(-4),
+    approval: tasks.map((task) => task.delivery?.approval).filter(Boolean).at(-1) || null,
+  };
   return {
     version: 1,
     project_key: projectKey,
@@ -783,6 +832,7 @@ async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageC
     started_at: starts[0] || null,
     updated_at: updates.at(-1) || null,
     completed_at: complete ? (completions.at(-1) || null) : null,
+    delivery,
     tasks,
     events: events.map((event) => ({
       id: Number(event.id),
