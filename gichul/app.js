@@ -148,13 +148,6 @@
 
     const downloadRows = [
       {
-        key: 'includeCommon',
-        title: '공통 파트 포함',
-        sub: '발췌할 때 공통 과목 페이지도 함께 담습니다.',
-        disabled: state.mode !== 'excerpt',
-        checked: state.includeCommon,
-      },
-      {
         key: 'includeAnswers',
         title: '정답표 포함',
         sub: '문제지 뒤에 해당 회차 정답표를 붙입니다.',
@@ -189,12 +182,8 @@
     if (state.mode === 'excerpt') {
       if (blocked) sub = '선택과목 구간이 없어 발췌할 수 없습니다';
       else {
-        // 순서는 병합 결과의 순서와 같게 읽힌다 — 공통 파트가 앞, 선택과목 발췌가 뒤다.
         const [from, to] = exam.sections.selection;
-        const common = state.includeCommon && Array.isArray(exam.sections.common)
-          ? `공통 ${exam.sections.common[0]}–${exam.sections.common[1]}쪽 · `
-          : '';
-        sub = `${common}발췌 ${from}–${to}쪽`;
+        sub = `선택과목만 ${from}–${to}쪽`;
       }
     }
     const id = `gi-pick-${exam.id}`;
@@ -262,30 +251,37 @@
   //
   // 같은 PDF를 두 번 담지 않는다: 2022학년도 이후 국어·수학은 화작/언매(확통/미적/기하)가
   // **같은 파일**의 다른 페이지 구간이므로, 전체 모드에서 둘을 함께 고르면 같은 시험지가
-  // 두 벌 들어간다. 발췌 모드의 공통 파트와 정답표도 같은 이유로 파일당 한 번만 담는다.
+  // 두 벌 들어간다. 공통 파트와 정답표도 같은 이유로 파일당 한 번만 담는다.
   function planSegments(exams, manifest, state) {
     const byId = new Map((manifest?.exams || []).map((exam) => [exam.id, exam]));
     const papers = [];
     const answerByPaper = new Map();
     const missingAnswers = [];
-    const seenFull = new Set();
+    const seenWhole = new Set();
     const seenCommon = new Set();
     const reportedMissing = new Set();
 
     for (const exam of exams) {
       if (state.mode === 'full') {
-        if (!seenFull.has(exam.r2_key)) {
-          seenFull.add(exam.r2_key);
+        if (isExcerptable(exam) && Array.isArray(exam.sections.common)) {
+          const ranges = [];
+          if (!seenCommon.has(exam.r2_key)) {
+            seenCommon.add(exam.r2_key);
+            ranges.push(exam.sections.common);
+          }
+          ranges.push(exam.sections.selection);
+          papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges });
+        } else if (!seenWhole.has(exam.r2_key)) {
+          seenWhole.add(exam.r2_key);
           papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges: [[1, exam.pages]] });
         }
       } else if (isExcerptable(exam)) {
-        const ranges = [];
-        if (state.includeCommon && Array.isArray(exam.sections.common) && !seenCommon.has(exam.r2_key)) {
-          seenCommon.add(exam.r2_key);
-          ranges.push(exam.sections.common);
-        }
-        ranges.push(exam.sections.selection);
-        papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges });
+        papers.push({
+          id: exam.id,
+          key: exam.r2_key,
+          label: examLabel(exam),
+          ranges: [exam.sections.selection],
+        });
       }
 
       if (!state.includeAnswers || answerByPaper.has(exam.r2_key)) continue;
@@ -355,7 +351,6 @@
     rounds: [],
     tracks: [],
     mode: 'full',
-    includeCommon: true,
     includeAnswers: false,
     selected: [],
   });
@@ -393,12 +388,14 @@
       const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null');
       if (!saved || typeof saved !== 'object') return;
       const merged = { ...defaultState(), ...saved, selected: [] };
+      // v1 저장값의 includeCommon은 발췌 계약에서 삭제됐다. 펼쳐 합친 뒤에도 명시적으로
+      // 지워 오래된 localStorage가 planner나 화면에 다시 들어올 여지를 없앤다.
+      delete merged.includeCommon;
       merged.years = Array.isArray(merged.years) ? merged.years.map(Number).filter(Number.isFinite) : [];
       merged.rounds = Array.isArray(merged.rounds) ? merged.rounds.filter((value) => ROUND_ORDER.includes(value)) : [];
       merged.tracks = Array.isArray(merged.tracks) ? merged.tracks.filter((value) => value in TRACK_LABEL) : [];
       if (!SUBJECT_ORDER.includes(merged.subject)) merged.subject = 'korean';
       if (merged.mode !== 'excerpt') merged.mode = 'full';
-      merged.includeCommon = merged.includeCommon !== false;
       merged.includeAnswers = merged.includeAnswers === true;
       state = merged;
     } catch {

@@ -3,6 +3,8 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { canonicalFormFromProvenance } from './fetch-kice.mjs';
+
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIRECTORY, '..', '..');
 const DEFAULT_SOURCE_DIRECTORY = path.join(ROOT, 'gichul-src');
@@ -296,13 +298,31 @@ async function validateCrawlInventory(inventoryPath, sourceDirectory, files) {
     throw new Error(`crawl inventory 형식이 잘못되었습니다: ${inventoryPath}`);
   }
   const targets = new Set();
+  const entriesByTarget = new Map();
   for (const entry of inventory.files) {
     if (!entry || typeof entry.target !== 'string' || !/^[\da-f]{32}$/iu.test(entry.fileSeq || '')) {
       throw new Error('crawl inventory에 잘못된 target/fileSeq가 있습니다.');
     }
     if (targets.has(entry.target)) throw new Error(`crawl inventory target 중복: ${entry.target}`);
-    parseSourceFilename(entry.target);
+    const source = parseSourceFilename(entry.target);
+    const canonicalForm = canonicalFormFromProvenance(entry.sourceFilename, entry.archiveEntry);
+    if (!['odd', 'even', 'single'].includes(entry.canonical_form)
+      || entry.canonical_form !== (source.kind === 'question' ? canonicalForm : 'single')) {
+      throw new Error(`crawl inventory canonical_form 불일치: ${entry.target}`);
+    }
+    const provenanceFields = {
+      grade_year: source.gradeYear,
+      year: source.year,
+      round: source.round,
+      subject: source.subject,
+      track: source.track,
+      kind: source.kind,
+    };
+    for (const [name, value] of Object.entries(provenanceFields)) {
+      if (entry[name] !== value) throw new Error(`crawl inventory provenance 불일치: ${entry.target}.${name}`);
+    }
     targets.add(entry.target);
+    entriesByTarget.set(entry.target, entry);
   }
   const sourceTargets = new Set(files.map((file) => path.relative(sourceDirectory, file).split(path.sep).join('/')));
   for (const target of targets) {
@@ -311,6 +331,7 @@ async function validateCrawlInventory(inventoryPath, sourceDirectory, files) {
   for (const target of sourceTargets) {
     if (!targets.has(target)) throw new Error(`crawl inventory에 없는 PDF가 있습니다: ${target}`);
   }
+  return entriesByTarget;
 }
 
 function compareExams(left, right) {
@@ -333,8 +354,9 @@ export async function buildManifest({
 } = {}) {
   const files = await pdfFiles(sourceDirectory);
   if (!files.length) throw new Error(`PDF가 없습니다: ${sourceDirectory}`);
+  let inventoryByTarget = null;
   if (!allowPartial) {
-    await validateCrawlInventory(inventoryPath, sourceDirectory, files);
+    inventoryByTarget = await validateCrawlInventory(inventoryPath, sourceDirectory, files);
     validateCorpusManifest(files.flatMap((file) => {
       const source = parseSourceFilename(file);
       return tracksForSource(source).map((track) => ({ id: idFor(source, track) }));
@@ -356,6 +378,7 @@ export async function buildManifest({
     const tracks = tracksForSource(source);
     const sections = sectionMapFor(source, pageTexts, pageCount, tracks, overrides, usedOverrides);
     const r2Key = path.relative(sourceDirectory, file).split(path.sep).join('/');
+    const canonicalForm = inventoryByTarget?.get(r2Key)?.canonical_form;
     for (const track of tracks) {
       exams.push({
         id: idFor(source, track),
@@ -367,6 +390,7 @@ export async function buildManifest({
         kind: source.kind,
         r2_key: r2Key,
         pages: pageCount,
+        ...(source.kind === 'question' && canonicalForm ? { canonical_form: canonicalForm } : {}),
         ...(sections.has(track) ? { sections: sections.get(track) } : {}),
       });
     }

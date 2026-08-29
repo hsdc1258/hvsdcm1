@@ -234,13 +234,11 @@ const GICHUL_FIXTURE = {
   ],
 };
 
-// 발췌 모드 + 공통 파트 포함 + 정답표 포함으로 얼린다. 이 조합이 화면의 갈래를 가장
-// 많이 지난다: 발췌 구간이 붙은 행, 선택과목 구간이 없어 비활성으로 내려앉는 구체제 행,
-// 그리고 발췌 모드에서만 살아나는 "공통 파트 포함" 옵션.
+// 발췌 모드 + 정답표 포함으로 얼린다. 선택과목 구간이 붙은 행과 그 구간이 없어
+// 비활성으로 내려앉는 구체제 행을 함께 지난다.
 const GICHUL_STATE = {
   subject: 'korean',
   mode: 'excerpt',
-  includeCommon: true,
   includeAnswers: true,
   selected: ['2023-06-korean-hwajak-question', '2023-csat-korean-hwajak-question'],
 };
@@ -465,10 +463,10 @@ export function buildSnapshots() {
       note: '<strong>무엇인가</strong> — 기출(<code>/gichul/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 필터와 결과는 <code>gichul/app.js</code>의 <code>renderFilters()</code>·<code>renderBody()</code>를'
         + ' <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>GICHUL_FIXTURE</code>)이고,'
-        + ' 과목은 국어 · 범위는 <strong>선택과목 발췌</strong> · 공통 파트 포함 · 정답표 포함 · 두 항목 선택 상태다.'
+        + ' 과목은 국어 · 범위는 <strong>선택과목 발췌</strong> · 정답표 포함 · 두 항목 선택 상태다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 필터가 표본에서 도출한 값(학년도 · 시행 · 선택과목)만 내는지,'
         + ' 발췌 모드에서 선택과목 구간이 없는 2021학년도 수능 행이 <strong>비활성</strong>으로 내려앉고 체크박스가 잠기는지,'
-        + ' 행마다 발췌 구간과 공통 구간이 부제 한 줄로 읽히는지, 툴바의 선택 개수와 버튼 상태가 선택과 맞는지,'
+        + ' 행마다 선택과목 전용 구간이 부제 한 줄로 읽히는지, 툴바의 선택 개수와 버튼 상태가 선택과 맞는지,'
         + ' 그리고 그룹 리스트 · 세그먼티드 · 툴바가 전부 <code>system.css</code>의 프리미티브를 그대로 쓰는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>account.js</code>와 <code>app.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
         + ' 실제 시험 목록은 이 문서가 아니라 로그인 뒤 <code>GET /api/gichul/manifest</code>에서 온다 — 표본은 계약의 모양을 보여주기 위한 것이지 실제 수록 범위가 아니다.'

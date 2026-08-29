@@ -23,6 +23,7 @@ import {
 } from './build-manifest.mjs';
 import { uploadR2 } from './upload-r2.mjs';
 import { verifyGichulReadiness } from './readiness.mjs';
+import { createGichulRenderers } from '../render-sandbox.mjs';
 
 async function temporaryDirectory(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'hvsdcm-gichul-'));
@@ -311,6 +312,62 @@ test('manifest filenames reject tracks from the wrong subject or academic-year s
   );
 });
 
+test('range planner uses common once for full output and selection only for excerpts', () => {
+  const renderers = createGichulRenderers();
+  const exams = [
+    {
+      id: '2021-csat-korean-hwajak-question', subject: 'korean', year: 2021, grade_year: 2022,
+      round: 'csat', track: 'hwajak', kind: 'question', r2_key: 'shared.pdf', pages: 20,
+      sections: { common: [1, 8], selection: [9, 12] },
+    },
+    {
+      id: '2021-csat-korean-eonmae-question', subject: 'korean', year: 2021, grade_year: 2022,
+      round: 'csat', track: 'eonmae', kind: 'question', r2_key: 'shared.pdf', pages: 20,
+      sections: { common: [1, 8], selection: [17, 20] },
+    },
+  ];
+  const manifest = { exams };
+  const full = renderers.planSegments(exams, manifest, {
+    ...renderers.defaultState(), mode: 'full', includeCommon: false,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(full.segments.map(({ ranges }) => ranges))), [
+    [[1, 8], [9, 12]],
+    [[17, 20]],
+  ]);
+  const excerpt = renderers.planSegments([exams[0]], manifest, {
+    ...renderers.defaultState(), mode: 'excerpt', includeCommon: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(excerpt.segments.map(({ ranges }) => ranges))), [[[9, 12]]]);
+
+  const filters = renderers.renderFilters(manifest, { ...renderers.defaultState(), mode: 'excerpt' });
+  const body = renderers.renderBody(manifest, { ...renderers.defaultState(), mode: 'excerpt', selected: [] });
+  assert.doesNotMatch(filters, /includeCommon|공통 파트 포함/u);
+  assert.match(body, /선택과목만 9–12쪽/u);
+  assert.doesNotMatch(body, /공통 1–8쪽/u);
+});
+
+test('full planner derives 0, 1 and N selected math tracks without foreign ranges', () => {
+  const renderers = createGichulRenderers();
+  const definitions = [
+    ['hwaktong', [13, 15]],
+    ['mijeok', [16, 18]],
+    ['giha', [19, 20]],
+  ];
+  const exams = definitions.map(([track, selection]) => ({
+    id: `2023-csat-math-${track}-question`, subject: 'math', year: 2023, grade_year: 2024,
+    round: 'csat', track, kind: 'question', r2_key: 'math.pdf', pages: 20,
+    sections: { common: [1, 12], selection },
+  }));
+  const manifest = { exams };
+  for (const chosen of [[], exams.slice(0, 1), exams]) {
+    const { segments } = renderers.planSegments(chosen, manifest, { ...renderers.defaultState(), mode: 'full' });
+    const ranges = segments.flatMap((segment) => segment.ranges);
+    assert.equal(ranges.filter(([from, to]) => from === 1 && to === 12).length, chosen.length ? 1 : 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(ranges.filter(([from]) => from > 12))),
+      chosen.map((exam) => exam.sections.selection));
+  }
+});
+
 test('production corpus validation rejects an incomplete manifest and crawl inventory', () => {
   assert.throws(() => validateCorpusManifest([{
     id: '2026-06-english-question',
@@ -343,7 +400,18 @@ test('production manifest build rejects an inventoried but incomplete source cor
   const inventoryPath = path.join(sourceDirectory, 'crawl-inventory.json');
   await writeFile(inventoryPath, JSON.stringify({
     version: 1,
-    files: [{ target, fileSeq: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }],
+    files: [{
+      target,
+      fileSeq: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      sourceFilename: '영어영역_문제지.pdf',
+      canonical_form: 'single',
+      grade_year: 2027,
+      year: 2026,
+      round: '06',
+      subject: 'english',
+      track: null,
+      kind: 'question',
+    }],
   }));
   let extracted = false;
   await assert.rejects(buildManifest({

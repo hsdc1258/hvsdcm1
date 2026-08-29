@@ -694,6 +694,13 @@ function validateGichulFrontend() {
     'gichul/app.js: a failed fetch must abort before any merging — no partial merge may be produced (plan.md §4)');
   check(appSource.includes('isExcerptable'),
     'gichul/app.js: items without sections.selection must be rejected in excerpt mode (plan.md §4)');
+  check(!/\bstate\.includeCommon\b/u.test(appSource)
+    && !appSource.includes('data-option="includeCommon"')
+    && !appSource.includes('공통 파트 포함'),
+    'gichul/app.js: excerpt mode must ignore the removed includeCommon state and emit selection pages only');
+  check(appSource.includes('ranges.push(exam.sections.common)')
+    && appSource.includes('ranges.push(exam.sections.selection)'),
+  'gichul/app.js: full modern papers must be planned from common plus the selected track range');
 
   const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
   check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),
@@ -2131,7 +2138,7 @@ function validateGlobalsAndOrder() {
     'usage/index.html': ['/usage/assets/js/usage.js?v=20260829-orgchart-v10'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n4'],
+    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n5'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
