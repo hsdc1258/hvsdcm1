@@ -777,6 +777,27 @@ function projectUsageSummary(source, eventRows, usageContext) {
   };
 }
 
+export function latestHarnessDelivery(tasks = []) {
+  const newestFirst = [...tasks].reverse();
+  const latestList = (key, maximum) => {
+    const values = newestFirst
+      .map((task) => task?.delivery?.[key])
+      .find((entries) => Array.isArray(entries) && entries.length > 0) || [];
+    return [...new Set(values)].slice(-maximum);
+  };
+  return {
+    request: newestFirst
+      .map((task) => optionalEventText(task?.delivery?.request) || optionalEventText(task?.input))
+      .find(Boolean) || '',
+    plan: latestList('plan', 3),
+    changes: latestList('changes', 4),
+    verification: latestList('verification', 4),
+    approval: newestFirst.filter((task) => task.status !== 'complete'
+      && (task.actors || []).some((actor) => actor.status === 'blocked'))
+      .map((task) => task.delivery?.approval).find(Boolean) || null,
+  };
+}
+
 async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageContext) {
   const [taskRows, eventRows] = await Promise.all([
     env.DB.prepare(`
@@ -820,15 +841,7 @@ async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageC
   const updates = validTimes('updated_at');
   const completions = validTimes('completed_at');
   const complete = tasks.length > 0 && tasks.every((task) => task.status === 'complete');
-  const delivery = {
-    request: tasks.map((task) => optionalEventText(task.delivery?.request) || optionalEventText(task.input)).find(Boolean) || '',
-    plan: [...new Set(tasks.flatMap((task) => task.delivery?.plan || []))].slice(-3),
-    changes: [...new Set(tasks.flatMap((task) => task.delivery?.changes || []))].slice(-4),
-    verification: [...new Set(tasks.flatMap((task) => task.delivery?.verification || []))].slice(-4),
-    approval: tasks.filter((task) => task.status !== 'complete'
-      && (task.actors || []).some((actor) => actor.status === 'blocked'))
-      .map((task) => task.delivery?.approval).filter(Boolean).at(-1) || null,
-  };
+  const delivery = latestHarnessDelivery(tasks);
   return {
     version: 1,
     project_key: projectKey,

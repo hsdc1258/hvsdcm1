@@ -9,6 +9,7 @@ import {
   effectiveHarnessStatus,
   fixedTimeEqual,
   fixedTimeTextEqual,
+  latestHarnessDelivery,
   mergeHarnessReport,
 } from './src/router.js';
 import {
@@ -22,6 +23,30 @@ import {
 } from './src/lib.js';
 
 const ROUTER_SOURCE = readFileSync(new URL('./src/router.js', import.meta.url), 'utf8');
+
+test('project delivery uses the newest task summary instead of mixing historical release SHAs', () => {
+  const oldTask = {
+    status: 'complete', input: 'old request',
+    delivery: { request: 'old request', plan: ['old plan'], changes: ['Codex old0000'], verification: ['old gate'] },
+    actors: [],
+  };
+  const latestTask = {
+    status: 'complete', input: 'current request',
+    delivery: {
+      request: 'current request', plan: ['current plan'],
+      changes: ['Codex abcdef1', 'Claude bcdefa2', 'hvsdcm1 cdefab3'],
+      verification: ['current gate'],
+    },
+    actors: [],
+  };
+  assert.deepEqual(latestHarnessDelivery([oldTask, latestTask]), {
+    request: 'current request',
+    plan: ['current plan'],
+    changes: ['Codex abcdef1', 'Claude bcdefa2', 'hvsdcm1 cdefab3'],
+    verification: ['current gate'],
+    approval: null,
+  });
+});
 
 function createLoginTestDb(user = null) {
   const limits = new Map();
