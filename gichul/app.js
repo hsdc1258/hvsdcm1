@@ -308,21 +308,28 @@
       const answer = byId.get(answerIdOf(exam));
       const selectionAnswer = outputParts.every(({ kind }) => kind !== 'whole');
       const answerPagesValid = Array.isArray(answer?.answer_pages) && answer.answer_pages.length > 0;
-      const answerRegions = selectionAnswer
+      const answerRegionsByPart = selectionAnswer
         ? outputParts.map(({ answerField }) => answer?.[answerField])
         : [];
-      const selectionValid = !selectionAnswer || answerRegions.every((regions) => (
+      const answerRegions = answerRegionsByPart.filter((regions) => (
         Array.isArray(regions) && regions.length > 0
       ));
+      const missingAnswerPart = selectionAnswer && answerRegions.length !== answerRegionsByPart.length;
       // 정답표가 자체 판정하지 않고 같은 문제지의 provenance-derived canonical_form을 공유한다.
-      // 구형/불일치 manifest는 답안을 생략해 다른 형을 섞는 대신 명시적인 missing으로 처리한다.
-      if (!answer || answer.canonical_form !== exam.canonical_form || !answerPagesValid || !selectionValid) {
+      // 구형/불일치 manifest는 다른 형을 섞지 않고 missing으로 보고한다.
+      // 한 part의 crop이 비어 있어도 검증된 나머지 part까지 통째로 버리지는 않는다.
+      if (!answer || answer.canonical_form !== exam.canonical_form || !answerPagesValid
+        || (selectionAnswer && answerRegions.length === 0)) {
         // 같은 시험지에서 갈라진 선택과목마다 같은 말을 반복하지 않는다.
         if (!reportedMissing.has(exam.r2_key)) {
           reportedMissing.add(exam.r2_key);
           missingAnswers.push(examLabel(exam));
         }
         continue;
+      }
+      if (missingAnswerPart && !reportedMissing.has(exam.r2_key)) {
+        reportedMissing.add(exam.r2_key);
+        missingAnswers.push(examLabel(exam));
       }
       let planned = answerByPaper.get(exam.r2_key);
       if (!planned) {

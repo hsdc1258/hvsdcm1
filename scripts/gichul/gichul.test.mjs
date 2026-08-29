@@ -622,6 +622,17 @@ test('answer planner maps the exact included question parts to common and select
     { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
   ]);
 
+  const missingCommon = { exams: manifest.exams.map((exam) => (
+    exam.id === answers[0].id ? { ...exam, answer_common: undefined } : exam
+  )) };
+  const partialFull = renderers.planSegments([questions[0]], missingCommon, {
+    ...renderers.defaultState(), mode: 'full', includeAnswers: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(partialFull.segments.at(-1).clips)), [
+    { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
+  ]);
+  assert.equal(partialFull.missingAnswers.length, 1);
+
   const excerpt = renderers.planSegments([questions[0]], manifest, {
     ...renderers.defaultState(), mode: 'excerpt', includeAnswers: true,
   });

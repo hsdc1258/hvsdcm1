@@ -379,14 +379,16 @@ export function inspectAnswerClip({ clip, layout, raster, definitions }) {
   return rasterAnswerSemantics(raster, definitions, clip);
 }
 
-function answerPartsFromQuestionPages(questionPages, oracle) {
-  const pages = new Set(questionPages);
-  return [
-    ...(oracle.common.every((page) => pages.has(page)) ? ['common'] : []),
-    ...oracle.definitions.filter(({ track }) => (
-      oracle.selections.get(track).every((page) => pages.has(page))
-    )).map(({ track }) => track),
-  ];
+function expectedAnswerParts(mode, selectedTracks) {
+  return [...(mode === 'full' ? ['common'] : []), ...selectedTracks];
+}
+
+function answerQuestionCount(parts, oracle) {
+  const selectionFirst = oracle.definitions[0].firstQuestion;
+  const selectionCount = answerLastQuestion(selectionFirst) - selectionFirst + 1;
+  return parts.reduce((count, part) => (
+    count + (part === 'common' ? selectionFirst - 1 : selectionCount)
+  ), 0);
 }
 
 function sameRegion(left, right) {
@@ -400,6 +402,7 @@ function answerCounts({
   const matches = segments.filter(({ key }) => key === answerKey);
   if (matches.length !== 1) {
     return {
+      answer_count_mismatch_count: answerQuestionCount(expectedParts, oracle),
       noncanonical_form_page_count: 0,
       missing_common_count: expectedParts.includes('common') ? 1 : 0,
       foreign_common_count: 0,
@@ -419,7 +422,8 @@ function answerCounts({
     segment.clips = (segment.clips || []).filter((clip) => (
       !commonRegions.some((region) => sameRegion(clip, region))
     ));
-  } else if (mutation === 'answer-empty') {
+  } else if (mutation === 'answer-empty'
+    || (mutation === 'full-answer-empty' && mode === 'full')) {
     segment.ranges = [];
     segment.clips = [];
   } else if (mutation === 'answer-partial') {
@@ -473,10 +477,15 @@ function answerCounts({
     }
   }
   const expected = new Set(expectedParts);
+  const expectedAnswerCount = answerQuestionCount(expectedParts, oracle);
+  const actualAnswerCount = answerQuestionCount(
+    [...found].flatMap(([part, count]) => Array.from({ length: count }, () => part)), oracle,
+  );
   const foreignCommon = expected.has('common') ? 0 : (found.get('common') || 0);
   const foreignTracks = [...found].filter(([part]) => part !== 'common' && !expected.has(part))
     .reduce((sum, [, count]) => sum + count, 0);
   return {
+    answer_count_mismatch_count: Math.abs(expectedAnswerCount - actualAnswerCount),
     noncanonical_form_page_count: noncanonical,
     missing_common_count: expected.has('common') && !found.has('common') ? 1 : 0,
     foreign_common_count: foreignCommon,
@@ -543,6 +552,7 @@ function mutateManifest(manifest, mutation) {
     'full-answer',
     'answer-remove-common',
     'answer-empty',
+    'full-answer-empty',
     'answer-partial',
     'answer-add-common',
     'answer-add-foreign',
@@ -771,13 +781,13 @@ export async function runFullCorpusContract({
       const fullAnswer = answerCounts({
         ...sharedAnswerInput,
         segments: fullPlan.segments,
-        expectedParts: answerPartsFromQuestionPages(fullQuestionPages, oracle),
+        expectedParts: expectedAnswerParts('full', tracks),
         mode: 'full',
       });
       const excerptAnswer = answerCounts({
         ...sharedAnswerInput,
         segments: excerptPlan.segments,
-        expectedParts: answerPartsFromQuestionPages(excerptQuestionPages, oracle),
+        expectedParts: expectedAnswerParts('excerpt', tracks),
         mode: 'excerpt',
       });
       const result = {
