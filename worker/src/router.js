@@ -59,6 +59,10 @@ const LOGIN_FAILURES_PER_WINDOW = 10;
 const GICHUL_HEADERS = Object.freeze({
   'cache-control': 'no-store',
 });
+const LEARNING_CONTENT_KEYS = Object.freeze({
+  wordmaster: 'learning/wordmaster.json',
+  smstudy: 'learning/smstudy.json',
+});
 
 export function fixedTimeEqual(left, right) {
   if (typeof crypto.subtle.timingSafeEqual === 'function') {
@@ -545,10 +549,18 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     });
     modules = modules.map((module) => ({ ...module, status: 'done', progress: 100 }));
   }
-  // 이 보고가 title을 실었으면 그것이 지정 제목이고, 아니면 **이미 지정으로 확인된**
-  // 이전 제목만 물려받는다. 구 행의 title은 name에서 채워졌을 수 있으므로 근거가 되지
-  // 못한다 — 그런 행은 여기서 지정 아님으로 남고, 화면이 예전 판정 규칙을 그대로 쓴다.
-  const authoredTitle = incoming.task.title || (current.title_authored ? current.title : '') || '';
+  // 이 보고가 title을 실었으면 그것이 지정 제목이다. 아니면 이전 제목의 출처를 본다:
+  //   - `title_authored === true`  → 지정으로 확인된 제목이므로 그대로 물려받는다.
+  //   - `title_authored === false` → 파생(name 복사) 제목이므로 물려받지 않는다.
+  //   - 필드 **부재**(플래그 도입 전 행) → 근거가 없으므로 예전 판정 규칙을 한 번 적용해
+  //     `title !== name`인 제목만 지정으로 승격 보존한다 (review 기능 B M-2-R2).
+  //     승격하지 않으면 구 행의 사용자 제목이 무제목 보고 한 번에 name으로 덮여 사라진다.
+  const legacyAuthored = current.title_authored === undefined
+    && typeof current.title === 'string'
+    && current.title !== ''
+    && current.title !== current.name;
+  const inheritedTitle = (current.title_authored === true || legacyAuthored) ? current.title : '';
+  const authoredTitle = incoming.task.title || inheritedTitle || '';
   const merged = {
     version: 1,
     ...current,
@@ -992,6 +1004,37 @@ async function gichulPdf(request, env, id) {
   });
 }
 
+async function learningContent(request, env, app) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  const key = LEARNING_CONTENT_KEYS[app];
+  if (!key) return gichulError('Not found', 404);
+  const object = await env.GICHUL.get(key);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'application/json; charset=utf-8',
+    },
+  });
+}
+
+async function learningImage(request, env, name) {
+  if (!(await gichulSession(request, env))) {
+    return gichulError('로그인이 필요합니다.', 401);
+  }
+  if (!/^[a-z0-9-]{1,120}\.webp$/u.test(name)) return gichulError('Not found', 404);
+  const object = await env.GICHUL.get(`learning/smstudy/kice/${name}`);
+  if (!object) return gichulError('Not found', 404);
+  return new Response(object.body, {
+    headers: {
+      ...GICHUL_HEADERS,
+      'content-type': 'image/webp',
+    },
+  });
+}
+
 async function logout(request, env) {
   const rawToken = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (rawToken) {
@@ -1298,6 +1341,16 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
   if (method === 'GET' && path === '/api/gichul/manifest') return gichulManifest(request, env);
+
+  const learningContentMatch = path.match(/^\/api\/learning\/(wordmaster|smstudy)$/u);
+  if (method === 'GET' && learningContentMatch) {
+    return learningContent(request, env, learningContentMatch[1]);
+  }
+
+  const learningImageMatch = path.match(/^\/api\/learning\/smstudy\/image\/([^/]+)$/u);
+  if (method === 'GET' && learningImageMatch) {
+    return learningImage(request, env, learningImageMatch[1]);
+  }
 
   const gichulPdfMatch = path.match(/^\/api\/gichul\/pdf\/(.+)$/u);
   if (method === 'GET' && gichulPdfMatch) {

@@ -384,7 +384,7 @@ test('OPTIONS and unknown routes include CORS headers', async () => {
 const GICHUL_USER_TOKEN_HASH = await sha256('user-token');
 const GICHUL_DISABLED_TOKEN_HASH = await sha256('disabled-token');
 
-function createGichulEnv({ exams = [], pdfs = new Map(), manifestExists = true } = {}) {
+function createGichulEnv({ exams = [], pdfs = new Map(), learningObjects = new Map(), manifestExists = true } = {}) {
   const r2Reads = [];
   const manifest = { exams };
   return {
@@ -421,6 +421,7 @@ function createGichulEnv({ exams = [], pdfs = new Map(), manifestExists = true }
     GICHUL: {
       async get(key) {
         r2Reads.push(key);
+        if (learningObjects.has(key)) return { body: learningObjects.get(key) };
         if (key === 'manifest.json') {
           if (!manifestExists) return null;
           return {
@@ -447,6 +448,46 @@ test('gichul manifest and PDF routes reject anonymous requests before reading R2
     }
   }
   assert.deepEqual(env.r2Reads, []);
+});
+
+test('learning content and images reject anonymous requests before reading R2', async () => {
+  const env = createGichulEnv();
+  for (const path of [
+    '/api/learning/wordmaster',
+    '/api/learning/smstudy',
+    '/api/learning/smstudy/image/2026-csat-01.webp',
+  ]) {
+    const response = await worker.fetch(new Request(`https://api.test${path}`), env);
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+  }
+  assert.deepEqual(env.r2Reads, []);
+});
+
+test('authenticated learning routes stream only fixed R2 keys', async () => {
+  const objects = new Map([
+    ['learning/wordmaster.json', JSON.stringify({ words: [{ id: 'fixture' }], emoji: {} })],
+    ['learning/smstudy.json', JSON.stringify({ data: {}, notebook: {}, explanations: {} })],
+    ['learning/smstudy/kice/2026-csat-01.webp', new Uint8Array([82, 73, 70, 70])],
+  ]);
+  const env = createGichulEnv({ learningObjects: objects });
+  const headers = { authorization: 'Bearer user-token' };
+
+  const words = await worker.fetch(new Request('https://api.test/api/learning/wordmaster', { headers }), env);
+  assert.equal(words.status, 200);
+  assert.match(words.headers.get('content-type'), /^application\/json/u);
+  assert.equal(words.headers.get('cache-control'), 'no-store');
+  assert.equal((await words.json()).words[0].id, 'fixture');
+
+  const image = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/2026-csat-01.webp', { headers }), env);
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('content-type'), 'image/webp');
+  assert.equal(image.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(env.r2Reads, ['learning/wordmaster.json', 'learning/smstudy/kice/2026-csat-01.webp']);
+
+  const invalid = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/not-a-webp.txt', { headers }), env);
+  assert.equal(invalid.status, 404);
+  assert.equal(env.r2Reads.length, 2);
 });
 
 test('authenticated gichul routes stream only manifest-mapped PDFs with no-store CORS', async () => {
@@ -1840,6 +1881,99 @@ test('a stored task records whether its title was authored or inherited from the
   const carried = JSON.parse(authored.state.payload);
   assert.equal(carried.title, sameText);
   assert.equal(carried.title_authored, true);
+});
+
+// review 기능 B M-2-R2 — 위 테스트는 모두 플래그 도입 **후** 새로 만든 행만 다룬다.
+// 실제 D1에는 플래그가 없던 시절의 행이 남아 있고, 그 행의 명시 제목은 후속 무제목 보고
+// 한 번에 name으로 덮여 사라졌다. 플래그 부재는 "파생"이 아니라 "근거 없음"이므로,
+// 그런 행에는 예전 판정 규칙(title !== name)을 한 번 적용해 지정 제목을 승격 보존한다.
+test('a pre-flag row keeps its authored title when a later report carries none', async () => {
+  const post = (env, body) => worker.fetch(new Request('https://api.test/api/harness/report', {
+    method: 'POST',
+    headers: { authorization: 'Bearer harness-token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env);
+
+  const legacyName = 'WP2 관제탑 (08-29)';
+  const legacyTitle = '관제탑 UI 개선';
+
+  // (1) 플래그가 없던 시절의 행: 사람이 지정한 title이 name과 다르고, title_authored 자체가
+  //     payload에 **없다**.
+  const kept = harnessStoreEnv();
+  kept.state.payload = JSON.stringify({
+    version: 1,
+    id: 'usage-harness',
+    name: legacyName,
+    title: legacyTitle,
+    phase: 'work',
+    status: 'active',
+    progress: 40,
+    created_at: '2026-08-27T08:00:00.000Z',
+    updated_at: '2026-08-27T08:00:00.000Z',
+    actors: [],
+    modules: [],
+    artifacts: [],
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(JSON.parse(kept.state.payload), 'title_authored'), false);
+
+  // title을 싣지 않은 후속 보고가 들어와도 지정 제목이 살아남고, 출처가 참으로 승격된다.
+  assert.equal((await post(kept.env, harnessInput({
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    task: { ...harnessInput().task, name: legacyName },
+  }))).status, 200);
+  const promoted = JSON.parse(kept.state.payload);
+  assert.equal(promoted.title, legacyTitle);
+  assert.equal(promoted.title_authored, true);
+
+  // (2) **반례**: 같은 플래그 부재라도 title이 name과 같은 행은 name에서 채워졌을 뿐이므로
+  //     승격하지 않는다. 여기까지 승격하면 파생 제목이 지정 제목으로 둔갑한다.
+  const derived = harnessStoreEnv();
+  derived.state.payload = JSON.stringify({
+    version: 1,
+    id: 'usage-harness',
+    name: legacyName,
+    title: legacyName,
+    phase: 'work',
+    status: 'active',
+    progress: 40,
+    created_at: '2026-08-27T08:00:00.000Z',
+    updated_at: '2026-08-27T08:00:00.000Z',
+    actors: [],
+    modules: [],
+    artifacts: [],
+  });
+  assert.equal((await post(derived.env, harnessInput({
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    task: { ...harnessInput().task, name: '사용량 하네스 시각화 (08-27)' },
+  }))).status, 200);
+  const stayedDerived = JSON.parse(derived.state.payload);
+  assert.equal(stayedDerived.title, '사용량 하네스 시각화 (08-27)');
+  assert.equal(stayedDerived.title_authored, false);
+
+  // (3) 명시적 `false`는 근거가 있는 파생 판정이므로 승격 대상이 아니다.
+  const explicitFalse = harnessStoreEnv();
+  explicitFalse.state.payload = JSON.stringify({
+    version: 1,
+    id: 'usage-harness',
+    name: legacyName,
+    title: legacyTitle,
+    title_authored: false,
+    phase: 'work',
+    status: 'active',
+    progress: 40,
+    created_at: '2026-08-27T08:00:00.000Z',
+    updated_at: '2026-08-27T08:00:00.000Z',
+    actors: [],
+    modules: [],
+    artifacts: [],
+  });
+  assert.equal((await post(explicitFalse.env, harnessInput({
+    occurred_at: '2026-08-27T09:00:00.000Z',
+    task: { ...harnessInput().task, name: legacyName },
+  }))).status, 200);
+  const notPromoted = JSON.parse(explicitFalse.state.payload);
+  assert.equal(notPromoted.title, legacyName);
+  assert.equal(notPromoted.title_authored, false);
 });
 
 test('the real SQLite UPSERT preserves milliseconds and advances strictly', async (t) => {

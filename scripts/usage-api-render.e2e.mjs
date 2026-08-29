@@ -167,6 +167,34 @@ assert.equal((await post(env, '/api/harness/report', 'harness-token', report('fi
   actors: [actor('finished:main', '끝난 Main', 'done')],
 }))).status, 200);
 
+// (3-b) **플래그 도입 전에 저장된 행**을 그대로 심는다 — payload에 `title_authored`가 없고
+//       사람이 지정한 title이 name과 다르다. 이 행에 title 없는 후속 보고가 들어와도
+//       지정 제목이 살아남아야 한다 (review 기능 B M-2-R2). 승격이 없으면 화면 제목이
+//       조용히 name으로 바뀐다.
+const LEGACY_NAME = '레거시 세션 (08-20)';
+const LEGACY_TITLE = '관제탑 UI 개선';
+database.prepare(`
+  INSERT INTO harness_tasks(task_id, status, updated_at, payload) VALUES (?, 'active', ?, ?)
+`).run('legacy', iso(30 * 60 * 1000), JSON.stringify({
+  version: 1,
+  id: 'legacy',
+  name: LEGACY_NAME,
+  title: LEGACY_TITLE,
+  phase: 'work',
+  status: 'active',
+  progress: 40,
+  created_at: iso(60 * 60 * 1000),
+  updated_at: iso(30 * 60 * 1000),
+  heartbeat_at: iso(30 * 60 * 1000),
+  actors: [],
+  modules: [],
+  artifacts: [],
+}));
+assert.equal((await post(env, '/api/harness/report', 'harness-token', report('legacy', {
+  task: { name: LEGACY_NAME },
+  actors: [actor('legacy:main', 'Main Codex')],
+}))).status, 200);
+
 // (4) 실제 한도 수집 보고 두 건 — usage_snapshots와 usage_source_health를 함께 채운다.
 assert.equal((await post(env, '/api/usage/report', 'usage-token', {
   source: 'codex',
@@ -189,10 +217,12 @@ const payload = await response.json();
 
 // 응답 자체가 계약을 싣고 있는지 먼저 본다 — 화면이 옳아도 서버가 안 보내면 이 줄이 잡는다.
 const byId = new Map(payload.tasks.map((task) => [task.id, task]));
-assert.equal(byId.size, 3, 'owner 조회가 세 세션을 모두 돌려줘야 한다');
+assert.equal(byId.size, 4, 'owner 조회가 네 세션을 모두 돌려줘야 한다');
 assert.equal(byId.get('wp2').title, AUTHORED);
 assert.equal(byId.get('wp2').title_authored, true, 'Worker가 제목의 출처를 실어야 화면이 구별할 수 있다');
 assert.equal(byId.get('wp2').input, REQUEST_TEXT);
+assert.equal(byId.get('legacy').title, LEGACY_TITLE, '플래그 없던 행의 지정 제목이 무제목 보고로 사라지면 안 된다');
+assert.equal(byId.get('legacy').title_authored, true, '구 행의 명시 제목은 한 번 지정으로 승격돼야 한다');
 assert.equal(byId.get('wp2').status, 'active');
 assert.equal(byId.get('stalled').status, 'stale', 'Worker가 하트비트 끊김을 stale로 파생해야 한다');
 assert.equal(byId.get('finished').status, 'complete');
@@ -211,6 +241,9 @@ assert.equal(renderers.taskPresentation(byId.get('wp2')).name, AUTHORED);
 const activeMarkup = renderers.renderSessionView(payload.tasks, NOW, 'active', 'org');
 assert.match(activeMarkup, /WP2 관제탑 \(08-29\)/u);
 assert.doesNotMatch(activeMarkup, /작업 묶음 2/u);
+// 구 행의 지정 제목도 실제 마크업까지 살아 나온다 — name으로 돌아가지 않는다.
+assert.match(activeMarkup, /관제탑 UI 개선/u);
+assert.doesNotMatch(activeMarkup, /레거시 세션 \(08-20\)/u);
 
 // (2) input — 보고 원문이 상세에 그대로 서고, 한 화면에 한 번만 난다 (review-visual M4).
 assert.match(activeMarkup, /<section class="h-task-input"[\s\S]*?완료된 파이프라인 목록을 게시글형으로/u);
@@ -218,7 +251,7 @@ assert.equal((activeMarkup.match(/완료된 파이프라인 목록을 게시글�
 
 // (3) 3상태 — 세 세션이 각자 탭으로 갈리고, 개수도 같은 판정에서 나온다.
 const views = renderers.renderSessionViews(payload.tasks, NOW);
-for (const [view, count] of [['active', 1], ['stale', 1], ['complete', 1]]) {
+for (const [view, count] of [['active', 2], ['stale', 1], ['complete', 1]]) {
   assert.match(views, new RegExp(`data-session-view="${view}"[^>]*>[\\s\\S]*?data-view-count="${count}"`, 'u'));
 }
 assert.doesNotMatch(activeMarkup, /멎은 세션|끝난 세션/u);

@@ -55,8 +55,11 @@ function kindFromFilename(filename) {
 
 function formFromFilename(filename) {
   const value = compact(filename);
-  if (value.includes('홀수형')) return 'odd';
-  if (value.includes('짝수형')) return 'even';
+  // 2020 수능 영어는 긴 "홀수형/짝수형"이 아니라 "영어_홀.pdf/영어_짝.pdf"로
+  // 게시됐다. 확장자 직전의 한 글자 표기도 같은 form 계약으로 접어 canonical target
+  // 충돌에서 홀수형을 선택한다.
+  if (value.includes('홀수형') || /홀pdf$/u.test(value)) return 'odd';
+  if (value.includes('짝수형') || /짝pdf$/u.test(value)) return 'even';
   return null;
 }
 

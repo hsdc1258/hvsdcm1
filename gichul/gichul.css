@@ -30,6 +30,13 @@
   font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
 }
+/* 선택 라벨은 행 전체 히트 영역만 제공한다. flex 항목으로 폭을 차지하면 뒤의
+   본문과 액세서리가 오른쪽 끝으로 밀리므로, 행을 기준으로 겹쳐 놓는다. */
+.gi-pick-hit {
+  position: absolute;
+  inset: 0;
+  width: auto;
+}
 /* 행 우측에 "열기" 버튼과 체크박스가 함께 온다. .list-row-accessory는 기본이
    place-items 격자라 두 컨트롤을 가로로 세우는 것만 여기서 한다. */
 .gi-accessory {

@@ -33,6 +33,83 @@
     return candidates.some((field) => normalizeStudySearch(field).includes(normalizedQuery));
   }
 
+  function normalizeMeaningAnswer(value) {
+    return String(value ?? '')
+      .toLowerCase()
+      .normalize('NFKC')
+      .replace(/[\s\u00A0]+/gu, '')
+      .replace(/[.,;:!?"'`´“”‘’·•\/\\|<>《》〈〉「」『』【】()[\]{}~…―—–_-]/gu, '');
+  }
+
+  function splitTopLevelAnswers(text) {
+    const parts = [];
+    let buffer = '';
+    let depth = 0;
+    const open = new Set(['(', '[', '{', '〈', '《', '【']);
+    const close = new Set([')', ']', '}', '〉', '》', '】']);
+    for (const character of String(text)) {
+      if (open.has(character)) depth += 1;
+      if (close.has(character)) depth = Math.max(0, depth - 1);
+      if ([',', ';', '/'].includes(character) && depth === 0) {
+        if (buffer.trim()) parts.push(buffer.trim());
+        buffer = '';
+      } else {
+        buffer += character;
+      }
+    }
+    if (buffer.trim()) parts.push(buffer.trim());
+    return parts;
+  }
+
+  function expandSquareVariants(segment) {
+    const match = segment.match(/^(.*?)\[([^\]]+)\](.*)$/u);
+    if (!match) return [segment];
+    const [, before, inside, after] = match;
+    return [...new Set([
+      before + after,
+      inside + after,
+      before + inside + after,
+    ].flatMap(expandSquareVariants))];
+  }
+
+  function cleanMeaningSegment(segment) {
+    return String(segment)
+      .replace(/<[^>]*>/gu, ' ')
+      .replace(/\([^)]*\)/gu, ' ')
+      .replace(/[<>]/gu, ' ')
+      .replace(/^\s*~\s*/gu, '')
+      .replace(/\s+/gu, ' ')
+      .trim();
+  }
+
+  function acceptedMeaningAliases(item, customAliases = []) {
+    const source = item?.meaning || '';
+    const aliases = new Set();
+    const push = (value) => {
+      const normalized = normalizeMeaningAnswer(value);
+      if (normalized) aliases.add(normalized);
+    };
+
+    push(source);
+    for (const segment of splitTopLevelAnswers(source)) {
+      for (const expanded of expandSquareVariants(segment)) {
+        const cleaned = cleanMeaningSegment(expanded);
+        push(cleaned);
+        const particleStripped = cleaned.replace(/^(을|를|에|에게|에서|의|로|으로|와|과)\s+/u, '');
+        if (particleStripped !== cleaned) push(particleStripped);
+      }
+    }
+    for (const alias of customAliases) push(alias);
+    return aliases;
+  }
+
+  function matchesMeaningAnswer(item, input, customAliases = []) {
+    const answers = splitTopLevelAnswers(input).map(normalizeMeaningAnswer).filter(Boolean);
+    if (!answers.length) return false;
+    const aliases = acceptedMeaningAliases(item, customAliases);
+    return answers.some((answer) => aliases.has(answer));
+  }
+
   function shuffle(items) {
     const result = [...items];
     for (let index = result.length - 1; index > 0; index -= 1) {
@@ -85,9 +162,13 @@
 
   globalThis.HvsStudyUtils = Object.freeze({
     SORT_MODES,
+    acceptedMeaningAliases,
     escapeHtml,
     matchesStudySearch,
+    matchesMeaningAnswer,
+    normalizeMeaningAnswer,
     shuffle,
+    splitTopLevelAnswers,
     sortStudyItems,
   });
 })();

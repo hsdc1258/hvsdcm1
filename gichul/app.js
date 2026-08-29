@@ -200,7 +200,7 @@
     const id = `gi-pick-${exam.id}`;
     const lead = blocked
       ? ''
-      : `<label class="list-row-stretch" for="${escapeHtml(id)}">`
+      : `<label class="list-row-stretch gi-pick-hit" for="${escapeHtml(id)}">`
         + `<span class="sr-only">${escapeHtml(examLabel(exam))} 선택</span></label>`;
     return `<div class="list-row"${blocked ? ' aria-disabled="true"' : ''}>${lead}`
       + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(title)}</span>`
@@ -552,6 +552,10 @@
   }
 
   function onClick(event) {
+    if (event.target.closest('#gichulRetry')) {
+      load();
+      return;
+    }
     const subject = event.target.closest('[data-subject]');
     if (subject) {
       state.subject = subject.dataset.subject;
@@ -611,6 +615,8 @@
   }
 
   async function load() {
+    elements.filters.innerHTML = '';
+    elements.body.innerHTML = '<p class="gi-empty">시험 목록을 불러오는 중입니다…</p>';
     try {
       const data = await window.HvsAccount.api('/api/gichul/manifest');
       manifest = { exams: Array.isArray(data?.exams) ? data.exams : [] };
@@ -621,7 +627,8 @@
     } catch (error) {
       if (error?.message === 'unauthorized') return;
       elements.filters.innerHTML = '';
-      elements.body.innerHTML = failureBanner('시험 목록을 받지 못했습니다.', [error?.message || '알 수 없는 오류']);
+      elements.body.innerHTML = `${failureBanner('시험 목록을 받지 못했습니다.', [error?.message || '알 수 없는 오류'])}
+        <div class="toolbar"><button id="gichulRetry" class="btn btn-secondary btn-sm" type="button">다시 받기</button></div>`;
     }
   }
 
@@ -631,6 +638,5 @@
   restoreFilters();
   // 목록이 오기 전에는 결과 자리를 만들지 않는다 — 빈 결과 그룹을 먼저 그리면
   // "조건에 맞는 시험지가 없습니다"가 잠깐 스쳤다가 뒤집힌다.
-  elements.body.innerHTML = '<p class="gi-empty">시험 목록을 불러오는 중입니다…</p>';
   load();
 })();

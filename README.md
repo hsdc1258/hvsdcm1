@@ -12,9 +12,9 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | `/gichul/` | Login-only KICE past-paper filtering, viewing and client-side PDF merge | `gichul/app.js` | filter settings |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
 | `/usage/` | Owner-only Codex limits and live AI harness hierarchy | `usage/assets/js/usage.js` | account token |
-| Worker | JSON API, D1 access and authenticated R2 PDF proxy | `worker/src/index.js` | D1 tables and R2 objects |
+| Worker | JSON API, D1 access and authenticated R2 learning/PDF proxy | `worker/src/index.js` | D1 tables and R2 objects |
 
-There is no front-end build step. HTML loads checked-in CSS, JavaScript, WebP and data files directly, so filenames and script order are deployment contracts.
+There is no front-end bundle step. HTML loads checked-in CSS and JavaScript directly, while learning content is fetched after login from authenticated Worker routes. The checked-in `_learning/` source is excluded by the default Jekyll Pages build and is converted into private R2 payloads before release.
 
 ## Local verification
 
@@ -25,6 +25,17 @@ npm test
 ```
 
 The command checks every JavaScript file, local HTML asset references, the WordMaster 50 × 40 data shape, all 13 social-studies subunits and 78 image-backed questions, shared study sorting behavior, then runs Worker utility and routing tests.
+
+## Protected learning content
+
+WordMaster and social-studies source data lives under `_learning/`, which GitHub Pages omits while Jekyll is enabled. Public loader files contain no content. Build and verify the 80 private R2 objects (2 JSON visibility switches plus 78 WebP files) before deploying the Worker or Pages change:
+
+```bash
+node scripts/learning/build-payloads.mjs
+node scripts/learning/upload-r2.mjs --bucket hvsdcm-gichul
+```
+
+The uploader sends images first and the two JSON payloads last. Worker routes `/api/learning/wordmaster`, `/api/learning/smstudy`, and `/api/learning/smstudy/image/:name` require a valid user session and disable caching.
 
 For a static preview:
 
@@ -49,6 +60,7 @@ The KICE list pages are the only collection source; there is no hand-maintained 
 node scripts/gichul/fetch-kice.mjs
 npm install
 node scripts/gichul/build-manifest.mjs
+node scripts/gichul/readiness.mjs
 node scripts/gichul/upload-r2.mjs --bucket hvsdcm-gichul
 ```
 

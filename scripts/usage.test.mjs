@@ -252,9 +252,18 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
 // 골격을 채우던 조판을 걷어냈다). 판독 어휘(data-org-phase·data-phase-state)는 그대로다.
 test('the session tree always renders every phase plus the reported actors', () => {
   const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active', 'org');
-  for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 지적', 'Main Codex', 'gpt-5.6-sol · xhigh', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
+  for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 지적', 'Main Codex', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
+  // 모델과 추론 단계는 조직도 카드에서 **각자 한 줄**이다 (review-visual M7). 한 줄에
+  // 붙였을 때는 노드 폭이 모자라 추론 단계가 늘 말줄임으로 잘렸다 — 표시하되 읽을 수
+  // 없으면 표시하지 않은 것과 같다. 두 값이 **모두 온전히** 나오는지를 단언한다.
+  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.6-sol<\/dd>/u);
+  assert.match(markup, /<dt>추론<\/dt><dd class="h-node-fact-mono">xhigh<\/dd>/u);
+  assert.doesNotMatch(markup, /h-node-fact-mono">gpt-5\.6-sol · xhigh/u);
+  // 측정이 없는 단계도 소요 자리를 `—`로 지킨다 — 한 장만 이 줄이 없으면 나란히 선
+  // 형제 카드들의 끝이 들쭉날쭉해진다 (review-visual N13).
+  assert.match(markup, /<dt>소요<\/dt><dd class="h-node-time">—<\/dd>/u);
   // 여덟 단계가 하나도 빠지지 않는다 — 카드가 된 것과 rest 줄로 내려간 것을 합쳐서다.
   assert.deepEqual(
     [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]).sort(),
@@ -334,7 +343,7 @@ test('the new stage keys carry status, model, and duration like the original fou
   assert.match(markup, /data-org-phase="approve" data-phase-state="current"/u);
   assert.match(markup, /data-org-phase="revise" data-phase-state="done"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
-  assert.match(markup, /data-org-phase="revise"[\s\S]*?claude-opus-5 · high/u);
+  assert.match(markup, /data-org-phase="revise"[\s\S]*?>claude-opus-5<[\s\S]*?>high</u);
   assert.match(markup, /data-org-phase="gate"[\s\S]*?h-node-time">1시간/u);
   // gate보다 앞선 input·plan·work는 이 세션이 보고한 적이 없다 — 완료로 세지 않는다.
   for (const phase of ['input', 'plan', 'work']) {
@@ -899,7 +908,8 @@ test('claude actors render in the reporting tree', () => {
   assert.match(markup, />Claude</u);
   assert.doesNotMatch(markup, />CLAUDE</u);
   assert.match(markup, /Fable 5 오케스트레이터/u);
-  assert.match(markup, /claude-fable-5 · high/u);
+  assert.match(markup, /<dd class="h-node-fact-mono">claude-fable-5<\/dd>/u);
+  assert.match(markup, /<dt>추론<\/dt><dd class="h-node-fact-mono">high<\/dd>/u);
 });
 
 test('an empty snapshot list and a payload without buckets render an empty state', async () => {
@@ -1342,14 +1352,15 @@ test('role, assignment, duration, and the quota estimate each get their own line
   assert.match(markup, /<dt>역할<\/dt><dd>백엔드 구현<\/dd>/u);
   assert.match(markup, /<dt>담당<\/dt><dd>worker 자동 스탬프<\/dd>/u);
   // 소요시간: 끝난 액터는 시작~종료, 진행 중인 액터는 시작~지금.
-  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>소요<\/dt><dd>1시간<\/dd>/u);
-  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?<dt>소요<\/dt><dd>2시간<\/dd>/u);
+  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>소요<\/dt><dd class="h-node-time">1시간<\/dd>/u);
+  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?<dt>소요<\/dt><dd class="h-node-time">2시간<\/dd>/u);
   // 한도 소비는 **추정**이다: 잔여의 감소분(88 → 80.5)이고, 라벨에 그렇게 적는다.
   assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>한도 소비<\/dt><dd>Codex 7\.5%p 추정<\/dd>/u);
   // 종료 스냅샷이 없는 액터에는 소비 줄 자체가 없다 — 0%p로 지어내지 않는다.
   assert.doesNotMatch(markup, /data-actor-id="wp3:front"[\s\S]*?한도 소비/u);
-  // 모델은 정확한 모델명 그대로, 같은 라벨-값 격자의 첫 줄로 낸다.
-  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.2-codex · xhigh<\/dd>/u);
+  // 모델은 정확한 모델명 그대로, 같은 라벨-값 격자의 첫 줄로 낸다. 추론 단계는 **그 다음
+  // 줄**이다 — 한 줄에 붙이면 노드 폭이 모자라 늘 추론 쪽이 잘렸다 (review-visual M7).
+  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.2-codex<\/dd><\/div><div><dt>추론<\/dt><dd class="h-node-fact-mono">xhigh<\/dd>/u);
   // 진행 중 노드는 테두리만이 아니라 글자 라벨로도 구분된다 (색각 조건).
   assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?class="h-node-flag">작업중</u);
 });
@@ -1385,9 +1396,17 @@ test('a payload without any of the new fields still renders through the old infe
   // 이벤트가 말한 단계(work)에 그 액터가 선다 — 종전 추정 경로가 그대로 살아 있다.
   const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
   assert.match(workBlock, /data-actor-id="usage-harness:webgpt"/u);
-  // 잴 근거가 없는 값은 줄 자체가 없다: 소요·한도 소비를 지어내지 않는다.
-  assert.doesNotMatch(markup, /<dt>소요<\/dt>/u);
+  // 액터 카드에서는 잴 근거가 없는 값의 줄 자체가 없다: 소요·한도 소비를 지어내지 않는다.
+  const webgptCard = /data-actor-id="usage-harness:webgpt"[\s\S]*?<\/article>/u.exec(markup)[0];
+  assert.doesNotMatch(webgptCard, /<dt>소요<\/dt>/u);
   assert.doesNotMatch(markup, /<dt>한도 소비<\/dt>/u);
+  // 단계 카드는 반대다 — 한 줄에 나란히 서는 고정 형제 집합이라, 측정이 없어도 `—`로
+  // 자리를 지킨다 (review-visual N13: `완료`만 소요가 비어 형제 카드들의 끝이 들쭉날쭉
+  // 했다). `—`는 값을 지어낸 것이 아니라 "측정 없음"의 표기라 숫자로 오독되지 않는다.
+  // 단계 카드는 **하나도 빠짐없이** 이 줄을 갖는다 — 그래야 카드 끝이 가지런하다.
+  const phaseCards = markup.match(/<article class="h-node is-phase[\s\S]*?<\/article>/gu) || [];
+  assert.ok(phaseCards.length > 0, '단계 카드가 없으면 이 검사는 공허하게 통과한다');
+  for (const card of phaseCards) assert.match(card, /<dt>소요<\/dt><dd class="h-node-time">/u);
   // 역할은 그대로 나온다 (구 payload에도 role은 있다).
   assert.match(markup, /<dt>역할<\/dt><dd>위임 실행<\/dd>/u);
   assert.doesNotMatch(markup, /undefined|NaN/u);

@@ -135,6 +135,8 @@
     duration: '소요',
     usage: '한도 소비',
     model: '모델',
+    reasoning: '추론',
+    progress: '진행도',
     // 자기 단계가 부모와 달라 부모 카드 밖에 선 액터는 **부모를 이름으로** 밝힌다.
     // 계층을 잃지 않으면서 API가 고정한 단계 자리도 지키는 유일한 방법이다 (major 2).
     parent: '상위',
@@ -900,9 +902,9 @@
   //
   // 노드 하나의 표시 계약은 아래 한 형태뿐이고, 축 노드(입력·총괄·단계)와 분기 노드
   // (서브에이전트)가 같은 렌더러를 공유한다. 종류마다 다른 마크업을 만들면 톤이 갈라진다.
-  //   { kind, kindLabel, name, detail, model, note, status, tone, time,
+  //   { kind, kindLabel, name, detail, model, reasoning, note, status, tone,
   //     progress, facts, current, attributes, children }
-  // model은 한 줄 고정(모노·말줄임)이고, facts는 라벨·값이 짝을 이루는 사실 목록이다.
+  // model·reasoning은 각자 한 줄의 모노 값이고, facts는 라벨·값이 짝을 이루는 사실 목록이다.
   // **facts의 라벨은 NODE_FACT_LABELS에서만 나온다** — 마크업에 손으로 적지 않는다.
 
   function renderNodeAttributes(attributes) {
@@ -914,14 +916,23 @@
 
   // 라벨-값 한 줄씩. 값이 없는 항목은 줄 자체를 만들지 않는다 — 빈 값을 '없음'으로
   // 채우면 보고되지 않은 것과 보고된 빈 값이 구별되지 않는다.
-  // 모델은 언제나 첫 줄이고 모노다(정확한 모델명이 한 줄에 고정되게).
+  //
+  // 모델과 추론 단계는 **각자 한 줄**을 쓴다 (review-visual M7). 한 줄에
+  // `모델 · 추론`으로 붙였을 때는 어느 노드 폭에서도 값이 길어, 말줄임이 **항상 추론
+  // 단계 자리에서** 발생했다 — 카드 넷 중 셋이 `gpt-5.6-codex · xh…` 꼴이었다.
+  // 표시하되 읽을 수 없으면 표시하지 않은 것과 같으므로, 두 값을 갈라 각각 온전히 낸다.
+  // 수집을 합쳐 추측하지 않는다는 DESIGN.md §1.1의 계약은 그대로다 — 바뀐 것은 조판뿐이다.
   function renderNodeFacts(node) {
     const rows = [
       node.model ? { label: NODE_FACT_LABELS.model, value: node.model, mono: true } : null,
+      node.reasoning ? { label: NODE_FACT_LABELS.reasoning, value: node.reasoning, mono: true } : null,
       ...(node.facts || []),
     ].filter((fact) => fact && fact.label && fact.value);
     if (rows.length === 0) return '';
-    return `<dl class="h-node-facts">${rows.map((fact) => `<div><dt>${escapeHtml(fact.label)}</dt><dd${fact.mono ? ' class="h-node-fact-mono"' : ''}>${escapeHtml(fact.value)}</dd></div>`).join('')}</dl>`;
+    return `<dl class="h-node-facts">${rows.map((fact) => {
+      const className = [fact.mono ? 'h-node-fact-mono' : '', fact.className || ''].filter(Boolean).join(' ');
+      return `<div><dt>${escapeHtml(fact.label)}</dt><dd${className ? ` class="${className}"` : ''}>${escapeHtml(fact.value)}</dd></div>`;
+    }).join('')}</dl>`;
   }
 
   function renderNode(node) {
@@ -934,12 +945,12 @@
         ${renderNodeFacts(node)}
         ${node.note ? `<p class="h-node-note">${escapeHtml(node.note)}</p>` : ''}
         ${node.status
-    ? `<p class="h-node-state"><span class="status-dot${node.tone || ' is-idle'}" aria-hidden="true"></span>${escapeHtml(node.status)}${node.time ? `<span class="h-node-time">${escapeHtml(node.time)}</span>` : ''}</p>`
+    ? `<p class="h-node-state"><span class="status-dot${node.tone || ' is-idle'}" aria-hidden="true"></span>${escapeHtml(node.status)}</p>`
     : ''}
         ${progress === null
     ? ''
-    : `<p class="h-node-progress"><span>진행도</span><strong>${Math.round(progress)}%</strong></p>
-        <span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>`}
+    : `<p class="h-node-progress"><span>${escapeHtml(NODE_FACT_LABELS.progress)}</span><strong>${Math.round(progress)}%</strong></p>
+        ${node.kind === 'lead' ? `<span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>` : ''}`}
       </article>`;
   }
 
@@ -983,6 +994,10 @@
         </dl>`;
   }
 
+  // 조직도 기하와 **선택 세션의 메타**를 조판에서도 가른다 (review-visual M9). rest 줄은
+  // 조직도의 node가 아니라 세션의 사실이므로, 조직도 상자 안이 아니라 그 아래 상세 본문
+  // 레벨에 선다 — 상자가 어떤 이유로든 안쪽 스크롤을 갖게 되어도 이 줄이 함께 밀려
+  // 본문 좌측 정렬 기준선에서 이탈하지 않는다.
   function renderOrgTree(tree) {
     const branches = tree.branches.map((node) => `
           <div class="h-orgchart-branch">
@@ -993,7 +1008,6 @@
       <div class="h-orgchart">
         <div class="h-orgchart-root">${renderNode(tree.lead)}</div>
         ${branches ? `<div class="h-orgchart-branches">${branches}</div>` : ''}
-        ${renderOrgRest(tree.rest)}
       </div>`;
   }
 
@@ -1070,13 +1084,17 @@
         kind: 'agent',
         kindLabel: ACTOR_KIND_LABELS[actor.kind] || actor.kind || NODE_KIND_LABELS.agent,
         name: actor.name || '이름 미기록',
-        model: modelAndReasoning(actor.model, actor.reasoning),
+        model: actor.model || (actor.reasoning ? '모델 미기록' : ''),
+        reasoning: actor.reasoning || '',
         // 역할·담당·소요·한도를 **각각** 낸다 (요구 2·4). 하나로 합치지 않는다.
         facts: [
           { label: NODE_FACT_LABELS.role, value: actor.role || '' },
           { label: NODE_FACT_LABELS.assignment, value: actor.assignment || '' },
           { label: NODE_FACT_LABELS.parent, value: detachedParent.get(actor.id) || '' },
-          { label: NODE_FACT_LABELS.duration, value: duration },
+          // 액터의 소요는 **잴 근거가 있을 때만** 줄이 선다. 단계 카드와 달리(아래
+          // phaseNodesOf의 `—`) 액터의 사실 목록은 길이가 제각각이라 자리를 지킬 격자가
+          // 없고, 빈 줄을 세우면 "보고되지 않음"과 "0"이 구별되지 않는다.
+          { label: NODE_FACT_LABELS.duration, value: duration, className: 'h-node-time' },
           { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(actor) },
         ],
         role: actor.role || '',
@@ -1109,21 +1127,32 @@
       const stat = timeline.stats.get(phase.key);
       const state = states.get(phase.key);
       const isCurrent = state === 'current';
-      const model = modelAndReasoning(
-        stat?.model || (isCurrent ? task.model : ''),
-        stat?.reasoning || (isCurrent ? task.reasoning : ''),
-      );
+      const model = stat?.model || (isCurrent ? task.model : '');
+      const reasoning = stat?.reasoning || (isCurrent ? task.reasoning : '');
+      // 소요는 다른 사실과 **같은 라벨-값 줄**로 낸다. 예전에는 이 값만 상태 줄 오른쪽에
+      // 양끝 정렬로 붙어, 한 조직도 안에서 정렬 규칙이 둘로 갈렸다 (review-visual N12).
+      //
+      // 값이 없는 단계는 `—`로 자리를 지킨다 (N13: `완료`만 소요가 비어 형제 넷의 카드
+      // 끝이 들쭉날쭉했다). 단계 카드는 **한 줄에 나란히 서는 고정 형제 집합**이라 자리를
+      // 지킬 격자가 실제로 있고, `—`는 값을 지어내는 것이 아니라 "측정 없음"을 명시하는
+      // 표기다. 길이가 제각각인 액터 카드에는 같은 이유가 없으므로 그쪽은 종전대로
+      // 줄 자체를 만들지 않는다.
       return {
         kind: 'phase',
         kindLabel: NODE_KIND_LABELS.phase,
         name: phase.label,
         detail: phase.detail,
-        model,
+        model: model || (reasoning ? '모델 미기록' : ''),
+        reasoning,
+        facts: [{
+          label: NODE_FACT_LABELS.duration,
+          value: stat && stat.duration > 0 ? formatDuration(stat.duration) : '—',
+          className: 'h-node-time',
+        }],
         // '기록 없음'이 왜 기록 없음인지 노드가 직접 말한다 (사용자 지시 ①).
         note: state === 'skipped' ? PHASE_SKIPPED_REASON : '',
         status: PHASE_STATE_LABELS[state],
         tone: isCurrent ? ' is-accent' : ' is-idle',
-        time: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
         current: isCurrent,
         attributes: { 'data-org-phase': phase.key, 'data-phase-state': state },
         children: byPhase.get(phase.key) || [],
@@ -1183,11 +1212,12 @@
         kind: 'lead',
         kindLabel: NODE_KIND_LABELS.lead,
         name: main.name || '이름 미기록',
-        model: modelAndReasoning(main.model, main.reasoning),
+        model: main.model || (main.reasoning ? '모델 미기록' : ''),
+        reasoning: main.reasoning || '',
         facts: [
           { label: NODE_FACT_LABELS.role, value: main.role || '' },
           { label: NODE_FACT_LABELS.assignment, value: main.assignment || '' },
-          { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now) },
+          { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now), className: 'h-node-time' },
           { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(main) },
         ],
         status: actorStatus(main),
@@ -1204,17 +1234,26 @@
   // ---- 조직도 껍데기 ------------------------------------------------------
   //
   // 예전에는 여기에 확대·이동 캔버스가 있었다. 지금은 **아무 변환도 하지 않는 컨테이너**
-  // 하나뿐이다 (계약 §C). 트리는 일반 문서 흐름으로 원본 크기로 서고, 내용이 화면보다
-  // 넓으면 이 컨테이너만 가로로 스크롤한다 — 페이지 본문이 좌우로 흔들리지 않는다.
-  // 도구 줄(축소·확대·맞춤)과 힌트도 함께 사라졌다: 조작할 것이 없으므로 조작 UI도 없다.
-  function renderOrgSection(label, treeMarkup) {
+  // 하나뿐이다 (계약 §C). 조직도는 이 상자의 폭 **안에서 완결된다** — 노드가 폭을 나눠
+  // 갖고 커넥터만 고정 모듈이므로, 단계가 늘어도 상자를 넘치지 않는다.
+  //
+  // 예전에는 트리가 `max-content`로 서고 넘치면 이 상자가 가로 스크롤했다. 그 결과
+  // 데스크톱에서 마지막 단계 카드가 우측 경계에서 말줄임 없이 잘리고, 패널 폭 전체에
+  // 걸친 네이티브 스크롤바가 순검정 캔버스 위에서 가장 밝은 요소가 됐다
+  // (review-visual B3). 가로 스크롤 스트립은 §1.1 v9가 세션 목록에서 이미 걷어낸
+  // 조판이고, 조직도에만 면제할 근거가 없다. 그래서 스크롤이 아니라 **폭 예산**으로 푼다.
+  // 상자에는 안전망만 남는다(아래 CSS) — 정상 데이터에서는 발동하지 않는다.
+  //
+  // rest 줄은 이 상자 **밖**이다: 조직도 기하가 아니라 선택 세션의 메타이므로, 조판
+  // 위치도 상세 본문 레벨로 분리한다 (review-visual M9).
+  function renderOrgSection(label, treeMarkup, restMarkup) {
     return `
       <section class="h-org" aria-label="${escapeHtml(label)}">
         <header class="h-org-head">
           <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
         </header>
-        <div class="h-org-scroll" data-org-scroll tabindex="0" role="group"
-          aria-label="실행 조직도. 내용이 넓으면 가로로 스크롤합니다">${treeMarkup}</div>
+        <div class="h-org-scroll" data-org-scroll>${treeMarkup}</div>
+        ${restMarkup || ''}
       </section>`;
   }
 
@@ -1291,7 +1330,10 @@
         ${renderTaskInput(task)}
         ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${renderOrgSection(`${presentation.name} 실행 조직도`, renderOrgTree(sessionOrgTree(task, now)))}
+        ${(() => {
+    const tree = sessionOrgTree(task, now);
+    return renderOrgSection(`${presentation.name} 실행 조직도`, renderOrgTree(tree), renderOrgRest(tree.rest));
+  })()}
         ${renderArtifacts(task)}`;
   }
 
@@ -1423,7 +1465,10 @@
           chips: flattenAgentNodes(byPhase.get(phase.key)).map(({ node, depth }) => ({
             name: node.name,
             role: node.role || '',
-            model: node.model || '',
+            // 관제탑 칩은 한 줄에 `모델 · 추론`을 그대로 유지한다. 조직도가 두 줄로 나눈
+            // 것은 **노드 카드의 폭 예산** 때문이고(review-visual M7), 칩은 가로로 흐르는
+            // 조판이라 같은 제약이 없다. 이식한 원본 조판을 재해석하지 않는다.
+            model: modelAndReasoning(node.model, node.reasoning),
             duration: node.duration || '',
             assignment: node.assignment || '',
             // 부모와 단계가 달라 중첩되지 못한 액터는 부모를 이름으로 밝힌다 —

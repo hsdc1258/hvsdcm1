@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 await import('../assets/js/study-utils.js');
 
-const { SORT_MODES, matchesStudySearch, sortStudyItems } = globalThis.HvsStudyUtils;
+const {
+  SORT_MODES,
+  matchesMeaningAnswer,
+  matchesStudySearch,
+  sortStudyItems,
+} = globalThis.HvsStudyUtils;
 const items = [
   { id: 'unseen', order: 1, wrongRate: null, wrongCount: 0, recentAt: null },
   { id: 'low', order: 2, wrongRate: 20, wrongCount: 4, recentAt: 100 },
@@ -68,4 +75,18 @@ test('study search ignores Korean whitespace and shows all for a blank query', (
   assert.equal(matchesStudySearch('구 성 하 다', fields), true);
   assert.equal(matchesStudySearch('지어 내다', fields), true);
   assert.equal(matchesStudySearch('   ', fields), true);
+});
+
+test('WordMaster OCR delimiter repairs expose each real meaning as a grading alias', () => {
+  const sandbox = { window: {} };
+  const source = readFileSync(new URL('../_learning/wordmaster/words.js', import.meta.url), 'utf8');
+  vm.runInNewContext(source, sandbox, { filename: '_learning/wordmaster/words.js' });
+  const byWord = new Map(sandbox.window.WORDMASTER_WORDS.map((item) => [item.word, item]));
+
+  assert.equal(matchesMeaningAnswer(byWord.get('delight'), '기쁨'), true);
+  assert.equal(matchesMeaningAnswer(byWord.get('fuel'), '연료'), true);
+  assert.equal(matchesMeaningAnswer(byWord.get('outrage'), '분노'), true);
+  assert.doesNotMatch(byWord.get('delight').meaning, /\s0/u);
+  assert.doesNotMatch(byWord.get('fuel').meaning, /\s0/u);
+  assert.doesNotMatch(byWord.get('outrage').meaning, /\s0/u);
 });
