@@ -1,0 +1,46 @@
+{
+  "schema": "gichul-live-answer-compose-verification",
+  "version": 1,
+  "verified_at": "2026-08-30T00:24:24.8190413+09:00",
+  "target": {
+    "url": "https://hvsdcm1.xyz/gichul/",
+    "main_commit": "9e567eb6c1a5ef8fa5c6bbf7bcd33267f25a10c3",
+    "asset_version": "20260829-n7"
+  },
+  "selection": {
+    "exam": "2026학년도 6월 국어",
+    "mode": "전체 시험지",
+    "track": "화법과 작문",
+    "include_answers": true
+  },
+  "live_output": {
+    "filename": "2026-06-국어-화작.pdf",
+    "page_count": 18,
+    "sha256": "8a620825de37fbffe57f5c8614441433de902f18937323d0c491d864a3a546da"
+  },
+  "question_sheet": {
+    "question_numbers": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+      11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+      31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+      41, 42, 43, 44, 45
+    ],
+    "question_count": 45
+  },
+  "answer_sheet": {
+    "answer_numbers": [
+      1, 18, 2, 19, 3, 20, 4, 21, 5, 22, 6, 23,
+      7, 24, 8, 25, 9, 26, 10, 27, 11, 28, 12, 29,
+      13, 30, 14, 31, 15, 32, 16, 33, 17, 34, 35
+    ],
+    "actual_answer_count": 35,
+    "common_answers_included": true,
+    "common_answer_count": 34,
+    "selected_track_answer_count": 1,
+    "not_selected_track_answer_count": 0,
+    "odd_and_even_forms_both_present": false
+  },
+  "verdict": "이상",
+  "finding": "문제지는 1~45번이 모두 있으나 답안은 공통 1~34번과 화법과 작문 35번만 포함되어 36~45번 답이 누락됐다."
+}
