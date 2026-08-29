@@ -1437,6 +1437,30 @@ async function moderatorActiveCommandCount(env) {
   return Number(row?.count || 0);
 }
 
+async function moderatorActiveReviewLeaseCount(env, at = moderatorTimestamp()) {
+  const row = await env.DB.prepare(`
+    SELECT COUNT(*) AS count
+    FROM moderator_items
+    WHERE kind = 'review' AND status = 'running'
+      AND julianday(lease_until) > julianday(?1)
+  `).bind(at).first();
+  return Number(row?.count || 0);
+}
+
+async function moderatorDaemonCounts(env, at = moderatorTimestamp()) {
+  const [effectiveActiveTasks, activeCommands, reviewLeases] = await Promise.all([
+    moderatorActiveTaskCount(env, at),
+    moderatorActiveCommandCount(env),
+    moderatorActiveReviewLeaseCount(env, at),
+  ]);
+  return {
+    version: 1,
+    effective_active_tasks: effectiveActiveTasks,
+    active_commands: activeCommands,
+    review_leases: reviewLeases,
+  };
+}
+
 async function moderatorItemById(env, itemId) {
   return env.DB.prepare('SELECT * FROM moderator_items WHERE item_id = ?1')
     .bind(itemId)
@@ -1800,9 +1824,11 @@ async function claimModeratorCommand(request, env) {
   const command = await env.DB.prepare(MODERATOR_COMMAND_CLAIM_SQL)
     .bind(timestamp, leaseId, leaseUntil)
     .first();
+  const counts = await moderatorDaemonCounts(env, timestamp);
   return json({
     command: command ? { ...serializeModeratorCommand(command), lease_id: command.lease_id, lease_until: command.lease_until } : null,
-    active_task_count: await moderatorActiveTaskCount(env, timestamp),
+    counts,
+    active_task_count: counts.effective_active_tasks,
   });
 }
 

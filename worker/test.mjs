@@ -3208,10 +3208,18 @@ test('moderator owner and daemon boundaries protect an atomic direct-command lea
   assert.equal(claimBody.command.attempts, 1);
   assert.match(claimBody.command.lease_id, /^lease_/u);
   assert.equal(claimBody.active_task_count, 0);
+  assert.deepEqual(claimBody.counts, {
+    version: 1,
+    effective_active_tasks: 0,
+    active_commands: 1,
+    review_leases: 0,
+  });
   const emptyClaim = await moderatorRequest(env, '/api/moderator/daemon/claim', {
     method: 'POST', token: 'daemon-token',
   });
-  assert.equal((await emptyClaim.json()).command, null);
+  const emptyClaimBody = await emptyClaim.json();
+  assert.equal(emptyClaimBody.command, null);
+  assert.equal(emptyClaimBody.counts.active_commands, 1);
 
   const statePath = `/api/moderator/daemon/commands/${claimBody.command.command_id}/state`;
   const nullState = await moderatorRequest(env, statePath, {
