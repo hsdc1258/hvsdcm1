@@ -706,12 +706,13 @@ function validateGichulFrontend() {
     && !appSource.includes('data-option="includeCommon"')
     && !appSource.includes('공통 파트 포함'),
     'gichul/app.js: excerpt mode must ignore the removed includeCommon state and emit selection pages only');
-  check(appSource.includes('ranges.push(exam.sections.common)')
-    && appSource.includes('ranges.push(exam.sections.selection)'),
+  check(appSource.includes('questionRange: exam.sections.common')
+    && appSource.includes('questionRange: exam.sections.selection'),
   'gichul/app.js: full modern papers must be planned from common plus the selected track range');
   check(appSource.includes('answer.canonical_form !== exam.canonical_form')
-    && appSource.includes('answer?.answer_common')
-    && appSource.includes('answer?.answer_selection')
+    && appSource.includes("answerField: 'answer_common'")
+    && appSource.includes("answerField: 'answer_selection'")
+    && appSource.includes('answer?.[answerField]')
     && appSource.includes('planned.clips.push')
     && appSource.includes('setCropBox'),
   'gichul/app.js: answers must share the question canonical form and mirror common/selection question parts');
