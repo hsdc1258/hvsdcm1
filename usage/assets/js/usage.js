@@ -2074,6 +2074,8 @@
     clearTimeout(freshnessTimer);
     freshnessTimer = null;
     renderFreshness();
+    // 모더 뷰의 시계도 같은 1초 틱을 탄다 — 화면마다 타이머를 하나씩 더 걸지 않는다.
+    renderModeratorFreshness();
     if (isHidden()) return;
     freshnessTimer = setTimeout(scheduleFreshnessTick, FRESHNESS_TICK_MS);
   }
@@ -2165,14 +2167,647 @@
     if (isHidden()) {
       clearTimeout(pollTimer);
       clearTimeout(freshnessTimer);
+      clearTimeout(moderatorPollTimer);
       pollTimer = null;
       freshnessTimer = null;
+      moderatorPollTimer = null;
       renderFreshness();
+      renderModeratorFreshness();
       return;
     }
     void load();
+    if (selectedUsageView === 'moderator') void loadModerator();
   });
   load();
+
+  // ==========================================================================
+  // 모더 뷰 — 직접 명령 · 중요/제안/검토 · 실제 사용 모델
+  //
+  // 화면 계약: Claude/sessions/2026-08-29-모더-시각화/plan.md §5
+  //   1. 사용자가 모더에게 **직접 명령을 넣을 수 있다.** 그 입력은 정적 마크업이라
+  //      5초 폴링이 목록을 갈아 끼워도 쓰던 글이 사라지지 않는다.
+  //   2. 로그는 원시 로그가 아니라 **문제 한 줄 + 조치 한 줄**이다. 원문(명령·stdout)은
+  //      로컬 런타임에만 있고 이 화면에는 오지 않는다.
+  //   3. 모더의 **뇌 모델**과 하위 작업이 **실제로 쓴 모델**을 따로 낸다. 요청 모델과
+  //      실행 모델을 한 값으로 합치지 않고, 서버가 null이면 지어내지 않고 '미확인'이다.
+  //   4. 항목은 **중요 / 제안 / 검토** 셋으로 갈린다. 세 분류와 개수는 항상 함께 보이고,
+  //      목록은 고른 분류 하나만 낸다.
+  //   5. 제안에는 승인 / 거부 / 수정이 있고 **승인 전에는 아무것도 실행되지 않는다.**
+  //      버튼은 낙관적으로 먼저 그리지 않는다 — 서버 응답을 받은 뒤에만 상태가 바뀐다.
+  //      (실행 금지의 진짜 강제는 D1 쪽이다. 화면은 그 사실을 말하고 보여줄 뿐이다.)
+  // ==========================================================================
+
+  const MODERATOR_PATH = '/api/moderator?limit=50';
+  const MODERATOR_POLL_ACTIVE_MS = 5_000;
+  const MODERATOR_POLL_IDLE_MS = 60_000;
+  // API가 null을 주면 그것은 "확인되지 않았다"는 사실이다. 빈칸으로 두거나 요청 모델을
+  // 대신 적으면 실행 모델을 확인하지 못한 상태가 성공으로 꾸며진다 (plan.md §8).
+  const MODERATOR_UNKNOWN = '미확인';
+  const USAGE_VIEW_KEY = 'hvsdcm.usage.view';
+  const USAGE_VIEW_KEYS = new Set(['ops', 'moderator']);
+
+  const MODERATOR_KINDS = [
+    {
+      key: 'important', label: '중요', openLabel: '확인 필요',
+      lead: '사람이 판단해야 하는 항목입니다. 모더는 여기에 손대지 않습니다.',
+      empty: '지금 확인해야 할 중요 항목이 없습니다.',
+    },
+    {
+      key: 'proposal', label: '제안', openLabel: '승인 대기',
+      lead: '승인하기 전까지 아무 명령도 실행되지 않습니다. 승인한 순간에만 대기열에 들어갑니다.',
+      empty: '승인을 기다리는 제안이 없습니다.',
+    },
+    {
+      key: 'review', label: '검토', openLabel: '진행 중',
+      lead: '아무 세션도 돌지 않는 동안 모더가 스스로 돌린 점검입니다.',
+      empty: '기록된 자율 검토가 없습니다.',
+    },
+  ];
+  const MODERATOR_KIND_KEYS = new Set(MODERATOR_KINDS.map((kind) => kind.key));
+  // 분류마다 "아직 끝나지 않은" 상태가 다르다. 개수 줄이 이 집합에서 도출되므로
+  // 상태를 늘릴 때 여기만 고치면 필터·머리글·기본 선택이 함께 따라온다.
+  const MODERATOR_OPEN_STATUSES = {
+    important: new Set(['open']),
+    proposal: new Set(['pending']),
+    review: new Set(['queued', 'running']),
+  };
+  const MODERATOR_STATUS_LABELS = {
+    open: '확인 필요', acknowledged: '확인함', resolved: '해결됨',
+    pending: '승인 대기', approved: '승인함', rejected: '거부함',
+    queued: '대기', claimed: '배정됨', running: '진행 중',
+    done: '완료', failed: '실패', escalated: '중요로 올림', succeeded: '성공',
+  };
+  // 상태색은 상태에만 쓴다 (DESIGN.md §3). 이 뷰의 강조색은 --accent 하나이고,
+  // accent 배지는 '지금 돌고 있음'이라는 상태 하나에만 붙는다.
+  const MODERATOR_STATUS_TONES = {
+    open: 'orange', pending: 'orange', escalated: 'orange',
+    running: 'accent', claimed: 'accent',
+    resolved: 'green', approved: 'green', done: 'green', succeeded: 'green',
+    rejected: 'red', failed: 'red',
+  };
+  const MODERATOR_SOURCE_LABELS = {
+    direct: '직접 명령', proposal: '제안 승인', review: '자율 검토',
+  };
+  // 실행이 끝나기 전에는 요약이 없다. 그 자리를 지어낸 문장으로 채우지 않고,
+  // 왜 비어 있는지를 말한다 (기존 화면의 '기록 없음 + 사유' 규칙과 같은 원리).
+  const MODERATOR_COMMAND_WAITING = {
+    queued: '대기열에 있습니다. 아직 실행되지 않았습니다.',
+    claimed: '실행자가 가져갔습니다. 곧 시작합니다.',
+    running: '실행 중입니다. 요약은 끝난 뒤에 기록됩니다.',
+  };
+  // 서버가 돌려주는 안정적인 오류 키를 사람 말로 옮긴다. 키가 늘어도 원문이 그대로
+  // 나가므로 화면이 조용히 비지 않는다.
+  const MODERATOR_ERRORS = {
+    invalid_command: '명령 형식이 올바르지 않습니다.',
+    invalid_decision: '알 수 없는 결정입니다.',
+    invalid_item: '항목을 찾지 못했습니다.',
+    invalid_transition: '이미 처리된 항목입니다. 새로고침한 뒤 다시 확인해 주세요.',
+    idempotency_conflict: '같은 키로 다른 명령이 이미 접수됐습니다.',
+    invalid_json: '요청을 보내지 못했습니다.',
+    invalid_pagination: '목록 조건이 올바르지 않습니다.',
+    request_too_large: '명령이 너무 깁니다.',
+    authentication_required: '로그인이 필요합니다.',
+  };
+
+  const modElements = {
+    view: document.getElementById('viewModerator'),
+    opsView: document.getElementById('viewOps'),
+    brain: document.getElementById('modBrain'),
+    filter: document.getElementById('modFilter'),
+    items: document.getElementById('modItems'),
+    commands: document.getElementById('modCommands'),
+    error: document.getElementById('modError'),
+    refreshStatus: document.getElementById('modRefreshStatus'),
+    freshness: document.getElementById('modFreshness'),
+    reload: document.getElementById('modReload'),
+    form: document.getElementById('modCommandForm'),
+    commandText: document.getElementById('modCommandText'),
+    commandSubmit: document.getElementById('modCommandSubmit'),
+    commandStatus: document.getElementById('modCommandStatus'),
+  };
+
+  function readUsageView() {
+    try {
+      const stored = localStorage.getItem(USAGE_VIEW_KEY);
+      if (USAGE_VIEW_KEYS.has(stored)) return stored;
+    } catch { /* 저장소를 못 읽으면 기본 뷰로 연다 — 화면은 계속 돈다. */ }
+    return 'ops';
+  }
+
+  let selectedUsageView = readUsageView();
+  let selectedModeratorKind = '';
+  // 폴링이 목록을 다시 그려도 사람이 열어 둔 행과 편집 중인 글은 살아남아야 한다.
+  const moderatorOpenItems = new Set();
+  let moderatorEditingId = '';
+  let moderatorEditDraft = null;
+  let moderatorData = null;
+  let moderatorPollTimer = null;
+  let moderatorInFlight = false;
+  let moderatorSyncedAt = 0;
+  let moderatorBusy = false;
+  // 같은 명령을 다시 보낼 때는 같은 idempotency key를 쓴다 — 실패 뒤 재시도가
+  // 두 번째 명령을 만들면 안 된다. 글이 바뀌면 그때 새 키를 만든다.
+  let moderatorPendingKey = '';
+  let moderatorPendingText = '';
+
+  function moderatorIdempotencyKey() {
+    const random = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/gu, '')
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+    return `direct-${random}`;
+  }
+
+  async function requestModerator(path, { method = 'GET', body = null, signal } = {}) {
+    const separator = path.includes('?') ? '&' : '?';
+    const url = method === 'GET' ? `${API_URL}${path}${separator}_=${Date.now()}` : `${API_URL}${path}`;
+    const response = await fetch(url, {
+      method,
+      cache: 'no-store',
+      signal,
+      headers: body
+        ? { authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}`, 'content-type': 'application/json' }
+        : { authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (response.status === 401) {
+      localStorage.removeItem('hvsdcm.token');
+      location.replace(loginPath());
+      throw new Error('unauthorized');
+    }
+    // 소유자가 아니면 Worker가 라우트의 존재까지 숨긴다(404). 화면도 같은 판정을 따른다.
+    if (response.status === 404 || response.status === 403) {
+      location.replace('/');
+      throw new Error('unauthorized');
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(MODERATOR_ERRORS[data.error] || data.error || '모더 상태를 불러오지 못했습니다.');
+    }
+    return data;
+  }
+
+  function moderatorApi(path, options) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    return withTimeout(
+      requestModerator(path, { ...options, signal: controller?.signal }),
+      REQUEST_TIMEOUT_MS,
+      () => controller?.abort(),
+    );
+  }
+
+  // ---- 모더 렌더 -----------------------------------------------------------
+
+  function moderatorFact(label, value, mono = false) {
+    const text = String(value ?? '').trim();
+    const classes = text ? (mono ? ['md-fact-mono'] : []) : ['md-fact-unknown'];
+    const attribute = classes.length > 0 ? ` class="${classes.join(' ')}"` : '';
+    return `<div><dt>${escapeHtml(label)}</dt><dd${attribute}>${escapeHtml(text || MODERATOR_UNKNOWN)}</dd></div>`;
+  }
+
+  function moderatorStatusBadge(status) {
+    const label = MODERATOR_STATUS_LABELS[status] || status || MODERATOR_UNKNOWN;
+    const tone = MODERATOR_STATUS_TONES[status];
+    return `<span class="badge${tone ? ` badge-${tone}` : ''} disclosure-hint">${escapeHtml(label)}</span>`;
+  }
+
+  function renderModeratorBrain(data, now = Date.now()) {
+    const brain = data?.brain && typeof data.brain === 'object' ? data.brain : {};
+    const commands = finiteNumber(data?.active_commands) ?? 0;
+    const sessions = finiteNumber(data?.active_sessions) ?? 0;
+    const reported = relativeTime(brain.updated_at, now);
+    return `<p class="us-eyebrow">모더가 쓰는 모델</p>
+      <dl class="md-facts">
+        ${moderatorFact('뇌 모델', brain.model, true)}
+        ${moderatorFact('뇌 추론', brain.reasoning)}
+        ${moderatorFact('요약 모델', brain.worker_model, true)}
+        ${moderatorFact('요약 추론', brain.worker_reasoning)}
+        ${moderatorFact('대기 · 실행 중 명령', `${commands}건`)}
+        ${moderatorFact('활성 세션', `${sessions}개`)}
+        ${moderatorFact('모델 마지막 보고', reported)}
+      </dl>`;
+  }
+
+  function moderatorCounts(data) {
+    const counts = data?.counts && typeof data.counts === 'object' ? data.counts : {};
+    const result = {};
+    for (const kind of MODERATOR_KINDS) {
+      const bucket = counts[kind.key] && typeof counts[kind.key] === 'object' ? counts[kind.key] : {};
+      let total = 0;
+      let open = 0;
+      for (const [status, value] of Object.entries(bucket)) {
+        const number = finiteNumber(value) ?? 0;
+        total += number;
+        if (MODERATOR_OPEN_STATUSES[kind.key].has(status)) open += number;
+      }
+      result[kind.key] = { total, open };
+    }
+    return result;
+  }
+
+  // 기본 선택은 **손이 필요한 쪽**이다. 아무 분류도 열려 있지 않으면 기록이 있는 첫
+  // 분류를 열고, 그것도 없으면 중요를 연다. 사람이 한 번 고르면 그 선택이 이긴다.
+  function moderatorDefaultKind(data) {
+    const counts = moderatorCounts(data);
+    for (const kind of MODERATOR_KINDS) if (counts[kind.key].open > 0) return kind.key;
+    for (const kind of MODERATOR_KINDS) if (counts[kind.key].total > 0) return kind.key;
+    return 'important';
+  }
+
+  function renderModeratorFilter(data, selected) {
+    const counts = moderatorCounts(data);
+    const buttons = MODERATOR_KINDS.map((kind) => {
+      const active = kind.key === selected;
+      return `<button class="segmented-btn md-filter-btn" type="button" data-mod-kind="${kind.key}" aria-pressed="${active}">`
+        + `<span class="md-filter-label">${kind.label}</span>`
+        + `<span class="md-filter-count">${counts[kind.key].total}</span></button>`;
+    }).join('');
+    return `<div class="segmented md-filter-set">${buttons}</div>`;
+  }
+
+  function moderatorItemActions(item) {
+    const id = escapeHtml(String(item?.item_id || ''));
+    if (item?.kind === 'proposal' && item.status === 'pending') {
+      if (moderatorEditingId === item.item_id) {
+        const draft = moderatorEditDraft === null ? String(item.proposed_command || '') : moderatorEditDraft;
+        return `<div class="md-edit">
+            <label class="field-label" for="modEdit">고칠 명령</label>
+            <textarea id="modEdit" class="field-input md-edit-input" rows="4" data-mod-edit="${id}">${escapeHtml(draft)}</textarea>
+            <p class="field-hint">저장해도 실행되지 않습니다. 고친 제안은 다시 승인 대기로 남습니다.</p>
+            <div class="md-actions">
+              <button class="btn btn-primary btn-sm" type="button" data-mod-action="save" data-mod-item="${id}">고쳐서 저장</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-mod-action="cancel" data-mod-item="${id}">취소</button>
+            </div>
+          </div>`;
+      }
+      return `<div class="md-actions">
+          <button class="btn btn-primary btn-sm" type="button" data-mod-action="approve" data-mod-item="${id}">승인</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-mod-action="edit" data-mod-item="${id}">수정</button>
+          <button class="btn btn-danger btn-sm" type="button" data-mod-action="reject" data-mod-item="${id}">거부</button>
+        </div>`;
+    }
+    if (item?.kind === 'important' && item.status === 'open') {
+      return `<div class="md-actions">
+          <button class="btn btn-secondary btn-sm" type="button" data-mod-action="acknowledge" data-mod-item="${id}">확인함으로 표시</button>
+        </div>`;
+    }
+    return '';
+  }
+
+  function renderModeratorItem(item, now) {
+    const id = String(item?.item_id || '');
+    const pending = item?.kind === 'proposal' && item.status === 'pending';
+    const command = String(item?.proposed_command || '').trim();
+    const quote = command
+      ? `<div class="md-quote">
+          <p class="md-quote-label">${pending ? '승인하면 실행할 명령' : '이 제안의 명령'}</p>
+          <p class="md-quote-body">${escapeHtml(command)}</p>
+          ${pending ? '<p class="md-quote-note">아직 실행되지 않았습니다. 승인해야 대기열에 들어갑니다.</p>' : ''}
+        </div>`
+      : '';
+    return `<details class="disclosure md-item" data-mod-item-row="${escapeHtml(id)}"${moderatorOpenItems.has(id) ? ' open' : ''}>
+        <summary class="disclosure-head md-item-head">
+          <span class="md-item-body">
+            <span class="disclosure-title md-item-issue">${escapeHtml(item?.issue_summary || MODERATOR_UNKNOWN)}</span>
+            <span class="md-item-action">${escapeHtml(item?.action_summary || MODERATOR_UNKNOWN)}</span>
+          </span>
+          ${moderatorStatusBadge(item?.status)}
+        </summary>
+        <div class="disclosure-body">
+          ${quote}
+          <dl class="md-facts">
+            ${moderatorFact('뇌 모델', item?.brain_model, true)}
+            ${moderatorFact('뇌 추론', item?.brain_reasoning)}
+            ${moderatorFact('요약 모델', item?.worker_model, true)}
+            ${moderatorFact('요약 추론', item?.worker_reasoning)}
+            ${moderatorFact('연결된 세션', item?.source_task_id, true)}
+            ${moderatorFact('마지막 갱신', relativeTime(item?.updated_at, now))}
+          </dl>
+          ${moderatorItemActions(item)}
+        </div>
+      </details>`;
+  }
+
+  function renderModeratorItems(data, selected, now) {
+    const kind = MODERATOR_KINDS.find((entry) => entry.key === selected) || MODERATOR_KINDS[0];
+    const counts = moderatorCounts(data)[kind.key];
+    const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => item?.kind === kind.key);
+    const rows = items.length === 0
+      ? `<p class="us-empty">${kind.empty}</p>`
+      : `<div class="md-list">${items.map((item) => renderModeratorItem(item, now)).join('')}</div>`;
+    return `<div class="md-group-head">
+        <h2 class="list-group-head">${kind.label}</h2>
+        <p class="md-group-count">${kind.openLabel} ${counts.open}건</p>
+      </div>
+      <p class="md-lead">${kind.lead}</p>
+      ${rows}`;
+  }
+
+  function moderatorCommandLines(command) {
+    const issue = String(command?.issue_summary || '').trim();
+    const action = String(command?.action_summary || '').trim();
+    if (issue || action) return { issue: issue || MODERATOR_UNKNOWN, action: action || MODERATOR_UNKNOWN };
+    return {
+      issue: String(command?.command_text || '').trim().split('\n')[0] || MODERATOR_UNKNOWN,
+      action: MODERATOR_COMMAND_WAITING[command?.status] || '요약이 기록되지 않았습니다.',
+    };
+  }
+
+  function renderModeratorCommand(command, now) {
+    const lines = moderatorCommandLines(command);
+    const id = String(command?.command_id || '');
+    return `<details class="disclosure md-item">
+        <summary class="disclosure-head md-item-head">
+          <span class="md-item-body">
+            <span class="disclosure-title md-item-issue">${escapeHtml(lines.issue)}</span>
+            <span class="md-item-action">${escapeHtml(lines.action)}</span>
+          </span>
+          <span class="md-item-id">${escapeHtml(id || MODERATOR_UNKNOWN)}</span>
+          ${moderatorStatusBadge(command?.status)}
+        </summary>
+        <div class="disclosure-body">
+          <div class="md-quote">
+            <p class="md-quote-label">보낸 명령</p>
+            <p class="md-quote-body">${escapeHtml(String(command?.command_text || '').trim() || MODERATOR_UNKNOWN)}</p>
+          </div>
+          <dl class="md-facts">
+            ${moderatorFact('명령 ID', id, true)}
+            ${moderatorFact('출처', MODERATOR_SOURCE_LABELS[command?.source] || command?.source)}
+            ${moderatorFact('요청 모델', command?.requested_model, true)}
+            ${moderatorFact('실행 모델', command?.actual_model, true)}
+            ${moderatorFact('실행 추론', command?.actual_reasoning)}
+            ${moderatorFact('시도', `${finiteNumber(command?.attempts) ?? 0}회`)}
+            ${moderatorFact('마지막 갱신', relativeTime(command?.updated_at, now))}
+          </dl>
+        </div>
+      </details>`;
+  }
+
+  function renderModeratorCommands(data, now) {
+    const commands = Array.isArray(data?.commands) ? data.commands : [];
+    const body = commands.length === 0
+      ? '<p class="us-empty">아직 보낸 명령이 없습니다.</p>'
+      : `<div class="md-list">${commands.map((command) => renderModeratorCommand(command, now)).join('')}</div>`;
+    return `<div class="md-group-head">
+        <h2 class="list-group-head">명령 기록</h2>
+        <p class="md-group-count">${commands.length}건</p>
+      </div>
+      <p class="md-lead">실행 모델은 실행자가 확인해 준 값입니다. 확인되지 않으면 요청 모델로 대신 적지 않고 ${MODERATOR_UNKNOWN}으로 둡니다.</p>
+      ${body}`;
+  }
+
+  // ---- 모더 배선 -----------------------------------------------------------
+
+  function setModeratorHtml(element, markup) {
+    if (element && typeof element.innerHTML === 'string') element.innerHTML = markup;
+  }
+
+  function renderModerator(data, now = Date.now()) {
+    const kind = MODERATOR_KIND_KEYS.has(selectedModeratorKind)
+      ? selectedModeratorKind
+      : moderatorDefaultKind(data);
+    setModeratorHtml(modElements.brain, renderModeratorBrain(data, now));
+    setModeratorHtml(modElements.filter, renderModeratorFilter(data, kind));
+    setModeratorHtml(modElements.items, renderModeratorItems(data, kind, now));
+    setModeratorHtml(modElements.commands, renderModeratorCommands(data, now));
+  }
+
+  function renderModeratorFreshness() {
+    if (!modElements.freshness) return;
+    if (!moderatorSyncedAt) {
+      modElements.freshness.textContent = '';
+      return;
+    }
+    const seconds = Math.max(0, Math.round((Date.now() - moderatorSyncedAt) / 1000));
+    const elapsed = seconds < 60 ? `${seconds}초 전` : `${formatDuration(seconds * 1000)} 전`;
+    const cadence = isHidden() || selectedUsageView !== 'moderator'
+      ? '자동 갱신 멈춤'
+      : `${Math.round(moderatorPollDelay() / 1000)}초마다 자동 갱신`;
+    modElements.freshness.textContent = `화면 갱신 ${elapsed} · ${cadence}`;
+  }
+
+  function moderatorPollDelay() {
+    const active = finiteNumber(moderatorData?.active_commands) ?? 0;
+    return active > 0 ? MODERATOR_POLL_ACTIVE_MS : MODERATOR_POLL_IDLE_MS;
+  }
+
+  function scheduleModeratorPoll() {
+    clearTimeout(moderatorPollTimer);
+    moderatorPollTimer = null;
+    if (isHidden() || selectedUsageView !== 'moderator') return;
+    moderatorPollTimer = setTimeout(() => { void loadModerator(); }, moderatorPollDelay());
+  }
+
+  async function loadModerator({ announce = false } = {}) {
+    if (moderatorInFlight) return;
+    moderatorInFlight = true;
+    if (modElements.error) modElements.error.textContent = '';
+    if (announce && modElements.refreshStatus) {
+      modElements.refreshStatus.textContent = '모더 상태를 확인하고 있습니다.';
+    }
+    try {
+      const data = await moderatorApi(MODERATOR_PATH);
+      moderatorData = data;
+      moderatorSyncedAt = Date.now();
+      renderModerator(data);
+      if (announce && modElements.refreshStatus) {
+        modElements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
+      }
+    } catch (error) {
+      if (error.message === 'unauthorized') return;
+      if (modElements.error) modElements.error.textContent = error.message || '모더 상태를 불러오지 못했습니다.';
+      if (announce && modElements.refreshStatus) modElements.refreshStatus.textContent = '업데이트하지 못했습니다.';
+    } finally {
+      moderatorInFlight = false;
+      scheduleModeratorPoll();
+      renderModeratorFreshness();
+    }
+  }
+
+  function setModeratorBusy(busy) {
+    moderatorBusy = busy;
+    for (const button of [...(modElements.items?.querySelectorAll?.('[data-mod-action]') || [])]) {
+      button.disabled = busy;
+    }
+  }
+
+  // 버튼은 결과를 미리 그리지 않는다. 서버 응답을 받고, 그 응답으로 목록을 다시 읽은
+  // 뒤에만 상태가 바뀐다 — 승인 전 실행 금지는 화면의 낙관적 표시로 흔들리면 안 된다.
+  async function sendModeratorDecision(itemId, action, editedCommand) {
+    if (moderatorBusy) return;
+    setModeratorBusy(true);
+    if (modElements.error) modElements.error.textContent = '';
+    try {
+      const path = action === 'acknowledge'
+        ? `/api/moderator/items/${encodeURIComponent(itemId)}/acknowledge`
+        : `/api/moderator/items/${encodeURIComponent(itemId)}/decision`;
+      const body = action === 'acknowledge'
+        ? {}
+        : (action === 'edit' ? { action: 'edit', edited_command: editedCommand } : { action });
+      await moderatorApi(path, { method: 'POST', body });
+      moderatorEditingId = '';
+      moderatorEditDraft = null;
+      if (modElements.refreshStatus) {
+        modElements.refreshStatus.textContent = action === 'approve'
+          ? '승인했습니다. 이 제안의 명령이 대기열에 들어갔습니다.'
+          : '처리했습니다.';
+      }
+      await loadModerator();
+    } catch (error) {
+      if (error.message === 'unauthorized') return;
+      if (modElements.error) modElements.error.textContent = error.message || '처리하지 못했습니다.';
+    } finally {
+      setModeratorBusy(false);
+    }
+  }
+
+  async function submitModeratorCommand(event) {
+    event?.preventDefault?.();
+    const text = String(modElements.commandText?.value ?? '').trim();
+    if (!text) {
+      if (modElements.commandStatus) modElements.commandStatus.textContent = '보낼 명령을 적어 주세요.';
+      return;
+    }
+    if (moderatorBusy) return;
+    if (text !== moderatorPendingText || !moderatorPendingKey) {
+      moderatorPendingText = text;
+      moderatorPendingKey = moderatorIdempotencyKey();
+    }
+    moderatorBusy = true;
+    if (modElements.commandSubmit) {
+      modElements.commandSubmit.disabled = true;
+      modElements.commandSubmit.textContent = '보내는 중…';
+    }
+    if (modElements.commandStatus) modElements.commandStatus.textContent = '명령을 보내고 있습니다.';
+    try {
+      const data = await moderatorApi('/api/moderator/commands', {
+        method: 'POST',
+        body: { command: text, idempotency_key: moderatorPendingKey },
+      });
+      if (modElements.commandText) modElements.commandText.value = '';
+      moderatorPendingKey = '';
+      moderatorPendingText = '';
+      if (modElements.commandStatus) {
+        modElements.commandStatus.textContent = data?.duplicate
+          ? '이미 접수된 명령입니다. 대기열에 하나만 있습니다.'
+          : '대기열에 넣었습니다.';
+      }
+      await loadModerator();
+    } catch (error) {
+      if (error.message === 'unauthorized') return;
+      if (modElements.commandStatus) {
+        modElements.commandStatus.textContent = error.message || '명령을 보내지 못했습니다.';
+      }
+    } finally {
+      moderatorBusy = false;
+      if (modElements.commandSubmit) {
+        modElements.commandSubmit.disabled = false;
+        modElements.commandSubmit.textContent = '명령 보내기';
+      }
+    }
+  }
+
+  function wireModerator() {
+    modElements.form?.addEventListener?.('submit', submitModeratorCommand);
+    modElements.reload?.addEventListener?.('click', () => { void loadModerator({ announce: true }); });
+    modElements.filter?.addEventListener?.('click', (event) => {
+      const button = event.target?.closest?.('[data-mod-kind]');
+      if (!button) return;
+      selectedModeratorKind = button.dataset?.modKind || selectedModeratorKind;
+      if (moderatorData) renderModerator(moderatorData);
+    });
+    // 열고 접은 상태는 폴링을 넘어 살아남아야 한다 — 5초마다 손이 닫는 목록은 못 읽는다.
+    modElements.items?.addEventListener?.('toggle', (event) => {
+      const row = event.target?.dataset?.modItemRow;
+      if (!row) return;
+      if (event.target.open) moderatorOpenItems.add(row);
+      else moderatorOpenItems.delete(row);
+    }, true);
+    modElements.items?.addEventListener?.('input', (event) => {
+      if (event.target?.dataset?.modEdit) moderatorEditDraft = event.target.value;
+    });
+    modElements.items?.addEventListener?.('click', (event) => {
+      const button = event.target?.closest?.('[data-mod-action]');
+      if (!button) return;
+      const action = button.dataset?.modAction;
+      const itemId = button.dataset?.modItem || '';
+      if (action === 'edit') {
+        moderatorEditingId = itemId;
+        moderatorEditDraft = null;
+        moderatorOpenItems.add(itemId);
+        if (moderatorData) renderModerator(moderatorData);
+        return;
+      }
+      if (action === 'cancel') {
+        moderatorEditingId = '';
+        moderatorEditDraft = null;
+        if (moderatorData) renderModerator(moderatorData);
+        return;
+      }
+      if (action === 'save') {
+        const draft = String(moderatorEditDraft ?? '').trim();
+        if (!draft) {
+          if (modElements.error) modElements.error.textContent = '고친 명령이 비어 있습니다.';
+          return;
+        }
+        void sendModeratorDecision(itemId, 'edit', draft);
+        return;
+      }
+      if (['approve', 'reject', 'acknowledge'].includes(action)) {
+        void sendModeratorDecision(itemId, action);
+      }
+    });
+  }
+
+  // ---- 뷰 전환 -------------------------------------------------------------
+
+  function usageViewTabs() {
+    return [...(document.querySelectorAll?.('[data-usage-view]') || [])];
+  }
+
+  function activateUsageView(view, moveFocus = false) {
+    const next = USAGE_VIEW_KEYS.has(view) ? view : 'ops';
+    selectedUsageView = next;
+    try {
+      localStorage.setItem(USAGE_VIEW_KEY, next);
+    } catch { /* 저장 실패는 이번 방문의 기억만 잃는다. */ }
+    for (const tab of usageViewTabs()) {
+      const selected = tab.dataset?.usageView === next;
+      tab.classList?.toggle?.('is-active', selected);
+      tab.setAttribute?.('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && moveFocus) tab.focus?.();
+    }
+    if (modElements.opsView) modElements.opsView.hidden = next !== 'ops';
+    if (modElements.view) modElements.view.hidden = next !== 'moderator';
+    if (next === 'moderator') void loadModerator();
+    else {
+      clearTimeout(moderatorPollTimer);
+      moderatorPollTimer = null;
+    }
+    renderModeratorFreshness();
+  }
+
+  function wireUsageViews() {
+    const tabs = usageViewTabs();
+    for (const tab of tabs) {
+      tab.addEventListener?.('click', () => activateUsageView(tab.dataset?.usageView));
+      tab.addEventListener?.('keydown', (event) => {
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = tabs.indexOf(tab);
+        const target = event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? tabs.length - 1
+            : (index + (event.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;
+        activateUsageView(tabs[target]?.dataset?.usageView, true);
+      });
+    }
+  }
+
+  wireModerator();
+  wireUsageViews();
+  activateUsageView(selectedUsageView);
 
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
@@ -2181,5 +2816,8 @@
     phaseTimeline, sessionUsageDeltas, actorNodes,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
     wireLocalControls, renderActiveModes, readActiveMode, writeActiveMode, load,
+    // 모더 뷰 — 게이트가 렌더러를 실제로 실행해 계약을 본다 (scripts/usage.test.mjs).
+    renderModeratorBrain, renderModeratorFilter, renderModeratorItems, renderModeratorCommands,
+    moderatorCounts, moderatorDefaultKind, activateUsageView, loadModerator,
   };
 })();

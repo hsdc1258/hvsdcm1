@@ -2014,3 +2014,203 @@ test('the shipped static copy parses and actually renders a board', async () => 
   const stageCount = state.pipelines.reduce((total, item) => total + (item.stages || []).length, 0);
   assert.equal((markup.match(/class="pl-stage /gu) || []).length, stageCount);
 });
+
+// ==========================================================================
+// 모더 뷰 (plan.md §5 / DESIGN.md §1.1 v11)
+//
+// 여기서 보는 것은 **렌더 계약**이다. 서버의 승인 전 실행 금지(D1 batch·UNIQUE)는
+// worker/test.mjs가 따로 증명한다 — 화면 검사가 그것을 대신했다고 적지 않는다.
+// 이 검사가 **못 보는 것**: 네트워크 계층, DOM 이벤트 배선, 시각 조판.
+// ==========================================================================
+
+const moderatorItem = (overrides = {}) => ({
+  item_id: 'item_aa01', kind: 'proposal', status: 'pending',
+  issue_summary: '세션 세 개가 갱신 없이 진행 중으로 남아 있다.',
+  action_summary: '좀비 실행자를 종료하고 같은 단계부터 다시 띄운다.',
+  proposed_command: 'node scripts/moderator-daemon.mjs --restart-stalled',
+  version: 1, brain_model: 'gpt-5.6-sol', brain_reasoning: 'xhigh',
+  worker_model: 'gpt-5.6-luna', worker_reasoning: 'low',
+  source_task_id: '2026-08-29-모더-시각화',
+  created_at: iso(2 * HOUR), updated_at: iso(HOUR), decided_at: null, events: [],
+  ...overrides,
+});
+
+const moderatorCommand = (overrides = {}) => ({
+  command_id: 'cmd_bb02', source: 'direct', source_item_id: null,
+  idempotency_key: 'direct-bb02', command_text: '멈춘 세션을 정리해라.',
+  status: 'succeeded', attempts: 1,
+  requested_model: 'gpt-5.6-sol', requested_reasoning: 'xhigh',
+  actual_model: 'gpt-5.6-sol', actual_reasoning: 'xhigh',
+  issue_summary: '세션 세 개가 멈춰 있었다.', action_summary: '좀비 셋을 종료하고 다시 띄웠다.',
+  created_at: iso(2 * HOUR), updated_at: iso(HOUR), ...overrides,
+});
+
+const moderatorFeed = (overrides = {}) => ({
+  brain: {
+    model: 'gpt-5.6-sol', reasoning: 'xhigh',
+    worker_model: 'gpt-5.6-luna', worker_reasoning: 'low', updated_at: iso(HOUR),
+  },
+  active_sessions: 2, active_commands: 1,
+  counts: {
+    important: { open: 1, resolved: 2 },
+    proposal: { pending: 2, approved: 1 },
+    review: { running: 1 },
+  },
+  items: [moderatorItem()], commands: [moderatorCommand()], next_cursor: null,
+  ...overrides,
+});
+
+test('a pending proposal offers approve, edit, and reject and says nothing has run yet', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderModeratorItems(moderatorFeed(), 'proposal', NOW);
+  assert.match(markup, /data-mod-action="approve"[^>]*>승인</u);
+  assert.match(markup, /data-mod-action="edit"[^>]*>수정</u);
+  assert.match(markup, /data-mod-action="reject"[^>]*>거부</u);
+  // 승인 전 실행 금지는 그룹 머리와 행 안에서 **두 번** 읽힌다. 목록만 훑는 사람도,
+  // 한 행을 펼친 사람도 같은 사실을 본다.
+  assert.match(markup, /승인하기 전까지 아무 명령도 실행되지 않습니다/u);
+  assert.match(markup, /아직 실행되지 않았습니다/u);
+  // 제안 자체는 명령이 아니다 — 명령 ID를 붙여 이미 대기열에 있는 것처럼 그리지 않는다.
+  assert.doesNotMatch(markup, /md-item-id/u);
+});
+
+test('a decided proposal keeps its command visible but loses every decision button', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({ items: [moderatorItem({ status: 'approved', decided_at: iso(HOUR) })] });
+  const markup = renderers.renderModeratorItems(feed, 'proposal', NOW);
+  assert.doesNotMatch(markup, /data-mod-action=/u);
+  assert.match(markup, /이 제안의 명령/u);
+  assert.doesNotMatch(markup, /아직 실행되지 않았습니다/u);
+});
+
+test('an important item can only be acknowledged — the screen never offers to run it', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    items: [moderatorItem({
+      item_id: 'item_cc03', kind: 'important', status: 'open', proposed_command: null,
+    })],
+  });
+  const markup = renderers.renderModeratorItems(feed, 'important', NOW);
+  assert.match(markup, /data-mod-action="acknowledge"/u);
+  assert.doesNotMatch(markup, /data-mod-action="approve"/u);
+});
+
+test('the three classifications and their counts are all on screen at once', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderModeratorFilter(moderatorFeed(), 'proposal');
+  for (const [label, total] of [['중요', 3], ['제안', 3], ['검토', 1]]) {
+    assert.match(markup, new RegExp(`>${label}</span><span class="md-filter-count">${total}<`, 'u'));
+  }
+  assert.match(markup, /data-mod-kind="proposal"[^>]*aria-pressed="true"/u);
+  assert.match(markup, /data-mod-kind="important"[^>]*aria-pressed="false"/u);
+});
+
+test('the default classification is the first one that needs a hand, not an empty list', () => {
+  const renderers = createUsageRenderers();
+  assert.equal(renderers.moderatorDefaultKind(moderatorFeed()), 'important');
+  assert.equal(renderers.moderatorDefaultKind(moderatorFeed({
+    counts: { important: { resolved: 4 }, proposal: { pending: 1 }, review: {} },
+  })), 'proposal');
+  // 열린 것이 하나도 없으면 기록이 있는 첫 분류를 연다.
+  assert.equal(renderers.moderatorDefaultKind(moderatorFeed({
+    counts: { important: {}, proposal: { approved: 2 }, review: {} },
+  })), 'proposal');
+  assert.equal(renderers.moderatorDefaultKind({}), 'important');
+});
+
+test('a command row carries its own id, the model that actually ran, and the two-line summary', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderModeratorCommands(moderatorFeed(), NOW);
+  assert.match(markup, /<span class="md-item-id">cmd_bb02<\/span>/u);
+  assert.match(markup, /세션 세 개가 멈춰 있었다\./u);
+  assert.match(markup, /좀비 셋을 종료하고 다시 띄웠다\./u);
+  assert.match(markup, /<dt>실행 모델<\/dt><dd class="md-fact-mono">gpt-5\.6-sol</u);
+  assert.match(markup, /<dt>출처<\/dt><dd>직접 명령</u);
+});
+
+test('an unconfirmed execution model stays 미확인 instead of borrowing the requested one', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    commands: [moderatorCommand({ status: 'running', actual_model: null, actual_reasoning: null })],
+  });
+  const markup = renderers.renderModeratorCommands(feed, NOW);
+  assert.match(markup, /<dt>요청 모델<\/dt><dd class="md-fact-mono">gpt-5\.6-sol</u);
+  assert.match(markup, /<dt>실행 모델<\/dt><dd class="md-fact-unknown">미확인</u);
+  // 요청 모델이 실행 모델 자리로 새어 들어가지 않는다 — 확인값은 한 번만 나온다.
+  assert.equal((markup.match(/md-fact-mono">gpt-5\.6-sol/gu) || []).length, 1);
+});
+
+test('a queued command says why it has no summary instead of inventing one', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    commands: [moderatorCommand({
+      status: 'queued', issue_summary: null, action_summary: null, actual_model: null,
+    })],
+  });
+  const markup = renderers.renderModeratorCommands(feed, NOW);
+  assert.match(markup, /대기열에 있습니다\. 아직 실행되지 않았습니다\./u);
+  assert.match(markup, /멈춘 세션을 정리해라\./u);
+});
+
+test('the brain panel names the judging model and the summarising model apart', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderModeratorBrain(moderatorFeed(), NOW);
+  assert.match(markup, /<dt>뇌 모델<\/dt><dd class="md-fact-mono">gpt-5\.6-sol</u);
+  assert.match(markup, /<dt>요약 모델<\/dt><dd class="md-fact-mono">gpt-5\.6-luna</u);
+  assert.match(markup, /<dt>뇌 추론<\/dt><dd>xhigh</u);
+  assert.match(markup, /<dt>요약 추론<\/dt><dd>low</u);
+  // 결측은 빈칸이 아니라 판정이다.
+  const unknown = renderers.renderModeratorBrain({ brain: {} }, NOW);
+  assert.match(unknown, /<dt>뇌 모델<\/dt><dd class="md-fact-unknown">미확인</u);
+});
+
+test('an empty classification says so instead of rendering an empty box', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({ items: [], counts: { important: {}, proposal: {}, review: {} } });
+  assert.match(renderers.renderModeratorItems(feed, 'review', NOW), /기록된 자율 검토가 없습니다/u);
+  assert.doesNotMatch(renderers.renderModeratorItems(feed, 'review', NOW), /class="md-list"/u);
+  assert.match(renderers.renderModeratorCommands({ commands: [] }, NOW), /아직 보낸 명령이 없습니다/u);
+});
+
+test('summaries and commands from the server are escaped, never injected as markup', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    items: [moderatorItem({
+      issue_summary: '<img src=x onerror=alert(1)>',
+      proposed_command: '<script>alert(2)</script>',
+    })],
+  });
+  const markup = renderers.renderModeratorItems(feed, 'proposal', NOW);
+  assert.doesNotMatch(markup, /<img src=x/u);
+  assert.doesNotMatch(markup, /<script>alert/u);
+  assert.match(markup, /&lt;img src=x/u);
+});
+
+test('the moderator view is a sibling view, and only one view renders at a time', async () => {
+  const { readSource } = await import('./render-sandbox.mjs');
+  const html = readSource('usage/index.html');
+  const views = [...html.matchAll(/<section id="(view\w+)" class="us-view"([^>]*)>/gu)];
+  assert.equal(views.length, 2, '실행 현황과 모더 두 뷰가 있어야 한다');
+  const visible = views.filter(([, , attributes]) => !/\shidden(?=[\s>]|$)/u.test(attributes));
+  assert.equal(visible.length, 1, '문서 초기 상태에서 열려 있는 뷰는 하나뿐이다');
+  // UA의 [hidden] { display: none }은 저자 규칙에 항상 진다 — 기본 display가 none이어야 한다.
+  const css = readSource('usage/assets/css/usage.css');
+  assert.match(css, /\.us-view \{\s*display: none;/u);
+  // 사이드바 항목마다 짝이 되는 뷰가 있어야 한다.
+  const tabs = [...html.matchAll(/data-usage-view="(\w+)"/gu)].map(([, name]) => name);
+  assert.deepEqual(tabs, ['ops', 'moderator']);
+  assert.ok(html.includes('aria-controls="viewOps"'));
+  assert.ok(html.includes('aria-controls="viewModerator"'));
+});
+
+test('the command composer lives outside every polled container', async () => {
+  const { readSource } = await import('./render-sandbox.mjs');
+  const html = readSource('usage/index.html');
+  const source = readSource('usage/assets/js/usage.js');
+  // 폴링이 갈아 끼우는 컨테이너들. 입력 상자가 이 중 하나 안에 있으면 5초마다 글이 사라진다.
+  for (const id of ['modBrain', 'modFilter', 'modItems', 'modCommands']) {
+    assert.match(html, new RegExp(`id="${id}"[^>]*></div>`, 'u'), `#${id}는 렌더러가 채우는 빈 컨테이너여야 한다`);
+  }
+  assert.match(html, /<form id="modCommandForm"[\s\S]*?<textarea id="modCommandText"/u);
+  assert.doesNotMatch(source, /setModeratorHtml\(modElements\.(form|commandText)/u);
+});

@@ -20,7 +20,7 @@
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
 
   <header class="topbar">
-    <div class="topbar-inner container-wide">
+    <div class="topbar-inner container-wide us-wide">
       <a class="brand" href="/">hvsdcm</a>
       <span class="topbar-crumb">usage</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
@@ -30,30 +30,98 @@
   </header>
   <div class="topbar-spacer"></div>
 
-  <div class="container-wide app-page">
-    <main id="usageMain" class="app-main" tabindex="-1">
-      <header class="view-head">
-        <div class="view-head-main">
-          <div>
-            <h1 class="title-1">AI 실행 현황</h1>
-            <p>세션별 파이프라인, 투입 에이전트, Codex · Claude 한도</p>
-          </div>
+  <div class="container-wide us-wide app-page">
+    <!-- 운영 화면이 둘이 되면서 탐색 사이드바가 생겼다 (DESIGN.md §1.1 적용 제외표 v11).
+         admin과 같은 문법이다: 대문자 그룹 라벨 + 텍스트 항목, 활성 항목은 어두운 필.
+         한 번에 한 뷰만 열린다 — 숨김은 CSS 클래스가 아니라 hidden 속성이고,
+         .us-view의 기본 display가 none이라 저자 규칙이 [hidden]을 이기지 않는다. -->
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="운영 화면">
+        <div class="sidebar-emblem" aria-hidden="true">
+          <svg class="brand-mark" viewBox="0 0 200 200" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>
         </div>
-        <div class="toolbar-group">
-          <!-- 자동 갱신 시계. 1초마다 바뀌므로 aria-live를 걸지 않는다 — 수동 새로고침
-               결과만 아래 #usageRefreshStatus가 polite로 알린다. -->
-          <span id="usageFreshness" class="us-freshness"></span>
-          <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+
+        <div class="sidebar-group" role="tablist" aria-orientation="vertical" aria-label="운영 화면">
+          <p class="sidebar-label">운영</p>
+          <button id="tabOps" class="sidebar-item is-active" type="button" role="tab" aria-selected="true" aria-controls="viewOps" data-usage-view="ops"><span class="sidebar-item-text">실행 현황</span></button>
+          <button id="tabModerator" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewModerator" data-usage-view="moderator" tabindex="-1"><span class="sidebar-item-text">모더</span></button>
         </div>
-      </header>
 
-      <p id="usageRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+        <div class="sidebar-group">
+          <p class="sidebar-label">범위</p>
+          <p class="side-note">소유자 계정에서만 열리는 화면입니다. 모더가 올린 제안은 여기서 승인하기 전까지 실행되지 않습니다.</p>
+        </div>
+      </aside>
 
-      <p id="usageError" class="field-error" role="alert"></p>
+      <main id="usageMain" class="app-main" tabindex="-1">
+        <section id="viewOps" class="us-view" role="tabpanel" aria-labelledby="tabOps" tabindex="0">
+          <header class="view-head">
+            <div class="view-head-main">
+              <div>
+                <h1 class="title-1">AI 실행 현황</h1>
+                <p>세션별 파이프라인, 투입 에이전트, Codex · Claude 한도</p>
+              </div>
+            </div>
+            <div class="toolbar-group">
+              <!-- 자동 갱신 시계. 1초마다 바뀌므로 aria-live를 걸지 않는다 — 수동 새로고침
+                   결과만 아래 #usageRefreshStatus가 polite로 알린다. -->
+              <span id="usageFreshness" class="us-freshness"></span>
+              <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+            </div>
+          </header>
 
-      <!-- 소유자 전용 GET /api/usage의 Codex · Claude 한도와 하네스 작업을 같은 화면에 그린다. -->
-      <div id="usageBody" class="us-body"></div>
-    </main>
+          <p id="usageRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+
+          <p id="usageError" class="field-error" role="alert"></p>
+
+          <!-- 소유자 전용 GET /api/usage의 Codex · Claude 한도와 하네스 작업을 같은 화면에 그린다. -->
+          <div id="usageBody" class="us-body"></div>
+        </section>
+
+        <!-- 모더 뷰. 명령 입력만 정적 마크업이다 — 5초 폴링이 innerHTML을 갈아 끼워도
+             쓰던 글이 사라지면 안 되기 때문이다. 나머지 영역은 usage.js가 채운다. -->
+        <section id="viewModerator" class="us-view" role="tabpanel" aria-labelledby="tabModerator" tabindex="0" hidden>
+          <header class="view-head">
+            <div class="view-head-main">
+              <div>
+                <h1 class="title-1">모더</h1>
+                <p>직접 명령, 승인 대기 제안, 상시 감시 기록</p>
+              </div>
+            </div>
+            <div class="toolbar-group">
+              <span id="modFreshness" class="us-freshness"></span>
+              <button id="modReload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+            </div>
+          </header>
+
+          <p id="modRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+
+          <p id="modError" class="field-error" role="alert"></p>
+
+          <!-- 뇌 모델 · 요약 모델 · 대기열. 별칭을 추측하지 않고 서버가 확인한 값만 쓴다. -->
+          <div id="modBrain" class="md-brain"></div>
+
+          <form id="modCommandForm" class="md-composer">
+            <div class="field">
+              <label class="field-label" for="modCommandText">모더에게 직접 명령</label>
+              <textarea id="modCommandText" class="field-input md-composer-input" rows="3" maxlength="2000" required
+                placeholder="예: 12시간 넘게 갱신이 없는 세션을 정리하고 무엇을 껐는지 보고해라."></textarea>
+              <p class="field-hint">직접 명령은 사용자가 이미 지시한 것이므로 바로 대기열에 들어갑니다. 모더가 스스로 올린 제안은 아래 목록에서 승인해야 실행됩니다.</p>
+            </div>
+            <div class="md-composer-foot">
+              <p id="modCommandStatus" class="md-composer-status" aria-live="polite"></p>
+              <button id="modCommandSubmit" class="btn btn-primary" type="submit">명령 보내기</button>
+            </div>
+          </form>
+
+          <div id="modFilter" class="md-filter" role="group" aria-label="항목 분류"></div>
+
+          <div id="modItems" class="md-items"></div>
+
+          <div id="modCommands" class="md-commands"></div>
+        </section>
+      </main>
+    </div>
   </div>
 </body>
 </html>
