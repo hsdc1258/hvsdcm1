@@ -33,6 +33,7 @@ import {
 } from './build-manifest.mjs';
 import { uploadR2 } from './upload-r2.mjs';
 import { verifyGichulReadiness } from './readiness.mjs';
+import { inspectAnswerClip } from './output-contract.e2e.mjs';
 import { createGichulRenderers } from '../render-sandbox.mjs';
 
 async function temporaryDirectory(t) {
@@ -381,10 +382,15 @@ test('answer metadata selects the question canonical page and derives track crop
     width: 600,
     height: 800,
     items: [
+      { text: '공통 과목', x: 140, y: 600, width: 40, height: 10 },
       { text: '화법과 작문', x: 340, y: 600, width: 20, height: 10 },
       { text: '언어와 매체', x: 440, y: 600, width: 20, height: 10 },
-      { text: '35', x: 340, y: 300, width: 10, height: 10 },
-      { text: '35', x: 440, y: 300, width: 10, height: 10 },
+      { text: '1', x: 100, y: 500, width: 10, height: 10 },
+      { text: '34', x: 200, y: 300, width: 10, height: 10 },
+      { text: '35', x: 340, y: 500, width: 10, height: 10 },
+      { text: '45', x: 340, y: 300, width: 10, height: 10 },
+      { text: '35', x: 440, y: 500, width: 10, height: 10 },
+      { text: '45', x: 440, y: 300, width: 10, height: 10 },
     ],
   }));
   const metadata = deriveAnswerMetadata({
@@ -396,6 +402,9 @@ test('answer metadata selects the question canonical page and derives track crop
     subject: 'korean',
   });
   assert.deepEqual(metadata.answer_pages, [1]);
+  assert.deepEqual(metadata.common, [{
+    page: 1, x: [0, 0.5], y: [0.36, 0.8075],
+  }]);
   assert.deepEqual(metadata.selections.get('hwajak'), [{
     page: 1, x: [0.5, 0.666667], y: [0.36, 0.8075],
   }]);
@@ -473,8 +482,47 @@ test('image-only answer table derives selection columns from original raster lin
     tracks: ['hwajak', 'eonmae'], canonicalForm: 'odd', answerFormOrder: ['odd'],
     gradeYear: 2025, subject: 'korean',
   });
+  assert.deepEqual(metadata.common[0], {
+    page: 1, x: [0.1025, 0.5025], y: [0.163667, 0.836333],
+  });
   assert.deepEqual(metadata.selections.get('hwajak')[0].x, [0.5025, 0.7025]);
   assert.deepEqual(metadata.selections.get('eonmae')[0].x, [0.7025, 0.9]);
+});
+
+test('independent answer oracle requires the header and first/last selected rows inside both crop axes', () => {
+  const layout = {
+    width: 600,
+    height: 800,
+    items: [
+      { text: '공통 과목', x: 100, y: 600, width: 40, height: 10 },
+      { text: '화법과 작문', x: 340, y: 600, width: 20, height: 10 },
+      { text: '언어와 매체', x: 440, y: 600, width: 20, height: 10 },
+      { text: '1', x: 100, y: 500, width: 10, height: 10 },
+      { text: '34', x: 200, y: 300, width: 10, height: 10 },
+      { text: '35', x: 340, y: 500, width: 10, height: 10 },
+      { text: '45', x: 340, y: 300, width: 10, height: 10 },
+      { text: '35', x: 440, y: 500, width: 10, height: 10 },
+      { text: '45', x: 440, y: 300, width: 10, height: 10 },
+    ],
+  };
+  const definitions = [
+    { track: 'hwajak', header: '화법과 작문', firstQuestion: 35 },
+    { track: 'eonmae', header: '언어와 매체', firstQuestion: 35 },
+  ];
+  const correct = inspectAnswerClip({
+    clip: { x: [0.5, 0.666667], y: [0.36, 0.8075] },
+    layout,
+    definitions,
+  });
+  assert.deepEqual(correct, {
+    parts: ['hwajak'], partial_part_count: 0,
+  });
+  const empty = inspectAnswerClip({
+    clip: { x: [0.5, 0.666667], y: [0, 0.01] },
+    layout,
+    definitions,
+  });
+  assert.deepEqual(empty.parts, []);
 });
 
 test('manifest filenames reject tracks from the wrong subject or academic-year system', () => {
@@ -522,7 +570,7 @@ test('range planner uses common once for full output and selection only for exce
   assert.doesNotMatch(body, /공통 1–8쪽/u);
 });
 
-test('answer planner shares the question form and crops only selected answer columns in every mode', () => {
+test('answer planner maps the exact included question parts to common and selected answer crops', () => {
   const renderers = createGichulRenderers();
   const questions = [
     {
@@ -540,11 +588,13 @@ test('answer planner shares the question form and crops only selected answer col
     {
       ...questions[0], id: '2021-csat-korean-hwajak-answer', kind: 'answer', r2_key: 'answer.pdf', pages: 2,
       sections: undefined, answer_pages: [1],
+      answer_common: [{ page: 1, x: [0, 0.48], y: [0.4, 0.8] }],
       answer_selection: [{ page: 1, x: [0.48, 0.66], y: [0.4, 0.8] }],
     },
     {
       ...questions[1], id: '2021-csat-korean-eonmae-answer', kind: 'answer', r2_key: 'answer.pdf', pages: 2,
       sections: undefined, answer_pages: [1],
+      answer_common: [{ page: 1, x: [0, 0.48], y: [0.4, 0.8] }],
       answer_selection: [{ page: 1, x: [0.66, 0.84], y: [0.4, 0.8] }],
     },
   ];
@@ -557,11 +607,20 @@ test('answer planner shares the question form and crops only selected answer col
     key: 'answer.pdf',
     label: '2022학년도 수능 국어 (화법과 작문) 정답표',
     clips: [
+      { page: 1, x: [0, 0.48], y: [0.4, 0.8] },
       { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
       { page: 1, x: [0.66, 0.84], y: [0.4, 0.8] },
     ],
   });
   assert.equal(full.missingAnswers.length, 0);
+
+  const fullOne = renderers.planSegments([questions[0]], manifest, {
+    ...renderers.defaultState(), mode: 'full', includeAnswers: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(fullOne.segments.at(-1).clips)), [
+    { page: 1, x: [0, 0.48], y: [0.4, 0.8] },
+    { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
+  ]);
 
   const excerpt = renderers.planSegments([questions[0]], manifest, {
     ...renderers.defaultState(), mode: 'excerpt', includeAnswers: true,

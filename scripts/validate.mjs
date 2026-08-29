@@ -710,10 +710,11 @@ function validateGichulFrontend() {
     && appSource.includes('ranges.push(exam.sections.selection)'),
   'gichul/app.js: full modern papers must be planned from common plus the selected track range');
   check(appSource.includes('answer.canonical_form !== exam.canonical_form')
-    && appSource.includes('answer.answer_selection')
+    && appSource.includes('answer?.answer_common')
+    && appSource.includes('answer?.answer_selection')
     && appSource.includes('planned.clips.push')
     && appSource.includes('setCropBox'),
-  'gichul/app.js: answers must share the question canonical form and crop excerpt output to the selected answer column');
+  'gichul/app.js: answers must share the question canonical form and mirror common/selection question parts');
 
   const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
   check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),

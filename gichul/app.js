@@ -256,6 +256,31 @@
 
   const answerIdOf = (exam) => `${exam.id.replace(/-question$/u, '')}-answer`;
 
+  // 문제지에 넣는 문항 집합과 그 문항의 답 위치를 한 계약으로 표현한다.
+  // 모드별 판단은 여기서만 하고, 문제지와 답안 planner는 같은 part 목록을 소비한다.
+  function includedOutputParts(exam, mode, seenQuestionParts) {
+    if (mode === 'excerpt') {
+      return isExcerptable(exam)
+        ? [{ kind: 'selection', questionRange: exam.sections.selection, answerField: 'answer_selection' }]
+        : [];
+    }
+    if (!isExcerptable(exam) || !Array.isArray(exam.sections.common)) {
+      const key = `whole\u0000${exam.r2_key}`;
+      if (seenQuestionParts.has(key)) return [];
+      seenQuestionParts.add(key);
+      return [{ kind: 'whole', questionRange: [1, exam.pages], answerField: 'answer_pages' }];
+    }
+
+    const parts = [];
+    const commonKey = `common\u0000${exam.r2_key}`;
+    if (!seenQuestionParts.has(commonKey)) {
+      seenQuestionParts.add(commonKey);
+      parts.push({ kind: 'common', questionRange: exam.sections.common, answerField: 'answer_common' });
+    }
+    parts.push({ kind: 'selection', questionRange: exam.sections.selection, answerField: 'answer_selection' });
+    return parts;
+  }
+
   // 선택된 항목을 "PDF 조각"의 목록으로 바꾼다. 1-based 포함 구간이며, 순서가 곧 병합 순서다.
   //
   // 같은 PDF를 두 번 담지 않는다: 2022학년도 이후 국어·수학은 화작/언매(확통/미적/기하)가
@@ -266,39 +291,29 @@
     const papers = [];
     const answerByPaper = new Map();
     const missingAnswers = [];
-    const seenWhole = new Set();
-    const seenCommon = new Set();
+    const seenQuestionParts = new Set();
     const reportedMissing = new Set();
 
     for (const exam of exams) {
-      if (state.mode === 'full') {
-        if (isExcerptable(exam) && Array.isArray(exam.sections.common)) {
-          const ranges = [];
-          if (!seenCommon.has(exam.r2_key)) {
-            seenCommon.add(exam.r2_key);
-            ranges.push(exam.sections.common);
-          }
-          ranges.push(exam.sections.selection);
-          papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges });
-        } else if (!seenWhole.has(exam.r2_key)) {
-          seenWhole.add(exam.r2_key);
-          papers.push({ id: exam.id, key: exam.r2_key, label: examLabel(exam), ranges: [[1, exam.pages]] });
-        }
-      } else if (isExcerptable(exam)) {
-        papers.push({
-          id: exam.id,
-          key: exam.r2_key,
-          label: examLabel(exam),
-          ranges: [exam.sections.selection],
-        });
-      }
+      const outputParts = includedOutputParts(exam, state.mode, seenQuestionParts);
+      if (!outputParts.length) continue;
+      papers.push({
+        id: exam.id,
+        key: exam.r2_key,
+        label: examLabel(exam),
+        ranges: outputParts.map(({ questionRange }) => questionRange),
+      });
 
       if (!state.includeAnswers) continue;
       const answer = byId.get(answerIdOf(exam));
-      const selectionAnswer = isExcerptable(exam);
+      const selectionAnswer = outputParts.every(({ kind }) => kind !== 'whole');
       const answerPagesValid = Array.isArray(answer?.answer_pages) && answer.answer_pages.length > 0;
-      const selectionValid = !selectionAnswer
-        || (Array.isArray(answer?.answer_selection) && answer.answer_selection.length > 0);
+      const answerRegions = selectionAnswer
+        ? outputParts.map(({ answerField }) => answer?.[answerField])
+        : [];
+      const selectionValid = !selectionAnswer || answerRegions.every((regions) => (
+        Array.isArray(regions) && regions.length > 0
+      ));
       // 정답표가 자체 판정하지 않고 같은 문제지의 provenance-derived canonical_form을 공유한다.
       // 구형/불일치 manifest는 답안을 생략해 다른 형을 섞는 대신 명시적인 missing으로 처리한다.
       if (!answer || answer.canonical_form !== exam.canonical_form || !answerPagesValid || !selectionValid) {
@@ -322,11 +337,13 @@
         throw new Error(`${examLabel(exam)}: 같은 문제지의 정답표 파일이 서로 다릅니다.`);
       }
       if (selectionAnswer) {
-        for (const clip of answer.answer_selection) {
-          if (!planned.clips.some((candidate) => candidate.page === clip.page
-            && candidate.x?.[0] === clip.x?.[0] && candidate.x?.[1] === clip.x?.[1]
-            && candidate.y?.[0] === clip.y?.[0] && candidate.y?.[1] === clip.y?.[1])) {
-            planned.clips.push(clip);
+        for (const regions of answerRegions) {
+          for (const clip of regions) {
+            if (!planned.clips.some((candidate) => candidate.page === clip.page
+              && candidate.x?.[0] === clip.x?.[0] && candidate.x?.[1] === clip.x?.[1]
+              && candidate.y?.[0] === clip.y?.[0] && candidate.y?.[1] === clip.y?.[1])) {
+              planned.clips.push(clip);
+            }
           }
         }
       } else {
