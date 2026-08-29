@@ -37,7 +37,6 @@ function decodeHtml(value) {
     return ENTITY_VALUES[entity.toLowerCase()] ?? match;
   });
 }
-
 function attributesOf(tag) {
   const attributes = new Map();
   for (const match of tag.matchAll(/([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gu)) {
@@ -69,6 +68,29 @@ function formFromFilename(filename) {
 
 export function canonicalFormFromProvenance(sourceFilename, archiveEntry) {
   return formFromFilename(archiveEntry || sourceFilename) || 'single';
+}
+
+export function canonicalFormForAnswer(answer, questions, { allowMissing = false } = {}) {
+  const gradeYear = answer.gradeYear ?? answer.grade_year;
+  const answerTrack = answer.track ?? null;
+  const candidates = questions.filter((question) => {
+    const questionTrack = question.track ?? null;
+    return (question.gradeYear ?? question.grade_year) === gradeYear
+      && question.year === answer.year
+      && question.round === answer.round
+      && question.subject === answer.subject
+      && (answerTrack === null || questionTrack === null || questionTrack === answerTrack);
+  });
+  if (!candidates.length) {
+    if (allowMissing) return 'single';
+    throw new Error(`정답표에 짝이 되는 문제지 provenance가 없습니다: ${answer.target || 'answer'}`);
+  }
+  const forms = new Set(candidates.map((question) => question.canonical_form
+    ?? canonicalFormFromProvenance(question.filename ?? question.sourceFilename, question.archiveEntry)));
+  if (forms.size !== 1 || !['odd', 'even', 'single'].includes(forms.values().next().value)) {
+    throw new Error(`같은 정답표에 대응하는 문제지 정본 형이 일치하지 않습니다: ${answer.target || 'answer'}`);
+  }
+  return forms.values().next().value;
 }
 
 function socialSubjectFromFilename(filename) {
@@ -738,8 +760,17 @@ async function readInventory(file) {
   return new Map(parsed.files.map((entry) => [entry.target, entry]));
 }
 
-async function writeInventory(file, attachments, availability) {
+async function writeInventory(file, attachments, availability, allowPartial) {
   const temporary = `${file}.${process.pid}.tmp`;
+  // 형 판정은 문제지 KICE provenance에서만 한다. 정답표는 같은 회차 문제지 target의
+  // 결과를 공유하므로 회차/과목별 판정 목록이나 두 번째 추론 규칙이 생기지 않는다.
+  const questions = attachments
+    .filter(({ kind }) => kind === 'question')
+    .map((attachment) => ({
+      ...attachment,
+      canonical_form: canonicalFormFromProvenance(attachment.filename, attachment.archiveEntry),
+    }));
+  const questionForms = new Map(questions.map(({ target, canonical_form: form }) => [target, form]));
   const inventory = {
     version: 1,
     availability,
@@ -749,8 +780,8 @@ async function writeInventory(file, attachments, availability) {
       sourceFilename: attachment.filename,
       archiveEntry: attachment.archiveEntry,
       canonical_form: attachment.kind === 'question'
-        ? canonicalFormFromProvenance(attachment.filename, attachment.archiveEntry)
-        : 'single',
+        ? questionForms.get(attachment.target)
+        : canonicalFormForAnswer(attachment, questions, { allowMissing: allowPartial }),
       grade_year: attachment.gradeYear,
       year: attachment.year,
       round: attachment.round,
@@ -821,7 +852,7 @@ export async function fetchKice({
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   outputs.sort((left, right) => left.target.localeCompare(right.target));
-  await writeInventory(inventoryPath, outputs, availability);
+  await writeInventory(inventoryPath, outputs, availability, allowPartial);
   if (!allowPartial) validateAssignmentCoverage(outputs, availability);
   return results;
 }

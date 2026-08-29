@@ -18,6 +18,7 @@ export const DEFAULT_AVAILABILITY = freezeDeep({
   subjects: [
     {
       id: 'korean',
+      selection_first_question: 35,
       tracks: [
         { id: null, from: 2020, to: 2021 },
         { id: 'hwajak', from: 2022, to: 2027, section_header: '화법과 작문' },
@@ -26,6 +27,7 @@ export const DEFAULT_AVAILABILITY = freezeDeep({
     },
     {
       id: 'math',
+      selection_first_question: 23,
       tracks: [
         { id: 'hwaktong', from: 2022, to: 2027, section_header: '확률과 통계' },
         { id: 'mijeok', from: 2022, to: 2027, section_header: '미적분' },
@@ -79,6 +81,11 @@ export function validateAvailability(availability) {
     if (subjectIds.has(subject.id)) throw new Error(`availability subject 중복: ${subject.id}`);
     if (!Array.isArray(subject.tracks) || !subject.tracks.length) {
       throw new Error(`availability ${subject.id} track 목록이 비어 있습니다.`);
+    }
+    const hasSelectionSections = subject.tracks.some(({ section_header: header }) => Boolean(header));
+    if (hasSelectionSections && (!Number.isSafeInteger(subject.selection_first_question)
+      || subject.selection_first_question < 1)) {
+      throw new Error(`availability ${subject.id} 선택과목 첫 문항 번호가 잘못되었습니다.`);
     }
     subjectIds.add(subject.id);
     const trackIds = new Set();

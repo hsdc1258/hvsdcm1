@@ -5,105 +5,371 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-import { canonicalFormFromProvenance } from './fetch-kice.mjs';
+import { extractPdfText } from './build-manifest.mjs';
 import { createGichulRenderers } from '../render-sandbox.mjs';
 
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIRECTORY, '..', '..');
 const DEFAULT_SOURCE_DIRECTORY = path.join(ROOT, 'gichul-src');
-const DEFAULT_MANIFEST_PATH = path.join(DEFAULT_SOURCE_DIRECTORY, 'manifest.json');
-const DEFAULT_INVENTORY_PATH = path.join(DEFAULT_SOURCE_DIRECTORY, 'crawl-inventory.json');
 const PDF_LIB_PATH = path.join(ROOT, 'assets', 'vendor', 'pdf-lib', 'pdf-lib.min.js');
-const CMAP_URL = `${path.join(ROOT, 'node_modules', 'pdfjs-dist', 'cmaps')}${path.sep}`;
-const EXPECTED_SELECTION_NUMBERS = Object.freeze(Array.from({ length: 11 }, (_, index) => 35 + index));
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function normalizedText(items) {
-  return items.map((item) => `${item.str || ''}${item.hasEOL ? '\n' : ' '}`)
-    .join('')
-    .normalize('NFKC')
-    .replace(/\s+/gu, ' ')
-    .trim();
+function compact(value) {
+  return String(value || '').normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 }
 
-export function canonicalOperatorValue(value, seen = new WeakSet(), references = new Map()) {
-  if (value === null || value === undefined || typeof value === 'boolean') return value ?? null;
-  if (typeof value === 'string') {
-    // PDF.js가 문서/페이지 로드 순서에서 만든 리소스 ID만 접는다. 실제 글자·좌표·연산자와
-    // 이미지/폰트 내용은 아래 값과 typed-array hash에 남으므로 다른 페이지는 같아지지 않는다.
-    if (/^\d+R$/u.test(value)) {
-      if (!references.has(value)) references.set(value, `R${references.size + 1}`);
-      return references.get(value);
+function pageForm(text) {
+  const value = compact(text);
+  const odd = value.includes('홀수형');
+  const even = value.includes('짝수형');
+  if (odd && even) throw new Error('한 페이지에 홀수형과 짝수형이 함께 표기됐습니다.');
+  return odd ? 'odd' : (even ? 'even' : null);
+}
+
+function hasPrintedQuestion(text, number) {
+  return new RegExp(`(?:^|[^0-9])${number}\\s*(?:[.]|번)`, 'u')
+    .test(String(text || '').normalize('NFKC'));
+}
+
+function descriptorFor(manifest, subject) {
+  const descriptor = manifest.availability?.subjects?.find(({ id }) => id === subject);
+  if (!descriptor || !Number.isSafeInteger(descriptor.selection_first_question)) {
+    throw new Error(`${subject}: 독립 oracle에 필요한 선택 첫 문항 번호가 없습니다.`);
+  }
+  return descriptor;
+}
+
+function trackDefinitions(manifest, questions) {
+  const descriptor = descriptorFor(manifest, questions[0].subject);
+  const ids = new Set(questions.map(({ track }) => track));
+  return descriptor.tracks
+    .filter(({ id, section_header: header }) => ids.has(id) && header)
+    .map(({ id: track, section_header: header }) => ({
+      track,
+      header,
+      firstQuestion: descriptor.selection_first_question,
+    }));
+}
+
+function hasPhysicalSectionHeader(layout, header) {
+  if (!layout || !Number.isFinite(layout.height) || !Array.isArray(layout.items)) return false;
+  const wanted = compact(header);
+  return layout.items.some((item) => compact(item.text) === wanted
+    && item.y / layout.height >= 0.8 && item.y / layout.height <= 0.87);
+}
+
+function questionOracle(manifest, questions, extracted) {
+  const rawForms = extracted.pageTexts.map(pageForm);
+  let forms;
+  let canonicalForm;
+  if (rawForms.every((form) => form === null)) {
+    forms = rawForms.map(() => 'single');
+    canonicalForm = 'single';
+  } else {
+    if (rawForms.some((form) => form === null)) {
+      throw new Error(`${questions[0].r2_key}: 일부 문제지 페이지의 형 표기를 판독하지 못했습니다.`);
     }
-    return value.replace(/^g_d\d+_/u, 'g_d#_').replace(/([_-])p\d+_/gu, '$1p#_');
+    forms = rawForms;
+    canonicalForm = forms.includes('odd') ? 'odd' : 'even';
   }
-  if (typeof value === 'number') return Number.isFinite(value) ? Number(value.toFixed(6)) : String(value);
-  if (ArrayBuffer.isView(value)) {
-    return { type: value.constructor.name, sha256: sha256(Buffer.from(value.buffer, value.byteOffset, value.byteLength)) };
+  const canonicalPages = forms.flatMap((form, index) => (
+    form === canonicalForm ? [index + 1] : []
+  ));
+  if (!canonicalPages.length || canonicalPages.some((page, index) => (
+    index > 0 && page !== canonicalPages[index - 1] + 1
+  ))) {
+    throw new Error(`${questions[0].r2_key}: 정본 형 페이지가 연속 블록이 아닙니다.`);
   }
-  if (Array.isArray(value)) return value.map((entry) => canonicalOperatorValue(entry, seen, references));
-  if (typeof value !== 'object') return String(value);
-  if (seen.has(value)) return '[circular]';
-  seen.add(value);
-  const result = {};
-  for (const key of Object.keys(value).sort()) result[key] = canonicalOperatorValue(value[key], seen, references);
-  seen.delete(value);
-  return result;
-}
 
-async function loadPdfJsDocument(bytes) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const data = new Uint8Array(bytes);
-  return pdfjs.getDocument({
-    data,
-    disableWorker: true,
-    useSystemFonts: true,
-    cMapUrl: CMAP_URL,
-    cMapPacked: true,
-  }).promise;
-}
-
-export async function inspectPdf(bytes) {
-  const metadataDocument = await loadPdfJsDocument(bytes);
-  const pageCount = metadataDocument.numPages;
-  await metadataDocument.destroy();
-  const pages = [];
-  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-    // PDF.js dependency 연산자는 앞 페이지를 이미 읽었는지에 따라 생략될 수 있다. 페이지마다
-    // 문서를 새로 열어 같은 source page가 병합 위치와 무관하게 같은 content hash를 갖게 한다.
-    const document = await loadPdfJsDocument(bytes);
-    try {
-      const page = await document.getPage(pageNumber);
-      const [textContent, operators] = await Promise.all([page.getTextContent(), page.getOperatorList()]);
-      const text = normalizedText(textContent.items);
-      const contentHash = sha256(JSON.stringify(canonicalOperatorValue({
-        fn: operators.fnArray,
-        args: operators.argsArray,
-      })));
-      pages.push({
-        page: pageNumber,
-        text,
-        text_sha256: sha256(text),
-        content_sha256: contentHash,
-        fingerprint: sha256(`${sha256(text)}\0${contentHash}`),
-      });
-    } finally {
-      await document.destroy();
+  const definitions = trackDefinitions(manifest, questions);
+  const starts = new Map();
+  for (const definition of definitions) {
+    const pages = canonicalPages.filter((page) => {
+      const text = extracted.pageTexts[page - 1];
+      return hasPhysicalSectionHeader(extracted.pageLayouts?.[page - 1], definition.header)
+        && hasPrintedQuestion(text, definition.firstQuestion);
+    });
+    if (pages.length !== 1) {
+      throw new Error(`${questions[0].r2_key}: ${definition.track} 첫 문항 페이지가 ${pages.length}개입니다.`);
     }
+    starts.set(definition.track, pages[0]);
   }
+  const ordered = definitions.map(({ track }) => starts.get(track));
+  if (ordered.some((start, index) => index > 0 && start <= ordered[index - 1])) {
+    throw new Error(`${questions[0].r2_key}: 선택과목 의미 순서가 잘못됐습니다.`);
+  }
+  const common = Array.from(
+    { length: ordered[0] - canonicalPages[0] },
+    (_, index) => canonicalPages[0] + index,
+  );
+  const selections = new Map(definitions.map(({ track }, index) => {
+    const from = ordered[index];
+    const to = index + 1 < ordered.length ? ordered[index + 1] - 1 : canonicalPages.at(-1);
+    return [track, Array.from({ length: to - from + 1 }, (_, offset) => from + offset)];
+  }));
+  return { forms, canonicalForm, canonicalPages, common, selections, definitions };
+}
+
+function powerset(values) {
+  return Array.from({ length: 2 ** values.length - 1 }, (_, maskIndex) => {
+    const mask = maskIndex + 1;
+    return values.filter((_, index) => mask & (1 << index));
+  });
+}
+
+function expandQuestionPages(segments, key) {
+  return segments.filter((segment) => segment.key === key).flatMap(({ ranges = [] }) => (
+    ranges.flatMap(([from, to]) => (
+      Array.from({ length: to - from + 1 }, (_, index) => from + index)
+    ))
+  ));
+}
+
+function multisetMissing(expected, actual) {
+  const remaining = new Map();
+  actual.forEach((value) => remaining.set(value, (remaining.get(value) || 0) + 1));
+  let missing = 0;
+  for (const value of expected) {
+    const count = remaining.get(value) || 0;
+    if (count) remaining.set(value, count - 1);
+    else missing += 1;
+  }
+  return missing;
+}
+
+function questionCounts(mode, actual, selectedTracks, oracle) {
+  const expectedSelection = selectedTracks.flatMap((track) => oracle.selections.get(track));
+  const expected = mode === 'full' ? [...oracle.common, ...expectedSelection] : expectedSelection;
+  const expectedSet = new Set(expected);
+  const commonSet = new Set(oracle.common);
+  const actualCommon = actual.filter((page) => commonSet.has(page));
+  const commonDuplicate = mode === 'full'
+    ? Math.max(0, actualCommon.length - oracle.common.length) : actualCommon.length;
+  return {
+    noncanonical_form_page_count: actual.filter((page) => (
+      oracle.forms[page - 1] !== oracle.canonicalForm
+    )).length,
+    foreign_page_count: actual.filter((page) => !expectedSet.has(page)).length,
+    common_page_count: mode === 'excerpt' ? actualCommon.length : 0,
+    common_duplicate_count: mode === 'full' ? commonDuplicate : 0,
+    missing_page_count: multisetMissing(expected, actual),
+    sequence_mismatch_count: JSON.stringify(actual) === JSON.stringify(expected) ? 0 : 1,
+  };
+}
+
+function explicitAnswerForms(pageTexts) {
+  return pageTexts.map((text) => pageForm(text) || 'single');
+}
+
+function answerFormOrders(extractions) {
+  const orders = new Map();
+  for (const { key, extracted } of extractions) {
+    const forms = explicitAnswerForms(extracted.pageTexts);
+    if (forms.every((form) => form === 'single')) continue;
+    if (forms.includes('single')) throw new Error(`${key}: 답안 형 표기가 일부 페이지만 존재합니다.`);
+    if (!forms.includes('odd') || !forms.includes('even')) continue;
+    const previous = orders.get(forms.length);
+    if (previous && previous.some((form, index) => form !== forms[index])) {
+      throw new Error(`${key}: 답안 형 페이지 순서가 원본끼리 다릅니다.`);
+    }
+    orders.set(forms.length, forms);
+  }
+  return orders;
+}
+
+function canonicalAnswerPages(extracted, canonicalForm, formOrders, key) {
+  let forms = explicitAnswerForms(extracted.pageTexts);
+  if (canonicalForm === 'single') return forms.map((_, index) => index + 1);
+  if (forms.every((form) => form === 'single')) {
+    forms = formOrders.get(forms.length);
+    if (!forms) throw new Error(`${key}: 이미지형 답안의 형 페이지 순서를 판독하지 못했습니다.`);
+  }
+  const pages = forms.flatMap((form, index) => form === canonicalForm ? [index + 1] : []);
+  if (!pages.length) throw new Error(`${key}: ${canonicalForm} 답안 페이지가 없습니다.`);
   return pages;
 }
 
-async function loadPdfLib() {
-  // 다른 VM realm에서 평가하면 pdf-lib의 Uint8Array 판정과 Node Buffer의 생성자가 달라져
-  // 정상 PDF가 숫자 하나로 오인된다. 현재 realm에서 browser bundle만 평가해 타입 경계를 맞춘다.
-  vm.runInThisContext(await readFile(PDF_LIB_PATH, 'utf8'), { filename: PDF_LIB_PATH });
-  if (typeof globalThis.PDFLib?.PDFDocument?.load !== 'function') {
-    throw new Error(`vendored pdf-lib를 불러오지 못했습니다: ${PDF_LIB_PATH}`);
+function joinedHeaderBox(items, header) {
+  const wanted = compact(header);
+  const direct = items.find(({ text }) => compact(text) === wanted);
+  if (direct) return { center: direct.x + direct.width / 2 };
+  const ordered = items.filter(({ text }) => compact(text)).sort((left, right) => left.x - right.x);
+  for (let start = 0; start < ordered.length; start += 1) {
+    let value = '';
+    let minY = ordered[start].y;
+    let maxY = ordered[start].y;
+    for (let end = start; end < Math.min(ordered.length, start + 5); end += 1) {
+      minY = Math.min(minY, ordered[end].y);
+      maxY = Math.max(maxY, ordered[end].y);
+      if (maxY - minY > 4) break;
+      value += compact(ordered[end].text);
+      if (value === wanted) {
+        const right = ordered[end].x + ordered[end].width;
+        return { center: (ordered[start].x + right) / 2 };
+      }
+      if (!wanted.startsWith(value)) break;
+    }
   }
+  return null;
+}
+
+function textualTrackColumns(layout, definitions) {
+  const centers = definitions.map((definition) => ({
+    ...definition,
+    center: joinedHeaderBox(layout.items, definition.header)?.center,
+  }));
+  if (centers.every(({ center }) => !Number.isFinite(center))) return null;
+  if (centers.some(({ center }) => !Number.isFinite(center))) {
+    throw new Error('답안 선택과목 헤더 일부만 판독됐습니다.');
+  }
+  centers.sort((left, right) => left.center - right.center);
+  return new Map(centers.map((entry, index) => {
+    const left = index === 0
+      ? entry.center - (centers[1].center - entry.center) / 2
+      : (centers[index - 1].center + entry.center) / 2;
+    const right = index === centers.length - 1
+      ? entry.center + (entry.center - centers[index - 1].center) / 2
+      : (entry.center + centers[index + 1].center) / 2;
+    return [entry.track, [Math.max(0, left / layout.width), Math.min(1, right / layout.width)]];
+  }));
+}
+
+function rasterTrackColumns(raster, definitions) {
+  if (!raster || raster.error || !Array.isArray(raster.selection_lines)) {
+    throw new Error(`이미지형 답안 표 판독 실패: ${raster?.error || 'raster 없음'}`);
+  }
+  const lines = raster.selection_lines;
+  const left = lines[0].x;
+  const right = lines.at(-1).x;
+  const chosen = Array.from({ length: definitions.length + 1 }, (_, index) => {
+    const target = left + (right - left) * index / definitions.length;
+    return [...lines].sort((a, b) => Math.abs(a.x - target) - Math.abs(b.x - target))[0];
+  });
+  if (new Set(chosen).size !== chosen.length) throw new Error('이미지형 답안 열 경계가 중복됩니다.');
+  return new Map(definitions.map(({ track }, index) => (
+    [track, [chosen[index].x, chosen[index + 1].x]]
+  )));
+}
+
+function nearPair(actual, expected, tolerance = 0.012) {
+  return Array.isArray(actual) && actual.length === 2
+    && Math.abs(actual[0] - expected[0]) <= tolerance
+    && Math.abs(actual[1] - expected[1]) <= tolerance;
+}
+
+function answerCounts({
+  segments, answerKey, answerEntryByTrack, selectedTracks, extracted, oracle, formOrders, mutation,
+}) {
+  const matches = segments.filter(({ key }) => key === answerKey);
+  if (matches.length !== 1) {
+    return {
+      noncanonical_form_page_count: 0,
+      common_entry_count: 0,
+      foreign_track_entry_count: 0,
+      dual_form_count: 0,
+      missing_track_count: selectedTracks.length,
+      segment_count_error: Math.abs(matches.length - 1),
+    };
+  }
+  const segment = structuredClone(matches[0]);
+  if (mutation === 'full-answer') {
+    segment.ranges = [[1, answerEntryByTrack.get(selectedTracks[0]).pages]];
+    delete segment.clips;
+  }
+  const canonicalPages = canonicalAnswerPages(extracted, oracle.canonicalForm, formOrders, answerKey);
+  const explicitForms = explicitAnswerForms(extracted.pageTexts);
+  const forms = explicitForms.every((form) => form === 'single') && oracle.canonicalForm !== 'single'
+    ? formOrders.get(explicitForms.length) : explicitForms;
+  const wholePages = (segment.ranges || []).flatMap(([from, to]) => (
+    Array.from({ length: to - from + 1 }, (_, index) => from + index)
+  ));
+  if (wholePages.length) {
+    const actualForms = new Set(wholePages.map((page) => forms?.[page - 1] || 'single'));
+    return {
+      noncanonical_form_page_count: wholePages.filter((page) => !canonicalPages.includes(page)).length,
+      common_entry_count: wholePages.length,
+      foreign_track_entry_count: Math.max(0, oracle.definitions.length - selectedTracks.length),
+      dual_form_count: actualForms.size > 1 ? 1 : 0,
+      missing_track_count: 0,
+      segment_count_error: 0,
+    };
+  }
+
+  const found = new Set();
+  let foreign = 0;
+  let noncanonical = 0;
+  for (const clip of segment.clips || []) {
+    if (!canonicalPages.includes(clip.page)) noncanonical += 1;
+    const layout = extracted.pageLayouts?.[clip.page - 1];
+    if (!layout) {
+      foreign += 1;
+      continue;
+    }
+    const columns = textualTrackColumns(layout, oracle.definitions)
+      || rasterTrackColumns(extracted.pageRasterLayouts?.[clip.page - 1], oracle.definitions);
+    const matched = [...columns].find(([, expected]) => nearPair(clip.x, expected));
+    if (!matched || !selectedTracks.includes(matched[0])) foreign += 1;
+    else found.add(matched[0]);
+  }
+  return {
+    noncanonical_form_page_count: noncanonical,
+    common_entry_count: 0,
+    foreign_track_entry_count: foreign,
+    dual_form_count: 0,
+    missing_track_count: selectedTracks.filter((track) => !found.has(track)).length,
+    segment_count_error: 0,
+  };
+}
+
+function anomalyTotal(result) {
+  return Object.values(result.full).reduce((sum, value) => sum + value, 0)
+    + Object.values(result.excerpt).reduce((sum, value) => sum + value, 0)
+    + Object.values(result.answer).reduce((sum, value) => sum + value, 0);
+}
+
+function mutateManifest(manifest, mutation) {
+  const result = structuredClone(manifest);
+  if (mutation === 'b1-start-plus-one') {
+    for (const exam of result.exams.filter(({ id }) => /^2025-(?:06|09)-math-.+-question$/u.test(id))) {
+      exam.sections.common[1] += 1;
+      exam.sections.selection[0] += 1;
+      if (exam.track !== 'giha') exam.sections.selection[1] += 1;
+    }
+  } else if (mutation === 'combined-form-as-single') {
+    const combinedKeys = new Set(result.exams.filter(({ kind, source_forms: forms, sections }) => (
+      kind === 'question' && Array.isArray(forms) && forms.length > 1 && sections?.selection
+    )).map(({ r2_key: key }) => key));
+    for (const exam of result.exams) {
+      if (combinedKeys.has(exam.r2_key)) {
+        exam.canonical_form = 'single';
+        exam.canonical_pages = [1, exam.pages];
+        exam.source_forms = ['single'];
+      }
+    }
+    for (const key of combinedKeys) {
+      const questions = result.exams.filter(({ kind, r2_key: r2Key, sections }) => (
+        kind === 'question' && r2Key === key && sections?.selection
+      ));
+      if (!questions.length) continue;
+      questions.sort((left, right) => left.sections.selection[0] - right.sections.selection[0]);
+      questions.at(-1).sections.selection[1] = questions.at(-1).pages;
+      const sample = questions[0];
+      for (const answer of result.exams.filter((exam) => exam.kind === 'answer'
+        && exam.year === sample.year && exam.round === sample.round && exam.subject === sample.subject)) {
+        answer.canonical_form = 'single';
+      }
+    }
+  } else if (mutation && mutation !== 'full-answer') {
+    throw new Error(`알 수 없는 mutation: ${mutation}`);
+  }
+  return result;
+}
+
+async function loadPdfLib() {
+  vm.runInThisContext(await readFile(PDF_LIB_PATH, 'utf8'), { filename: PDF_LIB_PATH });
   return globalThis.PDFLib;
 }
 
@@ -116,337 +382,232 @@ async function mergeSegments(PDFDocument, sourceDirectory, segments) {
       loaded.set(segment.key, await PDFDocument.load(bytes, { ignoreEncryption: true }));
     }
     const source = loaded.get(segment.key);
-    for (const [from, to] of segment.ranges) {
+    for (const [from, to] of segment.ranges || []) {
       const indices = Array.from({ length: to - from + 1 }, (_, index) => from + index - 1);
-      const copied = await output.copyPages(source, indices);
-      for (const page of copied) output.addPage(page);
+      for (const page of await output.copyPages(source, indices)) output.addPage(page);
+    }
+    for (const clip of segment.clips || []) {
+      const [page] = await output.copyPages(source, [clip.page - 1]);
+      const { width, height } = page.getSize();
+      page.setCropBox(width * clip.x[0], height * clip.y[0],
+        width * (clip.x[1] - clip.x[0]), height * (clip.y[1] - clip.y[0]));
+      output.addPage(page);
     }
   }
   return Buffer.from(await output.save({ useObjectStreams: false }));
 }
 
-function pageRecords(pages, range) {
-  const [from, to] = range;
-  return pages.slice(from - 1, to);
-}
-
-function fingerprintCounts(records) {
-  const counts = new Map();
-  for (const { fingerprint } of records) counts.set(fingerprint, (counts.get(fingerprint) || 0) + 1);
-  return counts;
-}
-
-function foreignPageCount(actual, expected) {
-  const remaining = fingerprintCounts(expected);
-  let foreign = 0;
-  for (const { fingerprint } of actual) {
-    const count = remaining.get(fingerprint) || 0;
-    if (count === 0) foreign += 1;
-    else remaining.set(fingerprint, count - 1);
-  }
-  return foreign;
-}
-
-function commonDuplicateCount(actual, common) {
-  const actualCounts = fingerprintCounts(actual);
-  const expectedCounts = fingerprintCounts(common);
-  let duplicates = 0;
-  for (const [fingerprint, expected] of expectedCounts) {
-    duplicates += Math.max(0, (actualCounts.get(fingerprint) || 0) - expected);
-  }
-  return duplicates;
-}
-
-function questionNumbers(pageTexts) {
-  const found = new Set();
-  const source = pageTexts.join('\n').normalize('NFKC');
-  for (const match of source.matchAll(/(?:^|\s)(3[5-9]|4[0-5])\s*[.)]/gmu)) found.add(Number(match[1]));
-  return [...found].sort((left, right) => left - right);
-}
-
-function inventoryByTarget(inventory) {
-  if (inventory?.version !== 1 || !Array.isArray(inventory.files)) {
-    throw new Error('crawl-inventory.json 형식이 잘못되었습니다.');
-  }
-  return new Map(inventory.files.map((entry) => [entry.target, entry]));
-}
-
-function evenSegmentInputCount(segments, inventory) {
-  let count = 0;
-  for (const segment of segments) {
-    const provenance = inventory.get(segment.key);
-    if (!provenance) throw new Error(`출력 segment provenance가 없습니다: ${segment.key}`);
-    if (provenance.canonical_form === 'even') count += 1;
-  }
-  return count;
-}
-
-function independentFullExpectation(exams, pagesByKey) {
-  const pages = [];
-  const common = [];
-  const segments = [];
-  const seenCommon = new Set();
-  for (const exam of exams) {
-    const sourcePages = pagesByKey.get(exam.r2_key);
-    if (!sourcePages) throw new Error(`${exam.id}: source page inventory가 없습니다.`);
-    if (!seenCommon.has(exam.r2_key)) {
-      seenCommon.add(exam.r2_key);
-      const commonPages = pageRecords(sourcePages, exam.sections.common);
-      pages.push(...commonPages);
-      common.push(...commonPages);
-      segments.push({
-        id: exam.id,
-        key: exam.r2_key,
-        ranges: [exam.sections.common, exam.sections.selection],
-      });
-    } else {
-      segments.push({ id: exam.id, key: exam.r2_key, ranges: [exam.sections.selection] });
-    }
-    pages.push(...pageRecords(sourcePages, exam.sections.selection));
-  }
-  return { common, pages, segments };
-}
-
-async function verifyMergedOutput({
-  bytes,
-  commonPages,
-  expectedPages,
-  expectedSegments,
-  inventory,
-  mode,
-  segments,
-  label,
-}) {
-  const actualPages = await inspectPdf(bytes);
-  assert.equal(actualPages.length, expectedPages.length, `${label}: PDF 페이지 수 불일치`);
-  const actualSegments = segments.map(({ id, key, ranges }) => ({ id, key, ranges }));
-  assert.deepEqual(JSON.parse(JSON.stringify(actualSegments)), expectedSegments,
-    `${label}: planner segment provenance/range 불일치`);
-  const evenInputCount = evenSegmentInputCount(segments, inventory);
-  const foreign = foreignPageCount(actualPages, expectedPages);
-  assert.equal(evenInputCount, 0, `${label}: output에 even 원본 segment가 선택됐습니다.`);
-  assert.equal(foreign, 0, `${label}: output에 계약 밖 페이지가 있습니다.`);
-  if (mode === 'full') {
-    const duplicate = commonDuplicateCount(actualPages, commonPages);
-    assert.equal(duplicate, 0, `${label}: full output에 공통 페이지가 중복됐습니다.`);
-    return {
-      pages: actualPages.length,
-      even_input_count: evenInputCount,
-      foreign_page_count: foreign,
-      common_duplicate_count: duplicate,
-      sha256: sha256(bytes),
-    };
-  }
-  const commonCount = actualPages.filter(({ fingerprint }) => (
-    commonPages.some((page) => page.fingerprint === fingerprint)
-  )).length;
-  const numbers = questionNumbers(actualPages.map(({ text }) => text));
-  assert.equal(commonCount, 0, `${label}: excerpt output에 공통 페이지가 있습니다.`);
-  assert.deepEqual(numbers, EXPECTED_SELECTION_NUMBERS, `${label}: 선택 문항 번호가 35..45가 아닙니다.`);
-  return {
-    pages: actualPages.length,
-    common_page_count: commonCount,
-    foreign_page_count: foreign,
-    question_numbers: numbers,
-    sha256: sha256(bytes),
-  };
-}
-
-async function requireMutationFailure({
-  name,
-  plan,
-  expected,
-  PDFDocument,
-  sourceDirectory,
-  inventory,
-  mode,
-  label,
-}) {
-  try {
-    const bytes = await mergeSegments(PDFDocument, sourceDirectory, plan.segments);
-    await verifyMergedOutput({
-      bytes,
-      commonPages: expected.common,
-      expectedPages: expected.pages,
-      expectedSegments: expected.segments,
-      inventory,
-      mode,
-      segments: plan.segments,
-      label: `${label} mutation/${name}`,
-    });
-  } catch (error) {
-    return { name, rejected: true, reason: error.message };
-  }
-  throw new Error(`${label}: ${name} planner mutation을 검사가 거부하지 못했습니다.`);
-}
-
-export async function runOutputContract({
-  cases,
-  outDirectory,
-  sourceDirectory = DEFAULT_SOURCE_DIRECTORY,
-  manifestPath = DEFAULT_MANIFEST_PATH,
-  inventoryPath = DEFAULT_INVENTORY_PATH,
-} = {}) {
-  if (!Array.isArray(cases) || cases.length < 2) throw new Error('--cases에는 실제 회차 ID를 최소 2개 지정해야 합니다.');
-  if (!outDirectory) throw new Error('--out 경로가 필요합니다.');
-  const [manifestBytes, inventoryBytes] = await Promise.all([readFile(manifestPath), readFile(inventoryPath)]);
-  const manifest = JSON.parse(manifestBytes.toString('utf8'));
-  const inventory = inventoryByTarget(JSON.parse(inventoryBytes.toString('utf8')));
-  const byId = new Map((manifest.exams || []).map((exam) => [exam.id, exam]));
-  const planner = createGichulRenderers();
+async function writeRepresentativeOutputs({ manifest, groups, planner, sourceDirectory, outDirectory }) {
+  const representatives = [
+    { key: '2025-06-math-question.pdf', track: 'hwaktong', mode: 'excerpt' },
+    { key: '2022-csat-korean-question.pdf', track: 'hwajak', mode: 'full' },
+    { key: '2024-csat-korean-question.pdf', track: 'hwajak', mode: 'excerpt' },
+  ];
   const { PDFDocument } = await loadPdfLib();
-  const results = [];
-  await mkdir(outDirectory, { recursive: true });
-
-  for (const id of cases) {
-    const exam = byId.get(id);
-    if (!exam) throw new Error(`manifest에 E2E 회차가 없습니다: ${id}`);
-    if (!Array.isArray(exam.sections?.common) || !Array.isArray(exam.sections?.selection)) {
-      throw new Error(`${id}: common/selection 구간이 없습니다.`);
-    }
-    const provenance = inventory.get(exam.r2_key);
-    if (!provenance) throw new Error(`${id}: inventory provenance가 없습니다 (${exam.r2_key}).`);
-    const canonicalForm = canonicalFormFromProvenance(provenance.sourceFilename, provenance.archiveEntry);
-    assert.equal(provenance.canonical_form, canonicalForm, `${id}: inventory canonical_form 불일치`);
-    assert.equal(exam.canonical_form, canonicalForm, `${id}: manifest canonical_form 불일치`);
-
-    const sourceExams = (manifest.exams || []).filter((candidate) => candidate.kind === 'question'
-      && candidate.r2_key === exam.r2_key && Array.isArray(candidate.sections?.selection));
-    const companion = sourceExams.find((candidate) => candidate.id !== exam.id);
-    if (!companion) throw new Error(`${id}: full PDF에 함께 넣을 두 번째 track이 없습니다.`);
-    const fullExams = [exam, companion];
-    const sourcePath = path.join(sourceDirectory, exam.r2_key);
-    const sourceBytes = await readFile(sourcePath);
-    const sourcePages = await inspectPdf(sourceBytes);
-    assert.equal(sourcePages.length, exam.pages, `${id}: manifest와 source PDF 페이지 수 불일치`);
-    const commonPages = pageRecords(sourcePages, exam.sections.common);
-    const pagesByKey = new Map([[exam.r2_key, sourcePages]]);
-    const expectedFull = independentFullExpectation(fullExams, pagesByKey);
-    const expectedExcerpt = {
-      common: commonPages,
-      pages: pageRecords(sourcePages, exam.sections.selection),
-      segments: [{ id: exam.id, key: exam.r2_key, ranges: [exam.sections.selection] }],
-    };
-
-    const fullPlan = planner.planSegments(fullExams, manifest, { ...planner.defaultState(), mode: 'full' });
-    const excerptPlan = planner.planSegments([exam], manifest, { ...planner.defaultState(), mode: 'excerpt' });
-    assert.equal(fullPlan.missingAnswers.length, 0);
-    assert.equal(excerptPlan.missingAnswers.length, 0);
-    const fullBytes = await mergeSegments(PDFDocument, sourceDirectory, fullPlan.segments);
-    const excerptBytes = await mergeSegments(PDFDocument, sourceDirectory, excerptPlan.segments);
-    const fullPath = path.join(outDirectory, `${id}-full.pdf`);
-    const excerptPath = path.join(outDirectory, `${id}-excerpt.pdf`);
-    await Promise.all([writeFile(fullPath, fullBytes), writeFile(excerptPath, excerptBytes)]);
-
-    // 저장된 바이트를 다시 열고, planner output이 아니라 manifest sections로 독립 구성한 기대값과 대조한다.
-    const [full, excerpt] = await Promise.all([
-      readFile(fullPath).then((bytes) => verifyMergedOutput({
-        bytes,
-        commonPages: expectedFull.common,
-        expectedPages: expectedFull.pages,
-        expectedSegments: expectedFull.segments,
-        inventory,
-        mode: 'full',
-        segments: fullPlan.segments,
-        label: `${id} full`,
-      })),
-      readFile(excerptPath).then((bytes) => verifyMergedOutput({
-        bytes,
-        commonPages: expectedExcerpt.common,
-        expectedPages: expectedExcerpt.pages,
-        expectedSegments: expectedExcerpt.segments,
-        inventory,
-        mode: 'excerpt',
-        segments: excerptPlan.segments,
-        label: `${id} excerpt`,
-      })),
-    ]);
-
-    const wholePagePlan = {
-      ...fullPlan,
-      segments: [{ ...fullPlan.segments[0], ranges: [[1, exam.pages]] }],
-    };
-    const otherTrackPlan = {
-      ...excerptPlan,
-      segments: excerptPlan.segments.map((segment) => ({
-        ...segment,
-        id: companion.id,
-        ranges: [companion.sections.selection],
-      })),
-    };
-    const duplicateSelectionPlan = {
-      ...fullPlan,
-      segments: fullPlan.segments.map((segment, index) => index === fullPlan.segments.length - 1
-        ? { ...segment, ranges: [...segment.ranges, segment.ranges.at(-1)] }
-        : segment),
-    };
-    const mutations = await Promise.all([
-      requireMutationFailure({
-        name: 'whole-pages', plan: wholePagePlan, expected: expectedFull, PDFDocument,
-        sourceDirectory, inventory, mode: 'full', label: id,
-      }),
-      requireMutationFailure({
-        name: 'other-track', plan: otherTrackPlan, expected: expectedExcerpt, PDFDocument,
-        sourceDirectory, inventory, mode: 'excerpt', label: id,
-      }),
-      requireMutationFailure({
-        name: 'duplicate-selection', plan: duplicateSelectionPlan, expected: expectedFull, PDFDocument,
-        sourceDirectory, inventory, mode: 'full', label: id,
-      }),
-    ]);
-    results.push({
-      id,
-      canonical_form: canonicalForm,
-      selected_full_tracks: fullExams.map(({ track }) => track),
-      provenance: {
-        target: provenance.target,
-        fileSeq: provenance.fileSeq,
-        sourceFilename: provenance.sourceFilename,
-        archiveEntry: provenance.archiveEntry,
-      },
-      source_pdf_sha256: sha256(sourceBytes),
-      full,
-      excerpt,
-      mutations,
+  const files = [];
+  for (const representative of representatives) {
+    const questions = groups.get(representative.key);
+    const selected = questions?.filter(({ track }) => track === representative.track);
+    if (!selected?.length) continue;
+    const plan = planner.planSegments(selected, manifest, {
+      ...planner.defaultState(), mode: representative.mode, includeAnswers: true,
     });
+    const bytes = await mergeSegments(PDFDocument, sourceDirectory, plan.segments);
+    const file = path.join(outDirectory,
+      `${representative.key.replace(/-question[.]pdf$/u, '')}-${representative.track}-${representative.mode}.pdf`);
+    await writeFile(file, bytes);
+    files.push({ file: path.basename(file), sha256: sha256(bytes) });
+  }
+  return files;
+}
+
+function validateAllAnswerPlans(manifest, planner) {
+  const byId = new Map(manifest.exams.map((exam) => [exam.id, exam]));
+  const groups = new Map();
+  for (const question of manifest.exams.filter(({ kind }) => kind === 'question')) {
+    const list = groups.get(question.r2_key) || [];
+    list.push(question);
+    groups.set(question.r2_key, list);
+  }
+  let answerSegments = 0;
+  for (const [questionKey, questions] of groups) {
+    const answers = questions.map((question) => byId.get(
+      question.id.replace(/-question$/u, '-answer'),
+    ));
+    assert.ok(answers.every(Boolean), `${questionKey}: 대응 답안이 없습니다.`);
+    const plan = planner.planSegments(questions, manifest, {
+      ...planner.defaultState(), mode: 'full', includeAnswers: true,
+    });
+    assert.equal(JSON.stringify(plan.missingAnswers), '[]', `${questionKey}: 답안 계획이 누락됐습니다.`);
+    const expectedKeys = new Set(answers.map(({ r2_key: key }) => key));
+    const planned = plan.segments.filter(({ key }) => expectedKeys.has(key));
+    assert.equal(new Set(planned.map(({ key }) => key)).size, expectedKeys.size,
+      `${questionKey}: 답안 PDF 계획 수가 맞지 않습니다.`);
+    for (const segment of planned) {
+      const matchingAnswers = answers.filter(({ r2_key: key }) => key === segment.key);
+      const selectionAnswer = matchingAnswers.some(({ answer_selection: regions }) => Array.isArray(regions));
+      if (selectionAnswer) {
+        const expected = matchingAnswers.flatMap(({ answer_selection: regions = [] }) => regions)
+          .map((region) => JSON.stringify(region));
+        const actual = Array.from(segment.clips || [], (region) => JSON.stringify(region));
+        assert.deepEqual(actual, [...new Set(expected)], `${questionKey}: 선택 답안 crop이 맞지 않습니다.`);
+        assert.equal((segment.ranges || []).length, 0, `${questionKey}: 선택 답안에 전체 페이지가 섞였습니다.`);
+      } else {
+        const expected = matchingAnswers.flatMap(({ answer_pages: pages = [] }) => pages)
+          .map((page) => JSON.stringify([page, page]));
+        const actual = Array.from(segment.ranges || [], (range) => JSON.stringify(range));
+        assert.deepEqual(actual, [...new Set(expected)], `${questionKey}: 정본 답안 페이지가 맞지 않습니다.`);
+        assert.equal((segment.clips || []).length, 0, `${questionKey}: 비선택형 답안에 crop이 생겼습니다.`);
+      }
+      answerSegments += 1;
+    }
+  }
+  return { question_pdf_plans: groups.size, answer_segments: answerSegments, errors: 0 };
+}
+
+export async function runFullCorpusContract({
+  sourceDirectory = DEFAULT_SOURCE_DIRECTORY,
+  manifestPath = path.join(sourceDirectory, 'manifest.json'),
+  outDirectory,
+  mutation = null,
+  includeAnswers = false,
+} = {}) {
+  if (!outDirectory) throw new Error('--out이 필요합니다.');
+  if (!includeAnswers) throw new Error('--include-answers가 필요합니다.');
+  const manifestBytes = await readFile(manifestPath);
+  const baseManifest = JSON.parse(manifestBytes.toString('utf8'));
+  const manifest = mutateManifest(baseManifest, mutation);
+  const questions = manifest.exams.filter(({ kind, grade_year: year, subject, sections }) => (
+    kind === 'question' && year >= 2022 && ['korean', 'math'].includes(subject) && sections?.selection
+  ));
+  const groups = new Map();
+  for (const question of questions) {
+    const list = groups.get(question.r2_key) || [];
+    list.push(question);
+    groups.set(question.r2_key, list);
+  }
+  for (const list of groups.values()) {
+    const order = trackDefinitions(manifest, list).map(({ track }) => track);
+    list.sort((left, right) => order.indexOf(left.track) - order.indexOf(right.track));
+  }
+  const combinationCount = [...groups.values()]
+    .reduce((sum, list) => sum + 2 ** list.length - 1, 0);
+  assert.equal(groups.size, 32, '공유 문제 PDF 자동 도출 수가 32가 아닙니다.');
+  assert.equal(combinationCount, 160, '선택과목 부분집합 자동 도출 수가 160이 아닙니다.');
+
+  const questionExtractions = new Map();
+  const answerExtractions = new Map();
+  const answerKeys = new Set(questions.map((question) => (
+    manifest.exams.find(({ id }) => id === question.id.replace(/-question$/u, '-answer'))?.r2_key
+  )).filter(Boolean));
+  for (const [key] of groups) {
+    questionExtractions.set(key, await extractPdfText(path.join(sourceDirectory, key)));
+  }
+  for (const key of answerKeys) {
+    answerExtractions.set(key, await extractPdfText(path.join(sourceDirectory, key)));
+  }
+  const formOrders = answerFormOrders([...answerExtractions].map(([key, extracted]) => ({ key, extracted })));
+  const planner = createGichulRenderers();
+  const allAnswerPlans = validateAllAnswerPlans(manifest, planner);
+  const answerById = new Map(manifest.exams.filter(({ kind }) => kind === 'answer')
+    .map((exam) => [exam.id, exam]));
+  const results = [];
+  let anomalous = 0;
+
+  for (const [key, group] of groups) {
+    const oracle = questionOracle(manifest, group, questionExtractions.get(key));
+    for (const selected of powerset(group)) {
+      const tracks = selected.map(({ track }) => track);
+      const fullPlan = planner.planSegments(selected, manifest, {
+        ...planner.defaultState(), mode: 'full', includeAnswers: true,
+      });
+      const excerptPlan = planner.planSegments(selected, manifest, {
+        ...planner.defaultState(), mode: 'excerpt', includeAnswers: true,
+      });
+      const full = questionCounts('full', expandQuestionPages(fullPlan.segments, key), tracks, oracle);
+      const excerpt = questionCounts('excerpt', expandQuestionPages(excerptPlan.segments, key), tracks, oracle);
+      const answerEntries = new Map(selected.map((question) => {
+        const answer = answerById.get(question.id.replace(/-question$/u, '-answer'));
+        return [question.track, answer];
+      }));
+      const answerKey = answerEntries.values().next().value?.r2_key;
+      const answer = answerCounts({
+        segments: excerptPlan.segments,
+        answerKey,
+        answerEntryByTrack: answerEntries,
+        selectedTracks: tracks,
+        extracted: answerExtractions.get(answerKey),
+        oracle,
+        formOrders,
+        mutation,
+      });
+      const result = {
+        key,
+        subject: group[0].subject,
+        grade_year: group[0].grade_year,
+        round: group[0].round,
+        tracks,
+        full,
+        excerpt,
+        answer,
+      };
+      if (anomalyTotal(result) !== 0) anomalous += 1;
+      results.push(result);
+    }
+  }
+  if (results.length !== 160) throw new Error(`전수 조합 수가 ${results.length}입니다.`);
+  if (anomalous !== 0) {
+    const first = results.find((result) => anomalyTotal(result) !== 0);
+    throw new Error(`${mutation || 'normal'}: 이상 조합 ${anomalous}/160; 첫 오류 ${JSON.stringify(first)}`);
   }
 
+  await mkdir(outDirectory, { recursive: true });
+  const representativeFiles = mutation ? [] : await writeRepresentativeOutputs({
+    manifest, groups, planner, sourceDirectory, outDirectory,
+  });
   const evidence = {
-    version: 2,
+    schema: 'gichul-full-corpus-output-contract',
+    version: 1,
     generated_at: new Date().toISOString(),
-    manifest_sha256: sha256(manifestBytes),
-    cases: results,
+    source_manifest_sha256: sha256(manifestBytes),
+    shared_question_pdfs: groups.size,
+    subset_combinations: results.length,
+    anomalous_combinations: anomalous,
+    all_answer_plans: allAnswerPlans,
+    mutation,
+    results,
+    representative_files: representativeFiles,
   };
-  const evidencePath = path.join(outDirectory, 'output-contract.json');
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+  await writeFile(path.join(outDirectory, 'output-contract.json'), `${JSON.stringify(evidence, null, 2)}\n`);
   return evidence;
 }
 
 function cliOptions(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[++index];
-    if (!value) throw new Error(`${argv[index - 1]}에 값이 필요합니다.`);
-    if (argv[index - 1] === '--cases') options.cases = value.split(',').map((entry) => entry.trim()).filter(Boolean);
-    else if (argv[index - 1] === '--out') options.outDirectory = path.resolve(value);
-    else if (argv[index - 1] === '--source') options.sourceDirectory = path.resolve(value);
-    else if (argv[index - 1] === '--manifest') options.manifestPath = path.resolve(value);
-    else if (argv[index - 1] === '--inventory') options.inventoryPath = path.resolve(value);
-    else throw new Error(`알 수 없는 인자: ${argv[index - 1]}`);
+    const name = argv[index];
+    if (name === '--all') options.all = true;
+    else if (name === '--include-answers') options.includeAnswers = true;
+    else {
+      const value = argv[++index];
+      if (!value) throw new Error(`${name}에 값이 필요합니다.`);
+      if (name === '--source') options.sourceDirectory = path.resolve(value);
+      else if (name === '--manifest') options.manifestPath = path.resolve(value);
+      else if (name === '--out') options.outDirectory = path.resolve(value);
+      else if (name === '--mutation') options.mutation = value;
+      else throw new Error(`알 수 없는 인자: ${name}`);
+    }
   }
+  if (!options.all) throw new Error('--all이 필요합니다.');
+  delete options.all;
   return options;
 }
 
-const isMain = process.argv[1]
-  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isMain) {
-  runOutputContract(cliOptions(process.argv.slice(2))).then((evidence) => {
-    for (const item of evidence.cases) {
-      console.log(`${item.id}: full even=${item.full.even_input_count} foreign=${item.full.foreign_page_count}`
-        + ` common_duplicate=${item.full.common_duplicate_count}; excerpt common=${item.excerpt.common_page_count}`
-        + ` foreign=${item.excerpt.foreign_page_count}; questions=${item.excerpt.question_numbers.join(',')}`
-        + `; mutations=${item.mutations.map(({ name, rejected }) => `${name}:${rejected ? 'rejected' : 'missed'}`).join(',')}`);
-    }
+  runFullCorpusContract(cliOptions(process.argv.slice(2))).then((evidence) => {
+    console.log(`shared=${evidence.shared_question_pdfs} combinations=${evidence.subset_combinations}`
+      + ` anomalies=${evidence.anomalous_combinations}`);
   }).catch((error) => {
     console.error(error.stack || error.message);
     process.exitCode = 1;

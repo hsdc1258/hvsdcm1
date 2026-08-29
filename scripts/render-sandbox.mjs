@@ -409,7 +409,7 @@ export async function createUsageAppSandbox(responses = [], options = {}) {
 // 로그인 게이트 때문에 토큰을 미리 심고, 매니페스트 fetch는 영원히 대기하는 프라미스로
 // 둔다 — 스냅샷의 입력은 네트워크가 아니라 고정 표본이다.
 export const GICHUL_APP_SOURCE = 'gichul/app.js';
-export function createGichulRenderers() {
+export function createGichulRenderers(options = {}) {
   const store = new Map();
   const context = {};
   context.window = context;
@@ -437,7 +437,14 @@ export function createGichulRenderers() {
   context.console = { log() {}, warn() {}, error() {} };
   vm.createContext(context);
   vm.runInContext(readSource(ICON_SOURCE), context, { filename: ICON_SOURCE });
-  vm.runInContext(readSource(GICHUL_APP_SOURCE), context, { filename: GICHUL_APP_SOURCE });
+  const originalSource = readSource(GICHUL_APP_SOURCE);
+  const source = typeof options.sourceTransform === 'function'
+    ? options.sourceTransform(originalSource)
+    : originalSource;
+  if (typeof source !== 'string' || !source.length) {
+    throw new Error(`${GICHUL_APP_SOURCE}: sourceTransform이 유효한 소스를 반환하지 않았습니다.`);
+  }
+  vm.runInContext(source, context, { filename: GICHUL_APP_SOURCE });
 
   const renderers = context.GICHUL_RENDER;
   if (typeof renderers?.renderFilters !== 'function'

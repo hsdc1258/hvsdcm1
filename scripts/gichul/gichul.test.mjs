@@ -11,6 +11,7 @@ import {
   expectedCorpusEntries,
 } from './availability.mjs';
 import {
+  canonicalFormForAnswer,
   canonicalFormFromProvenance,
   classifyAttachment,
   fetchKice,
@@ -21,6 +22,10 @@ import {
 } from './fetch-kice.mjs';
 import {
   buildManifest,
+  deriveAnswerFormOrders,
+  deriveAnswerMetadata,
+  deriveQuestionFormMetadata,
+  detectAnswerTableLayout,
   detectSectionStarts,
   parseSourceFilename,
   validateCorpusManifest,
@@ -220,10 +225,10 @@ test('manifest builder injects PDF text extraction and derives modern selection 
   await Promise.all(files.map((file) => writeFile(path.join(sourceDirectory, file), 'fixture')));
   const pageTextByFile = {
     '2023-06-korean-question.pdf': [
-      '표지', '공통 1', '공통 2', '화법과 작문', '화법과 작문 문항', '언어와 매체', '언어와 매체 문항',
+      '표지', '공통 1', '공통 2', '화법과 작문 35.', '화법과 작문 문항', '언어와 매체 35.', '언어와 매체 문항',
     ],
     '2023-09-math-question.pdf': [
-      '표지', '공통', '공통', '공통', '확률과 통계', '확률과 통계 문항', '미적분', '미적분 문항', '기하', '기하 문항',
+      '표지', '공통', '공통', '공통', '확률과 통계 23.', '확률과 통계 문항', '미적분 23.', '미적분 문항', '기하 23.', '기하 문항',
     ],
     '2020-csat-math-ga-question.pdf': ['가형 문제', '가형 문제'],
     '2026-06-english-answer.pdf': ['정답'],
@@ -266,8 +271,8 @@ test('one availability descriptor carries a new round and fourth math track thro
   const source = '2026-10-math-question.pdf';
   await writeFile(path.join(sourceDirectory, source), 'fixture');
   const pageTexts = [
-    '표지', '공통', '확률과 통계', '확률과 통계 문항', '미적분', '미적분 문항',
-    '기하', '기하 문항', '벡터', '벡터 문항',
+    '표지', '공통', '확률과 통계 23.', '확률과 통계 문항', '미적분 23.', '미적분 문항',
+    '기하 23.', '기하 문항', '벡터 23.', '벡터 문항',
   ];
   const outputPath = path.join(sourceDirectory, 'manifest.json');
   const manifest = await buildManifest({
@@ -300,7 +305,7 @@ test('manifest overrides can correct one section while range overlap and bounds 
   const sourceDirectory = await temporaryDirectory(t);
   const file = path.join(sourceDirectory, '2023-06-korean-question.pdf');
   await writeFile(file, 'fixture');
-  const pageTexts = ['표지', '공통', '공통', '화법과 작문', '선택', '언어와 매체', '선택', '선택'];
+  const pageTexts = ['표지', '공통', '공통', '화법과 작문 35.', '선택', '언어와 매체 35.', '선택', '선택'];
   const extractText = async () => ({ pageCount: pageTexts.length, pageTexts });
   const overridesPath = path.join(sourceDirectory, 'overrides.json');
   await writeFile(overridesPath, JSON.stringify({
@@ -326,17 +331,150 @@ test('manifest overrides can correct one section while range overlap and bounds 
   ]), /1\.\.3 안/u);
 });
 
-test('section detection prefers a standalone header over an early contents mention', () => {
+test('section detection requires the track first question on the same physical page', () => {
   const starts = detectSectionStarts([
     '화법과 작문 또는 언어와 매체를 선택하십시오.',
     '공통 문항',
     '화법과 작문\n35번',
     '언어와 매체\n35번',
   ], [
-    { track: 'hwajak', header: '화법과 작문' },
-    { track: 'eonmae', header: '언어와 매체' },
+    { track: 'hwajak', header: '화법과 작문', firstQuestion: 35 },
+    { track: 'eonmae', header: '언어와 매체', firstQuestion: 35 },
   ]);
   assert.deepEqual(Object.fromEntries(starts), { hwajak: 3, eonmae: 4 });
+});
+
+test('section detection keeps the title plus copyright first page over a cleaner running header', () => {
+  const starts = detectSectionStarts([
+    '공통 22.',
+    '이 문제지에 관한 저작권은 평가원에 있습니다. (확률과 통계) 23. 첫 문항',
+    '(확률과 통계) 25. 반복 머리말',
+    '이 문제지에 관한 저작권은 평가원에 있습니다. (미적분) 23. 첫 문항',
+    '(미적분) 25. 반복 머리말',
+    '이 문제지에 관한 저작권은 평가원에 있습니다. (기하) 23. 첫 문항',
+  ], [
+    { track: 'hwaktong', header: '확률과 통계', firstQuestion: 23 },
+    { track: 'mijeok', header: '미적분', firstQuestion: 23 },
+    { track: 'giha', header: '기하', firstQuestion: 23 },
+  ]);
+  assert.deepEqual(Object.fromEntries(starts), { hwaktong: 2, mijeok: 4, giha: 6 });
+});
+
+test('internal odd-even question blocks select odd and unresolved single publication is rejected', () => {
+  const metadata = deriveQuestionFormMetadata([
+    ...Array.from({ length: 20 }, () => '홀수형 문제지'),
+    ...Array.from({ length: 20 }, () => '짝수형 문제지'),
+  ], 'single', 'combined.pdf');
+  assert.deepEqual(metadata, {
+    canonical_form: 'odd', canonical_pages: [1, 20], source_forms: ['odd', 'even'],
+  });
+  assert.throws(() => validateManifest([{
+    id: '2022-csat-korean-hwajak-question', r2_key: 'combined.pdf', kind: 'question',
+    subject: 'korean', grade_year: 2023, track: 'hwajak', pages: 40,
+    canonical_form: 'single', canonical_pages: [1, 40], source_forms: ['odd', 'even'],
+    sections: { common: [1, 12], selection: [13, 16] },
+  }]), /PDF 내부 형과 canonical_form이 충돌합니다/u);
+});
+
+test('answer metadata selects the question canonical page and derives track crops from PDF headers', () => {
+  const pageLayouts = [1, 2].map(() => ({
+    width: 600,
+    height: 800,
+    items: [
+      { text: '화법과 작문', x: 340, y: 600, width: 20, height: 10 },
+      { text: '언어와 매체', x: 440, y: 600, width: 20, height: 10 },
+      { text: '35', x: 340, y: 300, width: 10, height: 10 },
+      { text: '35', x: 440, y: 300, width: 10, height: 10 },
+    ],
+  }));
+  const metadata = deriveAnswerMetadata({
+    pageTexts: ['국어 정답표 (홀수) 형 화법과 작문 언어와 매체', '국어 정답표 (짝수) 형 화법과 작문 언어와 매체'],
+    pageLayouts,
+    tracks: ['hwajak', 'eonmae'],
+    canonicalForm: 'odd',
+    gradeYear: 2022,
+    subject: 'korean',
+  });
+  assert.deepEqual(metadata.answer_pages, [1]);
+  assert.deepEqual(metadata.selections.get('hwajak'), [{
+    page: 1, x: [0.5, 0.666667], y: [0.36, 0.8075],
+  }]);
+  assert.deepEqual(metadata.selections.get('eonmae'), [{
+    page: 1, x: [0.666667, 0.833333], y: [0.36, 0.8075],
+  }]);
+  assert.throws(() => deriveAnswerMetadata({
+    pageTexts: ['형 표기 없는 답안'], pageLayouts: pageLayouts.slice(0, 1), tracks: [],
+    canonicalForm: 'odd', gradeYear: 2022, subject: 'english',
+  }), /답안 형 표기가 없습니다/u);
+  assert.deepEqual(deriveAnswerMetadata({
+    pageTexts: ['홀수형 답안', '짝수형 답안'], pageLayouts, tracks: [],
+    canonicalForm: 'single', gradeYear: 2023, subject: 'english',
+  }).answer_pages, [1, 2]);
+  const formOrders = deriveAnswerFormOrders([
+    { label: 'text answer', pageTexts: ['홀수형 답안', '짝수형 답안'] },
+    { label: 'image answer', pageTexts: ['', ''] },
+  ]);
+  assert.deepEqual(formOrders.get(2), ['odd', 'even']);
+  assert.deepEqual(deriveAnswerMetadata({
+    pageTexts: ['', ''], pageLayouts, tracks: [], canonicalForm: 'odd',
+    gradeYear: 2025, subject: 'english', answerFormOrder: formOrders.get(2),
+  }).answer_pages, [1]);
+  assert.throws(() => deriveAnswerFormOrders([
+    { label: 'odd-first', pageTexts: ['홀수형', '짝수형'] },
+    { label: 'even-first', pageTexts: ['짝수형', '홀수형'] },
+  ]), /형 순서가 원본끼리 일치하지 않습니다/u);
+});
+
+test('a shared answer inherits one provenance-derived form from every matching question track', () => {
+  const answer = {
+    target: '2019-csat-math-answer.pdf', gradeYear: 2020, year: 2019,
+    round: 'csat', subject: 'math', track: null,
+  };
+  const questions = ['ga', 'na'].map((track) => ({
+    gradeYear: 2020, year: 2019, round: 'csat', subject: 'math', track,
+    filename: `수학_${track}_홀수형.pdf`, canonical_form: 'odd',
+  }));
+  assert.equal(canonicalFormForAnswer(answer, questions), 'odd');
+  assert.throws(() => canonicalFormForAnswer(answer, [
+    questions[0], { ...questions[1], canonical_form: 'even' },
+  ]), /문제지 정본 형이 일치하지 않습니다/u);
+});
+
+test('image-only answer table derives selection columns from original raster lines', () => {
+  const width = 400;
+  const height = 600;
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  const pixel = (x, y) => {
+    const offset = (y * width + x) * 4;
+    data[offset] = 0;
+    data[offset + 1] = 0;
+    data[offset + 2] = 0;
+  };
+  const horizontal = (y, from, to) => {
+    for (let x = from; x <= to; x += 1) pixel(x, y);
+  };
+  const vertical = (x, from, to) => {
+    for (let y = from; y <= to; y += 1) {
+      pixel(x, y);
+      pixel(x + 1, y);
+    }
+  };
+  horizontal(100, 40, 360);
+  horizontal(130, 200, 360);
+  horizontal(160, 40, 360);
+  vertical(40, 100, 500);
+  vertical(200, 100, 500);
+  vertical(280, 130, 360);
+  vertical(359, 100, 360);
+  const layout = detectAnswerTableLayout({ data, width, height });
+  assert.equal(layout.selection_lines.length, 3);
+  const metadata = deriveAnswerMetadata({
+    pageTexts: [''], pageLayouts: [{ width, height, items: [] }], pageRasterLayouts: [layout],
+    tracks: ['hwajak', 'eonmae'], canonicalForm: 'odd', answerFormOrder: ['odd'],
+    gradeYear: 2025, subject: 'korean',
+  });
+  assert.deepEqual(metadata.selections.get('hwajak')[0].x, [0.5025, 0.7025]);
+  assert.deepEqual(metadata.selections.get('eonmae')[0].x, [0.7025, 0.9]);
 });
 
 test('manifest filenames reject tracks from the wrong subject or academic-year system', () => {
@@ -382,6 +520,85 @@ test('range planner uses common once for full output and selection only for exce
   assert.doesNotMatch(filters, /includeCommon|공통 파트 포함/u);
   assert.match(body, /선택과목만 9–12쪽/u);
   assert.doesNotMatch(body, /공통 1–8쪽/u);
+});
+
+test('answer planner shares the question form and crops only selected answer columns in every mode', () => {
+  const renderers = createGichulRenderers();
+  const questions = [
+    {
+      id: '2021-csat-korean-hwajak-question', subject: 'korean', year: 2021, grade_year: 2022,
+      round: 'csat', track: 'hwajak', kind: 'question', r2_key: 'question.pdf', pages: 20,
+      canonical_form: 'odd', sections: { common: [1, 12], selection: [13, 16] },
+    },
+    {
+      id: '2021-csat-korean-eonmae-question', subject: 'korean', year: 2021, grade_year: 2022,
+      round: 'csat', track: 'eonmae', kind: 'question', r2_key: 'question.pdf', pages: 20,
+      canonical_form: 'odd', sections: { common: [1, 12], selection: [17, 20] },
+    },
+  ];
+  const answers = [
+    {
+      ...questions[0], id: '2021-csat-korean-hwajak-answer', kind: 'answer', r2_key: 'answer.pdf', pages: 2,
+      sections: undefined, answer_pages: [1],
+      answer_selection: [{ page: 1, x: [0.48, 0.66], y: [0.4, 0.8] }],
+    },
+    {
+      ...questions[1], id: '2021-csat-korean-eonmae-answer', kind: 'answer', r2_key: 'answer.pdf', pages: 2,
+      sections: undefined, answer_pages: [1],
+      answer_selection: [{ page: 1, x: [0.66, 0.84], y: [0.4, 0.8] }],
+    },
+  ];
+  const manifest = { exams: [...questions, ...answers] };
+  const full = renderers.planSegments(questions, manifest, {
+    ...renderers.defaultState(), mode: 'full', includeAnswers: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(full.segments.at(-1))), {
+    id: answers[0].id,
+    key: 'answer.pdf',
+    label: '2022학년도 수능 국어 (화법과 작문) 정답표',
+    clips: [
+      { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
+      { page: 1, x: [0.66, 0.84], y: [0.4, 0.8] },
+    ],
+  });
+  assert.equal(full.missingAnswers.length, 0);
+
+  const excerpt = renderers.planSegments([questions[0]], manifest, {
+    ...renderers.defaultState(), mode: 'excerpt', includeAnswers: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(excerpt.segments.at(-1).clips)), [
+    { page: 1, x: [0.48, 0.66], y: [0.4, 0.8] },
+  ]);
+  assert.equal(excerpt.missingAnswers.length, 0);
+
+  const mismatched = { exams: manifest.exams.map((exam) => (
+    exam.id === answers[0].id ? { ...exam, canonical_form: 'even' } : exam
+  )) };
+  const rejected = renderers.planSegments([questions[0]], mismatched, {
+    ...renderers.defaultState(), mode: 'excerpt', includeAnswers: true,
+  });
+  assert.equal(rejected.segments.length, 1);
+  assert.equal(rejected.missingAnswers.length, 1);
+
+  const legacyQuestion = {
+    id: '2020-06-english-question', subject: 'english', year: 2020, grade_year: 2021,
+    round: '06', track: null, kind: 'question', r2_key: 'legacy-question.pdf', pages: 8,
+    canonical_form: 'odd', canonical_pages: [1, 8], source_forms: ['odd'],
+  };
+  const legacyAnswer = {
+    ...legacyQuestion, id: '2020-06-english-answer', kind: 'answer', r2_key: 'legacy-answer.pdf',
+    pages: 2, canonical_pages: undefined, source_forms: undefined, answer_pages: [1],
+  };
+  const legacy = renderers.planSegments([legacyQuestion], { exams: [legacyQuestion, legacyAnswer] }, {
+    ...renderers.defaultState(), mode: 'full', includeAnswers: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(legacy.segments.at(-1))), {
+    id: legacyAnswer.id,
+    key: legacyAnswer.r2_key,
+    label: '2021학년도 6월 영어 정답표',
+    ranges: [[1, 1]],
+  });
+  assert.equal(legacy.missingAnswers.length, 0);
 });
 
 test('full planner derives 0, 1 and N selected math tracks without foreign ranges', () => {
@@ -467,7 +684,7 @@ test('production manifest build rejects an inventoried but incomplete source cor
 test('manifest overrides reject missing/extra ranges, inconsistent common pages, and unused IDs', async (t) => {
   const sourceDirectory = await temporaryDirectory(t);
   await writeFile(path.join(sourceDirectory, '2023-06-korean-question.pdf'), 'fixture');
-  const pageTexts = ['표지', '공통', '공통', '화법과 작문', '선택', '언어와 매체', '선택'];
+  const pageTexts = ['표지', '공통', '공통', '화법과 작문 35.', '선택', '언어와 매체 35.', '선택'];
   const extractText = async () => ({ pageCount: pageTexts.length, pageTexts });
   const overridesPath = path.join(sourceDirectory, 'overrides.json');
 
@@ -637,9 +854,13 @@ test('collector keeps the odd form, logs the even form and accessories, and acce
   const odd = inventory.files.find(({ target }) => target === '2024-csat-korean-question.pdf');
   assert.equal(odd.sourceFilename, '국어영역_문제지_홀수형.pdf');
   assert.equal(odd.canonical_form, 'odd');
+  assert.equal(inventory.files.find(({ target }) => target === '2024-csat-korean-answer.pdf').canonical_form,
+    'odd');
   assert.equal(inventory.files.find(({ target }) => target === '2023-csat-korean-question.pdf').canonical_form,
     'single');
   assert.equal(inventory.files.find(({ target }) => target === '2023-csat-english-question.pdf').canonical_form,
+    'even');
+  assert.equal(inventory.files.find(({ target }) => target === '2023-csat-english-answer.pdf').canonical_form,
     'even');
   assert.equal(canonicalFormFromProvenance('국어영역.zip', '문제지_홀수형.pdf'), 'odd');
 });

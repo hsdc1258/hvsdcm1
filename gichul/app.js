@@ -293,9 +293,15 @@
         });
       }
 
-      if (!state.includeAnswers || answerByPaper.has(exam.r2_key)) continue;
+      if (!state.includeAnswers) continue;
       const answer = byId.get(answerIdOf(exam));
-      if (!answer) {
+      const selectionAnswer = isExcerptable(exam);
+      const answerPagesValid = Array.isArray(answer?.answer_pages) && answer.answer_pages.length > 0;
+      const selectionValid = !selectionAnswer
+        || (Array.isArray(answer?.answer_selection) && answer.answer_selection.length > 0);
+      // 정답표가 자체 판정하지 않고 같은 문제지의 provenance-derived canonical_form을 공유한다.
+      // 구형/불일치 manifest는 답안을 생략해 다른 형을 섞는 대신 명시적인 missing으로 처리한다.
+      if (!answer || answer.canonical_form !== exam.canonical_form || !answerPagesValid || !selectionValid) {
         // 같은 시험지에서 갈라진 선택과목마다 같은 말을 반복하지 않는다.
         if (!reportedMissing.has(exam.r2_key)) {
           reportedMissing.add(exam.r2_key);
@@ -303,12 +309,33 @@
         }
         continue;
       }
-      answerByPaper.set(exam.r2_key, {
-        id: answer.id,
-        key: answer.r2_key,
-        label: `${examLabel(exam)} 정답표`,
-        ranges: [[1, answer.pages]],
-      });
+      let planned = answerByPaper.get(exam.r2_key);
+      if (!planned) {
+        planned = {
+          id: answer.id,
+          key: answer.r2_key,
+          label: `${examLabel(exam)} 정답표`,
+          ...(selectionAnswer ? { clips: [] } : { ranges: [] }),
+        };
+        answerByPaper.set(exam.r2_key, planned);
+      } else if (planned.key !== answer.r2_key) {
+        throw new Error(`${examLabel(exam)}: 같은 문제지의 정답표 파일이 서로 다릅니다.`);
+      }
+      if (selectionAnswer) {
+        for (const clip of answer.answer_selection) {
+          if (!planned.clips.some((candidate) => candidate.page === clip.page
+            && candidate.x?.[0] === clip.x?.[0] && candidate.x?.[1] === clip.x?.[1]
+            && candidate.y?.[0] === clip.y?.[0] && candidate.y?.[1] === clip.y?.[1])) {
+            planned.clips.push(clip);
+          }
+        }
+      } else {
+        for (const page of answer.answer_pages) {
+          if (!planned.ranges.some(([from, to]) => from === page && to === page)) {
+            planned.ranges.push([page, page]);
+          }
+        }
+      }
     }
 
     // 정답표는 그 시험지의 조각이 **전부 끝난 뒤**에 온다. 항목마다 바로 뒤에 붙이면
@@ -505,7 +532,7 @@
         }
         const source = loaded.get(segment.key);
         const total = source.getPageCount();
-        for (const [from, to] of segment.ranges) {
+        for (const [from, to] of (segment.ranges || [])) {
           if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to > total || from > to) {
             throw new Error(`${segment.label}: 페이지 구간 ${from}–${to}이 실제 문서(${total}쪽)와 맞지 않습니다.`);
           }
@@ -513,6 +540,22 @@
           for (let page = from; page <= to; page += 1) indices.push(page - 1);
           const copied = await merged.copyPages(source, indices);
           for (const page of copied) merged.addPage(page);
+        }
+        for (const clip of (segment.clips || [])) {
+          const page = clip?.page;
+          const from = clip?.x?.[0];
+          const to = clip?.x?.[1];
+          const bottom = clip?.y?.[0];
+          const top = clip?.y?.[1];
+          if (!Number.isInteger(page) || page < 1 || page > total
+            || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to > 1 || from >= to
+            || !Number.isFinite(bottom) || !Number.isFinite(top) || bottom < 0 || top > 1 || bottom >= top) {
+            throw new Error(`${segment.label}: 답안 crop이 실제 문서(${total}쪽)와 맞지 않습니다.`);
+          }
+          const [copied] = await merged.copyPages(source, [page - 1]);
+          const { width, height } = copied.getSize();
+          copied.setCropBox(width * from, height * bottom, width * (to - from), height * (top - bottom));
+          merged.addPage(copied);
         }
       }
 

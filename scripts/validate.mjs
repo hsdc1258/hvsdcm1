@@ -1,4 +1,4 @@
-﻿import { execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync as readFileRaw, statSync } from 'node:fs';
 import path from 'node:path';
@@ -539,6 +539,8 @@ function validateGichulBackend() {
   const packageJson = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   check(Boolean(packageJson.devDependencies?.['pdfjs-dist']),
     'package.json: pdfjs-dist must be declared as a devDependency for manifest extraction');
+  check(Boolean(packageJson.devDependencies?.['@napi-rs/canvas']),
+    'package.json: @napi-rs/canvas must be declared for image-only answer table extraction');
   check(!packageJson.dependencies?.['pdfjs-dist'],
     'package.json: pdfjs-dist must not be a production dependency');
   check(String(packageJson.scripts?.test || '').includes('scripts/gichul/gichul.test.mjs'),
@@ -559,7 +561,7 @@ function validateGichulBackend() {
   check(availabilitySource.includes('academic_years: { from: 2020, to: 2027 }'),
     'scripts/gichul/availability.mjs: academic years 2020-2027 must be one bounded descriptor range');
   const fetchProduction = /export async function fetchKice\([^]*?\n\}\n\nfunction cliOptions/u.exec(fetchSource)?.[0] || '';
-  const inventoryWriteIndex = fetchProduction.indexOf('await writeInventory(inventoryPath, outputs, availability)');
+  const inventoryWriteIndex = fetchProduction.indexOf('await writeInventory(inventoryPath, outputs, availability, allowPartial)');
   const coverageGateIndex = fetchProduction.indexOf('validateAssignmentCoverage(outputs, availability)');
   check(fetchSource.includes('crawl-inventory.json')
     && inventoryWriteIndex >= 0
@@ -707,6 +709,11 @@ function validateGichulFrontend() {
   check(appSource.includes('ranges.push(exam.sections.common)')
     && appSource.includes('ranges.push(exam.sections.selection)'),
   'gichul/app.js: full modern papers must be planned from common plus the selected track range');
+  check(appSource.includes('answer.canonical_form !== exam.canonical_form')
+    && appSource.includes('answer.answer_selection')
+    && appSource.includes('planned.clips.push')
+    && appSource.includes('setCropBox'),
+  'gichul/app.js: answers must share the question canonical form and crop excerpt output to the selected answer column');
 
   const css = readFileSync(path.join(ROOT, 'gichul/gichul.css'), 'utf8');
   check(!/box-shadow|backdrop-filter|linear-gradient|radial-gradient/u.test(css),
@@ -2144,7 +2151,7 @@ function validateGlobalsAndOrder() {
     'usage/index.html': ['/usage/assets/js/usage.js?v=20260829-orgchart-v10'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n5'],
+    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n6'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
