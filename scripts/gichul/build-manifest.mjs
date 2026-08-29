@@ -3,6 +3,14 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  corpusEntryId,
+  DEFAULT_AVAILABILITY,
+  expectedCorpusEntries,
+  roundDescriptorsFor,
+  trackDescriptorsFor,
+  validateAvailability,
+} from './availability.mjs';
 import { canonicalFormFromProvenance } from './fetch-kice.mjs';
 
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
@@ -10,27 +18,6 @@ const ROOT = path.resolve(SCRIPT_DIRECTORY, '..', '..');
 const DEFAULT_SOURCE_DIRECTORY = path.join(ROOT, 'gichul-src');
 const DEFAULT_INVENTORY_PATH = path.join(DEFAULT_SOURCE_DIRECTORY, 'crawl-inventory.json');
 const DEFAULT_OVERRIDES_PATH = path.join(SCRIPT_DIRECTORY, 'overrides.json');
-const ROUND_ORDER = new Map([['06', 0], ['09', 1], ['csat', 2]]);
-const SUBJECT_ORDER = new Map([
-  ['korean', 0], ['math', 1], ['english', 2], ['soc_culture', 3], ['politics_law', 4],
-]);
-const TRACK_ORDER = new Map([
-  [null, 0], ['hwajak', 1], ['eonmae', 2], ['hwaktong', 3], ['mijeok', 4],
-  ['giha', 5], ['ga', 6], ['na', 7],
-]);
-const SECTION_TRACKS = Object.freeze({
-  korean: Object.freeze([
-    { track: 'hwajak', header: '화법과 작문' },
-    { track: 'eonmae', header: '언어와 매체' },
-  ]),
-  math: Object.freeze([
-    { track: 'hwaktong', header: '확률과 통계' },
-    { track: 'mijeok', header: '미적분' },
-    { track: 'giha', header: '기하' },
-  ]),
-});
-const VALID_SUBJECTS = new Set(SUBJECT_ORDER.keys());
-const VALID_TRACKS = new Set(TRACK_ORDER.keys());
 
 async function pdfFiles(directory) {
   const files = [];
@@ -42,34 +29,36 @@ async function pdfFiles(directory) {
   return files;
 }
 
-export function parseSourceFilename(file) {
-  const match = /^(20\d{2})-(06|09|csat)-(korean|math|english|soc_culture|politics_law)(?:-(hwajak|eonmae|hwaktong|mijeok|giha|ga|na))?-(question|answer)\.pdf$/u
+export function parseSourceFilename(file, availability = DEFAULT_AVAILABILITY) {
+  validateAvailability(availability);
+  const match = /^(20\d{2})-([a-z0-9_]+)-(.+)-(question|answer)\.pdf$/u
     .exec(path.basename(file));
   if (!match) throw new Error(`정규 파일명 계약에 맞지 않습니다: ${path.basename(file)}`);
   const year = Number(match[1]);
   const gradeYear = year + 1;
-  if (gradeYear < 2020 || gradeYear > 2027) {
+  if (gradeYear < availability.academic_years.from || gradeYear > availability.academic_years.to) {
     throw new Error(`학년도 범위를 벗어났습니다: ${path.basename(file)}`);
   }
+  const sourcePart = match[3];
+  const subjectDescriptor = [...availability.subjects]
+    .sort((left, right) => right.id.length - left.id.length)
+    .find(({ id }) => sourcePart === id || sourcePart.startsWith(`${id}-`));
+  if (!subjectDescriptor) throw new Error(`지원하지 않는 과목입니다: ${path.basename(file)}`);
+  const track = sourcePart === subjectDescriptor.id ? null : sourcePart.slice(subjectDescriptor.id.length + 1);
   const parsed = {
     year,
     gradeYear,
     round: match[2],
-    subject: match[3],
-    track: match[4] || null,
-    kind: match[5],
+    subject: subjectDescriptor.id,
+    track,
+    kind: match[4],
   };
-  if (!VALID_SUBJECTS.has(parsed.subject) || !VALID_TRACKS.has(parsed.track)) {
-    throw new Error(`지원하지 않는 과목 또는 선택과목입니다: ${path.basename(file)}`);
+  if (!roundDescriptorsFor(availability, gradeYear).some(({ id }) => id === parsed.round)) {
+    throw new Error(`지원하지 않는 회차입니다: ${path.basename(file)}`);
   }
-  const allowedTracks = parsed.subject === 'korean'
-    ? (gradeYear >= 2022 ? new Set([null, 'hwajak', 'eonmae']) : new Set([null]))
-    : parsed.subject === 'math'
-      ? (gradeYear >= 2022
-        ? new Set([null, 'hwaktong', 'mijeok', 'giha'])
-        : new Set([null, 'ga', 'na']))
-      : new Set([null]);
-  if (!allowedTracks.has(parsed.track)) {
+  const allowedTracks = trackDescriptorsFor(availability, gradeYear, parsed.subject).map(({ id }) => id);
+  // null is the collector's shared source for a subject whose manifest expands to several tracks.
+  if (parsed.track !== null && !allowedTracks.includes(parsed.track)) {
     throw new Error(`과목 체제와 맞지 않는 선택과목입니다: ${path.basename(file)}`);
   }
   return parsed;
@@ -151,12 +140,9 @@ function normalizedOverride(value, id) {
   return sections;
 }
 
-function tracksForSource(source) {
+export function tracksForSource(source, availability = DEFAULT_AVAILABILITY) {
   if (source.track) return [source.track];
-  if (source.subject === 'korean' && source.gradeYear >= 2022) return ['hwajak', 'eonmae'];
-  if (source.subject === 'math' && source.gradeYear >= 2022) return ['hwaktong', 'mijeok', 'giha'];
-  if (source.subject === 'math' && source.gradeYear <= 2021) return ['ga', 'na'];
-  return [null];
+  return trackDescriptorsFor(availability, source.gradeYear, source.subject).map(({ id }) => id);
 }
 
 function idFor(source, track) {
@@ -175,7 +161,8 @@ function rangesOverlap(left, right) {
   return left[0] <= right[1] && right[0] <= left[1];
 }
 
-export function validateManifest(exams) {
+export function validateManifest(exams, availability = DEFAULT_AVAILABILITY) {
+  validateAvailability(availability);
   if (!Array.isArray(exams) || exams.length === 0) throw new Error('매니페스트 시험 목록이 비어 있습니다.');
   const ids = new Set();
   const selectionsByFile = new Map();
@@ -184,9 +171,9 @@ export function validateManifest(exams) {
     if (ids.has(exam.id)) throw new Error(`중복 매니페스트 ID: ${exam.id}`);
     ids.add(exam.id);
     if (!Number.isSafeInteger(exam.pages) || exam.pages < 1) throw new Error(`${exam.id}: 총 페이지 수가 비정상입니다.`);
-    const needsSections = exam.kind === 'question'
-      && exam.grade_year >= 2022
-      && (exam.subject === 'korean' || exam.subject === 'math');
+    const activeTrack = trackDescriptorsFor(availability, exam.grade_year, exam.subject)
+      .find(({ id }) => id === exam.track);
+    const needsSections = exam.kind === 'question' && Boolean(activeTrack?.section_header);
     if (needsSections && !exam.sections) {
       throw new Error(`${exam.id}: 현대 국어/수학 문제지는 common과 selection 구간이 필요합니다.`);
     }
@@ -224,12 +211,12 @@ export function validateManifest(exams) {
   return exams;
 }
 
-function sectionMapFor(source, pageTexts, pageCount, tracks, overrides, usedOverrides) {
-  if (source.kind !== 'question'
-    || source.gradeYear < 2022
-    || !SECTION_TRACKS[source.subject]) return new Map();
-
-  const definitions = SECTION_TRACKS[source.subject].filter(({ track }) => tracks.includes(track));
+function sectionMapFor(source, pageTexts, pageCount, tracks, overrides, usedOverrides, availability) {
+  if (source.kind !== 'question') return new Map();
+  const definitions = trackDescriptorsFor(availability, source.gradeYear, source.subject)
+    .filter(({ id, section_header: header }) => tracks.includes(id) && header)
+    .map(({ id: track, section_header: header }) => ({ track, header }));
+  if (!definitions.length) return new Map();
   const manual = new Map(definitions.map(({ track }) => {
     const id = idFor(source, track);
     const override = normalizedOverride(overrides[id], id);
@@ -260,28 +247,13 @@ function sectionMapFor(source, pageTexts, pageCount, tracks, overrides, usedOver
   return result;
 }
 
-function expectedCorpusTracks(academicYear, subject) {
-  if (subject === 'korean' && academicYear >= 2022) return ['hwajak', 'eonmae'];
-  if (subject === 'math' && academicYear >= 2022) return ['hwaktong', 'mijeok', 'giha'];
-  if (subject === 'math') return ['ga', 'na'];
-  return [null];
-}
-
-export function validateCorpusManifest(exams) {
+export function validateCorpusManifest(exams, availability = DEFAULT_AVAILABILITY) {
+  validateAvailability(availability);
   const ids = new Set(exams.map(({ id }) => id));
   const missing = [];
-  for (let academicYear = 2020; academicYear <= 2027; academicYear += 1) {
-    const rounds = academicYear === 2027 ? ['06'] : ['06', '09', 'csat'];
-    for (const round of rounds) {
-      for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
-        for (const track of expectedCorpusTracks(academicYear, subject)) {
-          for (const kind of ['question', 'answer']) {
-            const id = `${academicYear - 1}-${round}-${subject}${track ? `-${track}` : ''}-${kind}`;
-            if (!ids.has(id)) missing.push(id);
-          }
-        }
-      }
-    }
+  for (const entry of expectedCorpusEntries(availability)) {
+    const id = corpusEntryId(entry);
+    if (!ids.has(id)) missing.push(id);
   }
   if (missing.length) {
     throw new Error(`매니페스트 코퍼스가 불완전합니다 (${missing.length}개 누락): ${missing.slice(0, 8).join(', ')}`);
@@ -297,6 +269,7 @@ async function validateCrawlInventory(inventoryPath, sourceDirectory, files) {
   if (inventory?.version !== 1 || !Array.isArray(inventory.files)) {
     throw new Error(`crawl inventory 형식이 잘못되었습니다: ${inventoryPath}`);
   }
+  const availability = validateAvailability(inventory.availability ?? DEFAULT_AVAILABILITY);
   const targets = new Set();
   const entriesByTarget = new Map();
   for (const entry of inventory.files) {
@@ -304,7 +277,7 @@ async function validateCrawlInventory(inventoryPath, sourceDirectory, files) {
       throw new Error('crawl inventory에 잘못된 target/fileSeq가 있습니다.');
     }
     if (targets.has(entry.target)) throw new Error(`crawl inventory target 중복: ${entry.target}`);
-    const source = parseSourceFilename(entry.target);
+    const source = parseSourceFilename(entry.target, availability);
     const canonicalForm = canonicalFormFromProvenance(entry.sourceFilename, entry.archiveEntry);
     if (!['odd', 'even', 'single'].includes(entry.canonical_form)
       || entry.canonical_form !== (source.kind === 'question' ? canonicalForm : 'single')) {
@@ -331,14 +304,22 @@ async function validateCrawlInventory(inventoryPath, sourceDirectory, files) {
   for (const target of sourceTargets) {
     if (!targets.has(target)) throw new Error(`crawl inventory에 없는 PDF가 있습니다: ${target}`);
   }
-  return entriesByTarget;
+  return { availability, entriesByTarget };
 }
 
-function compareExams(left, right) {
+function rank(values, value) {
+  const index = values.indexOf(value);
+  return index === -1 ? values.length : index;
+}
+
+function compareExams(left, right, availability) {
+  const rounds = availability.rounds.map(({ id }) => id);
+  const subjects = availability.subjects.map(({ id }) => id);
+  const tracks = trackDescriptorsFor(availability, left.grade_year, left.subject).map(({ id }) => id);
   return left.year - right.year
-    || ROUND_ORDER.get(left.round) - ROUND_ORDER.get(right.round)
-    || SUBJECT_ORDER.get(left.subject) - SUBJECT_ORDER.get(right.subject)
-    || TRACK_ORDER.get(left.track) - TRACK_ORDER.get(right.track)
+    || rank(rounds, left.round) - rank(rounds, right.round)
+    || rank(subjects, left.subject) - rank(subjects, right.subject)
+    || rank(tracks, left.track) - rank(tracks, right.track)
     || left.kind.localeCompare(right.kind);
 }
 
@@ -349,25 +330,29 @@ export async function buildManifest({
   inventoryPath = sourceDirectory === DEFAULT_SOURCE_DIRECTORY
     ? DEFAULT_INVENTORY_PATH
     : path.join(sourceDirectory, 'crawl-inventory.json'),
+  availability = DEFAULT_AVAILABILITY,
   allowPartial = false,
   extractText = extractPdfText,
 } = {}) {
+  let activeAvailability = validateAvailability(availability);
   const files = await pdfFiles(sourceDirectory);
   if (!files.length) throw new Error(`PDF가 없습니다: ${sourceDirectory}`);
   let inventoryByTarget = null;
   if (!allowPartial) {
-    inventoryByTarget = await validateCrawlInventory(inventoryPath, sourceDirectory, files);
+    const inventory = await validateCrawlInventory(inventoryPath, sourceDirectory, files);
+    activeAvailability = inventory.availability;
+    inventoryByTarget = inventory.entriesByTarget;
     validateCorpusManifest(files.flatMap((file) => {
-      const source = parseSourceFilename(file);
-      return tracksForSource(source).map((track) => ({ id: idFor(source, track) }));
-    }));
+      const source = parseSourceFilename(file, activeAvailability);
+      return tracksForSource(source, activeAvailability).map((track) => ({ id: idFor(source, track) }));
+    }), activeAvailability);
   }
   const overrides = await readOverrides(overridesPath);
   const usedOverrides = new Set();
   const exams = [];
 
   for (const file of files.sort()) {
-    const source = parseSourceFilename(file);
+    const source = parseSourceFilename(file, activeAvailability);
     const extracted = await extractText(file);
     const pageCount = Number(extracted?.pageCount);
     const pageTexts = extracted?.pageTexts;
@@ -375,8 +360,10 @@ export async function buildManifest({
       || !Array.isArray(pageTexts) || pageTexts.length !== pageCount) {
       throw new Error(`${path.basename(file)}: 텍스트 추출기가 유효한 pageCount/pageTexts를 반환하지 않았습니다.`);
     }
-    const tracks = tracksForSource(source);
-    const sections = sectionMapFor(source, pageTexts, pageCount, tracks, overrides, usedOverrides);
+    const tracks = tracksForSource(source, activeAvailability);
+    const sections = sectionMapFor(
+      source, pageTexts, pageCount, tracks, overrides, usedOverrides, activeAvailability,
+    );
     const r2Key = path.relative(sourceDirectory, file).split(path.sep).join('/');
     const canonicalForm = inventoryByTarget?.get(r2Key)?.canonical_form;
     for (const track of tracks) {
@@ -396,16 +383,17 @@ export async function buildManifest({
     }
   }
 
-  validateManifest(exams);
-  if (!allowPartial) validateCorpusManifest(exams);
+  validateManifest(exams, activeAvailability);
+  if (!allowPartial) validateCorpusManifest(exams, activeAvailability);
   const unusedOverrides = Object.keys(overrides).filter((id) => !usedOverrides.has(id));
   if (unusedOverrides.length) {
     throw new Error(`사용되지 않은 section override ID: ${unusedOverrides.join(', ')}`);
   }
-  exams.sort(compareExams);
+  exams.sort((left, right) => compareExams(left, right, activeAvailability));
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify({ exams }, null, 2)}\n`, 'utf8');
-  return { exams };
+  const manifest = { availability: activeAvailability, exams };
+  await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  return manifest;
 }
 
 function cliOptions(argv) {

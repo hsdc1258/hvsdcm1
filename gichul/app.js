@@ -47,22 +47,6 @@
   };
   const ROUND_LABEL = { '06': '6월', '09': '9월', csat: '수능' };
   const ROUND_FILE = { '06': '06', '09': '09', csat: '수능' };
-  const SUBJECT_ORDER = ['korean', 'math', 'english', 'soc_culture', 'politics_law'];
-  const TRACK_ORDER = [null, 'hwajak', 'eonmae', 'hwaktong', 'mijeok', 'giha', 'ga', 'na'];
-  const ROUND_ORDER = ['06', '09', 'csat'];
-
-  const subjectRank = (value) => {
-    const index = SUBJECT_ORDER.indexOf(value);
-    return index === -1 ? SUBJECT_ORDER.length : index;
-  };
-  const trackRank = (value) => {
-    const index = TRACK_ORDER.indexOf(value || null);
-    return index === -1 ? TRACK_ORDER.length : index;
-  };
-  const roundRank = (value) => {
-    const index = ROUND_ORDER.indexOf(value);
-    return index === -1 ? ROUND_ORDER.length : index;
-  };
 
   function escapeHtml(value) {
     return String(value)
@@ -84,11 +68,33 @@
 
   const questionsOf = (manifest) => (manifest?.exams || []).filter((exam) => exam?.kind === 'question');
 
-  function compareExams(left, right) {
+  function preferredValues(manifest, type, subject) {
+    const availability = manifest?.availability;
+    if (type === 'subjects') return (availability?.subjects || []).map(({ id }) => id);
+    if (type === 'rounds') return (availability?.rounds || []).map(({ id }) => id);
+    if (type === 'tracks') {
+      return (availability?.subjects || []).find(({ id }) => id === subject)?.tracks?.map(({ id }) => id) || [];
+    }
+    return [];
+  }
+
+  function comparePreferred(left, right, preferred) {
+    const leftIndex = preferred.indexOf(left);
+    const rightIndex = preferred.indexOf(right);
+    const leftRank = leftIndex === -1 ? preferred.length : leftIndex;
+    const rightRank = rightIndex === -1 ? preferred.length : rightIndex;
+    return leftRank - rightRank || String(left ?? '').localeCompare(String(right ?? ''));
+  }
+
+  function orderedDistinct(values, preferred) {
+    return [...new Set(values)].sort((left, right) => comparePreferred(left, right, preferred));
+  }
+
+  function compareExams(left, right, manifest) {
     return left.grade_year - right.grade_year
-      || roundRank(left.round) - roundRank(right.round)
-      || subjectRank(left.subject) - subjectRank(right.subject)
-      || trackRank(left.track) - trackRank(right.track);
+      || comparePreferred(left.round, right.round, preferredValues(manifest, 'rounds'))
+      || comparePreferred(left.subject, right.subject, preferredValues(manifest, 'subjects'))
+      || comparePreferred(left.track, right.track, preferredValues(manifest, 'tracks', left.subject));
   }
 
   // 필터 선택지. 하드코딩하면 매니페스트가 늘어도 화면은 모른다.
@@ -96,10 +102,13 @@
     const questions = questionsOf(manifest);
     const forSubject = questions.filter((exam) => exam.subject === subject);
     return {
-      subjects: SUBJECT_ORDER.filter((key) => questions.some((exam) => exam.subject === key)),
+      subjects: orderedDistinct(questions.map((exam) => exam.subject), preferredValues(manifest, 'subjects')),
       years: [...new Set(forSubject.map((exam) => exam.grade_year))].sort((a, b) => a - b),
-      rounds: ROUND_ORDER.filter((key) => forSubject.some((exam) => exam.round === key)),
-      tracks: TRACK_ORDER.filter((key) => key !== null && forSubject.some((exam) => exam.track === key)),
+      rounds: orderedDistinct(forSubject.map((exam) => exam.round), preferredValues(manifest, 'rounds')),
+      tracks: orderedDistinct(
+        forSubject.map((exam) => exam.track).filter((track) => track !== null),
+        preferredValues(manifest, 'tracks', subject),
+      ),
     };
   }
 
@@ -112,7 +121,7 @@
         && passes(state.years, exam.grade_year)
         && passes(state.rounds, exam.round)
         && (exam.track === null || passes(state.tracks, exam.track)))
-      .sort(compareExams);
+      .sort((left, right) => compareExams(left, right, manifest));
   }
 
   const examLabel = (exam) => `${exam.grade_year}학년도 ${ROUND_LABEL[exam.round] || exam.round}`
@@ -330,8 +339,7 @@
     const subjects = [...new Set(exams.map((exam) => SUBJECT_LABEL[exam.subject] || exam.subject))];
     const tracks = [...new Set(exams.map((exam) => exam.track).filter(Boolean))]
       .map((track) => TRACK_SHORT[track] || track);
-    const rounds = ROUND_ORDER.filter((round) => exams.some((exam) => exam.round === round))
-      .map((round) => ROUND_FILE[round] || round);
+    const rounds = [...new Set(exams.map((exam) => exam.round))].map((round) => ROUND_FILE[round] || round);
     const head = subjects.length === 1
       ? `${subjects[0]}${tracks.length === 1 ? `-${tracks[0]}` : ''}`
       : '기출';
@@ -392,9 +400,11 @@
       // 지워 오래된 localStorage가 planner나 화면에 다시 들어올 여지를 없앤다.
       delete merged.includeCommon;
       merged.years = Array.isArray(merged.years) ? merged.years.map(Number).filter(Number.isFinite) : [];
-      merged.rounds = Array.isArray(merged.rounds) ? merged.rounds.filter((value) => ROUND_ORDER.includes(value)) : [];
-      merged.tracks = Array.isArray(merged.tracks) ? merged.tracks.filter((value) => value in TRACK_LABEL) : [];
-      if (!SUBJECT_ORDER.includes(merged.subject)) merged.subject = 'korean';
+      merged.rounds = Array.isArray(merged.rounds)
+        ? merged.rounds.filter((value) => typeof value === 'string' && value) : [];
+      merged.tracks = Array.isArray(merged.tracks)
+        ? merged.tracks.filter((value) => typeof value === 'string' && value) : [];
+      if (typeof merged.subject !== 'string' || !merged.subject) merged.subject = 'korean';
       if (merged.mode !== 'excerpt') merged.mode = 'full';
       merged.includeAnswers = merged.includeAnswers === true;
       state = merged;
@@ -616,7 +626,16 @@
     elements.body.innerHTML = '<p class="gi-empty">시험 목록을 불러오는 중입니다…</p>';
     try {
       const data = await window.HvsAccount.api('/api/gichul/manifest');
-      manifest = { exams: Array.isArray(data?.exams) ? data.exams : [] };
+      manifest = {
+        availability: data?.availability,
+        exams: Array.isArray(data?.exams) ? data.exams : [],
+      };
+      const subjects = facetsOf(manifest, state.subject).subjects;
+      if (subjects.length && !subjects.includes(state.subject)) state.subject = subjects[0];
+      const facets = facetsOf(manifest, state.subject);
+      state.years = state.years.filter((value) => facets.years.includes(value));
+      state.rounds = state.rounds.filter((value) => facets.rounds.includes(value));
+      state.tracks = state.tracks.filter((value) => facets.tracks.includes(value));
       paint();
       if (!manifest.exams.length) {
         status(failureBanner('아직 올라온 시험지가 없습니다.', ['매니페스트가 비어 있습니다.']));

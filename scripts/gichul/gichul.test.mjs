@@ -6,6 +6,11 @@ import test from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 
 import {
+  corpusEntryId,
+  DEFAULT_AVAILABILITY,
+  expectedCorpusEntries,
+} from './availability.mjs';
+import {
   canonicalFormFromProvenance,
   classifyAttachment,
   fetchKice,
@@ -116,38 +121,32 @@ function zipFixture(entries, { dataDescriptor = false, deflate = false } = {}) {
   return Buffer.concat([...localParts, centralDirectory, end]);
 }
 
-function completeCorpusFixtures() {
-  const attachments = [];
-  const exams = [];
-  for (let academicYear = 2020; academicYear <= 2027; academicYear += 1) {
-    const rounds = academicYear === 2027 ? ['06'] : ['06', '09', 'csat'];
-    for (const round of rounds) {
-      for (const subject of ['korean', 'math', 'english', 'soc_culture', 'politics_law']) {
-        const tracks = subject === 'korean' && academicYear >= 2022
-          ? ['hwajak', 'eonmae']
-          : subject === 'math' && academicYear >= 2022
-            ? ['hwaktong', 'mijeok', 'giha']
-            : subject === 'math' ? ['ga', 'na'] : [null];
-        for (const kind of ['question', 'answer']) {
-          if ((subject === 'korean' || subject === 'math') && academicYear >= 2022) {
-            attachments.push({ gradeYear: academicYear, round, subject, track: null, kind });
-          } else if (subject === 'math' && kind === 'answer') {
-            attachments.push({ gradeYear: academicYear, round, subject, track: null, kind });
-          } else {
-            for (const track of tracks) {
-              attachments.push({ gradeYear: academicYear, round, subject, track, kind });
-            }
-          }
-          for (const track of tracks) {
-            exams.push({
-              id: `${academicYear - 1}-${round}-${subject}${track ? `-${track}` : ''}-${kind}`,
-            });
-          }
-        }
-      }
-    }
+function completeCorpusFixtures(availability = DEFAULT_AVAILABILITY) {
+  const entries = expectedCorpusEntries(availability);
+  const attachments = new Map();
+  for (const entry of entries) {
+    const sharedTrack = ((entry.subject === 'korean' || entry.subject === 'math') && entry.gradeYear >= 2022)
+      || (entry.subject === 'math' && entry.kind === 'answer');
+    const attachment = { ...entry, track: sharedTrack ? null : entry.track };
+    const key = `${attachment.gradeYear}-${attachment.round}-${attachment.subject}`
+      + `${attachment.track ? `-${attachment.track}` : ''}-${attachment.kind}`;
+    attachments.set(key, attachment);
   }
-  return { attachments, exams };
+  return {
+    attachments: [...attachments.values()],
+    exams: entries.map((entry) => ({ id: corpusEntryId(entry) })),
+  };
+}
+
+function extendedAvailability() {
+  const availability = structuredClone(DEFAULT_AVAILABILITY);
+  availability.rounds.push({
+    id: '10', from: 2027, to: 2027, board_id: 'synthetic', query: '10월',
+  });
+  availability.subjects.find(({ id }) => id === 'math').tracks.push({
+    id: 'vector', from: 2022, to: 2027, section_header: '벡터',
+  });
+  return availability;
 }
 
 test('KICE list parser derives filtered PDF assignments from attachment anchors', () => {
@@ -255,7 +254,46 @@ test('manifest builder injects PDF text extraction and derives modern selection 
   });
   assert.equal(exams.find((exam) => exam.id === '2020-csat-math-ga-question').track, 'ga');
   assert.equal(exams.find((exam) => exam.id === '2026-06-english-answer').track, null);
-  assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')), { exams });
+  assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')), {
+    availability: DEFAULT_AVAILABILITY,
+    exams,
+  });
+});
+
+test('one availability descriptor carries a new round and fourth math track through build and UI facets', async (t) => {
+  const availability = extendedAvailability();
+  const sourceDirectory = await temporaryDirectory(t);
+  const source = '2026-10-math-question.pdf';
+  await writeFile(path.join(sourceDirectory, source), 'fixture');
+  const pageTexts = [
+    '표지', '공통', '확률과 통계', '확률과 통계 문항', '미적분', '미적분 문항',
+    '기하', '기하 문항', '벡터', '벡터 문항',
+  ];
+  const outputPath = path.join(sourceDirectory, 'manifest.json');
+  const manifest = await buildManifest({
+    sourceDirectory,
+    outputPath,
+    overridesPath: path.join(sourceDirectory, 'missing-overrides.json'),
+    availability,
+    allowPartial: true,
+    extractText: async () => ({ pageCount: pageTexts.length, pageTexts }),
+  });
+  assert.ok(manifest.exams.some(({ id }) => id === '2026-10-math-vector-question'));
+  assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')).availability, availability);
+
+  const complete = completeCorpusFixtures(availability);
+  assert.equal(validateAssignmentCoverage(complete.attachments, availability), complete.attachments);
+  assert.equal(validateCorpusManifest(complete.exams, availability), complete.exams);
+
+  const withUnknown = {
+    ...manifest,
+    exams: [...manifest.exams, {
+      ...manifest.exams.at(-1), id: 'synthetic-unknown', round: '11', track: 'mystery',
+    }],
+  };
+  const facets = createGichulRenderers().facetsOf(withUnknown, 'math');
+  assert.deepEqual(JSON.parse(JSON.stringify(facets.rounds)), ['10', '11']);
+  assert.deepEqual(JSON.parse(JSON.stringify(facets.tracks)), ['hwaktong', 'mijeok', 'giha', 'vector', 'mystery']);
 });
 
 test('manifest overrides can correct one section while range overlap and bounds stay fatal', async (t) => {

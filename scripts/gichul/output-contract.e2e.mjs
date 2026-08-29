@@ -171,8 +171,113 @@ function inventoryByTarget(inventory) {
   return new Map(inventory.files.map((entry) => [entry.target, entry]));
 }
 
-function segmentsExpectedPages(sourcePages, segments) {
-  return segments.flatMap((segment) => segment.ranges.flatMap((range) => pageRecords(sourcePages, range)));
+function evenSegmentInputCount(segments, inventory) {
+  let count = 0;
+  for (const segment of segments) {
+    const provenance = inventory.get(segment.key);
+    if (!provenance) throw new Error(`출력 segment provenance가 없습니다: ${segment.key}`);
+    if (provenance.canonical_form === 'even') count += 1;
+  }
+  return count;
+}
+
+function independentFullExpectation(exams, pagesByKey) {
+  const pages = [];
+  const common = [];
+  const segments = [];
+  const seenCommon = new Set();
+  for (const exam of exams) {
+    const sourcePages = pagesByKey.get(exam.r2_key);
+    if (!sourcePages) throw new Error(`${exam.id}: source page inventory가 없습니다.`);
+    if (!seenCommon.has(exam.r2_key)) {
+      seenCommon.add(exam.r2_key);
+      const commonPages = pageRecords(sourcePages, exam.sections.common);
+      pages.push(...commonPages);
+      common.push(...commonPages);
+      segments.push({
+        id: exam.id,
+        key: exam.r2_key,
+        ranges: [exam.sections.common, exam.sections.selection],
+      });
+    } else {
+      segments.push({ id: exam.id, key: exam.r2_key, ranges: [exam.sections.selection] });
+    }
+    pages.push(...pageRecords(sourcePages, exam.sections.selection));
+  }
+  return { common, pages, segments };
+}
+
+async function verifyMergedOutput({
+  bytes,
+  commonPages,
+  expectedPages,
+  expectedSegments,
+  inventory,
+  mode,
+  segments,
+  label,
+}) {
+  const actualPages = await inspectPdf(bytes);
+  assert.equal(actualPages.length, expectedPages.length, `${label}: PDF 페이지 수 불일치`);
+  const actualSegments = segments.map(({ id, key, ranges }) => ({ id, key, ranges }));
+  assert.deepEqual(JSON.parse(JSON.stringify(actualSegments)), expectedSegments,
+    `${label}: planner segment provenance/range 불일치`);
+  const evenInputCount = evenSegmentInputCount(segments, inventory);
+  const foreign = foreignPageCount(actualPages, expectedPages);
+  assert.equal(evenInputCount, 0, `${label}: output에 even 원본 segment가 선택됐습니다.`);
+  assert.equal(foreign, 0, `${label}: output에 계약 밖 페이지가 있습니다.`);
+  if (mode === 'full') {
+    const duplicate = commonDuplicateCount(actualPages, commonPages);
+    assert.equal(duplicate, 0, `${label}: full output에 공통 페이지가 중복됐습니다.`);
+    return {
+      pages: actualPages.length,
+      even_input_count: evenInputCount,
+      foreign_page_count: foreign,
+      common_duplicate_count: duplicate,
+      sha256: sha256(bytes),
+    };
+  }
+  const commonCount = actualPages.filter(({ fingerprint }) => (
+    commonPages.some((page) => page.fingerprint === fingerprint)
+  )).length;
+  const numbers = questionNumbers(actualPages.map(({ text }) => text));
+  assert.equal(commonCount, 0, `${label}: excerpt output에 공통 페이지가 있습니다.`);
+  assert.deepEqual(numbers, EXPECTED_SELECTION_NUMBERS, `${label}: 선택 문항 번호가 35..45가 아닙니다.`);
+  return {
+    pages: actualPages.length,
+    common_page_count: commonCount,
+    foreign_page_count: foreign,
+    question_numbers: numbers,
+    sha256: sha256(bytes),
+  };
+}
+
+async function requireMutationFailure({
+  name,
+  plan,
+  expected,
+  PDFDocument,
+  sourceDirectory,
+  inventory,
+  mode,
+  label,
+}) {
+  try {
+    const bytes = await mergeSegments(PDFDocument, sourceDirectory, plan.segments);
+    await verifyMergedOutput({
+      bytes,
+      commonPages: expected.common,
+      expectedPages: expected.pages,
+      expectedSegments: expected.segments,
+      inventory,
+      mode,
+      segments: plan.segments,
+      label: `${label} mutation/${name}`,
+    });
+  } catch (error) {
+    return { name, rejected: true, reason: error.message };
+  }
+  throw new Error(`${label}: ${name} planner mutation을 검사가 거부하지 못했습니다.`);
 }
 
 export async function runOutputContract({
@@ -205,14 +310,25 @@ export async function runOutputContract({
     assert.equal(provenance.canonical_form, canonicalForm, `${id}: inventory canonical_form 불일치`);
     assert.equal(exam.canonical_form, canonicalForm, `${id}: manifest canonical_form 불일치`);
 
+    const sourceExams = (manifest.exams || []).filter((candidate) => candidate.kind === 'question'
+      && candidate.r2_key === exam.r2_key && Array.isArray(candidate.sections?.selection));
+    const companion = sourceExams.find((candidate) => candidate.id !== exam.id);
+    if (!companion) throw new Error(`${id}: full PDF에 함께 넣을 두 번째 track이 없습니다.`);
+    const fullExams = [exam, companion];
     const sourcePath = path.join(sourceDirectory, exam.r2_key);
     const sourceBytes = await readFile(sourcePath);
     const sourcePages = await inspectPdf(sourceBytes);
     assert.equal(sourcePages.length, exam.pages, `${id}: manifest와 source PDF 페이지 수 불일치`);
     const commonPages = pageRecords(sourcePages, exam.sections.common);
-    const selectionPages = pageRecords(sourcePages, exam.sections.selection);
+    const pagesByKey = new Map([[exam.r2_key, sourcePages]]);
+    const expectedFull = independentFullExpectation(fullExams, pagesByKey);
+    const expectedExcerpt = {
+      common: commonPages,
+      pages: pageRecords(sourcePages, exam.sections.selection),
+      segments: [{ id: exam.id, key: exam.r2_key, ranges: [exam.sections.selection] }],
+    };
 
-    const fullPlan = planner.planSegments([exam], manifest, { ...planner.defaultState(), mode: 'full' });
+    const fullPlan = planner.planSegments(fullExams, manifest, { ...planner.defaultState(), mode: 'full' });
     const excerptPlan = planner.planSegments([exam], manifest, { ...planner.defaultState(), mode: 'excerpt' });
     assert.equal(fullPlan.missingAnswers.length, 0);
     assert.equal(excerptPlan.missingAnswers.length, 0);
@@ -222,38 +338,66 @@ export async function runOutputContract({
     const excerptPath = path.join(outDirectory, `${id}-excerpt.pdf`);
     await Promise.all([writeFile(fullPath, fullBytes), writeFile(excerptPath, excerptBytes)]);
 
-    // 저장된 바이트를 다시 열어 planner가 요청한 source page fingerprint와 대조한다.
-    const [fullPages, excerptPages] = await Promise.all([inspectPdf(await readFile(fullPath)), inspectPdf(await readFile(excerptPath))]);
-    const expectedFull = segmentsExpectedPages(sourcePages, fullPlan.segments);
-    const expectedExcerpt = segmentsExpectedPages(sourcePages, excerptPlan.segments);
-    assert.equal(fullPages.length, expectedFull.length, `${id}: full PDF 페이지 수 불일치`);
-    assert.equal(excerptPages.length, expectedExcerpt.length, `${id}: excerpt PDF 페이지 수 불일치`);
+    // 저장된 바이트를 다시 열고, planner output이 아니라 manifest sections로 독립 구성한 기대값과 대조한다.
+    const [full, excerpt] = await Promise.all([
+      readFile(fullPath).then((bytes) => verifyMergedOutput({
+        bytes,
+        commonPages: expectedFull.common,
+        expectedPages: expectedFull.pages,
+        expectedSegments: expectedFull.segments,
+        inventory,
+        mode: 'full',
+        segments: fullPlan.segments,
+        label: `${id} full`,
+      })),
+      readFile(excerptPath).then((bytes) => verifyMergedOutput({
+        bytes,
+        commonPages: expectedExcerpt.common,
+        expectedPages: expectedExcerpt.pages,
+        expectedSegments: expectedExcerpt.segments,
+        inventory,
+        mode: 'excerpt',
+        segments: excerptPlan.segments,
+        label: `${id} excerpt`,
+      })),
+    ]);
 
-    const full = {
-      pages: fullPages.length,
-      even_input_count: canonicalForm === 'even' ? 1 : 0,
-      foreign_page_count: foreignPageCount(fullPages, expectedFull),
-      common_duplicate_count: commonDuplicateCount(fullPages, commonPages),
-      sha256: sha256(fullBytes),
+    const wholePagePlan = {
+      ...fullPlan,
+      segments: [{ ...fullPlan.segments[0], ranges: [[1, exam.pages]] }],
     };
-    const excerpt = {
-      pages: excerptPages.length,
-      common_page_count: excerptPages.filter(({ fingerprint }) => (
-        commonPages.some((page) => page.fingerprint === fingerprint)
-      )).length,
-      foreign_page_count: foreignPageCount(excerptPages, expectedExcerpt),
-      question_numbers: questionNumbers(excerptPages.map(({ text }) => text)),
-      sha256: sha256(excerptBytes),
+    const otherTrackPlan = {
+      ...excerptPlan,
+      segments: excerptPlan.segments.map((segment) => ({
+        ...segment,
+        id: companion.id,
+        ranges: [companion.sections.selection],
+      })),
     };
-    assert.equal(full.even_input_count, 0, `${id}: full output에 even 원본이 선택됐습니다.`);
-    assert.equal(full.foreign_page_count, 0, `${id}: full output에 계약 밖 페이지가 있습니다.`);
-    assert.equal(full.common_duplicate_count, 0, `${id}: full output에 공통 페이지가 중복됐습니다.`);
-    assert.equal(excerpt.common_page_count, 0, `${id}: excerpt output에 공통 페이지가 있습니다.`);
-    assert.equal(excerpt.foreign_page_count, 0, `${id}: excerpt output에 다른 선택과목 페이지가 있습니다.`);
-    assert.deepEqual(excerpt.question_numbers, EXPECTED_SELECTION_NUMBERS, `${id}: 선택 문항 번호가 35..45가 아닙니다.`);
+    const duplicateSelectionPlan = {
+      ...fullPlan,
+      segments: fullPlan.segments.map((segment, index) => index === fullPlan.segments.length - 1
+        ? { ...segment, ranges: [...segment.ranges, segment.ranges.at(-1)] }
+        : segment),
+    };
+    const mutations = await Promise.all([
+      requireMutationFailure({
+        name: 'whole-pages', plan: wholePagePlan, expected: expectedFull, PDFDocument,
+        sourceDirectory, inventory, mode: 'full', label: id,
+      }),
+      requireMutationFailure({
+        name: 'other-track', plan: otherTrackPlan, expected: expectedExcerpt, PDFDocument,
+        sourceDirectory, inventory, mode: 'excerpt', label: id,
+      }),
+      requireMutationFailure({
+        name: 'duplicate-selection', plan: duplicateSelectionPlan, expected: expectedFull, PDFDocument,
+        sourceDirectory, inventory, mode: 'full', label: id,
+      }),
+    ]);
     results.push({
       id,
       canonical_form: canonicalForm,
+      selected_full_tracks: fullExams.map(({ track }) => track),
       provenance: {
         target: provenance.target,
         fileSeq: provenance.fileSeq,
@@ -263,11 +407,12 @@ export async function runOutputContract({
       source_pdf_sha256: sha256(sourceBytes),
       full,
       excerpt,
+      mutations,
     });
   }
 
   const evidence = {
-    version: 1,
+    version: 2,
     generated_at: new Date().toISOString(),
     manifest_sha256: sha256(manifestBytes),
     cases: results,
@@ -299,7 +444,8 @@ if (isMain) {
     for (const item of evidence.cases) {
       console.log(`${item.id}: full even=${item.full.even_input_count} foreign=${item.full.foreign_page_count}`
         + ` common_duplicate=${item.full.common_duplicate_count}; excerpt common=${item.excerpt.common_page_count}`
-        + ` foreign=${item.excerpt.foreign_page_count}; questions=${item.excerpt.question_numbers.join(',')}`);
+        + ` foreign=${item.excerpt.foreign_page_count}; questions=${item.excerpt.question_numbers.join(',')}`
+        + `; mutations=${item.mutations.map(({ name, rejected }) => `${name}:${rejected ? 'rejected' : 'missed'}`).join(',')}`);
     }
   }).catch((error) => {
     console.error(error.stack || error.message);
