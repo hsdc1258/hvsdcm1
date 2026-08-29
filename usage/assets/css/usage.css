@@ -705,6 +705,17 @@
   padding: 22px 0 0;
   list-style: none;
 }
+/* 단계 아래 실행자는 단계 칼럼 안에서 세로로 선다. 최상위 단계 세 개까지 다시 가로로
+   쪼갠 뒤 실행자 형제까지 한 줄에 강제로 나누면, 세 실행자가 있는 단계에서 각 카드가
+   70px 안팎으로 줄어 모델·추론·담당 값이 카드 밖으로 흘렀다. 단계 분기는 고전 조직도의
+   가로 trunk를 유지하되 그 아래 위임 사슬은 칼럼 폭 전체를 써야 상세가 보존된다. */
+.h-branch > .h-tree, .h-node-slot > ul {
+  flex-direction: column;
+}
+.h-branch > .h-tree > .h-node-slot, .h-node-slot > ul > .h-node-slot {
+  flex: none;
+  width: 100%;
+}
 /* 부모 카드 → trunk */
 .h-orgchart-branches::before, .h-branch > .h-tree::before, .h-node-slot > ul::before {
   content: '';
