@@ -1109,6 +1109,22 @@ function harnessInput(overrides = {}) {
   };
 }
 
+test('a later non-blocked delivery clears an earlier approval request in the persisted task', () => {
+  const approval = {
+    needed: '로그인 승인', reason: '인증 경계', minimum: '로그인만', tabs: '설정 탭',
+    steps: '로그인 버튼', secret_notice: '비밀값 공유 금지', completion: 'GET 200', continuation: '다른 WP 가능',
+  };
+  const first = mergeHarnessReport(null, harnessInput({
+    delivery: { request: '요청', plan: [], changes: [], verification: [], approval },
+  }));
+  assert.equal(first.delivery.approval.needed, '로그인 승인');
+  const resolved = mergeHarnessReport(first, harnessInput({
+    occurred_at: '2026-08-27T09:01:00.000Z',
+    delivery: { request: '요청', plan: [], changes: [], verification: [], approval: null },
+  }));
+  assert.equal(resolved.delivery.approval, null);
+});
+
 function emptyHarnessEventStatement(sql) {
   if (sql.includes('FROM usage_snapshots')) {
     return { bind() { return { async all() { return { results: [] }; } }; } };

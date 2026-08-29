@@ -333,7 +333,7 @@ function harnessInputText(value) {
 }
 
 function normalizeHarnessDelivery(value) {
-  if (value === undefined) return { request: '', plan: [], changes: [], verification: [], approval: null };
+  if (value === undefined) return { request: '', plan: [], changes: [], verification: [] };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const list = (key) => {
     const values = value[key] === undefined ? [] : value[key];
@@ -346,8 +346,8 @@ function normalizeHarnessDelivery(value) {
   const changes = list('changes');
   const verification = list('verification');
   if (request === null || plan === null || changes === null || verification === null) return null;
-  let approval = null;
-  if (value.approval !== undefined && value.approval !== null) {
+  let approval;
+  if (Object.hasOwn(value, 'approval') && value.approval !== null) {
     if (typeof value.approval !== 'object' || Array.isArray(value.approval)) return null;
     approval = {};
     for (const key of ['needed', 'reason', 'minimum', 'tabs', 'steps', 'secret_notice', 'completion', 'continuation']) {
@@ -355,7 +355,10 @@ function normalizeHarnessDelivery(value) {
       if (approval[key] === null) return null;
     }
   }
-  return { request, plan, changes, verification, approval };
+  return {
+    request, plan, changes, verification,
+    ...(Object.hasOwn(value, 'approval') ? { approval: value.approval === null ? null : approval } : {}),
+  };
 }
 
 function normalizeHarnessReport(input) {
@@ -544,7 +547,7 @@ export function mergeHarnessReport(previous, incoming, usage = null) {
     plan: mergeDeliveryList('plan'),
     changes: mergeDeliveryList('changes'),
     verification: mergeDeliveryList('verification'),
-    approval: incomingDelivery.approval || currentDelivery.approval || null,
+    approval: Object.hasOwn(incomingDelivery, 'approval') ? incomingDelivery.approval : (currentDelivery.approval || null),
   };
   const actorMap = new Map(
     Array.isArray(current.actors) ? current.actors.map((actor) => [actor.id, actor]) : [],
@@ -822,7 +825,9 @@ async function buildHarnessProjectSnapshot(env, projectKey, projectTitle, usageC
     plan: [...new Set(tasks.flatMap((task) => task.delivery?.plan || []))].slice(-3),
     changes: [...new Set(tasks.flatMap((task) => task.delivery?.changes || []))].slice(-4),
     verification: [...new Set(tasks.flatMap((task) => task.delivery?.verification || []))].slice(-4),
-    approval: tasks.map((task) => task.delivery?.approval).filter(Boolean).at(-1) || null,
+    approval: tasks.filter((task) => task.status !== 'complete'
+      && (task.actors || []).some((actor) => actor.status === 'blocked'))
+      .map((task) => task.delivery?.approval).filter(Boolean).at(-1) || null,
   };
   return {
     version: 1,
