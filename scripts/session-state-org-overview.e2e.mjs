@@ -53,17 +53,18 @@ const tasks = [
 const renderers = createUsageRenderers();
 assert.equal(typeof renderers.renderSessionViews, 'function', '상태 탭 renderer가 공개되어야 합니다.');
 assert.equal(typeof renderers.renderSessionView, 'function', '상태별 세션 renderer가 공개되어야 합니다.');
-assert.equal(typeof renderers.renderPortfolioBoard, 'function', '관제탑 renderer가 공개되어야 합니다.');
+assert.equal(typeof renderers.sessionWorktree, 'function', '워크트리 행 생성기가 공개되어야 합니다.');
+assert.equal(typeof renderers.renderWorktree, 'function', '워크트리 renderer가 공개되어야 합니다.');
 
 const views = renderers.renderSessionViews(tasks, NOW);
-// 상위 탭은 세션 상태 셋(진행 중 · 중단됨 · 완료)이다. 관제탑은 상위 탭이 아니라 진행 중
-// 패널 안의 보기 모드다 — 아래 보드 검사가 그 모드를 직접 렌더해 본다.
+// 상위 탭은 세션 상태 셋(진행 중 · 중단됨 · 완료)이다. 진행 중 패널의 각 세션은 같은
+// 워크트리 조판을 쓰며 별도 보기 모드는 없다.
 assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="2"/u);
 assert.match(views, /data-session-view="stale"[^>]*>[\s\S]*?data-view-count="0"/u);
 assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="2"/u);
 assert.equal((views.match(/data-session-view="/gu) || []).length, 3);
 
-const active = renderers.renderSessionView(tasks, NOW, 'active', 'org');
+const active = renderers.renderSessionView(tasks, NOW, 'active');
 assert.match(active, /진행 Alpha/u);
 assert.match(active, /진행 Beta/u);
 assert.doesNotMatch(active, /완료 Gamma|완료 Delta/u);
@@ -73,21 +74,21 @@ assert.match(complete, /완료 Gamma/u);
 assert.match(complete, /완료 Delta/u);
 assert.doesNotMatch(complete, /진행 Alpha|진행 Beta/u);
 
-// 관제탑은 **진행 중인 세션만** 그린다 (계약 §A). 완료 세션은 사라진 것이 아니라 완료
-// 탭으로 옮겨 갔을 뿐이므로, "데이터가 없어지지 않는다"는 계약은 두 화면을 합쳐 본다.
-const board = renderers.renderPortfolioBoard(tasks, NOW);
-assert.equal((board.match(/data-portfolio-task=/gu) || []).length, 2,
-  '관제탑은 진행 중인 세션 2개만 그려야 합니다.');
-assert.doesNotMatch(board, /data-board-scope|완료 Gamma|완료 Delta/u);
-// 보드 안에 범위 토글이 없다 — 같은 선택지가 상위 탭과 보드 양쪽에 있으면 축이 뒤섞인다.
-assert.doesNotMatch(board, /접힘/u);
+// 진행 중 패널은 **진행 중인 세션만** 그린다. 완료 세션은 사라진 것이 아니라 완료 탭으로
+// 옮겨 갔을 뿐이므로, "데이터가 없어지지 않는다"는 계약은 두 화면을 합쳐 본다.
+assert.equal((active.match(/data-worktree/gu) || []).length, 2,
+  '진행 중 세션 2개가 각각 워크트리 하나를 가져야 합니다.');
+assert.equal((active.match(/data-task-panel=/gu) || []).length, 2);
+assert.doesNotMatch(active, /완료 Gamma|완료 Delta|data-active-mode/u);
 
-// 진행 중 세션의 액터는 관제탑 칩으로, 완료 세션의 액터는 완료 탭의 조직도로 나온다.
-for (const expected of ['진행 Alpha', '진행 Beta', 'Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main']) {
-  assert.equal((board.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected}는 관제탑에 한 번만 있어야 합니다.`);
+// 진행 중·완료 세션의 액터는 각 상태 패널의 워크트리 행으로 나온다.
+for (const expected of ['진행 Alpha', '진행 Beta']) {
+  assert.match(active, new RegExp(expected, 'u'), `${expected}는 진행 중 패널에 있어야 합니다.`);
 }
-assert.equal((board.match(/data-actor-id=/gu) || []).length, 3);
-assert.match(board, /세션 2개 · 에이전트 3명/u);
+for (const expected of ['Alpha Main', 'Alpha 계산 서브에이전트', 'Beta Main']) {
+  assert.equal((active.match(new RegExp(expected, 'gu')) || []).length, 1, `${expected} 액터 행은 한 번만 있어야 합니다.`);
+}
+assert.equal((active.match(/data-actor-id=/gu) || []).length, 3);
 
 for (const expected of [
   '완료 Gamma', '완료 Delta',
@@ -158,13 +159,14 @@ assert.equal(apiPayload.tasks.length, 13);
 // 진행 2 + 완료 11이 두 화면에 나뉘어 서고, **어느 쪽에서도 잘리지 않는다.**
 // 완료 탭은 기본 10개만 펴므로(요구 6) 남은 1개는 '더 보기'가 개수로 밝힌다 —
 // 접힌 것과 사라진 것을 구별하는 것이 이 검사의 요지다.
-const retainedBoard = renderers.renderPortfolioBoard(apiPayload.tasks, API_NOW);
-assert.equal((retainedBoard.match(/data-portfolio-task=/gu) || []).length, 2);
-assert.match(retainedBoard, /보존 세션 01/u);
+const retainedActive = renderers.renderSessionView(apiPayload.tasks, API_NOW, 'active');
+assert.equal((retainedActive.match(/data-worktree/gu) || []).length, 2);
+assert.equal((retainedActive.match(/data-task-panel=/gu) || []).length, 2);
+assert.match(retainedActive, /보존 세션 01/u);
 
 const retainedComplete = renderers.renderSessionView(apiPayload.tasks, API_NOW, 'complete');
 assert.equal((retainedComplete.match(/data-task-post=/gu) || []).length, 10);
 assert.match(retainedComplete, /남은 1개/u);
 assert.match(retainedComplete, /보존 세션 03/u);
 
-console.log('SESSION STATE + PORTFOLIO ORG E2E: PASS');
+console.log('SESSION STATE + WORKTREE E2E: PASS');

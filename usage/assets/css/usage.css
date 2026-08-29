@@ -15,7 +15,7 @@
      손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
    - 장식 프리미티브는 게이지 1종뿐이다 (§6 상한 2종). 번호 뱃지·통계 타일·색 배너 없음.
    ========================================================================== */
-.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-views, .h-session-view-panels, .h-session-view-panel, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-modules, .h-module-list, .h-module, .h-org, .h-portfolio {
+.us-body, .us-command-layout, .us-pipeline-workspace, .h-session-list, .h-session-views, .h-session-view-panels, .h-session-view-panel, .h-session-switcher, .h-session-panels, .us-quota-rail, .us-quota-list, .us-limit-widget, .us-group, .h-task, .h-modules, .h-module-list, .h-module, .h-org {
   display: grid;
   min-width: 0;
 }
@@ -38,21 +38,13 @@
 .us-pipeline-workspace {
   gap: var(--space-4);
 }
-/* 대문자 구획 라벨. .us-eyebrow는 surface~surface-2 위(--text-3 4.99~4.65 ✓ 캡션),
-   .h-node-kind는 surface-3 노드 위라 --text-2(5.42 ✓ 캡션)로 올린다. */
-.us-eyebrow, .h-node-kind, .h-evidence-label {
+/* 대문자 구획 라벨. --text-3 on surface~surface-2 4.99~4.65 ✓ 캡션. */
+.us-eyebrow, .h-evidence-label {
   color: var(--text-3);
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: var(--ls-caps);
   line-height: 1.3;
-}
-/* 종류 라벨 줄. 오른쪽 끝에 '작업중' 라벨이 붙을 자리를 만든다. */
-.h-node-kind {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-2);
 }
 .us-empty {
   padding: var(--space-5) var(--space-4);
@@ -476,7 +468,7 @@
 /* ==========================================================================
    선택된 세션 — header, 사실 3칸, 모듈, 조직도, artifact
    ========================================================================== */
-.h-task, .h-portfolio {
+.h-task {
   align-content: start;
   gap: var(--space-4);
   padding: var(--space-4);
@@ -523,7 +515,7 @@
    가로 3칸 타일이었을 때는 완료 목록에서 펴면 필터 칩('완료 10')·행 배지('완료')·
    이 타일('완료 / 기계 게이트 통과')이 한 화면에서 같은 말을 세 번 했고, DESIGN.md
    §1.1은 usage가 요약 스트립을 쓰지 않는다고 못 박았다. 면·테두리·칸 구분선을 걷고
-   노드의 사실 목록(.h-node-facts)과 같은 2열 그리드로 낮춘다 — 값은 그대로다.
+   워크트리 행과 같은 라벨-값 2열 그리드로 낮춘다 — 값은 그대로다.
    --text-3 on --bg 5.80 ✓ 캡션 · --text on --bg 17.32 ✓ */
 .h-task-facts, .md-facts {
   display: grid;
@@ -602,29 +594,23 @@
   margin: 2px 0 0;
 }
 /* ==========================================================================
-   조직도 — 뿌리 → 수평 trunk → 개별 stem (DESIGN.md §1.1 v9)
+   워크트리 (.wt-*) — 실행 트리 한 장
    ==========================================================================
-   조판 (2026-08-29 재작성, review-visual B1·B2 / 라운드 3 재조정 B3·M7·M8·N8·N9)
-     · **뿌리**: 총괄(Main) 카드 하나가 최상단 가운데에 선다.
-     · **trunk**: 그 아래 가로 헤어라인 하나에서 자식마다 개별 stem이 내려온다.
-       카드가 되는 단계는 **보고된 단계 + 액터가 붙은 단계**뿐이고, 나머지는 조직도
-       아래 rest 줄이 이름으로 받는다. 여덟 장을 상시 세우던 골격이 아니다.
-     · **커넥터는 한 체계뿐이다** — 뿌리→단계, 단계→액터, 액터→하위 액터가 전부 같은
-       `stem 22px → 수평 trunk → stem 22px` 모듈을 되쓴다. 예전에는 1→2층만 중앙 stem이고
-       2→3층은 좌측 행잉 elbow(모바일 idiom)여서 한 그림에 두 체계가 보였다 (N3·N8).
-     · 연결선은 전부 의사요소 헤어라인이다. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §10).
+   사용자 지시(2026-08-30): "/usage를 워크트리 형식으로 가볍고 가독성 좋게".
 
-   **폭 예산 (라운드 3)** — 조직도는 컨테이너 폭 **안에서 완결된다.** 고정 노드 폭
-   188px을 버리고, 한 층의 형제들이 가용 폭을 나눠 갖는다(`flex: 1 1 0`). 고정폭은 폭이
-   모자란 쪽에서는 마지막 카드를 잘라 내고(데스크톱 845px 칼럼에 약 1050px 트리 →
-   B3: 잘린 `완료` 카드 + 전폭 네이티브 스크롤바), 폭이 남는 쪽에서는 카드 오른쪽을
-   비웠다(모바일 560px 컨테이너에 186px 고정 카드 → M8: 우측 약 45% 공백). 한 치수가
-   양쪽에서 동시에 틀린 것은 그 치수가 폭을 **모르기** 때문이므로, 치수를 고치는 대신
-   폭을 배분으로 바꾼다.
+   여기 있던 것은 조판 **둘**이었다 — 카드가 좌우로 갈라지는 조직도(.h-orgchart,
+   .h-node, 커넥터 의사요소 한 벌, 모바일 세로 직렬화 재조판)와, 단계 레일에 칩을
+   붙이는 관제탑 보드(.pl-*, 사이트 토큰 밖의 팔레트·px 치수). 둘 다 같은 파생값을
+   읽었으므로 화면에 보기 모드 토글이 필요했고, 토글이 있으니 둘을 모두 유지해야 했다.
 
-   남는 고정 치수는 **커넥터 모듈 22px** 하나와 뿌리 카드 폭뿐이다. 커스텀 프로퍼티로
-   묶지 않는 이유는 토큰 *정의*가 system.css 단일 원본이기 때문이다
-   (DESIGN.md §3 마지막 줄, validate.mjs가 강제). */
+   워크트리는 셋을 한꺼번에 없앤다.
+     · 한 행 = 한 노드. 계층은 글자 가이드(│ ├─ └─)가 말한다.
+     · 사실은 고정 열(상태 · 소요 · 진행)이 받는다 — 눈이 열을 따라 아래로 읽는다.
+     · 커넥터 의사요소도, 폭 예산 계산도, 뷰포트별 재조판도 없다. 행은 문서 흐름으로
+       쌓이고 좁은 화면에서는 열만 접힌다.
+
+   새 색 토큰을 만들지 않았다 — 전부 system.css의 토큰을 그대로 소비한다.
+   가이드 글리프는 모노 서체 + `white-space: pre`로 자리가 흔들리지 않는다. */
 .h-org {
   gap: var(--space-3);
 }
@@ -636,330 +622,174 @@
   font-size: var(--fs-caption);
   font-weight: 600;
 }
-/* 조직도 컨테이너 — 확대·이동 캔버스를 걷어낸 자리다 (계약 §C).
-   `transform: scale`이 없으므로 글자는 어느 폭에서도 원본 크기다.
-
-   트리가 이 상자의 폭을 **나눠 쓰므로** 정상 데이터에서는 스크롤이 발생하지 않는다.
-   `overflow-x: auto`는 안전망으로만 남는다 — 한 층에 형제가 비정상적으로 많아 노드가
-   더 줄어들 수 없을 때만 발동한다. 그때도 순검정 캔버스에서 가장 밝은 요소가 되지
-   않도록 스크롤바를 헤어라인 색의 얇은 것으로 낮춘다 (B3: 밝은 회색 트랙·썸·화살표
-   버튼이 패널 폭 전체에 걸쳐 있었다). min-width: 0은 그리드 칸의 자동 최소 크기를 풀어
-   페이지 body가 가로로 흔들리지 않게 한다. */
-.h-org-scroll {
+/* 격자. 이름 열이 남는 폭을 전부 쓰고 나머지 셋은 내용 폭이다. min-width: 0이 있어야
+   긴 모델 이름이 격자를 밀어내지 않고 자기 칸 안에서 말줄임된다. */
+.wt-grid {
   min-width: 0;
-  padding: var(--space-4);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  padding: var(--space-2) var(--space-3);
   background: var(--surface-2);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-m);
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
 }
-/* 보기 모드 토글(관제탑 · 조직도). 모양은 system.css의 `.segmented`가 그린다 —
-   여기서는 진행 중 패널 머리에서의 자리만 잡는다. 좁은 화면에서는 두 칸이 폭을
-   나눠 가지므로 터치 타깃이 줄지 않는다. */
-.h-mode-toggle {
-  align-self: flex-start;
-  margin-bottom: var(--space-3);
-}
-/* ---- 조직도(뿌리 → 수평 trunk → 단계 분기) ----
-   DESIGN.md §1.1이 요구하는 **고전적인 중앙 trunk·수평 branch·개별 stem**이다.
-   여기 있던 것은 세로 1열 축이었고, 데스크톱에서 845px 컨테이너의 왼쪽 213px에만
-   카드를 쌓아 오른쪽 62%를 빈 검은 면으로 남겼다(review-visual B1). 세로 직렬화는
-   §1.1이 **모바일에만** 허용한 조판이므로, 그 조판은 아래 768px 블록으로 내려갔다.
-
-   기하는 22px 모듈 하나뿐이다 — 뿌리 stem 22, trunk에서 각 단계로 내리는 stem 22,
-   단계 카드에서 액터로 내리는 척추 22 + 스텁 22. 커넥터 체계를 하나로 모으면 축 선과
-   카드 중앙 stub이 섞여 미완성으로 읽히던 것이 사라진다 (review-visual N3).
-   좌표는 손으로 계산하지 않는다: 배치는 flex/grid가, 선은 의사요소 헤어라인이 잡는다
-   (DESIGN.md §9·§10).
-
-   폭 계약: 트리가 컨테이너 폭을 그대로 쓰고, 한 층의 형제들이 그 폭을 나눠 갖는다.
-   `max-content`로 서지 않으므로 넘칠 것이 없다(계약 §C — 배율 변환은 이 화면에 없다). */
-.h-orgchart {
+.wt-row {
   display: grid;
-  justify-items: center;
-  width: 100%;
-  min-width: 0;
-}
-/* 뿌리 카드만 폭을 고정한다 — 조직도에서 **위로 갈수록 무거워야** 하는데, 뿌리가 아래
-   층과 같은 폭이면 위계가 폭으로는 전혀 표현되지 않는다 (review-visual N9: 뿌리와 말단
-   actor가 가장 크고 중간층 단계 카드가 가장 작아 위계가 역전돼 보였다). 게이지도 뿌리
-   에만 남겨 밝기의 무게중심을 위로 올린다. */
-.h-orgchart-root {
-  display: grid;
-  justify-items: center;
-  width: 252px;
-  max-width: 100%;
-}
-/* ---- 커넥터 한 체계 ----
-   층마다 같은 모듈을 되쓴다: 부모 카드 아래 22px stem → 수평 trunk → 자식마다 22px stem.
-   `.h-orgchart-branches`(뿌리→단계), `.h-tree`(단계→액터), `.h-node-slot > ul`
-   (액터→하위 액터)이 **같은 규칙**을 공유하므로, 깊이가 늘어도 그림의 문법은 하나다.
-
-   형제 사이 간격은 --space-3이고 트렁크 계산이 이 값을 그대로 되쓰므로(::after의 좌우
-   음수 여백), 간격을 바꾸면 선도 함께 따라온다 — 두 곳에 숫자를 적지 않는다. */
-.h-orgchart-branches, .h-branch > .h-tree, .h-node-slot > ul {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: center;
-  gap: var(--space-3);
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 22px 0 0;
-  list-style: none;
-}
-/* 단계 아래 실행자는 단계 칼럼 안에서 세로로 선다. 최상위 단계 세 개까지 다시 가로로
-   쪼갠 뒤 실행자 형제까지 한 줄에 강제로 나누면, 세 실행자가 있는 단계에서 각 카드가
-   70px 안팎으로 줄어 모델·추론·담당 값이 카드 밖으로 흘렀다. 단계 분기는 고전 조직도의
-   가로 trunk를 유지하되 그 아래 위임 사슬은 칼럼 폭 전체를 써야 상세가 보존된다. */
-.h-branch > .h-tree, .h-node-slot > ul {
-  flex-direction: column;
-}
-.h-branch > .h-tree > .h-node-slot, .h-node-slot > ul > .h-node-slot {
-  flex: none;
-  width: 100%;
-}
-/* 부모 카드 → trunk */
-.h-orgchart-branches::before, .h-branch > .h-tree::before, .h-node-slot > ul::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: 22px;
-  border-left: 1px solid var(--line);
-}
-/* 자식 슬롯. `flex: 1 1 0`이 이 층의 형제들에게 가용 폭을 **똑같이** 나눠 준다 —
-   카드가 폭을 모른 채 고정 188px로 서던 것이 B3(잘림)과 M8(사공간)의 공통 원인이다.
-   min-width: 0이 없으면 flex 항목의 자동 최소 크기가 max-content라 다시 넘친다. */
-.h-orgchart-branch, .h-node-slot {
-  position: relative;
-  display: grid;
-  flex: 1 1 0;
-  justify-items: stretch;
-  min-width: 0;
-  padding-top: 22px;
-}
-/* 개별 stem: trunk → 자식 카드 */
-.h-orgchart-branch::before, .h-node-slot::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: 22px;
-  border-left: 1px solid var(--line);
-}
-/* 수평 trunk. 형제마다 자기 폭과 좌우 gap의 절반씩을 그려 하나의 선으로 이어지고,
-   첫·마지막 형제는 바깥쪽 절반을 지워 선이 조직도 밖으로 새지 않는다. */
-.h-orgchart-branch::after, .h-node-slot::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: calc(var(--space-3) / -2);
-  left: calc(var(--space-3) / -2);
-  border-top: 1px solid var(--line);
-}
-.h-orgchart-branch:first-child::after, .h-node-slot:first-child::after {
-  left: 50%;
-}
-.h-orgchart-branch:last-child::after, .h-node-slot:last-child::after {
-  right: 50%;
-}
-.h-orgchart-branch:only-child::after, .h-node-slot:only-child::after {
-  display: none;
-}
-/* 카드가 되지 못한 단계 — 라벨-값 한 줄. 빈 카드를 만들지 않으면서 "보고가 오지
-   않았다"는 사실은 그대로 남긴다 (review-visual B2).
-   이 줄은 조직도 상자 **밖**, 상세 본문 레벨에 선다 (M9) — 조직도 기하가 아니라
-   선택 세션의 메타이기 때문이다. 그래서 배경면이 --surface-2(상자 안)에서
-   --surface(본문 면, `.h-task`)로 바뀐다. 두 면 모두 대비 하한을 넘는다
-   (system.css 전수표: --text-3 surface 4.99 / surface-2 4.65 ✓ 캡션 하한 4.5,
-   --text-2 surface 7.03 / surface-2 6.54 ✓ 본문). */
-.h-orgchart-rest {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 2px var(--space-3);
-  margin: 0;
-  color: var(--text-3);
-  font-size: var(--fs-micro);
-}
-.h-orgchart-rest > div {
-  display: contents;
-}
-.h-orgchart-rest dt {
-  font-weight: 600;
-}
-.h-orgchart-rest dd {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px var(--space-2);
-  min-width: 0;
-  margin: 0;
-  color: var(--text-2);
-}
-/* 값 사이에 구분자를 세운다. 띄어쓰기만으로 이으면 `입력 게이트 수정 승인`이 네 개의
-   단계 이름이 아니라 한 구절로 읽힌다 (review-visual N10). 마크업에 문자를 넣지 않는
-   이유는 각 값이 판독용 data 속성을 가진 span이어야 하기 때문이다 — 구분자는 값이
-   아니라 조판이므로 CSS가 그린다. */
-.h-orgchart-rest dd > span + span::before {
-  content: '·';
-  margin-right: var(--space-2);
-  color: var(--text-3);
-}
-/* ---- 액터 가지(단계 카드 아래) ----
-   위의 커넥터 한 체계를 그대로 되쓴다. `.h-branch`는 폭만 넘겨주는 껍데기이고,
-   선과 배치는 `.h-tree`·`.h-node-slot`이 `.h-orgchart-branches`·`.h-orgchart-branch`와
-   **같은 규칙**으로 그린다 (N8 — 예전에는 여기만 좌측 행잉 elbow였다). */
-.h-branch {
-  min-width: 0;
-  justify-self: stretch;
-  /* 깊이가 내려갈수록 카드가 한 단씩 좁아진다 — 조직도는 아래로 갈수록 가벼워야 하는데
-     말단 카드가 부모와 같은 폭이면 위계가 폭으로 표현되지 않는다 (review-visual N9).
-     들여쓰기 값은 형제 사이 gap과 같은 --space-2 계열이라 새 치수를 들이지 않는다. */
-  padding: 0 var(--space-2);
-}
-/* ---- 노드 ----
-   surface-2 캔버스 위 surface-3 면. 노드 안 텍스트는 --text(12.80)와
-   --text-2(5.42)만 쓴다 — --text-3는 3.85로 캡션 하한 미달이다. */
-/* 노드는 **자기 슬롯의 폭을 쓴다.** 고정 폭(188px)이었을 때 같은 한 치수가 데스크톱
-   에서는 모자라 마지막 카드를 잘랐고(B3) 모바일에서는 남아 컨테이너 우측 45%를
-   비웠다(M8). 폭을 아는 것은 카드가 아니라 컨테이너이므로, 카드는 배분받은 만큼 선다.
-   min-width: 0은 그리드 항목의 자동 최소 크기를 풀어 준다. */
-.h-node {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  min-width: 0;
-  margin: 5px 0;
-  padding: 10px var(--space-3);
-  background: var(--surface-3);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-m);
-}
-/* 진행 중 노드 — 첨부 레퍼런스의 "굵은 초록 테두리 + 작업중 라벨"과 **같은 시각 위계**를
-   이 화면의 강조 1색으로 낸다. 초록을 그대로 쓰지 않는 이유: 이 화면의 초록(#5FBF8A)은
-   이미 관제탑에서 '완료'다. 한 화면에서 같은 색이 '완료'와 '진행 중'을 동시에 뜻하면
-   색이 거짓말을 한다 (DESIGN.md §3 상태색 규칙 · 강조 1색). 대신 테두리를 2px로 올리고
-   글자 라벨을 붙인다 — 색을 못 보는 조건에서도 구별된다.
-   테두리가 1px 두꺼워지는 만큼 안쪽 여백을 1px 줄여 노드 기하가 흔들리지 않게 한다. */
-.h-node.is-current {
-  padding: 9px calc(var(--space-3) - 1px);
-  border-width: 2px;
-  border-color: var(--accent);
-}
-/* '작업중' 라벨. 면을 채우지 않으므로 배경은 노드 면 하나뿐이다:
-   --accent on --surface-3 = 4.62:1 ✓ (본문 하한 4.5, system.css 전수표 인용).
-   12px(--fs-micro)라 큰 글자 예외를 쓰지 않는다. */
-.h-node-flag {
-  margin-left: auto;
-  padding: 0 6px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-full);
-  color: var(--accent);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-/* 보고된 적 없는 앞 단계(= '기록 없음')는 완료와 눈으로 갈라져야 한다 — 실선 대신
-   점선 테두리로 비우고, 이름을 본문 강조에서 보조 색으로 낮춘다. 새 색 토큰을 만들지
-   않고 노드 안에서 이미 쓰는 --text-2(surface-3 위 5.42)만 재사용한다. */
-.h-node[data-phase-state="skipped"] {
-  border-style: dashed;
-}
-.h-node[data-phase-state="skipped"] .h-node-name {
-  color: var(--text-2);
-  font-weight: 500;
-}
-/* 조직도의 뿌리(총괄)는 면을 바꾸지 않고 헤어라인 한 단으로만 구분한다.
-   `.is-request`는 사라졌다 — 사용자 입력은 더 이상 조직도 노드가 아니다 (M4).
-   위계는 폭(위 `.h-orgchart-root`)·이름 크기·게이지 세 가지로만 표현한다 — 새 면색이나
-   강조색을 들이지 않는다 (N9: 말단 actor 카드가 가장 크고 밝아 위계가 역전돼 보였다). */
-.h-node.is-lead {
-  border-color: var(--line);
-}
-.h-node.is-lead .h-node-name {
-  font-size: var(--fs-body-sm);
-}
-/* 이름은 잘리지 않는다 — 카드 폭이 이제 컨테이너를 따라가므로 자를 이유가 없고,
-   한국어 이름을 말줄임하면 어절이 끊긴다 (§2 keep-all). */
-.h-node-name {
-  min-width: 0;
-  margin: 0;
-  color: var(--text);
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  line-height: var(--lh-snug);
-}
-.h-node-detail, .h-node-note, .h-node-state, .h-node-progress, .h-node-facts {
-  color: var(--text-2);
-  font-size: var(--fs-micro);
-  line-height: 1.45;
-}
-/* 사실 목록 — 모델·역할·담당·소요·한도 소비가 각자 한 줄을 갖는다 (요구 2·4).
-   행(div)을 display: contents로 풀어 **목록 전체가 하나의 2열 그리드**가 된다. 그래야
-   라벨 열이 가장 긴 라벨에 맞춰 한 번에 잡히고, 값이 줄마다 같은 x에서 시작한다
-   (행마다 그리드를 만들면 열 폭을 손으로 고정해야 하고, 라벨이 길어지는 순간 어긋난다).
-   노드 면(surface-3) 위에서 --text-2 5.42 ✓ 캡션 / --text 12.80 ✓.
-   --text-3(3.85)는 이 면에서 캡션 하한 미달이라 쓰지 않는다. */
-.h-node-facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 2px var(--space-2);
-  margin: 1px 0 0;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: baseline;
+  gap: 0 var(--space-3);
+  padding: 3px 0;
 }
-.h-node-facts > div {
-  display: contents;
+/* 머리 줄 — 대문자 구획 라벨과 같은 위계다(.us-eyebrow와 같은 --text-3). */
+.wt-head {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.h-node-facts dt {
-  font-weight: 500;
-}
-.h-node-facts dd {
-  min-width: 0;
-  margin: 0;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-/* 모델·추론은 이제 **각자 한 줄**이라 값 하나가 짧다(`gpt-5.6-codex` / `xhigh`).
-   그래도 폭이 모자라면 말줄임이 아니라 줄바꿈으로 넘긴다 — 말줄임은 값을 **잃지만**
-   줄바꿈은 잃지 않는다. 모델명의 하이픈이 자연스러운 분절점이라 어절 중간에서 끊기지도
-   않는다 (review-visual M7: `claude-opus-5 · hi…`처럼 추론 단계가 늘 사라졌다). */
-.h-node-fact-mono {
-  min-width: 0;
-  font-family: var(--font-mono);
-  overflow-wrap: break-word;
-}
-/* note는 반대로 길어지면 줄바꿈한다. 잘라 버리면 수치가 사라지기 때문이다. */
-.h-node-note {
-  font-variant-numeric: tabular-nums;
-}
-.h-node-state {
+.wt-name-cell {
   display: flex;
-  align-items: center;
+  min-width: 0;
+  align-items: baseline;
   gap: 6px;
 }
-/* 소요는 이제 사실 목록의 한 줄(dd)이다. `margin-left: auto`로 상태 줄 오른쪽에 밀어
-   붙이던 좌우 양끝 정렬을 걷었다 — 한 조직도 안에서 단계 카드만 정렬 규칙이 달랐다
-   (review-visual N4 잔여 · N12). */
-.h-node-time {
-  font-variant-numeric: tabular-nums;
+/* 가이드. 모노 + pre라 어느 깊이에서도 한 글자 폭이 같다. 색은 선 색이지 글자 색이
+   아니다 — 계층은 읽는 대상이 아니라 따라가는 자국이다. */
+.wt-guide {
+  flex: none;
+  color: var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  white-space: pre;
 }
-/* 진행도도 다른 사실과 **같은 정렬 규칙**을 쓴다: 라벨 뒤에 값이 붙는다.
-   예전에는 이 줄만 좌우 양끝 정렬이라, 모델·역할·담당이 라벨-값 좌측 정렬로 선
-   카드 안에서 한 줄만 규칙이 달랐다 (review-visual N4). */
-.h-node-progress {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin-top: 2px;
-}
-.h-node-progress strong {
+.wt-name {
+  flex: 0 1 auto;
+  overflow: hidden;
   color: var(--text);
+  font-size: var(--fs-body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wt-row.is-lead .wt-name {
   font-weight: 600;
+}
+.wt-row.is-phase .wt-name {
+  font-weight: 600;
+}
+/* 종류 라벨(총괄 · 단계 · Codex …). 이름 뒤에 붙는 보조 사실이다. */
+.wt-kind {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+/* 모델 · 추론 강도. 좁은 폭에서 먼저 줄어드는 값이므로 이름보다 뒤에 두고
+   `min-width: 0`으로 접히게 한다. */
+/* 좁아지면 **모델이 먼저 줄어든다**. flex-basis 0이라 이름이 자기 내용 폭을 지키고
+   남는 폭만 모델이 가져간다 — 이름이 잘리면 어느 노드인지 알 수 없어지지만, 모델은
+   잘려도 앞자리로 판별된다. */
+.wt-model {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wt-state, .wt-time, .wt-pct {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+.wt-time, .wt-pct {
   font-variant-numeric: tabular-nums;
+}
+.wt-state {
+  min-width: 5.5em;
+  text-align: right;
+}
+.wt-time {
+  min-width: 5em;
+  text-align: right;
+}
+.wt-pct {
+  min-width: 3.5em;
+  text-align: right;
+}
+/* 보조 줄 — 역할·담당·상위·사유. 이름 열 아래로 흘러 격자를 깨지 않는다. */
+/* 보조 줄의 들여쓰기는 그 행의 가이드 폭과 같다 — 3ch 모듈 × 깊이 + 연결선 3ch.
+   깊이는 data-depth에서 읽어 손으로 적지 않는다. */
+.wt-sub {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  padding-left: 3ch;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+/* 진행 중인 행 — 첨부 레퍼런스와 같은 위계를 유지한다: 면을 채우지 않고 강조색
+   왼쪽 표시와 굵기로만 말한다. 강조색은 이 화면에서 한 색뿐이다(DESIGN.md §4). */
+[data-depth="1"] .wt-sub {
+  padding-left: 3ch;
+}
+[data-depth="2"] .wt-sub {
+  padding-left: 6ch;
+}
+[data-depth="3"] .wt-sub {
+  padding-left: 9ch;
+}
+[data-depth="4"] .wt-sub {
+  padding-left: 12ch;
+}
+.wt-row.is-current {
+  margin-left: -8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+}
+.wt-row.is-current .wt-state {
+  color: var(--accent);
+}
+/* 보고된 적 없는 단계는 완료와 눈으로 갈라져야 한다 — 색이 아니라 흐림으로 낮춘다. */
+.wt-row[data-phase-state="skipped"] .wt-name, .wt-row[data-phase-state="pending"] .wt-name {
+  color: var(--text-3);
+  font-weight: 400;
+}
+@media (max-width: 700px) {
+  /* 좁은 화면에서는 진행률만 이름 줄에 남기고 상태·소요는 그 아래 줄로 내린다.
+     행을 재조판하는 것이 아니라 열을 접는 것뿐이라 트리 모양은 그대로다. */
+  .wt-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  /* 좁은 폭에서는 모델을 이름 아래로 접는다. 한 줄에 붙여 두면 이름이 먼저 잘려
+     어느 노드인지 알 수 없어진다 — 잘려도 되는 값은 모델 쪽이다. */
+  .wt-name-cell {
+    flex-wrap: wrap;
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .wt-model {
+    flex: 1 0 100%;
+    padding-left: 2ch;
+  }
+  .wt-pct {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  /* 상태와 소요는 한 줄을 **나눠** 쓴다. 각자 전폭을 차지하면 행 하나가 세 줄이 되어
+     34행짜리 트리가 3400px로 늘어난다 — 워크트리의 이점인 훑어보기가 사라진다. */
+  .wt-state {
+    grid-row: 2;
+    grid-column: 1;
+    padding-left: 2ch;
+    text-align: left;
+  }
+  .wt-time {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  .wt-head .wt-state, .wt-head .wt-time {
+    display: none;
+  }
 }
 /* ---- 검증 artifact ---- */
 .h-evidence {
@@ -1016,65 +846,8 @@
     border-top: 0;
   }
 }
-/* ---- 모바일 배치(≤768px): 조직도를 **세로 트리로 직렬화**한다 ----
-   §1.1이 모바일에만 허용한 조판이다. 형제를 가로로 늘어놓으면 노드 하나가 320px대
-   화면보다 넓은 열을 여럿 만들고, 그것을 넣는 방법은 배율을 떨어뜨리는 것뿐인데
-   이 화면에 `transform: scale`은 존재하지 않는다(계약 §C). 그래서 폭을 '노드 하나 +
-   들여쓰기'로 줄이고 길어진 세로는 페이지가 그냥 스크롤한다.
-
-   **직렬화가 허용된 것이지 고정폭 카드가 허용된 것은 아니다** (review-visual M8).
-   카드는 들여쓰기 이후의 잔여 폭을 끝까지 쓴다 — 560px 컨테이너에 186px 고정 카드가
-   서던 때는 오른쪽 약 235px가 빈 검은 면이었고, 남는 폭이 바로 옆에 있는데도 모델 값이
-   말줄임으로 잘렸다. 깊이는 카드 폭이 아니라 **들여쓰기와 커넥터**가 표현한다.
-
-   새 선을 만들지 않는다 — 데스크톱의 22px 모듈을 방향만 돌려 되쓴다: 척추가 왼쪽
-   22px에서 내려오고, 형제마다 27px 지점에 22px 스텁이 붙는다. 데스크톱과 마찬가지로
-   모든 층(뿌리→단계, 단계→액터, 액터→하위)이 같은 규칙을 공유한다. */
-@media (max-width: 768px) {
-  .h-orgchart {
-    justify-items: stretch;
-  }
-  .h-orgchart-root {
-    width: 100%;
-    justify-items: start;
-  }
-  .h-orgchart-branches, .h-branch > .h-tree, .h-node-slot > ul {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-    padding-top: 0;
-  }
-  .h-orgchart-branches::before, .h-branch > .h-tree::before, .h-node-slot > ul::before {
-    display: none;
-  }
-  .h-orgchart-branch, .h-node-slot {
-    justify-items: stretch;
-    padding-top: 0;
-    padding-left: 44px;
-  }
-  /* 세로 척추 — 형제마다 이어져 하나의 선이 되고, 마지막 형제는 자기 스텁에서 끊는다. */
-  .h-orgchart-branch::before, .h-node-slot::before {
-    top: 0;
-    bottom: 0;
-    left: 22px;
-    height: auto;
-  }
-  .h-orgchart-branch:last-child::before, .h-node-slot:last-child::before {
-    bottom: calc(100% - 27px);
-  }
-  /* trunk였던 가로선은 형제 하나짜리 스텁이 된다. */
-  .h-orgchart-branch::after, .h-orgchart-branch:first-child::after, .h-orgchart-branch:last-child::after, .h-node-slot::after, .h-node-slot:first-child::after, .h-node-slot:last-child::after {
-    top: 27px;
-    right: auto;
-    left: 22px;
-    width: 22px;
-  }
-  .h-orgchart-branch:only-child::after, .h-node-slot:only-child::after {
-    display: block;
-  }
-}
 @media (max-width: 700px) {
-  .h-task, .h-portfolio {
+  .h-task {
     padding: var(--space-3);
   }
   .h-task-head, .h-org-head {
@@ -1089,8 +862,8 @@
   }
 }
 @media (max-width: 430px) {
-  .h-org-scroll {
-    padding: var(--space-3);
+  .wt-grid {
+    padding: var(--space-2);
   }
   /* 노드 폭은 이제 어느 뷰포트에서도 188px 하나다. 커넥터 모듈도 22px 하나뿐이라
      여기서 다시 계산할 좌표가 없다 (예전에는 축 x좌표 = 폭의 절반이라 폭을 바꿀 때마다
@@ -1099,362 +872,6 @@
     display: none;
   }
 }
-/* ==========================================================================
-   관제탑 (.pl-*) — 파이프라인 진행 보드
-   ==========================================================================
-   출처와 예외: 이 블록은 사용자가 승인한 관제탑 원본
-   `Claude/sessions/2026-08-28-자율-멀티파이프라인/orgchart.html`의 조판을 **그대로**
-   이식한 것이다 (P-C plan.md §1b: "DESIGN.md 재해석 금지"). 그래서 이 블록만은 사이트
-   토큰이 아니라 원본의 팔레트·서체·px 치수를 쓴다. 나머지 화면(사용량 뷰·셸)은 그대로
-   system.css의 토큰을 소비한다.
-
-   사이트 셸과 충돌해 조정한 것은 셋뿐이다:
-     1) 라이트 팔레트를 뺐다 — 이 사이트는 <meta name="color-scheme" content="dark">의
-        다크 전용이라 라이트 분기는 도달할 수 없는 코드가 된다. 원본의 다크 값만 남겼다.
-     2) 색을 커스텀 프로퍼티로 정의하지 않고 리터럴로 적었다 — 토큰 *정의*의 단일 원본은
-        system.css이고 그 규칙은 게이트가 강제한다 (DESIGN.md §3 마지막 줄).
-     3) 보드 바깥 배경(원본 --bg #14151B)을 깔지 않는다 — 페이지 캔버스가 이미 --bg(#000)다.
-
-   대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"). 위 이식 팔레트가 만드는 조합 전부:
-     #E8E9EE on #1D1F28 (카드 본문)        13.54:1
-     #E8E9EE on #000    (보드 제목)        17.32:1
-     #9A9CAC on #1D1F28 (부제·노트·메타)    6.04:1
-     #9A9CAC on #000    (보드 부제·범례)    7.73:1
-     #8B9AF2 on #1D1F28 (담당 모델 라벨)    6.26:1
-     #8B9AF2 on #272B44 (서브에이전트 칩)   5.28:1
-     #5FBF8A on #1E3328 (완료 뱃지)         5.97:1
-     #E0A94F on #3A2F1B (진행 뱃지)         6.21:1
-     #8D8F9E on #262833 (대기 뱃지)         4.57:1
-     #5FBF8A on #1D1F28 (단계 상태 '완료')   7.28:1
-     #E0A94F on #1D1F28 (단계 상태 '진행 중') 7.79:1
-     #8D8F9E on #1D1F28 (단계 상태 '대기'·'기록 없음') 5.13:1
-   본문 하한 4.5:1을 전부 넘는다. 레일 점(그래픽, 하한 3:1)은 카드 면 #1D1F28 위에서
-     #5FBF8A 7.28 / #E0A94F 7.79 / #8D8F9E 5.13 이다.
-
-   하네스 피드 통합에서 더한 것 (2026-08-28):
-     - 단계 상태가 넷이 됐다. 원본의 완료·진행·대기에 **기록 없음**(보고된 적 없는 단계)이
-       붙는다. 색만으로 넷을 가르지 않는다 — 기록 없음은 마디를 **점선 빈 원**으로 그리고,
-       모든 단계가 `.pl-state` 글자 라벨을 함께 낸다. 색각·흑백 인쇄에서도 구분된다.
-     - `.pl-state`는 새 색을 만들지 않는다. 위 표의 마디 색을 그대로 글자에 쓰므로
-       대비는 이미 실측된 값이고, 셋 다 본문 하한 4.5:1을 넘는다.
-
-   서브에이전트 칩 구조화에서 더한 것 (2026-08-28, 요구 2 — 이름·역할·상태·%를 분리):
-     칩 배경 #272B44 위에 이식 팔레트의 두 색이 새로 얹힌다. 새 색은 만들지 않았고,
-     **새로 생긴 조합**만 WCAG 상대휘도로 실측해 적는다 (DESIGN.md §3.1 전수 검산):
-       #E8E9EE on #272B44 (칩 이름·진행률)  11.43:1
-       #9A9CAC on #272B44 (칩 상태)          5.10:1
-       #8B9AF2 on #272B44 (칩 역할)          5.28:1  ← 위 표에 이미 있던 값
-     셋 다 본문 하한 4.5:1을 넘는다. 칩 글자는 10.5px라 큰 글자 예외를 쓰지 않는다.
-
-   칩 필드 확장에서 더한 것 (2026-08-28, 계약 §B — 모델·소요시간을 칩에도 싣는다):
-     새 색을 만들지 않았고 **새 조합도 생기지 않았다**. 두 슬롯은 위에서 이미 실측한
-     같은 배경(#272B44) 위 같은 두 색을 재사용한다:
-       #8B9AF2 on #272B44 (칩 모델 · .pl-chip-model)  5.28:1  ← 칩 역할과 같은 조합
-       #9A9CAC on #272B44 (칩 소요 · .pl-chip-time)   5.10:1  ← 칩 상태와 같은 조합
-     그래서 전수 검산의 대상 집합은 그대로이고, 둘 다 본문 하한 4.5:1을 넘는다.
-   ========================================================================== */
-.pl-board {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
-  color: #e8e9ee;
-}
-.pl-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 12px 20px;
-  margin-bottom: 6px;
-}
-.pl-title {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -.01em;
-}
-.pl-window {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: #9a9cac;
-}
-.pl-sub {
-  margin: 0 0 22px;
-  font-size: 14px;
-  color: #9a9cac;
-}
-.pl-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin: 0 0 20px;
-  font-size: 12.5px;
-  color: #9a9cac;
-}
-.pl-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.pl-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #8d8f9e;
-}
-.pl-dot.is-ok {
-  background: #5fbf8a;
-}
-.pl-dot.is-run {
-  background: #e0a94f;
-}
-.pl-dot.is-skip {
-  background: transparent;
-  border: 1.5px dashed #8d8f9e;
-}
-.pl-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-}
-.pl-card {
-  padding: 18px 18px 14px;
-  background: #1d1f28;
-  border: 1px solid #333542;
-  border-radius: 10px;
-}
-.pl-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.pl-card-title {
-  margin: 0;
-  font-size: 16.5px;
-  font-weight: 700;
-  letter-spacing: normal;
-}
-.pl-task {
-  margin: 3px 0 0;
-  font-size: 13px;
-  color: #9a9cac;
-}
-.pl-badge {
-  padding: 3px 9px;
-  border-radius: 99px;
-  font-size: 11.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  background: #262833;
-  color: #8d8f9e;
-}
-.pl-badge.is-ok {
-  background: #1e3328;
-  color: #5fbf8a;
-}
-.pl-badge.is-run {
-  background: #3a2f1b;
-  color: #e0a94f;
-}
-.pl-orch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-  padding: 6px 10px;
-  border: 1px dashed #333542;
-  border-radius: 8px;
-  font-size: 12.5px;
-  color: #9a9cac;
-}
-/* 총괄 줄은 이름(본문색)과 모델(모노 강조색) 둘로 갈린다 — 모델만 적으면 같은 모델을
-   쓰는 총괄이 서로 구분되지 않는다. 이름은 #E8E9EE on #1D1F28 13.54:1. */
-.pl-orch b {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: #e8e9ee;
-}
-/* 세로 단계 레일 — 선은 ::before, 마디는 ::after. 첫·마지막 단계에서 선을 마디까지만
-   그려 레일이 카드 밖으로 새지 않는다. */
-.pl-stage {
-  position: relative;
-  display: flex;
-  gap: 12px;
-  padding: 7px 0 7px 22px;
-}
-.pl-stage::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 7px;
-  width: 2px;
-  background: #333542;
-}
-.pl-stage::after {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: 2.5px;
-  width: 11px;
-  height: 11px;
-  border: 2.5px solid #8d8f9e;
-  border-radius: 50%;
-  background: #1d1f28;
-}
-.pl-stage.is-ok::after {
-  border-color: #5fbf8a;
-  background: #5fbf8a;
-}
-.pl-stage.is-run::after {
-  border-color: #e0a94f;
-}
-/* 기록 없음 — 보고된 적이 없어 "지나갔다"고 말할 근거가 없는 단계. 대기와 같은 회색이지만
-   마디가 점선 빈 원이라 색을 못 보는 조건에서도 갈린다 (옆의 .pl-state 글자가 짝을 이룬다). */
-.pl-stage.is-skip::after {
-  border-style: dashed;
-  border-color: #8d8f9e;
-  background: transparent;
-}
-.pl-state {
-  flex: none;
-  align-self: flex-start;
-  margin-top: 12px;
-  font-size: 11px;
-  color: #8d8f9e;
-  white-space: nowrap;
-}
-.pl-state.is-ok {
-  color: #5fbf8a;
-}
-.pl-state.is-run {
-  color: #e0a94f;
-}
-.pl-stage:first-of-type::before {
-  top: 14px;
-}
-.pl-stage:last-of-type::before {
-  bottom: calc(100% - 14px);
-}
-.pl-stage-main {
-  flex: 1;
-  min-width: 0;
-}
-.pl-stage-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-.pl-who {
-  margin-left: 7px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: #8b9af2;
-}
-.pl-note {
-  margin-top: 1px;
-  font-size: 12.5px;
-  color: #9a9cac;
-}
-/* '기록 없음' 마디의 **사유** 한 줄. 단계 설명(.pl-note)과 같은 조판을 쓰되 한 톤 낮춰
-   둘이 섞이지 않게 한다. 새 색을 만들지 않고 이미 실측된 마디 색을 그대로 쓴다:
-   #8D8F9E on #1D1F28 = 5.13:1 ✓ (위 전수표 "단계 상태 '대기'·'기록 없음'" 줄). */
-.pl-reason {
-  color: #8d8f9e;
-}
-.pl-cost {
-  margin-top: 2px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: #9a9cac;
-  font-variant-numeric: tabular-nums;
-}
-/* 칩 = 그 단계에 붙은 액터 하나. 가로로 흘리지 않고 **세로로 쌓는다** — parent_id
-   계층을 들여쓰기로 남기기 위해서다(가로 wrap에서는 들여쓰기가 줄바꿈에 씻긴다).
-   칩 하나 안에서 이름·역할·상태·진행률이 각자 자기 슬롯을 갖는다 (요구 2). */
-.pl-chips {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  margin-top: 4px;
-}
-.pl-chip {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 100%;
-  padding: 2px 7px;
-  border-radius: 5px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  background: #272b44;
-  color: #8b9af2;
-}
-/* 위임 깊이. 3단에서 멈춘다 — 그보다 깊어지면 들여쓰기가 카드를 밀어낸다. */
-.pl-chip[data-depth="1"] {
-  margin-left: 12px;
-}
-.pl-chip[data-depth="2"] {
-  margin-left: 24px;
-}
-.pl-chip[data-depth="3"] {
-  margin-left: 36px;
-}
-.pl-chip-name {
-  font-weight: 600;
-  color: #e8e9ee;
-}
-.pl-chip-state {
-  color: #9a9cac;
-}
-/* 액터의 모델 + 추론 강도. 단계의 모노 라벨(.pl-who)과 **같은 강조색**을 쓴다 —
-   둘 다 "누가 돌렸는가"를 말하는 같은 종류의 사실이기 때문이다.
-   #8B9AF2 on #272B44 = 5.28:1 ✓ (아래 표에 이미 실측된 조합). */
-.pl-chip-model {
-  color: #8b9af2;
-}
-/* 액터 소요시간. 상태와 같은 보조색을 쓴다 — 둘 다 진행 상황의 부가 사실이다.
-   #9A9CAC on #272B44 = 5.10:1 ✓ (아래 표에 이미 실측된 조합). */
-.pl-chip-time {
-  color: #9a9cac;
-  font-variant-numeric: tabular-nums;
-}
-/* 측정된 진행도. 보고가 없는 칩에는 이 요소 자체가 없다 (0%로 그리지 않는다). */
-.pl-chip-percent {
-  margin-left: auto;
-  padding-left: 6px;
-  color: #e8e9ee;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.pl-meta {
-  padding-top: 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.7;
-  color: #9a9cac;
-  text-align: right;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.pl-foot {
-  margin-top: 26px;
-  font-size: 12.5px;
-  color: #9a9cac;
-}
-.pl-empty {
-  padding: var(--space-6) var(--space-4);
-  border: 1px solid #333542;
-  border-radius: 10px;
-  color: #9a9cac;
-  text-align: center;
-}
-@media (max-width: 420px) {
-  .pl-meta {
-    display: none;
-  }
 }
 /* ==========================================================================
    모더 뷰 (.md-*) — 직접 명령 · 중요/제안/검토 · 실제 사용 모델
@@ -1500,7 +917,7 @@
     column-gap: var(--space-5);
   }
 }
-/* 모델 이름·ID는 글자 모양이 값의 일부다 — 조직도 노드(.h-node-fact-mono)와 같은 처리.
+/* 모델 이름·ID는 글자 모양이 값의 일부다 — 워크트리의 모델 열(.wt-model)과 같은 처리.
    --text on --surface 16.61 ✓ */
 .md-fact-mono {
   font-family: var(--font-mono);

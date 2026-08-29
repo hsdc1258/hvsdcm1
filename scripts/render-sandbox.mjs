@@ -317,7 +317,7 @@ export function createUsageRenderers() {
   const renderers = context.USAGE_RENDER;
   if (typeof renderers?.buildDashboard !== 'function'
     || typeof renderers?.renderSessionViews !== 'function'
-    || typeof renderers?.renderPortfolioBoard !== 'function'
+    || typeof renderers?.sessionWorktree !== 'function'
     || typeof renderers?.activateTaskTab !== 'function'
     || typeof renderers?.wireTaskTabs !== 'function') {
     throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
@@ -466,12 +466,10 @@ export function renderGichulScreen(manifest, state) {
   return { filters, body };
 }
 
-// mode는 진행 중 패널의 보기 방식('board' | 'org')이다. 화면의 기본값은 관제탑이므로
-// 상세 조직도를 보려는 호출자(게이트·스냅샷)는 그것을 **명시해야** 한다 — 기본값에만
-// 기대면 검사가 한 모드만 보고 다른 모드는 영영 렌더되지 않는다.
-export function renderUsageDashboard(input, now, mode = 'board') {
+// 보기 모드 인자는 사라졌다 — 조판이 워크트리 하나뿐이라 고를 것이 없다
+// (2026-08-30 사용자 지시). 호출자는 그냥 대시보드를 렌더한다.
+export function renderUsageDashboard(input, now) {
   const renderers = createUsageRenderers();
-  renderers.writeActiveMode(mode);
   const markup = renderers.buildDashboard(input, now);
   if (!markup.includes('us-command-layout') || !markup.includes('us-quota-rail')) {
     throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without command-center contracts`);

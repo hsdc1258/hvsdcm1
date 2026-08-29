@@ -21,10 +21,18 @@ const HOUR = 60 * 60 * 1000;
 const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString();
 
 // renderUsageDashboard()는 command-center 골격이 없으면 throw한다(샌드박스의 계약 검사).
-// mode는 진행 중 패널의 보기 방식이다 — 화면 기본값과 같은 'board'가 기본이고,
-// 상세 조직도를 보는 검사는 'org'를 명시한다 (계약 §A의 모드 토글).
-function dashboard(input, now = NOW, mode = 'board') {
-  return renderUsageDashboard(input, now, mode);
+// 진행 중 패널은 워크트리 조판 하나만 사용한다.
+function dashboard(input, now = NOW) {
+  return renderUsageDashboard(input, now);
+}
+
+function worktree(renderers, task, now = NOW) {
+  return renderers.renderWorktree(renderers.sessionWorktree(task, now), `${task.name || task.id} 실행 워크트리`);
+}
+
+function worktreeRow(markup, attribute, value) {
+  const needle = `${attribute}="${value}"`;
+  return markup.split(/(?=<div class="wt-row )/u).find((part) => part.includes(needle)) || '';
 }
 
 const codexSnapshot = (buckets, capturedAt = iso(HOUR)) => ({
@@ -247,23 +255,18 @@ test('the command layout keeps the pipeline first and the Codex limit in a dedic
   assert.doesNotMatch(markup, /summary-strip|활성 작업|작업 카테고리|작업 중 AI|Codex 최고 사용률/u);
 });
 
-// 조직도는 **보고된 단계 + 실제 액터**를 그린다. 여덟 단계가 화면에서 사라지지는 않지만,
-// 보고가 없는 단계는 카드가 아니라 한 줄의 라벨-값으로 선다 (review-visual B2 — 빈 카드로
-// 골격을 채우던 조판을 걷어냈다). 판독 어휘(data-org-phase·data-phase-state)는 그대로다.
+// 워크트리는 **보고된 단계 + 실제 액터**를 그린다. 여덟 단계는 모두 같은 행 어휘로 서며,
+// 판독 어휘(data-org-phase·data-phase-state)는 그대로다.
 test('the session tree always renders every phase plus the reported actors', () => {
-  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active', 'org');
+  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
   for (const expected of ['계약 · 증거 고정', '격리 구현 · 검증', '독립 반증 · 지적', 'Main Codex', '독립 검토', 'WebGPT 실행자', 'WebGPT PRO', 'HARNESS E2E: PASS']) {
     assert.match(markup, new RegExp(expected, 'u'));
   }
-  // 모델과 추론 단계는 조직도 카드에서 **각자 한 줄**이다 (review-visual M7). 한 줄에
-  // 붙였을 때는 노드 폭이 모자라 추론 단계가 늘 말줄임으로 잘렸다 — 표시하되 읽을 수
-  // 없으면 표시하지 않은 것과 같다. 두 값이 **모두 온전히** 나오는지를 단언한다.
-  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.6-sol<\/dd>/u);
-  assert.match(markup, /<dt>추론<\/dt><dd class="h-node-fact-mono">xhigh<\/dd>/u);
-  assert.doesNotMatch(markup, /h-node-fact-mono">gpt-5\.6-sol · xhigh/u);
+  // 모델과 추론은 고정 모델 열 한 칸에서 둘 다 온전히 읽혀야 한다.
+  assert.match(markup, /class="wt-model h-node-fact-mono">gpt-5\.6-sol · xhigh<\/span>/u);
   // 측정이 없는 단계도 소요 자리를 `—`로 지킨다 — 한 장만 이 줄이 없으면 나란히 선
   // 형제 카드들의 끝이 들쭉날쭉해진다 (review-visual N13).
-  assert.match(markup, /<dt>소요<\/dt><dd class="h-node-time">—<\/dd>/u);
+  assert.match(markup, /class="wt-cell wt-time h-node-time" role="cell">—<\/div>/u);
   // 여덟 단계가 하나도 빠지지 않는다 — 카드가 된 것과 rest 줄로 내려간 것을 합쳐서다.
   assert.deepEqual(
     [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]).sort(),
@@ -283,18 +286,19 @@ test('the session tree always renders every phase plus the reported actors', () 
   assert.match(markup, /data-org-phase="input" data-phase-state="skipped"/u);
   assert.match(markup, /data-org-phase="revise" data-phase-state="pending"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
-  // 뿌리(총괄) → 단계 분기 → 액터의 중첩 목록. 손계산 SVG 좌표는 쓰지 않는다 (DESIGN.md §9).
-  assert.match(markup, /<ul class="h-tree">/u);
-  assert.match(markup, /class="h-orgchart-root">\s*<article class="h-node is-lead/u);
+  // 뿌리(총괄) → 깊이 1의 단계 → 깊이 2 이상의 액터 행. 손계산 SVG 좌표는 쓰지 않는다.
+  assert.match(markup, /class="wt-row is-lead[^"]*" role="row"\s*data-depth="0"/u);
+  assert.equal((markup.match(/class="wt-row is-phase[^"]*" role="row"\s*data-depth="1"/gu) || []).length, 8);
+  assert.match(markup, /class="wt-row is-agent[^"]*" role="row"\s*data-depth="2"/u);
   // 사용자 입력은 조직도 노드가 아니다 — 요청 원문은 상세 머리의 inset 하나가 정본이다
   // (review-visual M4 · DESIGN.md §1.1 "그 밖의 노드를 추측해 추가하지 않는다").
-  assert.doesNotMatch(markup, /h-node is-request/u);
+  assert.doesNotMatch(markup, /is-request/u);
   assert.doesNotMatch(markup, /<svg/u);
   // 보고된 액터 3명이 전부 자기 노드를 갖는다.
   assert.equal((markup.match(/data-actor-id=/gu) || []).length, 3);
-  assert.match(markup, /h-node-kind">WebGPT</u);
-  // 조직도는 변환 없는 스크롤 상자 안에 있다 (계약 §C — 캔버스·배율 제거).
-  assert.match(markup, /class="h-org-scroll" data-org-scroll/u);
+  assert.match(markup, /class="wt-kind">WebGPT<\/span>/u);
+  // 워크트리는 변환 없는 문서 흐름 표다 (계약 §C — 캔버스·배율 제거).
+  assert.match(markup, /class="wt-grid" role="table" data-worktree/u);
 });
 
 // 단계 사슬을 8단계로 넓힌 뒤에도 **구 4단계 키만 보고한 세션**은 그대로 읽혀야 한다
@@ -308,7 +312,7 @@ test('legacy four-key reports still place every stage, leaving unreported ones p
       { ts: iso(2 * HOUR), kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh' },
     ],
   });
-  const markup = createUsageRenderers().renderSessionView([legacy], NOW, 'active', 'org');
+  const markup = createUsageRenderers().renderSessionView([legacy], NOW, 'active');
   const states = Object.fromEntries(
     [...markup.matchAll(/data-org-phase="([a-z]+)" data-phase-state="([a-z]+)"/gu)]
       .map((match) => [match[1], match[2]]),
@@ -326,7 +330,7 @@ test('legacy four-key reports still place every stage, leaving unreported ones p
     done: 'pending',
   });
   // 구 보고에도 단계 소요시간은 그대로 붙는다 (plan 1시간).
-  assert.match(markup, /data-org-phase="plan"[\s\S]*?h-node-time">1시간/u);
+  assert.match(worktreeRow(markup, 'data-org-phase', 'plan'), /class="wt-cell wt-time h-node-time" role="cell">1시간<\/div>/u);
 });
 
 // 새 키를 보고한 세션은 그 단계가 현재로 서고, 보고된 앞 단계만 완료로 접힌다.
@@ -339,12 +343,12 @@ test('the new stage keys carry status, model, and duration like the original fou
       { ts: iso(0), kind: 'phase-change', phase: 'approve', model: 'claude-fable-5', reasoning: 'high' },
     ],
   });
-  const markup = createUsageRenderers().renderSessionView([task], NOW, 'active', 'org');
+  const markup = createUsageRenderers().renderSessionView([task], NOW, 'active');
   assert.match(markup, /data-org-phase="approve" data-phase-state="current"/u);
   assert.match(markup, /data-org-phase="revise" data-phase-state="done"/u);
   assert.match(markup, /data-org-phase="done" data-phase-state="pending"/u);
-  assert.match(markup, /data-org-phase="revise"[\s\S]*?>claude-opus-5<[\s\S]*?>high</u);
-  assert.match(markup, /data-org-phase="gate"[\s\S]*?h-node-time">1시간/u);
+  assert.match(worktreeRow(markup, 'data-org-phase', 'revise'), /class="wt-model h-node-fact-mono">claude-opus-5 · high<\/span>/u);
+  assert.match(worktreeRow(markup, 'data-org-phase', 'gate'), /class="wt-cell wt-time h-node-time" role="cell">1시간<\/div>/u);
   // gate보다 앞선 input·plan·work는 이 세션이 보고한 적이 없다 — 완료로 세지 않는다.
   for (const phase of ['input', 'plan', 'work']) {
     assert.match(markup, new RegExp(`data-org-phase="${phase}" data-phase-state="skipped"`, 'u'));
@@ -367,7 +371,7 @@ test('unreported stages before the current one read as no-record, never as done'
     ],
   });
   const reviewStates = Object.fromEntries(
-    [...renderers.renderSessionView([legacyReview], NOW, 'active', 'org')
+    [...renderers.renderSessionView([legacyReview], NOW, 'active')
       .matchAll(/data-org-phase="([a-z]+)" data-phase-state="([a-z]+)"/gu)]
       .map((match) => [match[1], match[2]]),
   );
@@ -407,15 +411,11 @@ test('unreported stages before the current one read as no-record, never as done'
     approve: 'skipped',
     done: 'done',
   });
-  // 건너뛴 단계는 카드가 아니라 rest 줄에 선다(review-visual B2). 판정 라벨은 **그 줄에
-  // 한 번** 나오고, 단계 자체는 개수만큼 span으로 남는다 — 여섯 장의 빈 카드가 여섯 번
-  // '기록 없음'을 반복하던 조판이 사라진 자리다.
+  // 건너뛴 단계 여섯 행은 판정과 사유를 각각 직접 말한다.
   const skipped = (doneMarkup.match(/data-phase-state="skipped"/gu) || []).length;
   assert.equal(skipped, 6);
-  assert.match(doneMarkup, /<dt>기록 없음<\/dt>/u);
-  // 남은 '기록 없음'은 둘뿐이다: rest 줄의 판정 라벨과, 요청 원문을 보고하지 않은
-  // 세션이 그 사실을 말하는 자리.
-  assert.equal((doneMarkup.match(/기록 없음/gu) || []).length, 2);
+  assert.equal((doneMarkup.match(/class="wt-cell wt-state" role="cell">기록 없음<\/div>/gu) || []).length, 6);
+  assert.equal((doneMarkup.match(/class="wt-note">이 단계는 보고가 전송되지 않았습니다<\/span>/gu) || []).length, 6);
 });
 
 test('overall, module, and actor progress render only from reported artifacts', () => {
@@ -430,21 +430,17 @@ test('overall, module, and actor progress render only from reported artifacts', 
       ...(index === 1 ? { role: '계산 작업', progress: 37 } : {}),
     })),
   });
-  // 두 모드가 **같은 두 수치**만 낸다 — 조판이 달라도 사실은 하나여야 한다.
-  const org = dashboard({ snapshots: [], tasks: [task] }, NOW, 'org');
-  // 진행도 바는 실제로 보고된 수치에만 붙는다: 총괄(64) + progress를 보고한 액터(37).
-  // 나머지 액터는 수치가 없으므로 0% 바를 그리지 않는다.
-  assert.equal((org.match(/진행도<\/span>/gu) || []).length, 2);
-  assert.match(org, /class="h-node is-lead[^"]*"[^>]*>[\s\S]*?<strong>64%<\/strong>/u);
-  assert.match(org, /계산 작업[\s\S]*?<strong>37%<\/strong>/u);
+  const renderers = createUsageRenderers();
+  const tree = worktree(renderers, task);
+  // 진행은 실제로 보고된 수치에만 붙는다: 총괄(64) + progress를 보고한 액터(37).
+  assert.match(worktreeRow(tree, 'data-actor-id', 'usage-harness:main'), /class="wt-cell wt-pct" role="cell">64%<\/div>/u);
+  assert.match(worktreeRow(tree, 'data-actor-id', 'usage-harness:reviewer'), /class="wt-cell wt-pct" role="cell">37%<\/div>/u);
+  assert.match(worktreeRow(tree, 'data-actor-id', 'usage-harness:webgpt'), /class="wt-cell wt-pct" role="cell">—<\/div>/u);
+  const markup = dashboard({ snapshots: [], tasks: [task] });
   for (const expected of ['검증 단계', '80%', 'CSS 구현', '88%']) {
-    assert.match(org, new RegExp(expected, 'u'));
+    assert.match(markup, new RegExp(expected, 'u'));
   }
-  // 관제탑 카드도 같은 두 수치만 낸다: 카드 메타의 총괄 진행도와, 진행도를 보고한
-  // 액터의 칩 하나. 보고가 없는 액터의 칩에는 수치 자체가 붙지 않는다.
-  const board = dashboard({ snapshots: [], tasks: [task] });
-  assert.match(board, /class="pl-meta">[\s\S]*?진행 64%/u);
-  assert.equal((board.match(/class="pl-chip-percent"/gu) || []).length, 1);
+  assert.doesNotMatch(tree, /class="wt-cell wt-pct" role="cell">0%<\/div>/u);
 });
 
 test('parallel project, protocol, and visualization reports render as session tabs with one visible panel', () => {
@@ -465,12 +461,12 @@ test('parallel project, protocol, and visualization reports render as session ta
       }),
       harnessTask(),
     ],
-  }, NOW, 'org');
+  }, NOW);
   for (const category of ['지문한장 프로젝트', '자체 pipeline 개선 프로토콜', '파이프라인 시각화']) {
     assert.match(markup, new RegExp(category, 'u'));
   }
   assert.match(markup, /role="tablist" aria-label="작업 상태별 보기"/u);
-  assert.match(markup, /role="tablist" aria-label="진행 중인 Codex 세션"/u);
+  assert.match(markup, /role="tablist" aria-label="진행 중인 세션"/u);
   // 상위 탭은 상태 셋(진행 중·중단됨·완료)이고, 그중 하나만 보인다.
   assert.equal((markup.match(/data-session-view="/gu) || []).length, 3);
   assert.equal((markup.match(/data-session-view-panel="[^"]+" hidden/gu) || []).length, 2);
@@ -489,17 +485,21 @@ test('session tabs carry no status dot and every remaining dot pairs with a text
       harnessTask({ id: 'active-two', name: '둘째 진행 세션' }),
       harnessTask({ id: 'done-one', name: '완료 세션', status: 'complete', phase: 'done', progress: 100 }),
     ],
-  }, NOW, 'org');
+  }, NOW);
   const tabs = markup.match(/<button class="h-session-tab[\s\S]*?<\/button>/gu) || [];
   assert.ok(tabs.length >= 2);
   for (const tab of tabs) assert.doesNotMatch(tab, /status-dot/u);
-  // 점 자체는 계속 쓰인다(조직도·액터 상태 등) — 전부 사라져서 통과하는 일은 막는다.
+  // 점 자체는 계속 쓰인다(워크트리·액터 상태 등) — 전부 사라져서 통과하는 일은 막는다.
   assert.ok((markup.match(/status-dot/gu) || []).length > 0);
-  // 라벨 짝 규칙: 점을 닫은 직후에 태그가 아니라 텍스트가 와야 한다.
-  assert.equal((markup.match(/status-dot[^"]*"[^>]*><\/(?:span|i)>\s*</gu) || []).length, 0);
+  const rows = markup.split(/(?=<div class="wt-row )/u).filter((part) => /class="wt-row is-/u.test(part));
+  assert.ok(rows.length > 0);
+  for (const row of rows) {
+    assert.match(row, /class="status-dot is-(?:accent|idle|warn|danger)"/u);
+    assert.match(row, /class="wt-cell wt-state" role="cell">[^<]*<\/div>/u);
+  }
 });
 
-test('active, stale, and completed tabs separate session state while the portfolio includes every reported actor', () => {
+test('active, stale, and completed tabs separate session state while the worktree includes every reported actor', () => {
   const renderers = createUsageRenderers();
   const active = harnessTask({ id: 'active-one', name: '진행 세션' });
   // 서버(worker effectiveHarnessStatus)가 하트비트 끊긴 active를 stale로 파생해 보낸다.
@@ -510,14 +510,14 @@ test('active, stale, and completed tabs separate session state while the portfol
   });
   const tasks = [active, stale, completed];
   const views = renderers.renderSessionViews(tasks, NOW);
-  // 상위 탭은 **상태 셋**이다. '관제탑'은 상위 탭이 아니라 진행 중 패널의 모드 토글이다.
+  // 상위 탭은 **상태 셋**이며 진행 중 세션은 단일 워크트리를 쓴다.
   assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="1"/u);
   assert.match(views, /data-session-view="stale"[^>]*>[\s\S]*?data-view-count="1"/u);
   assert.match(views, /data-session-view="complete"[^>]*>[\s\S]*?data-view-count="1"/u);
   assert.equal((views.match(/data-session-view="/gu) || []).length, 3);
   assert.doesNotMatch(views, /data-session-view="org"/u);
 
-  const activeMarkup = renderers.renderSessionView(tasks, NOW, 'active', 'org');
+  const activeMarkup = renderers.renderSessionView(tasks, NOW, 'active');
   assert.match(activeMarkup, /진행 세션/u);
   assert.doesNotMatch(activeMarkup, /완료 세션|중단 세션/u);
 
@@ -534,13 +534,12 @@ test('active, stale, and completed tabs separate session state while the portfol
   assert.match(completeMarkup, /완료 세션/u);
   assert.doesNotMatch(completeMarkup, /진행 세션|중단 세션/u);
 
-  // 관제탑은 **실제로 도는 세션**만 그린다. 하트비트가 끊긴 세션이 여기 서면 화면이
+  // 진행 중 워크트리는 **실제로 도는 세션**만 그린다. 하트비트가 끊긴 세션이 여기 서면 화면이
   // 거짓말을 한다 (조사 §d의 false positive가 정확히 그 증상이었다).
-  const board = renderers.renderPortfolioBoard(tasks, NOW);
-  assert.match(board, /진행 세션/u);
-  assert.doesNotMatch(board, /완료 세션|중단 세션/u);
-  assert.equal((board.match(/data-portfolio-task=/gu) || []).length, 1);
-  assert.doesNotMatch(board, /data-board-scope|pl-scope|접힘/u);
+  assert.match(activeMarkup, /진행 세션/u);
+  assert.doesNotMatch(activeMarkup, /완료 세션|중단 세션|data-active-mode/u);
+  assert.equal((activeMarkup.match(/data-worktree/gu) || []).length, 1);
+  assert.equal((activeMarkup.match(/data-actor-id=/gu) || []).length, active.actors.length);
 
   // 접힌 것이 아니라 다른 탭으로 옮겨 갔을 뿐이다: 완료 세션과 그 상태는 완료 탭에 있다.
   assert.match(completeMarkup, /완료 세션[\s\S]*에이전트 보고 없음/u);
@@ -593,10 +592,10 @@ test('status-view activation exposes one view and keyboard wiring advances to th
 //
 // 이 검사가 **못 보는 것**: 실제 브라우저에서의 가로 스크롤 감촉과 모바일 세로 스택의
 //   시각 결과. 그것은 docs/_snapshots/usage.html과 실화면 스크린샷이 사람 눈에 보여 준다.
-test('the org chart renders in document flow with no zoom, pan, or scale transform', () => {
-  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active', 'org');
-  // 트리는 가로 스크롤만 하는 상자 안에 있다 — 변환 캔버스도, 뷰포트도 없다.
-  assert.match(markup, /class="h-org-scroll" data-org-scroll/u);
+test('the worktree renders in document flow with no zoom, pan, or scale transform', () => {
+  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
+  // 워크트리는 문서 흐름의 표다 — 변환 캔버스도, 뷰포트도 없다.
+  assert.match(markup, /class="wt-grid" role="table" data-worktree/u);
   assert.doesNotMatch(markup, /h-org-viewport|h-org-canvas|data-org-view=|data-org-canvas/u);
   // 배율·이동이 마크업 어디에도 없다: 글자는 어느 폭에서도 CSS가 정한 크기 그대로다.
   assert.doesNotMatch(markup, /transform|scale\(|translate\(/u);
@@ -628,70 +627,37 @@ test('the usage snapshot injects no snapshot-only CSS', async () => {
     '스냅샷 전용 CSS가 생기면 사본이 실화면과 다른 규칙으로 그려진다 (리뷰가 지적한 사각지대).');
 });
 
-// ---- 보기 모드 토글 (계약 §A) ----------------------------------------------
-// 상위 탭은 "무엇을 보는가"(진행 중 / 완료), 모드 토글은 "어떻게 보는가"(관제탑 / 조직도)다.
-// 두 축을 한 줄에 섞지 않는 것이 이 라운드의 정보 구조 변경이다.
-test('the active panel carries a board/org mode toggle and remembers the choice', () => {
-  const renderers = createUsageRenderers();
-  const tasks = [harnessTask()];
-  // 기본은 관제탑이다 — "지금 무엇이 도는가"가 이 화면의 첫 질문이기 때문이다.
-  assert.equal(renderers.readActiveMode(), 'board');
-
-  const board = renderers.renderSessionView(tasks, NOW, 'active', 'board');
-  assert.match(board, /class="segmented h-mode-toggle" role="group"/u);
-  assert.match(board, /aria-pressed="true" data-active-mode="board"/u);
-  assert.match(board, /aria-pressed="false" data-active-mode="org"/u);
-  assert.match(board, /class="pl-board"/u);
-  assert.doesNotMatch(board, /class="h-orgchart"/u);
-
-  // 조직도 모드는 같은 세션 집합을 상세 트리로 그린다. 토글은 두 모드 모두에 남는다.
-  const org = renderers.renderSessionView(tasks, NOW, 'active', 'org');
-  assert.match(org, /aria-pressed="true" data-active-mode="org"/u);
-  assert.match(org, /class="h-orgchart"/u);
-  assert.doesNotMatch(org, /class="pl-board"/u);
-
-  // 선택은 localStorage에 남아 새로고침·폴링을 넘어 유지된다 (계약 §A).
-  renderers.writeActiveMode('org');
-  assert.equal(renderers.readActiveMode(), 'org');
-  assert.match(renderers.renderSessionView(tasks, NOW, 'active'), /class="h-orgchart"/u);
-  // 모르는 값은 기본값으로 떨어진다 — 저장소가 오염돼도 화면이 비지 않는다.
-  renderers.writeActiveMode('nonsense');
-  assert.equal(renderers.readActiveMode(), 'board');
-});
-
-// 세션이 하나도 없어도 토글은 남는다. 모드는 데이터가 아니라 사람의 선택이므로,
-// 빈 화면에서 토글이 사라지면 다음 세션이 떴을 때 모드가 어디로 갔는지 알 수 없다.
-test('the mode toggle survives an empty active list', () => {
-  const markup = createUsageRenderers().renderSessionView([], NOW, 'active', 'org');
-  assert.match(markup, /class="segmented h-mode-toggle"/u);
-  assert.match(markup, /현재 진행 중인 작업이 없습니다/u);
+// ---- 단일 워크트리 조판 (계약 §A) -----------------------------------------
+test('the active panel carries no board/org mode toggle', () => {
+  const markup = createUsageRenderers().renderSessionView([harnessTask()], NOW, 'active');
+  assert.equal((markup.match(/data-active-mode/gu) || []).length, 0);
+  assert.equal((markup.match(/data-worktree/gu) || []).length, 1);
 });
 
 // ---- 관제탑 칩: 조직도의 사실을 그대로 싣는다 (계약 §B) ---------------------
 // 요청 원문 1번이 "현 조직도가 가진 상세 내용·서브에이전트 기록을 관제탑 형식에도
 // 적용한다"였다. 그러므로 칩은 요약이 아니라 **같은 사실의 다른 조판**이어야 한다.
-test('a control-tower chip carries all six facts and keeps its delegation depth', () => {
-  const markup = createUsageRenderers().renderPortfolioBoard([wp3Task()], NOW);
-  // 계층이 평탄화되지 않는다: 손자는 부모보다 한 단 들여쓴 칩으로 남는다.
-  assert.match(markup, /class="pl-chip" data-actor-id="wp3:server" data-depth="0"/u);
-  assert.match(markup, /class="pl-chip" data-actor-id="wp3:server-sub" data-depth="1"/u);
-  // 여섯 사실이 각자 슬롯을 갖고 이 순서로 선다 — 이름·역할·모델·상태·소요·진행률.
-  // 담당(assignment)은 역할과 다른 사실이므로 합치지 않고 title로 갈라 담는다.
-  assert.match(markup, new RegExp(
-    'data-actor-id="wp3:server" data-depth="0" title="담당 · worker 자동 스탬프">'
-    + '<b class="pl-chip-name">서버 구현자</b>'
-    + '<span class="pl-chip-role">백엔드 구현</span>'
-    + '<span class="pl-chip-model">gpt-5\\.2-codex · xhigh</span>'
-    + '<span class="pl-chip-state">완료</span>'
-    + '<span class="pl-chip-time">1시간</span>'
-    + '<strong class="pl-chip-percent">100%</strong>',
-    'u',
-  ));
-  // 종료된 액터도 자기 단계의 칩으로 남는다 — 사라지면 그 단계가 비어 보인다.
+test('a worktree actor row carries all six facts and keeps its delegation depth', () => {
+  const renderers = createUsageRenderers();
+  const markup = worktree(renderers, wp3Task());
+  // 계층이 평탄화되지 않는다: 손자는 부모보다 한 단 깊은 행으로 남는다.
+  const parent = worktreeRow(markup, 'data-actor-id', 'wp3:server');
+  const child = worktreeRow(markup, 'data-actor-id', 'wp3:server-sub');
+  assert.match(parent, /data-depth="2"/u);
+  assert.match(child, /data-depth="3"/u);
+  assert.match(child, /class="wt-guide"[^>]*>│\s+│\s+└─ /u);
+  // 이름·역할·담당·모델+추론·상태·소요·진행률 값이 하나도 사라지지 않는다.
+  assert.match(parent, /class="wt-name">서버 구현자</u);
+  assert.match(parent, /class="wt-model h-node-fact-mono">gpt-5\.2-codex · xhigh</u);
+  assert.match(parent, /class="wt-cell wt-state" role="cell">완료/u);
+  assert.match(parent, /class="wt-cell wt-time h-node-time" role="cell">1시간/u);
+  assert.match(parent, /class="wt-cell wt-pct" role="cell">100%/u);
+  assert.match(parent, /class="wt-sub" role="cell">백엔드 구현 · worker 자동 스탬프/u);
+  // 종료된 액터도 자기 단계의 행으로 남는다 — 사라지면 그 단계가 비어 보인다.
   assert.match(markup, /data-org-phase="gate"[\s\S]*?data-actor-id="wp3:gate"/u);
-  // 보고가 없는 값은 슬롯 자체가 생기지 않는다 (0%·빈 문자열로 지어내지 않는다).
-  assert.doesNotMatch(markup, /class="pl-chip-percent"><\/strong>/u);
-  assert.doesNotMatch(markup, /class="pl-chip-(?:model|time|role|state)"><\/span>/u);
+  // 보고가 없는 값은 0%로 지어내지 않고 명시적인 미측정 표식으로 남는다.
+  assert.doesNotMatch(markup, /class="wt-cell wt-pct" role="cell">0%/u);
+  assert.doesNotMatch(markup, /undefined|NaN/u);
 });
 
 // ---- major 3 후속: 방향키가 날짜 그룹 경계를 넘는다 --------------------------
@@ -796,9 +762,7 @@ test('manual refresh bypasses cache, reports success, and preserves the selected
     { snapshots: [], tasks },
     { snapshots: [], tasks },
   ]);
-  // 세션 탭은 조직도 모드의 장치다 (관제탑 모드는 카드로 전부 편다) — 선택 보존을
-  // 보려면 그 모드에서 봐야 한다.
-  sandbox.renderers.writeActiveMode('org');
+  // 워크트리의 세션 탭 선택이 재렌더 뒤에도 보존되어야 한다.
   const makeTab = (index, id) => ({
     dataset: { taskTab: String(index), taskId: id }, tabIndex: index ? -1 : 0,
     classList: { toggle() {} }, setAttribute() {}, focus() {},
@@ -903,13 +867,12 @@ test('claude actors render in the reporting tree', () => {
         },
       ],
     })],
-  }, NOW, 'org');
+  }, NOW);
   // 액터 종류 라벨은 제품 이름 그대로다 (사용자 지시 ③ — 화면이 만드는 약어 금지).
   assert.match(markup, />Claude</u);
   assert.doesNotMatch(markup, />CLAUDE</u);
   assert.match(markup, /Fable 5 오케스트레이터/u);
-  assert.match(markup, /<dd class="h-node-fact-mono">claude-fable-5<\/dd>/u);
-  assert.match(markup, /<dt>추론<\/dt><dd class="h-node-fact-mono">high<\/dd>/u);
+  assert.match(markup, /class="wt-model h-node-fact-mono">claude-fable-5 · high<\/span>/u);
 });
 
 test('an empty snapshot list and a payload without buckets render an empty state', async () => {
@@ -950,9 +913,7 @@ test('an empty snapshot list and a payload without buckets render an empty state
 test('a fetch that never settles times out and the automatic poll keeps running', async () => {
   const clock = createFakeClock();
   const sandbox = await createUsageAppSandbox(
-    // 가운데 항목은 시간초과 뒤 화면이 비어 있을 때 읽는 정적 사본 요청의 응답이다.
-    // 여기서는 사본도 없는 상황을 재현해(오류) 폴백이 폴링을 가로채지 않는지 함께 본다.
-    [HANGING_RESPONSE, new Error('사본 없음'), { snapshots: [], tasks: [harnessTask()] }],
+    [HANGING_RESPONSE, { snapshots: [], tasks: [harnessTask()] }],
     { clock },
   );
   assert.equal(sandbox.requests.length, 1);
@@ -961,17 +922,15 @@ test('a fetch that never settles times out and the automatic poll keeps running'
   await clock.advance(14_000);
   assert.equal(sandbox.requests.length, 1);
 
-  // 15초에서 시간초과 → 사본을 한 번 확인하고, 없으면 오류를 말한 뒤 다음 주기를 예약한다.
+  // 15초에서 시간초과 → 오류를 말하고 사본 요청 없이 다음 주기를 예약한다.
   await clock.advance(2_000);
-  assert.equal(sandbox.requests.length, 2);
-  assert.equal(sandbox.requests[1].url, '/usage/pipeline-state.json');
+  assert.equal(sandbox.requests.length, 1);
   assert.match(sandbox.store.get('usageError').textContent, /응답이 없어/u);
 
   // 유휴 주기(60초) 뒤 다음 피드 요청이 실제로 나가고 화면이 채워진다.
   await clock.advance(60_000);
-  assert.equal(sandbox.requests.length, 3);
-  // 기본 모드(관제탑)의 카드가 실제로 서면 화면이 되살아난 것이다.
-  assert.match(sandbox.store.get('usageBody').innerHTML, /class="pl-card"/u);
+  assert.equal(sandbox.requests.length, 2);
+  assert.match(sandbox.store.get('usageBody').innerHTML, /data-worktree/u);
   assert.equal(sandbox.store.get('usageError').textContent, '');
 });
 
@@ -989,12 +948,12 @@ test('null usage snapshots and a null actor percent stay unmeasured instead of b
       { ts: iso(0), kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: null, usage_claude: null },
     ],
   });
-  const markup = renderers.renderPortfolioBoard([task], NOW);
-  assert.match(markup, /한도 소모 Claude 10\.0%p/u);
+  const markup = renderers.renderTask(task, NOW);
+  assert.match(markup, /이 세션 소모 · Claude 10\.0%p/u);
   // Codex는 측정값이 하나도 없다 — 0%p로 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Codex/u);
   assert.doesNotMatch(markup, /Claude 80\.0%p/u);
-  assert.match(markup, /data-actor-id="usage-harness:reviewer"[\s\S]*?<strong class="pl-chip-percent">55%<\/strong>/u);
+  assert.match(worktreeRow(markup, 'data-actor-id', 'usage-harness:reviewer'), /class="wt-cell wt-pct" role="cell">55%<\/div>/u);
 });
 
 // 한도 창이 초기화되면 잔여가 도로 오른다. 그 상승은 소모가 아니므로 더하지 않고,
@@ -1010,9 +969,9 @@ test('a quota window reset is excluded from consumption and marked', () => {
       { ts: iso(HOUR), kind: 'phase-change', phase: 'review', usage_codex: 93 },
     ],
   });
-  const markup = renderers.renderPortfolioBoard([task], NOW);
+  const markup = renderers.renderTask(task, NOW);
   // 18 + 7 = 25%p. 12 → 100의 상승(+88)은 소모가 아니다.
-  assert.match(markup, /한도 소모 Codex 25\.0%p \(한도 초기화 1회\)/u);
+  assert.match(markup, /이 세션 소모 · Codex 25\.0%p \(한도 초기화 1회\)/u);
 });
 
 // ---- Worker → 브라우저 경계 계약 (review WPA2 B1 / M5) ---------------------
@@ -1225,31 +1184,29 @@ test('consumption rendered in the browser matches what the Worker actually recor
   assert.equal(data.tasks.length, 1);
   assert.equal(data.tasks[0].events.length, 2);
 
-  const markup = createUsageRenderers().renderPortfolioBoard(data.tasks, liveNow);
-  assert.match(markup, /한도 소모 Codex 20\.0%p/u);
+  const markup = createUsageRenderers().renderTask(data.tasks[0], liveNow);
+  assert.match(markup, /이 세션 소모 · Codex 20\.0%p/u);
   // Claude 스냅샷이 없어 두 이벤트 모두 null이다 — 0%p 소모를 지어내지 않는다.
   assert.doesNotMatch(markup, /소모[^<]*Claude/u);
 });
 
-// ---- 관제탑 보드 조판 계약 (2026-08-28 통합) -------------------------------
-// 데이터 계약은 위 e2e·테스트가 잠근다. 여기서 보는 것은 **승인된 조판 어휘**가 실제
-// 마크업으로 나오는지다: 카드 · 세로 단계 레일 · 상태 라벨 · 모노 담당 라벨 · 칩.
-// 조판이 조용히 옛 트리로 되돌아가거나 상태 라벨이 사라지면 여기서 깨진다.
-test('the board renders the approved vocabulary and names every stage state in text', () => {
-  const markup = createUsageRenderers().renderPortfolioBoard([harnessTask()], NOW);
-  for (const vocabulary of ['pl-card', 'pl-stage', 'pl-badge', 'pl-who', 'pl-chip', 'pl-orch']) {
+// ---- 워크트리 조판 계약 ----------------------------------------------------
+test('the worktree renders the approved vocabulary and names every stage state in text', () => {
+  const renderers = createUsageRenderers();
+  const markup = worktree(renderers, harnessTask());
+  for (const vocabulary of ['wt-grid', 'wt-row is-lead', 'wt-row is-phase', 'wt-row is-agent', 'wt-cell wt-state', 'wt-cell wt-pct']) {
     assert.ok(markup.includes(`class="${vocabulary}`), `${vocabulary}가 조판에서 사라졌습니다.`);
   }
-  // 카드 하나에 여덟 단계가 상시 선다 — 대기·기록 없음도 마디를 차지한다.
-  const stages = markup.match(/class="pl-stage /gu) || [];
+  // 워크트리 하나에 여덟 단계가 상시 선다 — 대기·기록 없음도 행을 차지한다.
+  const stages = markup.match(/class="wt-row is-phase[^"]*"/gu) || [];
   assert.equal(stages.length, 8);
-  // 상태를 색으로만 말하지 않는다: 마디마다 글자 라벨이 짝을 이룬다.
-  assert.equal((markup.match(/class="pl-state /gu) || []).length, stages.length);
-  // 구 4단계만 보고한 세션이므로 신설 단계는 '기록 없음'이고, 완료로 날조되지 않는다.
-  assert.match(markup, /기록 없음/u);
-  assert.match(markup, /진행 중 2\/8/u);
-  // 옛 트리 조판이 되살아나면(중복 UI) 여기서 잡힌다.
-  assert.doesNotMatch(markup, /h-node|h-org|data-org-canvas/u);
+  const labels = { done: '완료', current: '진행 중', pending: '대기', skipped: '기록 없음' };
+  for (const [state, label] of Object.entries(labels)) {
+    const row = markup.split(/(?=<div class="wt-row )/u).find((part) => part.includes(`data-phase-state="${state}"`)) || '';
+    assert.match(row, new RegExp(`class="wt-cell wt-state" role="cell">${label}<\\/div>`, 'u'));
+  }
+  // 옛 두 조판이 되살아나면(중복 UI) 여기서 잡힌다.
+  assert.doesNotMatch(markup, /class="pl-|class="h-node\s|h-orgchart|data-org-canvas/u);
 });
 
 // ---- WP3: 상→하 축 · actor 고정 배치 · 개별 수치 (2026-08-28) --------------
@@ -1304,80 +1261,66 @@ const wp3Task = () => harnessTask({
   ],
 });
 
-// 조직도는 **고전 조직도**다: 총괄이 뿌리로 서고 단계가 수평 trunk에서 갈라진다
-// (DESIGN.md §1.1 v9 · review-visual B1 — 데스크톱에 모바일 세로 직렬화가 나와 컨테이너
-// 오른쪽 62%가 빈 검은 면이던 것을 고쳤다).
-test('the detail org chart branches horizontally from one root, not down a single column', () => {
-  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active', 'org');
-  assert.match(markup, /<div class="h-orgchart">/u);
-  // 뿌리는 하나(총괄)이고, 단계는 그 아래 분기로 갈라진다.
-  assert.equal((markup.match(/class="h-orgchart-root"/gu) || []).length, 1);
-  assert.match(markup, /class="h-orgchart-branches"/u);
-  // 카드가 되는 단계는 **근거가 있는 단계**뿐이다: 보고된 단계(done·current)이거나
-  // 액터가 실제로 붙은 단계. 여덟 장을 상시 세우던 골격이 아니다.
-  const blocks = markup.split(/<div class="h-orgchart-branch">/u).slice(1);
-  assert.ok(blocks.length < 8, '보고되지 않은 단계까지 카드로 세우면 다시 세로 적층이 된다');
-  assert.ok(blocks.length > 0, '분기가 하나도 없으면 이 검사는 공허하게 통과한다');
-  for (const block of blocks) {
-    assert.ok(
-      /data-phase-state="(?:done|current)"/u.test(block) || /class="h-branch"/u.test(block),
-      '보고도 액터도 없는 단계가 카드로 섰습니다',
-    );
-  }
-  // 그래도 여덟 단계는 화면에서 사라지지 않는다 — 나머지는 rest 줄이 받는다.
-  assert.deepEqual(
-    [...markup.matchAll(/data-org-phase="([a-z]+)"/gu)].map((match) => match[1]).sort(),
-    ['approve', 'done', 'gate', 'input', 'plan', 'review', 'revise', 'work'],
-  );
-  // 액터 줄기는 액터가 있는 단계에만 생긴다 (구현·게이트 둘).
-  assert.equal((markup.match(/class="h-branch"/gu) || []).length, 2);
-  // 손계산 좌표가 아니라 CSS 조판이다 (DESIGN.md §10).
+test('the worktree places one root above eight phases and nests actors below them', () => {
+  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active');
+  assert.match(markup, /class="wt-grid" role="table" data-worktree/u);
+  const leadRows = markup.match(/class="wt-row is-lead[^"]*" role="row"\s*data-depth="0"/gu) || [];
+  assert.equal(leadRows.length, 1);
+  const lead = worktreeRow(markup, 'data-actor-id', 'wp3:main');
+  assert.match(lead, /class="wt-guide" aria-hidden="true"><\/span>/u);
+  assert.equal((markup.match(/class="wt-row is-phase[^"]*" role="row"\s*data-depth="1"/gu) || []).length, 8);
+  const actorDepths = [...markup.matchAll(/class="wt-row is-agent[^"]*" role="row"\s*data-depth="(\d+)"/gu)]
+    .map((match) => Number(match[1]));
+  assert.equal(actorDepths.length, 4);
+  assert.ok(actorDepths.every((depth) => depth >= 2));
   assert.doesNotMatch(markup, /<svg/u);
 });
 
 test('a delegated grandchild agent is drawn nested under its parent, not dropped', () => {
-  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active', 'org');
+  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active');
   // 보고된 액터 5명이 전부 자기 노드를 갖는다 (총괄 1 + 서브 4).
   assert.equal((markup.match(/data-actor-id=/gu) || []).length, 5);
-  // 손자(테스트 서브에이전트)는 부모 카드 아래 중첩 목록 안에 있다.
-  assert.match(
-    markup,
-    /data-actor-id="wp3:server"[\s\S]*?<ul><li class="h-node-slot">[\s\S]*?data-actor-id="wp3:server-sub"/u,
-  );
+  const parent = worktreeRow(markup, 'data-actor-id', 'wp3:server');
+  const child = worktreeRow(markup, 'data-actor-id', 'wp3:server-sub');
+  assert.match(parent, /data-depth="2"/u);
+  assert.match(child, /data-depth="3"/u);
+  assert.match(child, /class="wt-guide"[^>]*>[^<]*│[^<]*└─ /u);
+  assert.ok(markup.indexOf('data-actor-id="wp3:server"') < markup.indexOf('data-actor-id="wp3:server-sub"'));
 });
 
 test('role, assignment, duration, and the quota estimate each get their own line', () => {
-  const markup = createUsageRenderers().renderSessionView([wp3Task()], NOW, 'active', 'org');
-  // 역할과 담당을 겹쳐 쓰지 않는다 — 둘 다 자기 라벨과 함께 나온다.
-  assert.match(markup, /<dt>역할<\/dt><dd>백엔드 구현<\/dd>/u);
-  assert.match(markup, /<dt>담당<\/dt><dd>worker 자동 스탬프<\/dd>/u);
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderSessionView([wp3Task()], NOW, 'active');
+  const server = worktreeRow(markup, 'data-actor-id', 'wp3:server');
+  const front = worktreeRow(markup, 'data-actor-id', 'wp3:front');
+  // 역할·담당·한도 소비가 같은 보조 줄에서 모두 온전히 나온다. 줄 전체를 끝(`</p>`)까지
+  // 못박아 값이 하나라도 빠지거나 순서가 바뀌면 깨지게 한다 — 이 계약이 헐거웠을 때
+  // 워크트리가 한도 추정치를 통째로 잃은 채 초록불로 지나갔다(2026-08-30 이관 라운드).
+  assert.match(server, /class="wt-sub" role="cell">백엔드 구현 · worker 자동 스탬프 · 한도 소비 Codex 7\.5%p 추정<\/p>/u);
   // 소요시간: 끝난 액터는 시작~종료, 진행 중인 액터는 시작~지금.
-  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>소요<\/dt><dd class="h-node-time">1시간<\/dd>/u);
-  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?<dt>소요<\/dt><dd class="h-node-time">2시간<\/dd>/u);
+  assert.match(server, /class="wt-cell wt-time h-node-time" role="cell">1시간<\/div>/u);
+  assert.match(front, /class="wt-cell wt-time h-node-time" role="cell">2시간<\/div>/u);
   // 한도 소비는 **추정**이다: 잔여의 감소분(88 → 80.5)이고, 라벨에 그렇게 적는다.
-  assert.match(markup, /data-actor-id="wp3:server"[\s\S]*?<dt>한도 소비<\/dt><dd>Codex 7\.5%p 추정<\/dd>/u);
+  assert.match(server, /Codex 7\.5%p 추정/u);
   // 종료 스냅샷이 없는 액터에는 소비 줄 자체가 없다 — 0%p로 지어내지 않는다.
-  assert.doesNotMatch(markup, /data-actor-id="wp3:front"[\s\S]*?한도 소비/u);
+  assert.doesNotMatch(front, /%p 추정/u);
   // 모델은 정확한 모델명 그대로, 같은 라벨-값 격자의 첫 줄로 낸다. 추론 단계는 **그 다음
   // 줄**이다 — 한 줄에 붙이면 노드 폭이 모자라 늘 추론 쪽이 잘렸다 (review-visual M7).
-  assert.match(markup, /<dt>모델<\/dt><dd class="h-node-fact-mono">gpt-5\.2-codex<\/dd><\/div><div><dt>추론<\/dt><dd class="h-node-fact-mono">xhigh<\/dd>/u);
+  assert.match(server, /class="wt-model h-node-fact-mono">gpt-5\.2-codex · xhigh<\/span>/u);
   // 진행 중 노드는 테두리만이 아니라 글자 라벨로도 구분된다 (색각 조건).
-  assert.match(markup, /data-actor-id="wp3:front"[\s\S]*?class="h-node-flag">작업중</u);
+  assert.match(front, /class="wt-cell wt-state" role="cell">작업 중<\/div>/u);
 });
 
 test('actors stay in the phase the API assigned even when the task has moved on', () => {
   const renderers = createUsageRenderers();
   // 이벤트 로그가 아예 없는 세션이다(보존 기간이 지나 사라진 상태를 흉내 낸다).
   // 그래도 게이트 러너는 task의 현재 단계(review)로 끌려가지 않고 gate에 남아야 한다.
-  const markup = renderers.renderSessionView([wp3Task()], NOW, 'active', 'org');
+  const markup = renderers.renderSessionView([wp3Task()], NOW, 'active');
   const gateBlock = /data-org-phase="gate"[\s\S]*?data-org-phase="review"/u.exec(markup)[0];
   assert.match(gateBlock, /data-actor-id="wp3:gate"/u);
   const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
   assert.match(workBlock, /data-actor-id="wp3:server"/u);
   assert.match(workBlock, /data-actor-id="wp3:front"/u);
-  // 관제탑도 같은 배치를 쓴다 — 두 화면이 액터를 서로 다른 단계에 세우지 않는다.
-  const board = renderers.renderPortfolioBoard([wp3Task()], NOW);
-  assert.match(board, /data-org-phase="gate"[\s\S]*?data-actor-id="wp3:gate"/u);
 });
 
 test('a payload without any of the new fields still renders through the old inference', () => {
@@ -1392,23 +1335,23 @@ test('a payload without any of the new fields still renders through the old infe
       { ts: iso(HOUR), kind: 'phase-change', phase: 'review' },
     ],
   });
-  const markup = renderers.renderSessionView([legacy], NOW, 'active', 'org');
+  const markup = renderers.renderSessionView([legacy], NOW, 'active');
   // 이벤트가 말한 단계(work)에 그 액터가 선다 — 종전 추정 경로가 그대로 살아 있다.
   const workBlock = /data-org-phase="work"[\s\S]*?data-org-phase="gate"/u.exec(markup)[0];
   assert.match(workBlock, /data-actor-id="usage-harness:webgpt"/u);
   // 액터 카드에서는 잴 근거가 없는 값의 줄 자체가 없다: 소요·한도 소비를 지어내지 않는다.
-  const webgptCard = /data-actor-id="usage-harness:webgpt"[\s\S]*?<\/article>/u.exec(markup)[0];
-  assert.doesNotMatch(webgptCard, /<dt>소요<\/dt>/u);
-  assert.doesNotMatch(markup, /<dt>한도 소비<\/dt>/u);
+  const webgptRow = worktreeRow(markup, 'data-actor-id', 'usage-harness:webgpt');
+  assert.match(webgptRow, /class="wt-cell wt-time h-node-time" role="cell">—<\/div>/u);
+  assert.doesNotMatch(markup, /%p 추정/u);
   // 단계 카드는 반대다 — 한 줄에 나란히 서는 고정 형제 집합이라, 측정이 없어도 `—`로
   // 자리를 지킨다 (review-visual N13: `완료`만 소요가 비어 형제 카드들의 끝이 들쭉날쭉
   // 했다). `—`는 값을 지어낸 것이 아니라 "측정 없음"의 표기라 숫자로 오독되지 않는다.
   // 단계 카드는 **하나도 빠짐없이** 이 줄을 갖는다 — 그래야 카드 끝이 가지런하다.
-  const phaseCards = markup.match(/<article class="h-node is-phase[\s\S]*?<\/article>/gu) || [];
-  assert.ok(phaseCards.length > 0, '단계 카드가 없으면 이 검사는 공허하게 통과한다');
-  for (const card of phaseCards) assert.match(card, /<dt>소요<\/dt><dd class="h-node-time">/u);
+  const phaseRows = markup.split(/(?=<div class="wt-row )/u).filter((part) => /class="wt-row is-phase/u.test(part));
+  assert.equal(phaseRows.length, 8);
+  for (const row of phaseRows) assert.match(row, /class="wt-cell wt-time h-node-time" role="cell">/u);
   // 역할은 그대로 나온다 (구 payload에도 role은 있다).
-  assert.match(markup, /<dt>역할<\/dt><dd>위임 실행<\/dd>/u);
+  assert.match(webgptRow, /class="wt-sub" role="cell">위임 실행 · fixture 정리<\/p>/u);
   assert.doesNotMatch(markup, /undefined|NaN/u);
 });
 
@@ -1447,7 +1390,7 @@ const crossPhaseTask = () => harnessTask({
 
 test('a child actor keeps the phase the API gave it, and still names its parent', () => {
   const renderers = createUsageRenderers();
-  const markup = renderers.renderSessionView([crossPhaseTask()], NOW, 'active', 'org');
+  const markup = renderers.renderSessionView([crossPhaseTask()], NOW, 'active');
 
   // 검토자는 부모(work)를 따라가지 않고 자기 단계(review)에 선다. 경계는 **다음 단계
   // 노드**다 — 어느 단계가 카드가 되는지는 보고 이력에 달렸으므로 키를 고정하지 않는다.
@@ -1458,19 +1401,15 @@ test('a child actor keeps the phase the API gave it, and still names its parent'
   assert.match(reviewBlock, /data-actor-id="cross:reviewer"/u);
 
   // 배치가 옮겨져도 계층은 사라지지 않는다 — 부모를 이름으로 명시한다.
-  assert.match(markup, /data-actor-id="cross:reviewer"[\s\S]*?<dt>상위<\/dt><dd>구현자<\/dd>/u);
-  // 부모와 단계가 같은 자식은 예전처럼 부모 카드 아래로 중첩되고, '상위' 줄이 붙지 않는다.
-  assert.match(
-    markup,
-    /data-actor-id="cross:impl"[\s\S]*?<ul><li class="h-node-slot">[\s\S]*?data-actor-id="cross:helper"/u,
-  );
-  const helperNode = /data-actor-id="cross:helper"[\s\S]*?<\/article>/u.exec(markup)[0];
-  assert.doesNotMatch(helperNode, /<dt>상위<\/dt>/u);
-
-  // 관제탑도 같은 배치를 쓴다 — 두 화면이 액터를 서로 다른 단계에 세우지 않는다.
-  const board = renderers.renderPortfolioBoard([crossPhaseTask()], NOW);
-  assert.match(board, /data-org-phase="review"[\s\S]*?data-actor-id="cross:reviewer"/u);
-  assert.match(board, /data-actor-id="cross:reviewer"[\s\S]*?상위 구현자/u);
+  const reviewerRow = worktreeRow(markup, 'data-actor-id', 'cross:reviewer');
+  assert.match(reviewerRow, /class="wt-sub" role="cell">리뷰 · 상위 구현자<\/p>/u);
+  // 부모와 단계가 같은 자식은 부모 다음의 한 단계 깊은 행이고, 별도 상위 문구가 없다.
+  const implRow = worktreeRow(markup, 'data-actor-id', 'cross:impl');
+  const helperRow = worktreeRow(markup, 'data-actor-id', 'cross:helper');
+  assert.match(implRow, /data-depth="2"/u);
+  assert.match(helperRow, /data-depth="3"/u);
+  assert.doesNotMatch(helperRow, /상위 구현자/u);
+  assert.ok(markup.indexOf('data-actor-id="cross:impl"') < markup.indexOf('data-actor-id="cross:helper"'));
 });
 
 // major 4 — 반례: task.progress=82 · main.progress=17을 넣으면 Main 카드가 82%로 렌더됐다.
@@ -1487,24 +1426,24 @@ test('the main node shows the orchestrator progress, not the whole session progr
       status: 'working', progress: 17,
     }],
   });
-  const markup = renderers.renderSessionView([task], NOW, 'active', 'org');
-  assert.match(markup, /data-actor-id="mp:main"[\s\S]*?<strong>17%<\/strong>/u);
-  assert.doesNotMatch(markup, /data-actor-id="mp:main"[\s\S]*?<strong>82%<\/strong>/u);
+  const markup = renderers.renderSessionView([task], NOW, 'active');
+  assert.match(worktreeRow(markup, 'data-actor-id', 'mp:main'), /class="wt-cell wt-pct" role="cell">17%<\/div>/u);
+  assert.doesNotMatch(worktreeRow(markup, 'data-actor-id', 'mp:main'), />82%<\/div>/u);
 
   // 이벤트가 측정한 값이 있으면 그것이 payload보다 우선한다 (다른 액터와 같은 규칙).
   const measured = renderers.renderSessionView([{
     ...task,
     events: [{ ts: iso(HOUR), kind: 'report', phase: 'work', actor_id: 'mp:main', percent: 44 }],
-  }], NOW, 'active', 'org');
-  assert.match(measured, /data-actor-id="mp:main"[\s\S]*?<strong>44%<\/strong>/u);
+  }], NOW, 'active');
+  assert.match(worktreeRow(measured, 'data-actor-id', 'mp:main'), /class="wt-cell wt-pct" role="cell">44%<\/div>/u);
 
   // progress를 싣지 않는 구 보고에서만 세션 진행률로 떨어진다 — 총괄 카드가 수치를
   // 통째로 잃지 않게 남겨 둔 폴백이다.
   const legacy = renderers.renderSessionView([{
     ...task,
     actors: [{ ...task.actors[0], progress: undefined }],
-  }], NOW, 'active', 'org');
-  assert.match(legacy, /data-actor-id="mp:main"[\s\S]*?<strong>82%<\/strong>/u);
+  }], NOW, 'active');
+  assert.match(worktreeRow(legacy, 'data-actor-id', 'mp:main'), /class="wt-cell wt-pct" role="cell">82%<\/div>/u);
 });
 
 // major 5 — 반례: 2026-08-27T15:30:00Z(= 한국 시간 08-28 00:30)에 끝난 세션이
@@ -1608,17 +1547,14 @@ test('a stage with no report explains why it has no record', () => {
       { ts: iso(HOUR), kind: 'phase-change', phase: 'review' },
     ],
   });
-  const tree = renderers.renderSessionView([task], NOW, 'active', 'org');
-  const board = renderers.renderPortfolioBoard([task], NOW);
+  const tree = renderers.renderSessionView([task], NOW, 'active');
   const reason = '이 단계는 보고가 전송되지 않았습니다';
-  // 조직도에서 보고 없는 단계는 카드가 아니라 rest 줄이다. 판정('기록 없음')은 그 줄이
-  // 내고, **사유 문장은 관제탑이 낸다** — 밀집 카드 안의 서술문을 걷어낸 결과다
-  // (review-visual B2: 좁은 카드 폭에서 "전송되지 / 않았습니다"로 어색하게 접혔다).
-  assert.match(tree, /<dt>기록 없음<\/dt>[\s\S]*?data-phase-state="skipped"/u);
-  assert.doesNotMatch(tree, new RegExp(reason, 'u'));
-  assert.match(board, new RegExp(`data-phase-state="skipped"[\\s\\S]*?${reason}`, 'u'));
+  const skippedRow = tree.split(/(?=<div class="wt-row )/u)
+    .find((part) => part.includes('data-phase-state="skipped"')) || '';
+  assert.match(skippedRow, /class="wt-cell wt-state" role="cell">기록 없음<\/div>/u);
+  assert.match(skippedRow, new RegExp(reason, 'u'));
   // 보고된 단계에는 사유를 붙이지 않는다 — 사유가 상태와 짝을 이룬다.
-  const planBlock = /data-org-phase="plan"[\s\S]*?data-org-phase="/u.exec(board)[0];
+  const planBlock = worktreeRow(tree, 'data-org-phase', 'plan');
   assert.doesNotMatch(planBlock, new RegExp(reason, 'u'));
 });
 
@@ -1648,7 +1584,8 @@ test('abbreviations are spelled out, in the UI chrome and in reported names alik
     assert.ok(!markup.includes(abbreviation), `UI가 만든 약어가 남아 있습니다: ${abbreviation}`);
   }
   assert.match(markup, />총괄</u);
-  assert.match(markup, />단계</u);
+  assert.equal((markup.match(/class="wt-row is-phase[^"]*" role="row"\s*data-depth="1"/gu) || []).length, 8);
+  assert.equal((markup.match(/class="wt-kind"><\/span>/gu) || []).length, 8);
   // 보고가 실어 온 약어는 풀어 쓴 형태로만 나온다 — 원문은 내부 필드에만 남는다.
   assert.doesNotMatch(markup, /WP1/iu);
   assert.match(markup, /작업 묶음 1 — 서버/u);
@@ -1667,14 +1604,11 @@ test('the spell-out rule is derived from the pattern, not from a per-abbreviatio
 test('the card clock is named after the report, not after the screen refresh', () => {
   const renderers = createUsageRenderers();
   const task = harnessTask({ id: 'clock', updated_at: iso(3 * HOUR) });
-  const tree = renderers.renderSessionView([task], NOW, 'active', 'org');
-  const board = renderers.renderPortfolioBoard([task], NOW);
+  const tree = renderers.renderSessionView([task], NOW, 'active');
   assert.match(tree, /마지막 보고 3시간 전/u);
-  assert.match(board, /마지막 보고 3시간 전/u);
   assert.doesNotMatch(tree, /동기화/u);
-  assert.doesNotMatch(board, /동기화/u);
   // 보고 시각이 아예 없으면 그렇게 말한다 (0분 전으로 지어내지 않는다).
-  const noTime = renderers.renderSessionView([harnessTask({ id: 'no-clock', updated_at: '' })], NOW, 'active', 'org');
+  const noTime = renderers.renderSessionView([harnessTask({ id: 'no-clock', updated_at: '' })], NOW, 'active');
   assert.match(noTime, /보고 시각 없음/u);
 });
 
@@ -1909,110 +1843,25 @@ test('a source that has never reported a success is a breach, not a blank', () =
   assert.match(markup, /마지막 수집 성공<\/dt><dd>기록 없음<\/dd>/u);
 });
 
-// ---- 정적 폴백 (usage/pipeline-state.json) --------------------------------
-//
-// 하네스 피드에 닿지 못한 첫 화면은 빈 채로 두지 않고, 저장소에 함께 배포되는 사본으로
-// 관제탑을 세운다. 계약 셋을 본다: ① 첫 화면 실패에서만 탄다 ② 사본임을 화면이 말한다
-// ③ 사본에 없는 판정('기록 없음')을 지어내지 않는다.
-// 이 테스트가 **못 보는 것**: 실제 HTTP 캐시 동작과 배포면에서의 파일 접근 권한.
-
-const settle = async (times = 6) => {
-  for (let index = 0; index < times; index += 1) {
-    await new Promise((resolve) => { setImmediate(resolve); });
-  }
-};
-
-const staticCopy = {
-  updated: '2026-08-27T11:00:00.000Z',
-  window: '10:07 → 17:00',
-  pipelines: [{
-    id: 'P-C',
-    name: '관제탑 이전',
-    orch: 'Fable 5',
-    task: '관제 페이지를 사이트에',
-    state: 'run',
-    meta: ['정본 = 사이트'],
-    stages: [
-      { n: '기획', who: 'Fable 5', st: 'ok', note: '계약 고정', t: '38m' },
-      { n: '구현', who: 'GPT 5.6 Sol xhigh', st: 'run', chips: ['GPT 5.6 Sol:Worker'] },
-      { n: '리뷰', who: 'Opus 5', st: 'wait' },
-    ],
-  }],
-};
-
-test('a first load that fails falls back to the shipped static copy and labels it as one', async () => {
-  const sandbox = await createUsageAppSandbox([new Error('network down'), staticCopy]);
-  await settle();
-
-  assert.equal(sandbox.requests.length, 2, '피드가 실패하면 사본을 한 번 읽는다');
-  assert.equal(sandbox.requests[1].url, '/usage/pipeline-state.json');
-  assert.equal(sandbox.requests[1].options.cache, 'no-store');
-  // 배포면의 정적 파일이라 인증 헤더를 붙이지 않는다.
-  assert.equal(sandbox.requests[1].options.headers, undefined);
-
-  const markup = sandbox.store.get('usageBody').innerHTML;
-  assert.match(markup, /class="pl-board"/u);
-  assert.match(markup, /P-C · 관제탑 이전/u);
-  assert.match(markup, /진행 중 1\/3/u);
-  // 사본의 chips는 문자열 배열이다 — 구조화된 칩 조판에서도 그 형식이 그대로 읽힌다.
-  assert.match(markup, /class="pl-chip-name">GPT 5\.6 Sol:Worker/u);
-  assert.match(markup, /class="pl-cost">38m/u);
-  // 사본임을 화면이 말한다 — 실시간처럼 보이게 두지 않는다.
-  assert.match(markup, /정적 사본/u);
-  // 사본이 언제 찍혔는지 상대 시각으로 말한다 (벽시계에 의존하지 않게 모양만 본다).
-  assert.match(markup, /사본 갱신 \d+[^<]*전/u);
-  assert.doesNotMatch(markup, /NaN|Invalid/u);
-  assert.match(sandbox.store.get('usageError').textContent, /저장된 사본을 대신 보여줍니다/u);
-  // 사본에는 단계 이벤트가 없다 — 없는 판정('기록 없음')을 만들어내지 않는다.
-  assert.doesNotMatch(markup, /class="pl-state is-skip"/u);
+// ---- 피드 실패: 낡은 정적 사본을 만들지 않는다 -----------------------------
+test('a failed feed says why without fetching or replacing a static copy', async () => {
+  const empty = await createUsageAppSandbox([new Error('network down')]);
+  assert.equal(empty.requests.length, 1);
+  assert.equal(empty.store.get('usageBody').innerHTML, '');
+  assert.equal(empty.store.get('usageError').textContent, 'network down');
 });
 
-test('a live dashboard is never replaced by the static copy', async () => {
-  const sandbox = await createUsageAppSandbox([
+test('a live dashboard is never replaced when a later feed request fails', async () => {
+  const live = await createUsageAppSandbox([
     { snapshots: [], tasks: [harnessTask()] },
-    new Error('network down'),
+    new Error('refresh down'),
   ]);
-  const before = sandbox.store.get('usageBody').innerHTML;
-  assert.match(before, /us-command-layout/u);
-
-  await sandbox.store.get('reload').listeners.click();
-  await settle();
-
-  // 사본을 묻지도 않았다: 요청은 최초 로드와 실패한 새로고침 둘뿐이다.
-  assert.equal(sandbox.requests.length, 2);
-  assert.equal(sandbox.store.get('usageBody').innerHTML, before);
-  assert.equal(sandbox.store.get('usageError').textContent, 'network down');
-});
-
-test('when the static copy is unreachable too, the screen says why instead of faking a board', async () => {
-  const sandbox = await createUsageAppSandbox([new Error('network down'), new Error('offline')]);
-  await settle();
-  assert.equal(sandbox.requests.length, 2);
-  assert.equal(sandbox.store.get('usageBody').innerHTML, '');
-  assert.equal(sandbox.store.get('usageError').textContent, 'network down');
-});
-
-test('an empty or malformed static copy is treated as no copy at all', async () => {
-  for (const body of [{}, { pipelines: [] }, { pipelines: 'nope' }, null]) {
-    const sandbox = await createUsageAppSandbox([new Error('network down'), body]);
-    await settle();
-    assert.equal(sandbox.store.get('usageBody').innerHTML, '');
-  }
-});
-
-test('the shipped static copy parses and actually renders a board', async () => {
-  const { readFileSync } = await import('node:fs');
-  const { fileURLToPath } = await import('node:url');
-  const nodePath = await import('node:path');
-  const root = nodePath.dirname(nodePath.dirname(fileURLToPath(import.meta.url)));
-  const state = JSON.parse(readFileSync(nodePath.join(root, 'usage/pipeline-state.json'), 'utf8'));
-  assert.ok(Array.isArray(state.pipelines) && state.pipelines.length > 0, '사본에 파이프라인이 있어야 한다');
-
-  const markup = createUsageRenderers().buildFallbackBoard(state, NOW);
-  assert.equal((markup.match(/class="pl-card"/gu) || []).length, state.pipelines.length);
-  // 사본의 모든 단계가 마디를 차지한다 — 빈 보드가 배포되는 것을 막는다.
-  const stageCount = state.pipelines.reduce((total, item) => total + (item.stages || []).length, 0);
-  assert.equal((markup.match(/class="pl-stage /gu) || []).length, stageCount);
+  const before = live.store.get('usageBody').innerHTML;
+  assert.match(before, /data-worktree/u);
+  await live.store.get('reload').listeners.click();
+  assert.equal(live.requests.length, 2, '실패 뒤 정적 사본을 위한 추가 fetch가 없어야 합니다.');
+  assert.equal(live.store.get('usageBody').innerHTML, before);
+  assert.equal(live.store.get('usageError').textContent, 'refresh down');
 });
 
 // ==========================================================================

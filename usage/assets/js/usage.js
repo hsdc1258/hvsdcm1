@@ -158,13 +158,6 @@
   // 세션의 상태와는 다른 축이기 때문이다.
   const SESSION_VIEWS = Object.entries(TASK_STATUS_LABELS).map(([key, label]) => ({ key, label }));
   const SESSION_VIEW_KEYS = new Set(SESSION_VIEWS.map((view) => view.key));
-  // 진행 중 패널의 보기 모드. 관제탑이 기본이다 — "지금 무엇이 도는가"를 한눈에 보는
-  // 것이 이 화면의 첫 질문이고, 세션 하나를 파고드는 조직도는 그 다음이다.
-  const ACTIVE_MODES = [{ key: 'board', label: '관제탑' }, { key: 'org', label: '조직도' }];
-  const ACTIVE_MODE_KEYS = new Set(ACTIVE_MODES.map((mode) => mode.key));
-  // 모드는 새로고침을 넘어 유지된다 (계약 §A). 조직도를 골라 둔 사람에게 5초 폴링마다
-  // 관제탑이 돌아오면 그 토글은 없는 것과 같다.
-  const ACTIVE_MODE_KEY = 'hvsdcm.usage.activeMode';
   // 소유자 응답을 받은 뒤에만 세우는 문서 제목. 정지 HTML의 제목은 랜딩과 같은 값이라
   // 미로그인 방문자에게는 이 화면의 존재가 제목으로도 새지 않는다 (review-visual N7).
   const OWNER_TITLE = '사용량 — hvsdcm';
@@ -182,28 +175,6 @@
   // 게시글 목록은 상태마다 따로 편다 — 하나의 카운터를 공유하면 완료에서 누른 '더 보기'가
   // 중단 목록까지 함께 펴 버린다.
   const postVisible = { stale: POST_PAGE_SIZE, complete: POST_PAGE_SIZE };
-
-  // 저장된 모드를 읽는다. localStorage는 사파리 프라이빗 모드처럼 **접근 자체가 던지는**
-  // 환경이 있으므로 읽기·쓰기를 모두 감싼다 — 저장이 안 되는 브라우저에서 화면이 통째로
-  // 죽는 것보다 모드가 기본값으로 돌아가는 편이 낫다.
-  function readActiveMode() {
-    try {
-      const stored = localStorage.getItem(ACTIVE_MODE_KEY);
-      return ACTIVE_MODE_KEYS.has(stored) ? stored : 'board';
-    } catch {
-      return 'board';
-    }
-  }
-
-  function writeActiveMode(mode) {
-    selectedActiveMode = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
-    try {
-      localStorage.setItem(ACTIVE_MODE_KEY, selectedActiveMode);
-    } catch { /* 저장 실패는 이번 세션의 모드만 잃는다 — 화면은 계속 돈다. */ }
-    return selectedActiveMode;
-  }
-
-  let selectedActiveMode = readActiveMode();
 
   function loginPath() {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
@@ -914,102 +885,196 @@
       .join('');
   }
 
-  // 라벨-값 한 줄씩. 값이 없는 항목은 줄 자체를 만들지 않는다 — 빈 값을 '없음'으로
-  // 채우면 보고되지 않은 것과 보고된 빈 값이 구별되지 않는다.
+  // ---- 워크트리 ------------------------------------------------------------
   //
-  // 모델과 추론 단계는 **각자 한 줄**을 쓴다 (review-visual M7). 한 줄에
-  // `모델 · 추론`으로 붙였을 때는 어느 노드 폭에서도 값이 길어, 말줄임이 **항상 추론
-  // 단계 자리에서** 발생했다 — 카드 넷 중 셋이 `gpt-5.6-codex · xh…` 꼴이었다.
-  // 표시하되 읽을 수 없으면 표시하지 않은 것과 같으므로, 두 값을 갈라 각각 온전히 낸다.
-  // 수집을 합쳐 추측하지 않는다는 DESIGN.md §1.1의 계약은 그대로다 — 바뀐 것은 조판뿐이다.
-  function renderNodeFacts(node) {
-    const rows = [
-      node.model ? { label: NODE_FACT_LABELS.model, value: node.model, mono: true } : null,
-      node.reasoning ? { label: NODE_FACT_LABELS.reasoning, value: node.reasoning, mono: true } : null,
-      ...(node.facts || []),
-    ].filter((fact) => fact && fact.label && fact.value);
-    if (rows.length === 0) return '';
-    return `<dl class="h-node-facts">${rows.map((fact) => {
-      const className = [fact.mono ? 'h-node-fact-mono' : '', fact.className || ''].filter(Boolean).join(' ');
-      return `<div><dt>${escapeHtml(fact.label)}</dt><dd${className ? ` class="${className}"` : ''}>${escapeHtml(fact.value)}</dd></div>`;
-    }).join('')}</dl>`;
+  // 조판은 **워크트리 한 장**이다 (사용자 지시 2026-08-30: "/usage를 워크트리 형식으로
+  // 가볍고 가독성 좋게"). 예전에는 같은 사실을 두 조판이 각자 그렸다 — 카드가 가로로
+  // 갈라지는 조직도와, 단계 레일에 칩을 붙이는 관제탑 보드. 둘 다 같은 파생값
+  // (phaseStates·phaseTimeline·actorNodes)을 읽고 있었으므로 조판만 둘이었고, 그래서
+  // 모드 토글이 필요했고, 토글이 있으니 두 조판을 모두 유지해야 했다.
+  //
+  // 워크트리는 그 셋을 한꺼번에 없앤다: 한 행 = 한 노드, 계층은 글자 가이드(│ ├─ └─)가
+  // 말하고, 사실은 고정 열(상태 · 소요 · 진행)이 받는다. 커넥터를 그리는 CSS 의사요소도,
+  // 폭 예산 계산도, 배율 변환도 필요 없다 — 행은 그냥 문서 흐름으로 쌓인다.
+  //
+  // 판독용 계약은 그대로다: 단계 행은 data-org-phase·data-phase-state를, 액터 행은
+  // data-actor-id를 싣는다. 그래서 "보고된 적 없는 단계를 완료로 날조하지 않는다"를
+  // 게이트가 조판과 무관하게 계속 검사한다.
+
+  // 가이드 글리프. `ancestors`는 **뿌리를 뺀 조상들의 "형제 중 마지막이었나"** 목록이고,
+  // true인 열에는 세로선을 잇지 않는다(그 가지는 이미 끝났으므로). 마지막 칸은 자기
+  // 자신의 연결선이다. 마크업에 손으로 적지 않고 여기서만 만든다.
+  const WT_GUIDE = { branch: '├─ ', last: '└─ ', trunk: '│  ', gap: '   ' };
+
+  // 노드의 사실 목록에서 라벨로 값을 꺼낸다. actorNodes가 이미 계산해 둔 파생값을
+  // 워크트리가 다시 계산하지 않기 위한 통로다(두 조판이 각자 계산하면 값이 갈린다).
+  function factValue(node, label) {
+    return (node.facts || []).find((fact) => fact && fact.label === label)?.value || '';
   }
 
-  function renderNode(node) {
-    const progress = Number.isFinite(node.progress) ? clampPercent(node.progress) : null;
+  function worktreeGuide(ancestors, isLast, isRoot = false) {
+    if (isRoot) return '';
+    const stem = (Array.isArray(ancestors) ? ancestors : [])
+      .map((ancestorWasLast) => (ancestorWasLast ? WT_GUIDE.gap : WT_GUIDE.trunk))
+      .join('');
+    return `${stem}${isLast ? WT_GUIDE.last : WT_GUIDE.branch}`;
+  }
+
+  // 노드 하나 → 행 하나. 값이 없는 열은 `—`로 자리를 지킨다. 행은 고정 격자에 서므로
+  // 자리를 비우면 아래 행의 같은 열이 위로 붙어 읽는 눈이 열을 잃는다. `—`는 값을
+  // 지어내는 것이 아니라 "측정 없음"을 명시하는 표기다(조직도 시절과 같은 규칙).
+  function renderWorktreeRow(row) {
+    const percent = Number.isFinite(row.progress) ? clampPercent(row.progress) : null;
+    const guide = worktreeGuide(row.ancestors, row.isLast, row.kind === 'lead');
+    // 한도 소비 추정치는 **보조 줄에** 실린다. 조직도 시절에는 노드 카드의 사실 목록에
+    // 자기 줄이 있었고, 워크트리에는 고정 열이 넷(이름·상태·소요·진행)뿐이라 다섯 번째
+    // 열을 만드는 대신 여기로 내렸다. 값 자체는 하나도 잃지 않는다 — 이 줄을 빠뜨렸을
+    // 때 게이트가 잡았다(2026-08-30 이관 라운드).
+    const secondary = [
+      row.detail,
+      row.role,
+      row.assignment,
+      row.usage ? `${NODE_FACT_LABELS.usage} ${row.usage}` : '',
+      row.parent ? `${NODE_FACT_LABELS.parent} ${row.parent}` : '',
+    ].filter(Boolean).join(' · ');
     return `
-      <article class="h-node is-${escapeHtml(node.kind)}${node.current ? ' is-current' : ''}"${renderNodeAttributes(node.attributes)}>
-        <p class="h-node-kind">${escapeHtml(node.kindLabel || '노드')}${node.current ? '<span class="h-node-flag">작업중</span>' : ''}</p>
-        <h5 class="h-node-name">${escapeHtml(node.name || '이름 미기록')}</h5>
-        ${node.detail ? `<p class="h-node-detail">${escapeHtml(node.detail)}</p>` : ''}
-        ${renderNodeFacts(node)}
-        ${node.note ? `<p class="h-node-note">${escapeHtml(node.note)}</p>` : ''}
-        ${node.status
-    ? `<p class="h-node-state"><span class="status-dot${node.tone || ' is-idle'}" aria-hidden="true"></span>${escapeHtml(node.status)}</p>`
+        <div class="wt-row is-${escapeHtml(row.kind)}${row.current ? ' is-current' : ''}" role="row"
+          data-depth="${Math.max(0, Number(row.depth) || 0)}"${renderNodeAttributes(row.attributes)}>
+          <div class="wt-cell wt-name-cell" role="cell">
+            <span class="wt-guide" aria-hidden="true">${escapeHtml(guide)}</span>
+            <span class="status-dot${row.tone || ' is-idle'}" aria-hidden="true"></span>
+            <span class="wt-name">${escapeHtml(row.name || '이름 미기록')}</span>
+            <span class="wt-kind">${escapeHtml(row.kindLabel || '')}</span>
+            ${row.mono ? `<span class="wt-model h-node-fact-mono">${escapeHtml(row.mono)}</span>` : ''}
+          </div>
+          <div class="wt-cell wt-state" role="cell">${escapeHtml(row.status || '—')}</div>
+          <div class="wt-cell wt-time h-node-time" role="cell">${escapeHtml(row.duration || '—')}</div>
+          <div class="wt-cell wt-pct" role="cell">${percent === null ? '—' : `${Math.round(percent)}%`}</div>
+          ${secondary || row.note
+    ? `<p class="wt-sub" role="cell">${escapeHtml(secondary)}${secondary && row.note ? ' · ' : ''}${row.note ? `<span class="wt-note">${escapeHtml(row.note)}</span>` : ''}</p>`
     : ''}
-        ${progress === null
-    ? ''
-    : `<p class="h-node-progress"><span>${escapeHtml(NODE_FACT_LABELS.progress)}</span><strong>${Math.round(progress)}%</strong></p>
-        ${node.kind === 'lead' ? `<span class="gauge-track" aria-hidden="true"><span class="gauge-fill" style="width: ${progress.toFixed(1)}%"></span></span>` : ''}`}
-      </article>`;
+        </div>`;
   }
 
-  // 분기(서브에이전트) 가지. 부모 카드의 **오른쪽**으로 갈라지고, parent_id 자식은 그
-  // 아래로 한 단 더 들어간다. 좌→우 연결선은 CSS 헤어라인이 그린다(DESIGN.md §10).
-  function renderBranch(node) {
-    const children = (node.children || []).filter(Boolean);
-    return `<li class="h-node-slot">${renderNode(node)}${children.length ? `<ul>${children.map(renderBranch).join('')}</ul>` : ''}</li>`;
-  }
-
-  function renderBranchList(nodes) {
+  // 액터 노드 숲을 행으로 편다. 손자·증손자까지 한 명도 빠지지 않는다 — 깊이는
+  // ancestors 배열이 그대로 들고 가므로 가이드가 계층을 말한다.
+  function worktreeActorRows(nodes, ancestors) {
     const list = (nodes || []).filter(Boolean);
-    if (list.length === 0) return '';
-    return `<div class="h-branch"><ul class="h-tree">${list.map(renderBranch).join('')}</ul></div>`;
+    return list.flatMap((node, index) => {
+      const isLast = index === list.length - 1;
+      const nextAncestors = [...ancestors, isLast];
+      return [
+        {
+          kind: 'agent',
+          kindLabel: node.kindLabel || '',
+          name: node.name,
+          mono: modelAndReasoning(node.model, node.reasoning),
+          role: node.role || '',
+          assignment: node.assignment || '',
+          usage: factValue(node, NODE_FACT_LABELS.usage),
+          parent: node.parent || '',
+          status: node.status || '',
+          tone: node.tone,
+          duration: node.duration || '',
+          progress: node.progress,
+          current: node.current,
+          attributes: node.attributes,
+          depth: nextAncestors.length,
+          ancestors,
+          isLast,
+        },
+        ...worktreeActorRows(node.children, nextAncestors),
+      ];
+    });
   }
 
-  // 조직도의 뼈대는 **고전적인 조직도**다: 총괄이 최상단에 서고, 그 아래 수평 trunk에서
-  // 단계마다 개별 stem이 내려온다 (DESIGN.md §1.1 v9 · review-visual B1).
+  // 세션 하나 → 워크트리 행 목록. 뿌리(총괄) → 여덟 단계 → 각 단계의 액터.
   //
-  // 예전에는 이 자리가 세로 1열 적층이었다. 데스크톱에서 조직도 컨테이너가 845px인데
-  // 노드는 213px 한 열에만 쌓여 오른쪽 62%가 빈 검은 면이었고, 카드가 다섯 장 넘게
-  // 세로로 이어져 §6의 "카드 3연속 스택" 금지에 걸렸다. 세로 직렬화는 **모바일에서만**
-  // 허용되는 조판인데 그것이 데스크톱에 그대로 나와 있었다.
-  //
-  // 좌표는 여전히 손으로 계산하지 않는다 — 가로 배치도 브라우저의 flex가 잡고,
-  // 커넥터는 CSS 헤어라인 의사요소가 그린다 (DESIGN.md §9·§10).
-  const ORG_REST_STATES = ['skipped', 'pending'];
-
-  // 카드가 되지 못한 단계는 **한 줄의 라벨-값**으로 남는다. 사실("이 단계는 보고가 없다")은
-  // 그대로 남기면서, 빈 카드가 조직도의 세로 길이를 늘리는 것은 막는다 (review-visual B2 —
-  // "고정 단계 골격을 먼저 그린 뒤 보고 없는 칸을 빈 카드로 채운다"). 판독용
-  // data-org-phase·data-phase-state는 카드일 때와 같은 어휘로 남겨, 게이트가 여전히
-  // "없던 단계를 완료로 지어내지 않는다"를 기계로 검사할 수 있게 한다.
-  function renderOrgRest(rest) {
-    if (rest.length === 0) return '';
-    return `
-        <dl class="h-orgchart-rest">
-          ${rest.map((group) => `<div><dt>${escapeHtml(group.label)}</dt><dd>${group.phases
-    .map((phase) => `<span data-org-phase="${escapeHtml(phase.key)}" data-phase-state="${escapeHtml(group.state)}">${escapeHtml(phase.label)}</span>`)
-    .join('')}</dd></div>`).join('')}
-        </dl>`;
+  // **모든 단계가 행으로 선다.** 조직도 시절에는 보고 없는 단계를 rest 줄로 접었는데,
+  // 그 이유는 빈 카드가 세로 길이를 늘렸기 때문이다. 행 하나는 카드가 아니라 한 줄이라
+  // 그 비용이 없고, 여덟 단계가 항상 같은 자리에 서면 "지금 어디까지 왔나"를 눈이
+  // 자리로 읽는다. 사용자 입력 노드는 여전히 만들지 않는다 — 요청 원문은 상세 머리의
+  // inset이 정본이다 (review-visual M4 · DESIGN.md §1.1 v9).
+  function sessionWorktree(task, now) {
+    const phases = phaseNodesOf(task, now);
+    const main = mainActorOf(task);
+    const rows = [];
+    if (main) {
+      const mainProgress = actorProgressMap(task).get(String(main.id));
+      rows.push({
+        kind: 'lead',
+        kindLabel: NODE_KIND_LABELS.lead,
+        name: main.name || '이름 미기록',
+        mono: modelAndReasoning(main.model, main.reasoning),
+        role: main.role || '',
+        assignment: main.assignment || '',
+        usage: actorUsageEstimate(main),
+        status: actorStatus(main),
+        tone: statusDotClass(main.status),
+        duration: actorDuration(main, task, now),
+        progress: mainProgress ?? finiteNumber(main.progress) ?? finiteNumber(task.progress),
+        current: main.status === 'working' || main.status === 'reviewing',
+        attributes: { 'data-actor-id': main.id || '' },
+        depth: 0,
+        ancestors: [],
+        isLast: false,
+      });
+    } else {
+      rows.push({
+        kind: 'lead',
+        kindLabel: NODE_KIND_LABELS.lead,
+        name: '에이전트 보고 없음',
+        detail: '이 세션은 실행자를 보고하지 않았습니다',
+        status: '',
+        depth: 0,
+        ancestors: [],
+        isLast: false,
+      });
+    }
+    phases.forEach((node, index) => {
+      const isLast = index === phases.length - 1;
+      rows.push({
+        kind: 'phase',
+        // 단계 행에는 종류 라벨을 붙이지 않는다. 여덟 줄이 모두 '단계'라고 말하면 그 열은
+        // 어떤 판단도 돕지 않고, 자리(뿌리 바로 아래 여덟 형제)가 이미 그것을 말한다.
+        kindLabel: '',
+        name: node.name,
+        detail: node.detail,
+        mono: modelAndReasoning(node.model, node.reasoning),
+        status: node.status,
+        tone: node.tone,
+        note: node.note,
+        duration: (node.facts || []).find((fact) => fact.className === 'h-node-time')?.value || '',
+        progress: null,
+        current: node.current,
+        attributes: node.attributes,
+        depth: 1,
+        ancestors: [],
+        isLast,
+      });
+      rows.push(...worktreeActorRows(node.children, [isLast]));
+    });
+    return rows;
   }
 
-  // 조직도 기하와 **선택 세션의 메타**를 조판에서도 가른다 (review-visual M9). rest 줄은
-  // 조직도의 node가 아니라 세션의 사실이므로, 조직도 상자 안이 아니라 그 아래 상세 본문
-  // 레벨에 선다 — 상자가 어떤 이유로든 안쪽 스크롤을 갖게 되어도 이 줄이 함께 밀려
-  // 본문 좌측 정렬 기준선에서 이탈하지 않는다.
-  function renderOrgTree(tree) {
-    const branches = tree.branches.map((node) => `
-          <div class="h-orgchart-branch">
-            ${renderNode(node)}
-            ${renderBranchList(node.children)}
-          </div>`).join('');
+  function renderWorktree(rows, label) {
     return `
-      <div class="h-orgchart">
-        <div class="h-orgchart-root">${renderNode(tree.lead)}</div>
-        ${branches ? `<div class="h-orgchart-branches">${branches}</div>` : ''}
-      </div>`;
+      <section class="h-org wt" aria-label="${escapeHtml(label)}">
+        <header class="h-org-head">
+          <div><p class="us-eyebrow">파이프라인</p><h4>실행 워크트리</h4></div>
+        </header>
+        <div class="wt-grid" role="table" data-worktree>
+          <div class="wt-row wt-head" role="row">
+            <div class="wt-cell wt-name-cell" role="columnheader">노드</div>
+            <div class="wt-cell wt-state" role="columnheader">상태</div>
+            <div class="wt-cell wt-time" role="columnheader">소요</div>
+            <div class="wt-cell wt-pct" role="columnheader">진행</div>
+          </div>
+          ${rows.map(renderWorktreeRow).join('')}
+        </div>
+      </section>`;
   }
+
 
   // ---- 트리 구성 -----------------------------------------------------------
 
@@ -1160,102 +1225,6 @@
     });
   }
 
-  // 세션 하나의 조직도 모델 — **뿌리(총괄) + 단계 분기 + 카드가 되지 못한 단계**.
-  //
-  // 사용자 입력 노드는 없다 (review-visual M4 · DESIGN.md §1.1 "그 밖의 노드를 추측해
-  // 추가하지 않는다"). 요청 원문은 이미 상세 머리의 `요청 원문` inset이 정본으로 내고
-  // 있었고, 조직도가 같은 문장을 한 번 더 그리면 한 화면에 같은 문자열이 두 번 선다.
-  // 남길 쪽은 사람이 아닌 노드를 만들지 않는 inset이다.
-  function sessionOrgTree(task, now) {
-    const phases = phaseNodesOf(task, now);
-    const main = mainActorOf(task);
-    // 단계는 **근거가 있을 때만 카드**가 된다: 보고된 단계(done·current)이거나, 보고는
-    // 없어도 그 단계에 실제 액터가 붙어 있는 경우다. 나머지는 rest 줄로 내려간다.
-    const branches = [];
-    const restBy = new Map();
-    for (const node of phases) {
-      const state = node.attributes['data-phase-state'];
-      if (state === 'done' || state === 'current' || (node.children || []).length > 0) {
-        branches.push(node);
-        continue;
-      }
-      const list = restBy.get(state) || [];
-      list.push({ key: node.attributes['data-org-phase'], label: node.name });
-      restBy.set(state, list);
-    }
-    const rest = ORG_REST_STATES
-      .filter((state) => restBy.has(state))
-      .map((state) => ({ state, label: PHASE_STATE_LABELS[state], phases: restBy.get(state) }));
-    // 액터를 하나도 보고하지 않은 세션도 뿌리를 비우지 않는다 — 조직도 모양을 같게 두고
-    // "보고가 없다"를 말한다. 뿌리를 지우면 단계만 남아 원인이 보이지 않는다.
-    if (!main) {
-      return {
-        lead: {
-          kind: 'lead',
-          kindLabel: NODE_KIND_LABELS.lead,
-          name: '에이전트 보고 없음',
-          detail: '이 세션은 실행자를 보고하지 않았습니다',
-        },
-        branches,
-        rest,
-      };
-    }
-    // Main 노드는 `data-actor-id`가 붙은 **액터 카드**다. 그러므로 진행률도 그 액터의
-    // 보고에서 와야 한다 (review WP3 major 4 — 예전에는 task.progress를 얹어서
-    // 총괄이 17%를 보고해도 카드가 세션 전체의 82%로 렌더됐다).
-    // 우선순위는 다른 액터와 같다: 이벤트가 측정한 값 → 액터 payload → (둘 다 없을 때만)
-    // 세션 진행률. 마지막 폴백을 남기는 이유는 progress를 안 싣는 구 보고에서 총괄
-    // 카드만 수치를 잃지 않게 하기 위해서다.
-    const mainProgress = actorProgressMap(task).get(String(main.id));
-    return {
-      lead: {
-        kind: 'lead',
-        kindLabel: NODE_KIND_LABELS.lead,
-        name: main.name || '이름 미기록',
-        model: main.model || (main.reasoning ? '모델 미기록' : ''),
-        reasoning: main.reasoning || '',
-        facts: [
-          { label: NODE_FACT_LABELS.role, value: main.role || '' },
-          { label: NODE_FACT_LABELS.assignment, value: main.assignment || '' },
-          { label: NODE_FACT_LABELS.duration, value: actorDuration(main, task, now), className: 'h-node-time' },
-          { label: NODE_FACT_LABELS.usage, value: actorUsageEstimate(main) },
-        ],
-        status: actorStatus(main),
-        tone: statusDotClass(main.status),
-        progress: mainProgress ?? finiteNumber(main.progress) ?? finiteNumber(task.progress),
-        current: main.status === 'working' || main.status === 'reviewing',
-        attributes: { 'data-actor-id': main.id || '' },
-      },
-      branches,
-      rest,
-    };
-  }
-
-  // ---- 조직도 껍데기 ------------------------------------------------------
-  //
-  // 예전에는 여기에 확대·이동 캔버스가 있었다. 지금은 **아무 변환도 하지 않는 컨테이너**
-  // 하나뿐이다 (계약 §C). 조직도는 이 상자의 폭 **안에서 완결된다** — 노드가 폭을 나눠
-  // 갖고 커넥터만 고정 모듈이므로, 단계가 늘어도 상자를 넘치지 않는다.
-  //
-  // 예전에는 트리가 `max-content`로 서고 넘치면 이 상자가 가로 스크롤했다. 그 결과
-  // 데스크톱에서 마지막 단계 카드가 우측 경계에서 말줄임 없이 잘리고, 패널 폭 전체에
-  // 걸친 네이티브 스크롤바가 순검정 캔버스 위에서 가장 밝은 요소가 됐다
-  // (review-visual B3). 가로 스크롤 스트립은 §1.1 v9가 세션 목록에서 이미 걷어낸
-  // 조판이고, 조직도에만 면제할 근거가 없다. 그래서 스크롤이 아니라 **폭 예산**으로 푼다.
-  // 상자에는 안전망만 남는다(아래 CSS) — 정상 데이터에서는 발동하지 않는다.
-  //
-  // rest 줄은 이 상자 **밖**이다: 조직도 기하가 아니라 선택 세션의 메타이므로, 조판
-  // 위치도 상세 본문 레벨로 분리한다 (review-visual M9).
-  function renderOrgSection(label, treeMarkup, restMarkup) {
-    return `
-      <section class="h-org" aria-label="${escapeHtml(label)}">
-        <header class="h-org-head">
-          <div><p class="us-eyebrow">파이프라인</p><h4>실행 조직도</h4></div>
-        </header>
-        <div class="h-org-scroll" data-org-scroll>${treeMarkup}</div>
-        ${restMarkup || ''}
-      </section>`;
-  }
 
   // ---- 세션 본문 -----------------------------------------------------------
 
@@ -1330,10 +1299,7 @@
         ${renderTaskInput(task)}
         ${renderTaskFacts(task)}
         ${renderModules(task)}
-        ${(() => {
-    const tree = sessionOrgTree(task, now);
-    return renderOrgSection(`${presentation.name} 실행 조직도`, renderOrgTree(tree), renderOrgRest(tree.rest));
-  })()}
+        ${renderWorktree(sessionWorktree(task, now), `${presentation.name} 실행 워크트리`)}
         ${renderArtifacts(task)}`;
   }
 
@@ -1368,327 +1334,6 @@
       </article>`;
   }
 
-  // ---- 관제탑 보드 ---------------------------------------------------------
-  //
-  // 전체 세션을 한눈에 보는 조판은 **하나뿐**이다: 사용자가 승인한 관제탑
-  // (카드 = 파이프라인, 카드 안 세로 레일 = 단계, 마디 = 상태, 모노 라벨 = 담당 모델,
-  // 칩 = 그 단계에 붙은 서브에이전트, 코스트 줄 = 그 단계에 쓴 시간).
-  // 같은 정보를 두 번째 조판(전체 조직도 캔버스)으로도 그리던 것은 걷어냈다 — 세션 하나를
-  // 파고드는 트리 캔버스는 세션 탭 안에 그대로 있고, 거기서만 확대·이동이 필요하다.
-  //
-  // **데이터는 그대로 하네스 피드다.** 단계 상태·소요시간·액터를 여기서 다시 계산하지 않고
-  // phaseStates()·phaseTimeline()·actorNodes()가 낸 값을 조판 어휘로 옮기기만 한다.
-  // 그래서 "보고된 적 없는 단계를 완료로 날조하지 않는다"는 계약이 이 조판에서도 그대로다:
-  // skipped는 '기록 없음'으로, 색이 아니라 **점선 마디 + 글자 라벨**로 구분된다.
-
-  const BOARD_STATE_LABELS = { ok: '완료', run: '진행 중', wait: '대기', skip: '기록 없음' };
-  // 단계 상태(phaseStates) → 레일 마디 상태. 여기 없는 값은 대기로 떨어져 마디가 사라지지 않는다.
-  const PHASE_RAIL_STATE = { done: 'ok', current: 'run', pending: 'wait', skipped: 'skip' };
-
-  // 액터 노드 숲을 평평하게 편다 — 손자 액터까지 칩 하나씩 받는다. 트리에서 접혀 있던
-  // 서브에이전트가 보드에서 사라지면 "누가 붙어 있는지"를 화면이 거짓말하게 된다.
-  // 액터 노드 숲을 평평하게 편다 — 손자 액터까지 칩 하나씩 받는다. 다만 **계층은 버리지
-  // 않는다**: 깊이를 함께 실어 칩이 들여쓰기로 부모-자식을 말한다 (요구 1·plan §3.3).
-  function flattenAgentNodes(nodes, depth = 0) {
-    return (nodes || []).flatMap((node) => [
-      { node, depth },
-      ...flattenAgentNodes(node.children, depth + 1),
-    ]);
-  }
-
-  // 하네스 세션 하나 → 관제탑 카드 하나.
-  function pipelineFromTask(task, now) {
-    const timeline = phaseTimeline(task, now);
-    const states = phaseStates(task, timeline);
-    const { main, byPhase } = actorNodes(task, now);
-    const presentation = taskPresentation(task);
-    const complete = task.status === 'complete';
-    const progress = finiteNumber(task.progress);
-    const deltas = sessionUsageDeltas(task);
-    const updated = relativeTime(task.updated_at, now);
-    return {
-      id: task.id || presentation.name,
-      name: presentation.name,
-      task: [taskCategory(task).label, presentation.dateLabel].filter(Boolean).join(' · '),
-      state: complete ? 'ok' : 'run',
-      // 총괄은 카드 머리의 한 줄이다. 액터를 하나도 보고하지 않은 세션은 자리를 비우지 않고
-      // "보고 없음"이라고 말한다 — 줄을 지우면 원인이 보이지 않는다.
-      orch: main
-        ? {
-          // 이름과 모델을 **둘 다** 낸다. 모델만 내면 같은 모델을 쓰는 총괄이 서로
-          // 구분되지 않고, 보고된 액터가 화면에서 사라진 것처럼 보인다.
-          label: main.name || '이름 미기록',
-          model: modelAndReasoning(main.model, main.reasoning),
-          actorId: main.id || '',
-        }
-        : null,
-      meta: [
-        // 이 시각은 **하네스가 마지막으로 보고한 때**이지 화면이 서버를 마지막으로 읽은
-        // 때가 아니다. 예전 문구('N분 전 동기화')는 머리말의 '마지막 갱신 3초 전 ·
-        // 60초 주기'와 나란히 놓여 두 시계가 어긋난 것처럼 보였다 (사용자 지시 ④).
-        // 화면 갱신 시계는 머리말이, 보고 시계는 카드가 맡는다고 말이 갈라 준다.
-        updated ? `마지막 보고 ${updated}` : '보고 시각 없음',
-        progress === null ? '' : `진행 ${Math.round(clampPercent(progress))}%`,
-        task.deadline ? `마감 ${task.deadline}` : '',
-        deltas.length ? `한도 소모 ${deltas.join(' · ')}` : '',
-      ].filter(Boolean),
-      stages: PHASES.map((phase) => {
-        const stat = timeline.stats.get(phase.key);
-        const state = states.get(phase.key);
-        const isCurrent = state === 'current';
-        return {
-          key: phase.key,
-          // 마크업에는 조판 어휘(st)와 **판독 어휘(state)** 를 둘 다 싣는다. 상태 판정의
-          // 단일 원본은 phaseStates()이고, 게이트는 그 원본 어휘(done/current/pending/
-          // skipped)로 검사해야 조판을 바꿔도 "날조 금지" 계약이 계속 검사된다.
-          state,
-          n: phase.label,
-          st: PHASE_RAIL_STATE[state] || 'wait',
-          // 모노 라벨은 그 단계를 실제로 보고한 모델이다. 진행 중인 단계에 한해 payload의
-          // 현재 모델로 메운다 — 지나간 단계를 현재 모델 이름으로 덮지 않는다.
-          who: modelAndReasoning(
-            stat?.model || (isCurrent ? task.model : ''),
-            stat?.reasoning || (isCurrent ? task.reasoning : ''),
-          ),
-          note: phase.detail,
-          // '기록 없음' 마디에는 사유를 함께 싣는다 (사용자 지시 ①). 상세 조직도의
-          // 같은 노드와 **한 상수**를 공유하므로 두 화면이 다른 말을 하지 않는다.
-          reason: state === 'skipped' ? PHASE_SKIPPED_REASON : '',
-          cost: stat && stat.duration > 0 ? formatDuration(stat.duration) : '',
-          // 칩은 조직도가 노드 카드로 내던 사실을 **그대로** 싣는다 (계약 §B):
-          // 이름 · 역할 · 모델+추론강도 · 상태 · 진행률 · 소요시간. 각자 자기 슬롯을
-          // 가지므로 `이름:역할`처럼 한 문자열로 이어 붙지 않고, 값이 없는 항목은 슬롯
-          // 자체가 생기지 않는다(빈 값을 '없음'으로 채우면 미보고와 구별되지 않는다).
-          // 모델을 칩에도 싣는 이유: 단계의 모노 라벨(who)은 **그 단계를 보고한 모델**이지
-          // 이 서브에이전트의 모델이 아니다 — 둘이 다를 때 예전 칩은 아무 말도 못 했다.
-          // assignment(지금 무슨 일을 하는가)은 칩을 3줄로 만들지 않도록 title에 담는다.
-          chips: flattenAgentNodes(byPhase.get(phase.key)).map(({ node, depth }) => ({
-            name: node.name,
-            role: node.role || '',
-            // 관제탑 칩은 한 줄에 `모델 · 추론`을 그대로 유지한다. 조직도가 두 줄로 나눈
-            // 것은 **노드 카드의 폭 예산** 때문이고(review-visual M7), 칩은 가로로 흐르는
-            // 조판이라 같은 제약이 없다. 이식한 원본 조판을 재해석하지 않는다.
-            model: modelAndReasoning(node.model, node.reasoning),
-            duration: node.duration || '',
-            assignment: node.assignment || '',
-            // 부모와 단계가 달라 중첩되지 못한 액터는 부모를 이름으로 밝힌다 —
-            // 들여쓰기로 말하던 계층을 글자로 대신한다 (major 2).
-            parent: node.parent || '',
-            status: node.status || '',
-            depth,
-            actorId: node.attributes?.['data-actor-id'] || '',
-            // 측정된 진행도만 싣는다. 보고가 없으면 칩에 수치가 아예 붙지 않는다 —
-            // 없는 값을 0%로 그리면 "아직 시작 못 했다"는 거짓말이 된다.
-            percent: Number.isFinite(node.progress) ? clampPercent(node.progress) : null,
-          })),
-        };
-      }),
-    };
-  }
-
-  // 칩 하나 = 그 단계에 붙은 액터 하나. 여섯 사실이 각자 자기 슬롯을 갖고,
-  // parent_id 계층은 depth 들여쓰기로 남는다 (깊이는 3단에서 시각적으로 멈춘다).
-  // 종료된 액터도 자기 단계의 칩으로 남는다 — 사라지면 "그 단계에 아무도 없었다"가 된다.
-  function renderBoardChip(chip) {
-    const depth = Math.min(3, Math.max(0, Number(chip.depth) || 0));
-    const percent = finiteNumber(chip.percent);
-    // 담당(assignment)은 줄을 더 만들지 않고 툴팁으로만 붙는다. 역할과 담당은 다른
-    // 사실이므로 합치지 않되, 칩 한 줄의 밀도(DESIGN.md §6)를 지키기 위한 분리다.
-    const title = chip.assignment
-      ? ` title="${escapeHtml(`${NODE_FACT_LABELS.assignment} · ${chip.assignment}`)}"`
-      : '';
-    return `<span class="pl-chip" data-actor-id="${escapeHtml(chip.actorId || '')}" data-depth="${depth}"${title}>`
-      + `<b class="pl-chip-name">${escapeHtml(chip.name || '이름 미기록')}</b>`
-      + `${chip.role ? `<span class="pl-chip-role">${escapeHtml(chip.role)}</span>` : ''}`
-      + `${chip.parent ? `<span class="pl-chip-role">${escapeHtml(`${NODE_FACT_LABELS.parent} ${chip.parent}`)}</span>` : ''}`
-      + `${chip.model ? `<span class="pl-chip-model">${escapeHtml(chip.model)}</span>` : ''}`
-      + `${chip.status ? `<span class="pl-chip-state">${escapeHtml(chip.status)}</span>` : ''}`
-      + `${chip.duration ? `<span class="pl-chip-time">${escapeHtml(chip.duration)}</span>` : ''}`
-      + `${percent === null ? '' : `<strong class="pl-chip-percent">${Math.round(clampPercent(percent))}%</strong>`}`
-      + '</span>';
-  }
-
-  function renderBoardStage(stage) {
-    const state = BOARD_STATE_LABELS[stage.st] ? stage.st : 'wait';
-    const chips = Array.isArray(stage.chips) ? stage.chips : [];
-    return `
-      <div class="pl-stage is-${escapeHtml(state)}" data-org-phase="${escapeHtml(stage.key || '')}" data-phase-state="${escapeHtml(stage.state || 'pending')}">
-        <div class="pl-stage-main">
-          <div class="pl-stage-name">${escapeHtml(stage.n)}${stage.who ? `<span class="pl-who">${escapeHtml(stage.who)}</span>` : ''}</div>
-          ${stage.note ? `<div class="pl-note">${escapeHtml(stage.note)}</div>` : ''}
-          ${stage.reason ? `<div class="pl-note pl-reason">${escapeHtml(stage.reason)}</div>` : ''}
-          ${stage.cost ? `<div class="pl-cost">${escapeHtml(stage.cost)}</div>` : ''}
-          ${chips.length > 0 ? `<div class="pl-chips">${chips.map(renderBoardChip).join('')}</div>` : ''}
-        </div>
-        <span class="pl-state is-${escapeHtml(state)}">${escapeHtml(BOARD_STATE_LABELS[state])}</span>
-      </div>`;
-  }
-
-  function renderBoardCard(pipeline) {
-    const stages = Array.isArray(pipeline.stages) ? pipeline.stages : [];
-    const done = stages.filter((stage) => stage.st === 'ok').length;
-    const state = BOARD_STATE_LABELS[pipeline.state] ? pipeline.state : 'wait';
-    const meta = Array.isArray(pipeline.meta) ? pipeline.meta : [];
-    const orchId = pipeline.orch?.actorId ? ` data-actor-id="${escapeHtml(pipeline.orch.actorId)}"` : '';
-    return `
-      <article class="pl-card" data-portfolio-task="${escapeHtml(pipeline.id || '')}" data-session-active="${String(state !== 'ok')}">
-        <div class="pl-card-head">
-          <div>
-            <h3 class="pl-card-title">${escapeHtml(pipeline.name || '이름 없는 작업')}</h3>
-            ${pipeline.task ? `<p class="pl-task">${escapeHtml(pipeline.task)}</p>` : ''}
-          </div>
-          <span class="pl-badge is-${escapeHtml(state)}">${escapeHtml(BOARD_STATE_LABELS[state])} ${done}/${stages.length}</span>
-        </div>
-        <div class="pl-orch"${orchId}>오케스트레이터 <b>${escapeHtml(pipeline.orch ? pipeline.orch.label : '에이전트 보고 없음')}</b>${pipeline.orch?.model ? `<span class="pl-who">${escapeHtml(pipeline.orch.model)}</span>` : ''}</div>
-        ${stages.map(renderBoardStage).join('')}
-        ${meta.length > 0 ? `<div class="pl-meta">${meta.map((line) => escapeHtml(line)).join('<br>')}</div>` : ''}
-      </article>`;
-  }
-
-  // 보드 전체. 입력은 이미 정규화된 파이프라인 배열이라, 하네스 피드에서 왔든 정적 사본에서
-  // 왔든 같은 조판이 나온다.
-  function renderBoard(pipelines, meta = {}) {
-    const cards = Array.isArray(pipelines) ? pipelines : [];
-    if (cards.length === 0) {
-      // 보드 안에서 범위를 넓힐 수단이 없어졌으므로(완료는 완료 탭이 맡는다), 빈 상태는
-      // 한 줄이면 충분하다. 예전의 '전체를 누르면…' 안내는 가리킬 버튼이 없는 거짓말이 된다.
-      return `<p class="pl-empty">${escapeHtml(meta.empty || '아직 동기화된 파이프라인이 없습니다.')}</p>`;
-    }
-    const sub = [meta.summary, meta.source].filter(Boolean).join(' · ');
-    return `
-      <div class="pl-board">
-        <div class="pl-head">
-          <h2 class="pl-title">파이프라인 관제탑</h2>
-          ${meta.window ? `<span class="pl-window">${escapeHtml(meta.window)}</span>` : ''}
-        </div>
-        ${sub ? `<p class="pl-sub">${escapeHtml(sub)}</p>` : ''}
-        <div class="pl-legend">
-          <span><span class="pl-dot is-ok" aria-hidden="true"></span>완료</span>
-          <span><span class="pl-dot is-run" aria-hidden="true"></span>진행 중</span>
-          <span><span class="pl-dot" aria-hidden="true"></span>대기</span>
-          <span><span class="pl-dot is-skip" aria-hidden="true"></span>기록 없음 (보고된 적 없는 단계)</span>
-          <span>칩 = 단계에 붙은 서브에이전트 (이름 · 역할 · 모델 · 상태 · 진행률 · 소요)</span>
-        </div>
-        <div class="pl-grid">${cards.map(renderBoardCard).join('')}</div>
-      </div>`;
-  }
-
-  // ---- 정적 폴백 -----------------------------------------------------------
-  //
-  // 하네스 피드(GET /api/usage)가 아직 배포되지 않았거나(404/403) 네트워크가 막혀 첫 화면을
-  // 세우지 못하면, 저장소에 함께 배포되는 사본(usage/pipeline-state.json)으로 관제탑만이라도
-  // 세운다. 빈 화면에 오류 한 줄만 남기는 것보다 "언제 찍힌 사본인지 밝힌 보드"가 낫다.
-  //
-  // 규칙 둘을 지킨다:
-  //   1. **살아 있는 응답이 언제나 이긴다.** 이 경로는 화면이 비어 있을 때만 탄다 — 이미
-  //      그려진 실시간 화면을 폴링 한 번 실패로 얼어붙은 사본이 덮지 않는다.
-  //   2. **사본임을 화면이 말한다.** 출처 줄과 오류 줄에 사본이라고 적는다. 실시간처럼
-  //      보이게 두면 이 화면이 하는 유일한 약속(지금 무엇이 도는가)이 거짓이 된다.
-  const STATIC_STATE_PATH = '/usage/pipeline-state.json';
-
-  async function staticBoardState() {
-    try {
-      // 배포면의 평범한 정적 파일이라 인증 헤더가 의미 없다. 캐시는 끈다 — 사본이 갱신돼도
-      // 브라우저가 옛 사본을 물고 있으면 폴백이 두 번 낡는다.
-      const response = await fetch(STATIC_STATE_PATH, { cache: 'no-store' });
-      if (!response.ok) return null;
-      const data = await response.json().catch(() => null);
-      return Array.isArray(data?.pipelines) && data.pipelines.length > 0 ? data : null;
-    } catch {
-      return null;
-    }
-  }
-
-  // 사본의 단계 상태(ok/run/wait)를 판독 어휘로 되돌린다. 사본에는 단계별 이벤트가 없어
-  // '기록 없음'(skipped)을 판정할 근거가 없다 — 그래서 만들어내지 않고 대기로 떨어뜨린다.
-  const STATIC_PHASE_STATE = { ok: 'done', run: 'current', wait: 'pending' };
-
-  function pipelineFromStatic(entry) {
-    const stages = Array.isArray(entry?.stages) ? entry.stages : [];
-    const state = ['ok', 'run', 'wait'].includes(entry?.state) ? entry.state : 'run';
-    return {
-      id: entry?.id || entry?.name || '',
-      name: [entry?.id, entry?.name].filter(Boolean).join(' · ') || '이름 없는 작업',
-      task: entry?.task || '',
-      state,
-      // 사본의 orch는 모델 이름 한 줄이다. 액터 id가 없으므로 붙이지 않는다.
-      orch: entry?.orch ? { label: String(entry.orch), model: '', actorId: '' } : null,
-      meta: (Array.isArray(entry?.meta) ? entry.meta : []).map((line) => String(line)),
-      stages: stages.map((stage) => ({
-        key: '',
-        state: STATIC_PHASE_STATE[stage?.st] || 'pending',
-        n: stage?.n || '단계',
-        st: BOARD_STATE_LABELS[stage?.st] ? stage.st : 'wait',
-        who: stage?.who || '',
-        note: stage?.note || '',
-        // 사본에는 skipped 판정 자체가 없으므로 사유도 없다 (지어내지 않는다).
-        reason: '',
-        // t(소요)·tok(토큰)·pct는 전부 선택 필드다. 있는 것만 잇고, pct 0은 값이다.
-        cost: [
-          stage?.t,
-          stage?.tok,
-          stage?.pct === null || stage?.pct === undefined ? null : `${stage.pct}%`,
-        ].filter(Boolean).join(' · '),
-        // 사본의 chips는 예전부터 **문자열 배열**이다. 그 형식을 계속 읽으면서, 새로
-        // 구조화된 객체({name, role, model, status, percent, duration})도 함께 받는다 —
-        // 사본을 손보지 않아도 화면이 깨지지 않는 것이 이 폴백의 존재 이유다.
-        // 사본에 없는 필드는 빈 문자열이고, 빈 슬롯은 렌더러가 아예 만들지 않는다.
-        chips: (Array.isArray(stage?.chips) ? stage.chips : []).map((chip) => (
-          chip && typeof chip === 'object'
-            ? {
-              name: String(chip.name || chip.label || '이름 미기록'),
-              role: chip.role ? String(chip.role) : '',
-              model: chip.model ? String(chip.model) : '',
-              duration: chip.duration ? String(chip.duration) : '',
-              assignment: chip.assignment ? String(chip.assignment) : '',
-              status: chip.status ? String(chip.status) : '',
-              percent: finiteNumber(chip.percent),
-              depth: Number(chip.depth) || 0,
-              parent: chip.parent ? String(chip.parent) : '',
-              actorId: '',
-            }
-            : {
-              name: String(chip),
-              role: '',
-              model: '',
-              duration: '',
-              assignment: '',
-              status: '',
-              percent: null,
-              depth: 0,
-              parent: '',
-              actorId: '',
-            })),
-      })),
-    };
-  }
-
-  function buildFallbackBoard(state, now) {
-    const pipelines = (Array.isArray(state?.pipelines) ? state.pipelines : []).map(pipelineFromStatic);
-    const updated = relativeTime(state?.updated, now) || state?.updated || '시각 없음';
-    return renderBoard(pipelines, {
-      window: state?.window || '',
-      summary: `세션 ${pipelines.length}개 · 사본 갱신 ${updated}`,
-      source: '정적 사본 — 실시간 피드에 닿지 못했습니다',
-    });
-  }
-
-  // 관제탑은 **진행 중인 세션만** 그린다 (계약 §A). 예전에는 보드 안에 '진행 중 / 전체'
-  // 범위 토글이 있었지만, 이제 완료는 완료 탭이 통째로 맡으므로 같은 선택지가 화면에
-  // 두 곳(상위 탭 · 보드 토글)에 생기는 셈이었다. 축을 하나로 줄인다:
-  // **무엇을 보는가 = 상위 탭 / 어떻게 보는가 = 모드 토글.**
-  function renderPortfolioBoard(inputTasks, now) {
-    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
-    // 관제탑은 **살아 있는 세션의 현재면**이다. 하트비트가 끊긴 세션은 지금 무엇을 하고
-    // 있지 않으므로 여기 서지 않고 '중단됨' 목록으로 간다.
-    const shown = tasks.filter((task) => taskStatusKey(task) === 'active');
-    const actorCount = shown.reduce((total, task) => total + taskActors(task).length, 0);
-    return renderBoard(shown.map((task) => pipelineFromTask(task, now)), {
-      empty: '진행 중인 파이프라인이 없습니다.',
-      summary: `세션 ${shown.length}개 · 에이전트 ${actorCount}명`,
-      source: '하네스 실시간 보고',
-    });
-  }
 
   // tabbable은 aria-selected와 **다른 사실**이다. 선택은 화면 전체에 하나뿐이지만,
   // 초점을 받을 수 있는 탭은 tablist마다 하나씩 있어야 한다 (review WP3 major 3).
@@ -1797,36 +1442,19 @@
 
   // 진행 중 패널의 보기 모드 토글. system.css의 `.segmented`가 모양을 그리고, 여기서는
   // 어느 모드가 눌려 있는지만 말한다. 상위 탭(tablist/tab)과 **다른 역할**을 쓴다 —
-  // 같은 패널을 두 어법으로 그리는 것이지 다른 패널로 가는 것이 아니므로, 탭이 아니라
-  // 눌림 상태를 가진 버튼 묶음이다.
-  function renderActiveModes(mode) {
-    const current = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
-    return `
-      <div class="segmented h-mode-toggle" role="group" aria-label="진행 중 세션을 보는 방식">
-        ${ACTIVE_MODES.map((item) => `<button class="segmented-btn${item.key === current ? ' is-selected' : ''}" type="button"
-          aria-pressed="${item.key === current}" data-active-mode="${item.key}">${item.label}</button>`).join('')}
-      </div>`;
-  }
-
-  // view는 상위 탭('active' | 'complete')이고, mode는 진행 중 패널 안의 보기 방식이다.
-  // mode를 인자로 받는 이유는 게이트가 두 모드를 **각각** 렌더해 검사할 수 있어야 하기
-  // 때문이다 — 화면 상태(selectedActiveMode)에만 의존하면 검사가 기본값 하나만 본다.
-  function renderSessionView(inputTasks, now, view, mode = selectedActiveMode) {
+  // view는 상위 탭('active' | 'complete' | 'stale')이다. 보기 모드 토글은 없앴다 —
+  // 조판이 워크트리 하나뿐이므로 "어떻게 보는가"라는 축 자체가 사라졌다
+  // (사용자 지시 2026-08-30). 남은 축은 "무엇을 보는가"인 상위 탭 하나다.
+  function renderSessionView(inputTasks, now, view) {
     const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
     const status = SESSION_VIEW_KEYS.has(view) ? view : 'active';
     // 상태별 필터는 **정확히 그 상태**다. 예전의 `!== 'complete'`는 중단된 세션까지
-    // 진행 중으로 끌어와 관제탑에 세웠다 (요구: 진행 중 표시는 실제 활성 세션만).
+    // 진행 중으로 끌어왔다 (요구: 진행 중 표시는 실제 활성 세션만).
     const filtered = tasks.filter((task) => taskStatusKey(task) === status);
     if (status === 'active') {
-      // 토글은 세션이 없어도 남는다 — 모드는 세션의 유무가 아니라 사람의 선택이고,
-      // 빈 화면에서 토글이 사라지면 다음 세션이 뜰 때 모드가 어디로 갔는지 알 수 없다.
-      const current = ACTIVE_MODE_KEYS.has(mode) ? mode : 'board';
-      const body = current === 'org'
-        ? (filtered.length === 0
-          ? '<p class="us-empty card">현재 진행 중인 작업이 없습니다.</p>'
-          : renderTaskTabs([{ label: '', ariaLabel: '진행 중인 Codex 세션', tasks: filtered }], now, status))
-        : renderPortfolioBoard(tasks, now);
-      return `${renderActiveModes(current)}${body}`;
+      return filtered.length === 0
+        ? '<p class="us-empty card">현재 진행 중인 작업이 없습니다.</p>'
+        : renderTaskTabs([{ label: '', ariaLabel: '진행 중인 세션', tasks: filtered }], now, status);
     }
     const label = TASK_STATUS_LABELS[status];
     if (filtered.length === 0) {
@@ -2022,13 +1650,6 @@
         rerenderDashboard();
       });
     }
-    for (const button of [...(root?.querySelectorAll?.('[data-active-mode]') || [])]) {
-      if (typeof button.addEventListener !== 'function') continue;
-      button.addEventListener('click', () => {
-        writeActiveMode(button.dataset.activeMode);
-        rerenderDashboard();
-      });
-    }
   }
 
   function wireDashboard(root) {
@@ -2134,21 +1755,9 @@
     } catch (error) {
       if (error.message === 'unauthorized') return;
       const reason = error.message || '사용량을 불러오지 못했습니다.';
-      // 화면이 아직 비어 있을 때만 사본으로 내려앉는다. 이미 실시간 화면이 있으면
-      // 그것을 그대로 두는 편이 항상 더 정확하다.
-      if (!elements.body.innerHTML) {
-        const fallback = await staticBoardState();
-        if (fallback) {
-          elements.body.innerHTML = buildFallbackBoard(fallback, Date.now());
-          wireDashboard(elements.body);
-          elements.error.textContent = `${reason} 저장된 사본을 대신 보여줍니다.`;
-          if (announce) {
-            elements.reload.textContent = '새로고침';
-            if (elements.refreshStatus) elements.refreshStatus.textContent = '저장된 사본을 보여주고 있습니다.';
-          }
-          return;
-        }
-      }
+      // 정적 사본 폴백은 걷어냈다. 손으로 유지하던 `usage/pipeline-state.json`은 마지막
+      // 갱신이 며칠 전이라, 피드가 끊긴 화면에 낡은 파이프라인을 실시간처럼 세웠다.
+      // 오래된 사실을 그리느니 못 읽었다고 말하는 편이 정확하다.
       elements.error.textContent = reason;
       if (announce) {
         elements.reload.textContent = '새로고침';
@@ -2810,12 +2419,12 @@
   activateUsageView(selectedUsageView);
 
   window.USAGE_RENDER = {
-    buildDashboard, renderSessionViews, renderSessionView, renderPortfolioBoard, renderTask,
+    buildDashboard, renderSessionViews, renderSessionView, renderTask,
     renderTaskBody, renderPostList, taskPresentation, taskStatusKey, taskInput,
-    sessionOrgTree, renderOrgTree, pipelineFromTask, renderBoard, buildFallbackBoard,
-    phaseTimeline, sessionUsageDeltas, actorNodes,
+    sessionWorktree, renderWorktree, worktreeGuide,
+    phaseTimeline, sessionUsageDeltas, actorNodes, phaseNodesOf,
     activateTaskTab, wireTaskTabs, activateSessionView, wireSessionViews, wireDashboard,
-    wireLocalControls, renderActiveModes, readActiveMode, writeActiveMode, load,
+    wireLocalControls, load,
     // 모더 뷰 — 게이트가 렌더러를 실제로 실행해 계약을 본다 (scripts/usage.test.mjs).
     renderModeratorBrain, renderModeratorFilter, renderModeratorItems, renderModeratorCommands,
     moderatorCounts, moderatorDefaultKind, activateUsageView, loadModerator,
