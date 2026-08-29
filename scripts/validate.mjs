@@ -525,6 +525,7 @@ function validateGichulBackend() {
   const requiredFiles = [
     'scripts/gichul/fetch-kice.mjs',
     'scripts/gichul/build-manifest.mjs',
+    'scripts/gichul/output-contract.e2e.mjs',
     'scripts/gichul/upload-r2.mjs',
     'scripts/gichul/overrides.json',
     'scripts/gichul/gichul.test.mjs',
