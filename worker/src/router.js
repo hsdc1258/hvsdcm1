@@ -1669,6 +1669,45 @@ async function acknowledgeModeratorItem(request, env, itemId) {
   return json({ item: serializeModeratorItem(await moderatorItemById(env, itemId)) });
 }
 
+async function closeModeratorDaemonItem(request, env, itemId) {
+  if (!(await moderatorDaemonAuthorized(request, env))) {
+    return moderatorError('daemon_unauthorized', 401);
+  }
+  if (!MODERATOR_ID_PATTERN.test(itemId)) return moderatorError('invalid_item');
+  const parsed = await readModeratorJson(request);
+  if (parsed.response) return parsed.response;
+  const reason = moderatorSummary(parsed.value.reason);
+  if (!reason) return moderatorError('invalid_reason');
+
+  const item = await moderatorItemById(env, itemId);
+  if (!item) return moderatorError('Not found', 404);
+  if (item.kind === 'review') return moderatorError('invalid_transition');
+
+  const transition = item.kind === 'important' && item.status === 'open'
+    ? { from: 'open', to: 'resolved' }
+    : item.kind === 'proposal' && item.status === 'pending'
+      ? { from: 'pending', to: 'rejected' }
+      : null;
+  if (!transition) return moderatorError('invalid_transition', 409);
+
+  const timestamp = moderatorTimestamp();
+  const results = await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE moderator_items
+      SET status = ?4, version = version + 1, updated_at = ?5, decided_at = ?5
+      WHERE item_id = ?1 AND kind = ?2 AND status = ?3
+    `).bind(itemId, item.kind, transition.from, transition.to, timestamp),
+    env.DB.prepare(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL).bind(
+      itemId,
+      transition.to,
+      timestamp,
+      JSON.stringify({ action: transition.to, reason, by: 'moderator-daemon' }),
+    ),
+  ]);
+  if (moderatorChanges(results[0]) !== 1) return moderatorError('invalid_transition', 409);
+  return json({ item: serializeModeratorItem(await moderatorItemById(env, itemId)) });
+}
+
 function normalizeDaemonItem(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const kind = typeof input.kind === 'string' ? input.kind : '';
@@ -2374,6 +2413,10 @@ export async function route(request, env) {
   const moderatorCommandStateMatch = path.match(/^\/api\/moderator\/daemon\/commands\/([^/]+)\/state$/u);
   if (method === 'POST' && moderatorCommandStateMatch) {
     return updateModeratorCommandState(request, env, moderatorCommandStateMatch[1]);
+  }
+  const moderatorDaemonCloseMatch = path.match(/^\/api\/moderator\/daemon\/items\/([^/]+)\/close$/u);
+  if (method === 'POST' && moderatorDaemonCloseMatch) {
+    return closeModeratorDaemonItem(request, env, moderatorDaemonCloseMatch[1]);
   }
   const moderatorDecisionMatch = path.match(/^\/api\/moderator\/items\/([^/]+)\/decision$/u);
   if (method === 'POST' && moderatorDecisionMatch) {

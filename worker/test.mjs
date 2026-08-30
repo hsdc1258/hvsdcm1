@@ -3099,6 +3099,24 @@ function moderatorRequest(env, path, { method = 'GET', token = '', body } = {}) 
   }), env);
 }
 
+function insertModeratorItemForTest(database, {
+  itemId, kind, status, version = 1,
+}) {
+  database.prepare(`
+    INSERT INTO moderator_items(
+      item_id, kind, status, issue_summary, action_summary, proposed_command,
+      version, created_at, updated_at
+    ) VALUES (?, ?, ?, 'Test issue', 'Test action', ?, ?,
+      '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z')
+  `).run(itemId, kind, status, kind === 'proposal' ? 'run test command' : null, version);
+}
+
+function closeModeratorItem(env, itemId, reason, token = 'daemon-token') {
+  return moderatorRequest(env, `/api/moderator/daemon/items/${itemId}/close`, {
+    method: 'POST', token, body: { reason },
+  });
+}
+
 test('moderator migration enforces kind states, proposal separation, and one active review', async (t) => {
   const context = await moderatorTestContext(t);
   if (!context) return;
@@ -3127,6 +3145,206 @@ test('moderator migration enforces kind states, proposal separation, and one act
   assert.match(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL, /changes\(\) > 0/u);
   assert.match(MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL, /source_item_id/u);
   assert.match(MODERATOR_COMMAND_CLAIM_SQL, /UPDATE moderator_commands[\s\S]*status = 'queued'/u);
+});
+
+test('daemon close resolves an open important item and records its reason', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const reason = '정지 세션이 사라져 중요 항목을 닫습니다.';
+  const rawReason = '  정지   세션이 사라져\n중요 항목을 닫습니다.  ';
+  insertModeratorItemForTest(database, {
+    itemId: 'important-close', kind: 'important', status: 'open', version: 3,
+  });
+
+  const response = await closeModeratorItem(env, 'important-close', rawReason);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.item.status, 'resolved');
+  assert.equal(body.item.version, 4);
+  assert.equal(body.item.updated_at, body.item.decided_at);
+  const events = database.prepare(`
+    SELECT event, version, payload FROM moderator_item_events WHERE item_id = ? ORDER BY id
+  `).all('important-close');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event, 'resolved');
+  assert.equal(events[0].version, 4);
+  assert.deepEqual(JSON.parse(events[0].payload), {
+    action: 'resolved', reason, by: 'moderator-daemon',
+  });
+});
+
+test('daemon close rejects a pending proposal and records its reason', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const reason = '제안 원인이 사라져 대기 항목을 닫습니다.';
+  insertModeratorItemForTest(database, {
+    itemId: 'proposal-close', kind: 'proposal', status: 'pending', version: 5,
+  });
+
+  const response = await closeModeratorItem(env, 'proposal-close', reason);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.item.status, 'rejected');
+  assert.equal(body.item.version, 6);
+  assert.equal(body.item.updated_at, body.item.decided_at);
+  const events = database.prepare(`
+    SELECT event, version, payload FROM moderator_item_events WHERE item_id = ?
+  `).all('proposal-close');
+  assert.equal(events.length, 1);
+  const [event] = events;
+  assert.equal(event.event, 'rejected');
+  assert.equal(event.version, 6);
+  assert.deepEqual(JSON.parse(event.payload), {
+    action: 'rejected', reason, by: 'moderator-daemon',
+  });
+});
+
+test('daemon close never changes an acknowledged important item', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'important-acknowledged', kind: 'important', status: 'acknowledged', version: 7,
+  });
+
+  const response = await closeModeratorItem(
+    env, 'important-acknowledged', '사용자가 확인한 항목은 그대로 둡니다.',
+  );
+  assert.equal(response.status, 409);
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('important-acknowledged');
+  assert.deepEqual({ ...row }, { status: 'acknowledged', version: 7 });
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM moderator_item_events WHERE item_id = ?
+  `).get('important-acknowledged').count, 0);
+});
+
+test('daemon close never changes an approved proposal', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'proposal-approved', kind: 'proposal', status: 'approved', version: 8,
+  });
+
+  const response = await closeModeratorItem(
+    env, 'proposal-approved', '사용자가 승인한 제안은 그대로 둡니다.',
+  );
+  assert.equal(response.status, 409);
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('proposal-approved');
+  assert.deepEqual({ ...row }, { status: 'approved', version: 8 });
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM moderator_item_events WHERE item_id = ?
+  `).get('proposal-approved').count, 0);
+});
+
+test('daemon close refuses review items', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'review-close', kind: 'review', status: 'done', version: 2,
+  });
+
+  const response = await closeModeratorItem(env, 'review-close', '검토는 기존 경로로 닫습니다.');
+  assert.equal(response.status, 400);
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('review-close');
+  assert.deepEqual({ ...row }, { status: 'done', version: 2 });
+});
+
+test('daemon close requires the daemon token', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'important-unauthorized', kind: 'important', status: 'open', version: 2,
+  });
+
+  const response = await closeModeratorItem(
+    env, 'important-unauthorized', '인증되지 않은 요청은 거절합니다.', '',
+  );
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: 'daemon_unauthorized' });
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('important-unauthorized');
+  assert.deepEqual({ ...row }, { status: 'open', version: 2 });
+});
+
+test('daemon close distinguishes missing and invalid item ids', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { env } = context;
+
+  const missing = await closeModeratorItem(env, 'missing-close-item', '없는 항목은 찾을 수 없습니다.');
+  assert.equal(missing.status, 404);
+  const invalid = await closeModeratorItem(env, 'invalid$item', '잘못된 식별자는 거절합니다.');
+  assert.equal(invalid.status, 400);
+});
+
+test('daemon close requires a normalized reason of at most 240 characters', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'important-reason', kind: 'important', status: 'open', version: 4,
+  });
+
+  assert.equal((await closeModeratorItem(env, 'important-reason', '   ')).status, 400);
+  assert.equal((await closeModeratorItem(env, 'important-reason', '가'.repeat(241))).status, 400);
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('important-reason');
+  assert.deepEqual({ ...row }, { status: 'open', version: 4 });
+});
+
+test('daemon close rejects repeated closes without another version or event', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'important-close-twice', kind: 'important', status: 'open', version: 9,
+  });
+
+  const first = await closeModeratorItem(
+    env, 'important-close-twice', '사라진 정지 세션 항목을 닫습니다.',
+  );
+  assert.equal(first.status, 200);
+  const second = await closeModeratorItem(
+    env, 'important-close-twice', '같은 항목을 다시 닫지 않습니다.',
+  );
+  assert.equal(second.status, 409);
+  const row = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('important-close-twice');
+  assert.deepEqual({ ...row }, { status: 'resolved', version: 10 });
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM moderator_item_events WHERE item_id = ?
+  `).get('important-close-twice').count, 1);
+
+  insertModeratorItemForTest(database, {
+    itemId: 'proposal-close-twice', kind: 'proposal', status: 'pending', version: 11,
+  });
+  assert.equal((await closeModeratorItem(
+    env, 'proposal-close-twice', '사라진 제안 원인 항목을 닫습니다.',
+  )).status, 200);
+  assert.equal((await closeModeratorItem(
+    env, 'proposal-close-twice', '같은 제안을 다시 닫지 않습니다.',
+  )).status, 409);
+  const proposal = database.prepare(`
+    SELECT status, version FROM moderator_items WHERE item_id = ?
+  `).get('proposal-close-twice');
+  assert.deepEqual({ ...proposal }, { status: 'rejected', version: 12 });
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM moderator_item_events WHERE item_id = ?
+  `).get('proposal-close-twice').count, 1);
 });
 
 test('moderator owner and daemon boundaries protect an atomic direct-command lease flow', async (t) => {
