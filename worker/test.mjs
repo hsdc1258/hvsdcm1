@@ -3020,7 +3020,7 @@ function sqliteD1(database) {
   };
 }
 
-async function moderatorTestContext(t) {
+async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   let DatabaseSync;
   try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
   if (!DatabaseSync) {
@@ -3029,7 +3029,7 @@ async function moderatorTestContext(t) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 11; number += 1) {
+  for (let number = 1; number <= 12; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3043,7 +3043,9 @@ async function moderatorTestContext(t) {
       '0009': 'usage_health_harness_heartbeat',
       '0010': 'harness_project_snapshots',
       '0011': 'moderator_control_plane',
+      '0012': 'moderator_read_state',
     };
+    if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
       new URL(`./migrations/${prefix}_${migrationNames[prefix]}.sql`, import.meta.url),
       'utf8',
@@ -3100,15 +3102,33 @@ function moderatorRequest(env, path, { method = 'GET', token = '', body } = {}) 
 }
 
 function insertModeratorItemForTest(database, {
-  itemId, kind, status, version = 1,
+  itemId, kind, status, version = 1, updatedAt = '2026-08-30T00:00:00.000Z',
 }) {
   database.prepare(`
     INSERT INTO moderator_items(
       item_id, kind, status, issue_summary, action_summary, proposed_command,
       version, created_at, updated_at
-    ) VALUES (?, ?, ?, 'Test issue', 'Test action', ?, ?,
-      '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z')
-  `).run(itemId, kind, status, kind === 'proposal' ? 'run test command' : null, version);
+    ) VALUES (?, ?, ?, 'Test issue', 'Test action', ?, ?, ?, ?)
+  `).run(
+    itemId,
+    kind,
+    status,
+    kind === 'proposal' ? 'run test command' : null,
+    version,
+    updatedAt,
+    updatedAt,
+  );
+}
+
+function insertModeratorCommandForTest(database, {
+  commandId, updatedAt, status = 'succeeded', seenAt = null,
+}) {
+  database.prepare(`
+    INSERT INTO moderator_commands(
+      command_id, source, idempotency_key, command_text, status, attempts,
+      created_at, updated_at, seen_at
+    ) VALUES (?, 'direct', ?, 'run test command', ?, 0, ?, ?, ?)
+  `).run(commandId, `key-${commandId}`, status, updatedAt, updatedAt, seenAt);
 }
 
 function closeModeratorItem(env, itemId, reason, token = 'daemon-token') {
@@ -3118,15 +3138,44 @@ function closeModeratorItem(env, itemId, reason, token = 'daemon-token') {
 }
 
 test('moderator migration enforces kind states, proposal separation, and one active review', async (t) => {
-  const context = await moderatorTestContext(t);
+  const legacyUpdatedAt = '2026-08-29T12:00:00.000Z';
+  const context = await moderatorTestContext(t, {
+    beforeReadStateMigration(database) {
+      database.prepare(`
+        INSERT INTO moderator_items(
+          item_id, kind, status, issue_summary, action_summary, version, created_at, updated_at
+        ) VALUES ('legacy-resolved', 'important', 'resolved', 'issue', 'action', 2, ?, ?)
+      `).run(legacyUpdatedAt, legacyUpdatedAt);
+      database.prepare(`
+        INSERT INTO moderator_commands(
+          command_id, source, idempotency_key, command_text, status, attempts, created_at, updated_at
+        ) VALUES ('legacy-command', 'direct', 'legacy-command', 'run legacy command',
+          'succeeded', 1, ?, ?)
+      `).run(legacyUpdatedAt, legacyUpdatedAt);
+    },
+  });
   if (!context) return;
-  const { database } = context;
+  const { database, env } = context;
   const tables = database.prepare(`
     SELECT name FROM sqlite_master
     WHERE type = 'table' AND name LIKE 'moderator_%'
     ORDER BY name
   `).all().map((row) => row.name);
   assert.deepEqual(tables, ['moderator_commands', 'moderator_item_events', 'moderator_items']);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT seen_version, version FROM moderator_items WHERE item_id = 'legacy-resolved'
+    `).get() },
+    { seen_version: 0, version: 2 },
+  );
+  assert.equal(
+    database.prepare("SELECT seen_at FROM moderator_commands WHERE command_id = 'legacy-command'").get().seen_at,
+    null,
+  );
+  const legacyList = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
+  const legacyBody = await legacyList.json();
+  assert.equal(legacyBody.items.find((item) => item.item_id === 'legacy-resolved').unread, true);
+  assert.equal(legacyBody.commands.find((command) => command.command_id === 'legacy-command').unread, true);
   assert.throws(() => database.prepare(`
     INSERT INTO moderator_items(
       item_id, kind, status, issue_summary, action_summary, created_at, updated_at
@@ -3145,6 +3194,310 @@ test('moderator migration enforces kind states, proposal separation, and one act
   assert.match(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL, /changes\(\) > 0/u);
   assert.match(MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL, /source_item_id/u);
   assert.match(MODERATOR_COMMAND_CLAIM_SQL, /UPDATE moderator_commands[\s\S]*status = 'queued'/u);
+});
+
+test('moderator read markers preserve required actions and reactivate changed rows', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'important-open', kind: 'important', status: 'open', version: 2,
+  });
+  insertModeratorItemForTest(database, {
+    itemId: 'proposal-pending', kind: 'proposal', status: 'pending', version: 3,
+  });
+  insertModeratorItemForTest(database, {
+    itemId: 'important-resolved', kind: 'important', status: 'resolved', version: 3,
+  });
+  insertModeratorItemForTest(database, {
+    itemId: 'review-queued', kind: 'review', status: 'queued', version: 1,
+  });
+  const commandUpdatedAt = '2026-08-30T00:01:00.000Z';
+  insertModeratorCommandForTest(database, { commandId: 'command-finished', updatedAt: commandUpdatedAt });
+  database.prepare(`
+    INSERT INTO moderator_item_events(item_id, event, version, occurred_at, payload)
+    VALUES ('important-resolved', 'resolved', 3, '2026-08-30T00:00:00.000Z', '{}')
+  `).run();
+
+  const marked = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST',
+    token: 'owner-token',
+    body: {
+      items: [
+        { item_id: 'important-open', version: 2 },
+        { item_id: 'proposal-pending', version: 3 },
+        { item_id: 'important-resolved', version: 3 },
+        { item_id: 'review-queued', version: 1 },
+      ],
+      commands: [{ command_id: 'command-finished', updated_at: commandUpdatedAt }],
+    },
+  });
+  assert.equal(marked.status, 200);
+  assert.deepEqual(await marked.json(), { marked: { items: 4, commands: 1 } });
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT version, seen_version FROM moderator_items WHERE item_id = 'important-resolved'
+    `).get() },
+    { version: 3, seen_version: 3 },
+  );
+  assert.equal(
+    database.prepare(`
+      SELECT COUNT(*) AS count FROM moderator_item_events WHERE item_id = 'important-resolved'
+    `).get().count,
+    1,
+  );
+
+  const listed = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
+  const listedBody = await listed.json();
+  const itemById = new Map(listedBody.items.map((item) => [item.item_id, item]));
+  assert.equal(itemById.get('important-open').unread, true);
+  assert.equal(itemById.get('proposal-pending').unread, true);
+  assert.equal(itemById.get('important-resolved').unread, false);
+  assert.equal(itemById.get('review-queued').unread, false, 'queued reviews are not owner actions');
+  assert.equal(itemById.get('important-resolved').seen_version, 3);
+  const listedCommand = listedBody.commands.find((command) => command.command_id === 'command-finished');
+  assert.equal(listedCommand.seen_at, commandUpdatedAt);
+  assert.equal(listedCommand.unread, false);
+  assert.deepEqual(listedBody.unread_counts, {
+    important: 1,
+    proposal: 1,
+    review: 0,
+    record: 0,
+  });
+  const unreadOnly = await moderatorRequest(env, '/api/moderator?unread=1&limit=100', {
+    token: 'owner-token',
+  });
+  const unreadOnlyBody = await unreadOnly.json();
+  assert.deepEqual(
+    unreadOnlyBody.items.map((item) => item.item_id).sort(),
+    ['important-open', 'proposal-pending'],
+  );
+  assert.deepEqual(unreadOnlyBody.commands, []);
+
+  const stale = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token',
+    body: { items: [{ item_id: 'important-resolved', version: 2 }] },
+  });
+  assert.deepEqual(await stale.json(), { marked: { items: 0, commands: 0 } });
+  assert.equal(
+    database.prepare("SELECT seen_version FROM moderator_items WHERE item_id = 'important-resolved'").get().seen_version,
+    3,
+  );
+
+  database.prepare(`
+    UPDATE moderator_items
+    SET version = version + 1, updated_at = '2026-08-30T00:02:00.000Z'
+    WHERE item_id = 'important-resolved'
+  `).run();
+  database.prepare(`
+    UPDATE moderator_commands SET updated_at = '2026-08-30T00:02:00.000Z'
+    WHERE command_id = 'command-finished'
+  `).run();
+  const changed = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
+  const changedBody = await changed.json();
+  assert.equal(changedBody.items.find((item) => item.item_id === 'important-resolved').unread, true);
+  assert.equal(changedBody.commands.find((command) => command.command_id === 'command-finished').unread, true);
+});
+
+test('moderator command read markers preserve exact ISO strings and never decrease', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const exactTimestamps = new Map([
+    ['command-no-fraction', '2026-08-30T03:00:00Z'],
+    ['command-offset', '2026-08-30T12:00:00+09:00'],
+  ]);
+  for (const [commandId, updatedAt] of exactTimestamps) {
+    insertModeratorCommandForTest(database, { commandId, updatedAt });
+  }
+
+  const marked = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST',
+    token: 'owner-token',
+    body: {
+      commands: [...exactTimestamps].map(([commandId, updatedAt]) => ({
+        command_id: commandId,
+        updated_at: updatedAt,
+      })),
+    },
+  });
+  assert.equal(marked.status, 200);
+  assert.deepEqual(await marked.json(), { marked: { items: 0, commands: 2 } });
+  for (const [commandId, updatedAt] of exactTimestamps) {
+    assert.equal(
+      database.prepare('SELECT seen_at FROM moderator_commands WHERE command_id = ?').get(commandId).seen_at,
+      updatedAt,
+    );
+  }
+
+  const listed = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
+  const listedBody = await listed.json();
+  assert.equal(listedBody.unread_counts.record, 0);
+  for (const [commandId, updatedAt] of exactTimestamps) {
+    const command = listedBody.commands.find((candidate) => candidate.command_id === commandId);
+    assert.equal(command.seen_at, updatedAt);
+    assert.equal(command.unread, false);
+  }
+  const unreadOnly = await moderatorRequest(env, '/api/moderator?unread=1', { token: 'owner-token' });
+  assert.deepEqual((await unreadOnly.json()).commands, []);
+
+  const stale = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token',
+    body: {
+      commands: [{ command_id: 'command-no-fraction', updated_at: '2026-08-30T02:59:59Z' }],
+    },
+  });
+  assert.deepEqual(await stale.json(), { marked: { items: 0, commands: 0 } });
+  assert.equal(
+    database.prepare(`
+      SELECT seen_at FROM moderator_commands WHERE command_id = 'command-no-fraction'
+    `).get().seen_at,
+    exactTimestamps.get('command-no-fraction'),
+  );
+
+  const conflictingDuplicates = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token',
+    body: {
+      commands: [
+        { command_id: 'command-offset', updated_at: exactTimestamps.get('command-offset') },
+        { command_id: 'command-offset', updated_at: '2026-08-30T03:00:00Z' },
+      ],
+    },
+  });
+  assert.equal(conflictingDuplicates.status, 400);
+  assert.deepEqual(await conflictingDuplicates.json(), { error: 'invalid_item' });
+  assert.equal(
+    database.prepare("SELECT seen_at FROM moderator_commands WHERE command_id = 'command-offset'").get().seen_at,
+    exactTimestamps.get('command-offset'),
+  );
+});
+
+test('moderator unread filtering paginates in SQL and counts beyond returned rows', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const start = Date.parse('2026-08-30T01:00:00.000Z');
+  for (let index = 0; index < 52; index += 1) {
+    const suffix = String(index).padStart(3, '0');
+    const updatedAt = new Date(start + index * 1_000).toISOString();
+    insertModeratorItemForTest(database, {
+      itemId: `resolved-${suffix}`,
+      kind: 'important',
+      status: 'resolved',
+      updatedAt,
+    });
+    insertModeratorCommandForTest(database, {
+      commandId: `finished-${suffix}`,
+      updatedAt,
+    });
+  }
+  database.prepare(`
+    UPDATE moderator_items SET seen_version = version WHERE item_id = 'resolved-051'
+  `).run();
+  database.prepare(`
+    UPDATE moderator_commands SET seen_at = updated_at WHERE command_id = 'finished-051'
+  `).run();
+
+  const first = await moderatorRequest(env, '/api/moderator?unread=1&limit=1', { token: 'owner-token' });
+  assert.equal(first.status, 200);
+  const firstBody = await first.json();
+  assert.equal(firstBody.items[0].item_id, 'resolved-050', 'the read newest row is filtered before LIMIT');
+  assert.equal(firstBody.items[0].unread, true);
+  assert.ok(firstBody.next_cursor);
+  assert.equal(firstBody.commands.length, 50);
+  assert.equal(firstBody.commands.some((command) => command.command_id === 'finished-051'), false);
+  assert.equal(firstBody.commands.every((command) => command.unread), true);
+  assert.deepEqual(firstBody.unread_counts, {
+    important: 51,
+    proposal: 0,
+    review: 0,
+    record: 51,
+  });
+  assert.equal(firstBody.counts.important.resolved, 52, 'existing total counts remain database-wide');
+
+  const second = await moderatorRequest(
+    env,
+    `/api/moderator?unread=1&limit=1&cursor=${encodeURIComponent(firstBody.next_cursor)}`,
+    { token: 'owner-token' },
+  );
+  assert.equal(second.status, 200);
+  const secondBody = await second.json();
+  assert.equal(secondBody.items[0].item_id, 'resolved-049');
+  assert.equal(secondBody.items[0].unread, true);
+  assert.deepEqual(secondBody.unread_counts, firstBody.unread_counts);
+
+  const all = await moderatorRequest(env, '/api/moderator?unread=0&limit=1', { token: 'owner-token' });
+  const allBody = await all.json();
+  assert.equal(allBody.items[0].item_id, 'resolved-051');
+  assert.equal(allBody.items[0].unread, false);
+});
+
+test('moderator read endpoint validates authorization, size, and the whole body before writes', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  insertModeratorItemForTest(database, {
+    itemId: 'validation-item', kind: 'important', status: 'resolved', version: 1,
+  });
+  const updatedAt = '2026-08-30T03:00:00.000Z';
+  insertModeratorCommandForTest(database, { commandId: 'validation-command', updatedAt });
+
+  const anonymous = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', body: { items: [{ item_id: 'validation-item', version: 1 }] },
+  });
+  assert.equal(anonymous.status, 401);
+  const nonOwner = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'student-token',
+    body: { items: [{ item_id: 'validation-item', version: 1 }] },
+  });
+  assert.equal(nonOwner.status, 404);
+  const empty = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token', body: { items: [], commands: [] },
+  });
+  assert.equal(empty.status, 400);
+  assert.deepEqual(await empty.json(), { error: 'invalid_item' });
+  const oversized = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token',
+    body: {
+      items: Array.from({ length: 201 }, () => ({ item_id: 'validation-item', version: 1 })),
+    },
+  });
+  assert.equal(oversized.status, 413);
+  assert.deepEqual(await oversized.json(), { error: 'request_too_large' });
+
+  const invalidBodies = [
+    { items: [{ item_id: 'invalid$item', version: 1 }] },
+    { items: [{ item_id: 'validation-item', version: 0 }] },
+    { items: [{ item_id: 'validation-item', version: 1.5 }] },
+    { commands: [{ command_id: 'invalid$command', updated_at: updatedAt }] },
+    { commands: [{ command_id: 'validation-command', updated_at: 'not-an-iso-time' }] },
+    { items: {} },
+  ];
+  for (const body of invalidBodies) {
+    const invalid = await moderatorRequest(env, '/api/moderator/read', {
+      method: 'POST', token: 'owner-token', body,
+    });
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), { error: 'invalid_item' });
+  }
+  const partiallyInvalid = await moderatorRequest(env, '/api/moderator/read', {
+    method: 'POST', token: 'owner-token',
+    body: {
+      items: [{ item_id: 'validation-item', version: 1 }],
+      commands: [{ command_id: 'validation-command', updated_at: 'invalid' }],
+    },
+  });
+  assert.equal(partiallyInvalid.status, 400);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT seen_version FROM moderator_items WHERE item_id = 'validation-item'
+    `).get() },
+    { seen_version: 0 },
+  );
+  assert.equal(
+    database.prepare("SELECT seen_at FROM moderator_commands WHERE command_id = 'validation-command'").get().seen_at,
+    null,
+  );
 });
 
 test('daemon close resolves an open important item and records its reason', async (t) => {
@@ -3365,6 +3718,16 @@ test('moderator owner and daemon boundaries protect an atomic direct-command lea
     { token: 'owner-token' },
   );
   assert.equal(duplicateCursor.status, 400);
+  const invalidUnread = await moderatorRequest(env, '/api/moderator?unread=true', { token: 'owner-token' });
+  assert.equal(invalidUnread.status, 400);
+  assert.deepEqual(await invalidUnread.json(), { error: 'invalid_pagination' });
+  const duplicateUnread = await moderatorRequest(
+    env,
+    '/api/moderator?unread=1&unread=0',
+    { token: 'owner-token' },
+  );
+  assert.equal(duplicateUnread.status, 400);
+  assert.deepEqual(await duplicateUnread.json(), { error: 'invalid_pagination' });
   const wrongDaemon = await moderatorRequest(env, '/api/moderator/daemon/claim', {
     method: 'POST', token: 'wrong-token',
   });

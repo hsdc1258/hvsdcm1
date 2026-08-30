@@ -68,6 +68,7 @@ const MAX_MODERATOR_COMMAND_BYTES = 8_192;
 const MAX_MODERATOR_BODY_BYTES = 64_000;
 const MAX_MODERATOR_SUMMARY_LENGTH = 240;
 const MAX_MODERATOR_CURSOR_LENGTH = 512;
+const MAX_MODERATOR_READ_ENTRIES = 200;
 const MODERATOR_COMMAND_LEASE_MS = 60_000;
 const MODERATOR_REVIEW_LEASE_MS = 15 * 60_000;
 const MODERATOR_REVIEW_PROJECT = Object.freeze({
@@ -81,6 +82,12 @@ const VALID_MODERATOR_REASONING = new Set([
 ]);
 const MODERATOR_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 const MODERATOR_IDEMPOTENCY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+const MODERATOR_ITEM_UNREAD_SQL = `(
+  (kind = 'important' AND status = 'open')
+  OR (kind = 'proposal' AND status = 'pending')
+  OR seen_version < version
+)`;
+const MODERATOR_COMMAND_UNREAD_SQL = '(seen_at IS NULL OR seen_at < updated_at)';
 
 export const MODERATOR_PROPOSAL_APPROVE_SQL = `
   UPDATE moderator_items
@@ -1342,13 +1349,16 @@ function moderatorListQuery(request) {
   const params = new URL(request.url).searchParams;
   const limits = params.getAll('limit');
   const cursors = params.getAll('cursor');
-  if (limits.length > 1 || cursors.length > 1) return null;
+  const unreadValues = params.getAll('unread');
+  if (limits.length > 1 || cursors.length > 1 || unreadValues.length > 1) return null;
   const limitText = limits[0];
   const limit = limitText === undefined ? 50 : Number(limitText);
   if (limitText !== undefined && (!/^[1-9]\d{0,2}$/u.test(limitText) || limit > 100)) return null;
   const cursor = cursors.length === 0 ? null : parseModeratorCursor(cursors[0]);
   if (cursors.length === 1 && cursor === null) return null;
-  return { limit, cursor };
+  const unreadText = unreadValues[0];
+  if (unreadText !== undefined && unreadText !== '0' && unreadText !== '1') return null;
+  return { limit, cursor, unreadOnly: unreadText === '1' };
 }
 
 function parseModeratorEvent(row) {
@@ -1363,8 +1373,14 @@ function parseModeratorEvent(row) {
   };
 }
 
+function moderatorItemRequiresAction(row) {
+  return (row.kind === 'important' && row.status === 'open')
+    || (row.kind === 'proposal' && row.status === 'pending');
+}
+
 function serializeModeratorItem(row, events = []) {
   if (!row) return null;
+  const seenVersion = Number(row.seen_version ?? 0);
   return {
     item_id: row.item_id,
     kind: row.kind,
@@ -1373,6 +1389,8 @@ function serializeModeratorItem(row, events = []) {
     action_summary: row.action_summary,
     proposed_command: row.proposed_command ?? null,
     version: row.version,
+    seen_version: seenVersion,
+    unread: moderatorItemRequiresAction(row) || seenVersion < Number(row.version),
     brain_model: row.brain_model ?? null,
     brain_reasoning: row.brain_reasoning ?? null,
     worker_model: row.worker_model ?? null,
@@ -1387,6 +1405,7 @@ function serializeModeratorItem(row, events = []) {
 
 function serializeModeratorCommand(row) {
   if (!row) return null;
+  const seenAt = row.seen_at ?? null;
   return {
     command_id: row.command_id,
     source: row.source,
@@ -1403,6 +1422,8 @@ function serializeModeratorCommand(row) {
     action_summary: row.action_summary ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    seen_at: seenAt,
+    unread: seenAt === null || seenAt < row.updated_at,
     claimed_at: row.claimed_at ?? null,
     started_at: row.started_at ?? null,
     completed_at: row.completed_at ?? null,
@@ -1482,15 +1503,18 @@ async function getModerator(request, env) {
   const query = moderatorListQuery(request);
   if (!query) return moderatorError('invalid_pagination');
 
+  const itemUnreadWhere = query.unreadOnly ? MODERATOR_ITEM_UNREAD_SQL : '1 = 1';
   const itemStatement = query.cursor
     ? env.DB.prepare(`
       SELECT * FROM moderator_items
-      WHERE updated_at < ?1 OR (updated_at = ?1 AND item_id < ?2)
+      WHERE ${itemUnreadWhere}
+        AND (updated_at < ?1 OR (updated_at = ?1 AND item_id < ?2))
       ORDER BY updated_at DESC, item_id DESC
       LIMIT ?3
     `).bind(query.cursor.updatedAt, query.cursor.itemId, query.limit + 1)
     : env.DB.prepare(`
       SELECT * FROM moderator_items
+      WHERE ${itemUnreadWhere}
       ORDER BY updated_at DESC, item_id DESC
       LIMIT ?1
     `).bind(query.limit + 1);
@@ -1512,9 +1536,19 @@ async function getModerator(request, env) {
     }
   }
 
-  const [commandRows, countRows, brainRow, activeSessions, activeCommands] = await Promise.all([
+  const commandUnreadWhere = query.unreadOnly ? MODERATOR_COMMAND_UNREAD_SQL : '1 = 1';
+  const [
+    commandRows,
+    countRows,
+    unreadItemCountRows,
+    unreadCommandCountRow,
+    brainRow,
+    activeSessions,
+    activeCommands,
+  ] = await Promise.all([
     env.DB.prepare(`
       SELECT * FROM moderator_commands
+      WHERE ${commandUnreadWhere}
       ORDER BY updated_at DESC, command_id DESC
       LIMIT 50
     `).all(),
@@ -1524,6 +1558,18 @@ async function getModerator(request, env) {
       GROUP BY kind, status
       ORDER BY kind, status
     `).all(),
+    env.DB.prepare(`
+      SELECT kind, COUNT(*) AS count
+      FROM moderator_items
+      WHERE ${MODERATOR_ITEM_UNREAD_SQL}
+      GROUP BY kind
+      ORDER BY kind
+    `).all(),
+    env.DB.prepare(`
+      SELECT COUNT(*) AS count
+      FROM moderator_commands
+      WHERE ${MODERATOR_COMMAND_UNREAD_SQL}
+    `).first(),
     env.DB.prepare(`
       SELECT brain_model, brain_reasoning, worker_model, worker_reasoning, updated_at
       FROM moderator_items
@@ -1538,6 +1584,11 @@ async function getModerator(request, env) {
   for (const row of countRows.results || []) {
     if (counts[row.kind]) counts[row.kind][row.status] = Number(row.count || 0);
   }
+  const unreadCounts = { important: 0, proposal: 0, review: 0, record: 0 };
+  for (const row of unreadItemCountRows.results || []) {
+    if (Object.hasOwn(unreadCounts, row.kind)) unreadCounts[row.kind] = Number(row.count || 0);
+  }
+  unreadCounts.record = Number(unreadCommandCountRow?.count || 0);
   const hasNext = (itemRows.results || []).length > query.limit;
   return json({
     brain: {
@@ -1550,9 +1601,80 @@ async function getModerator(request, env) {
     active_sessions: activeSessions,
     active_commands: activeCommands,
     counts,
+    unread_counts: unreadCounts,
     commands: (commandRows.results || []).map(serializeModeratorCommand),
     items: pageRows.map((row) => serializeModeratorItem(row, eventsByItem.get(row.item_id) || [])),
     next_cursor: hasNext ? moderatorCursor(pageRows.at(-1)) : null,
+  });
+}
+
+function moderatorReadTimestamp(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/u.test(value)) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? value : null;
+}
+
+async function markModeratorRead(request, env) {
+  const owner = await moderatorOwner(request, env);
+  if (owner.response) return owner.response;
+  const parsed = await readModeratorJson(request);
+  if (parsed.response) return parsed.response;
+  const itemEntries = parsed.value.items === undefined ? [] : parsed.value.items;
+  const commandEntries = parsed.value.commands === undefined ? [] : parsed.value.commands;
+  if (!Array.isArray(itemEntries) || !Array.isArray(commandEntries)) {
+    return moderatorError('invalid_item');
+  }
+  const entryCount = itemEntries.length + commandEntries.length;
+  if (entryCount > MAX_MODERATOR_READ_ENTRIES) {
+    return moderatorError('request_too_large', 413);
+  }
+  if (entryCount === 0) return moderatorError('invalid_item');
+
+  const items = new Map();
+  for (const entry of itemEntries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+      || typeof entry.item_id !== 'string'
+      || !MODERATOR_ID_PATTERN.test(entry.item_id)
+      || !Number.isSafeInteger(entry.version)
+      || entry.version <= 0) return moderatorError('invalid_item');
+    items.set(entry.item_id, Math.max(items.get(entry.item_id) || 0, entry.version));
+  }
+  const commands = new Map();
+  for (const entry of commandEntries) {
+    const updatedAt = entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? moderatorReadTimestamp(entry.updated_at)
+      : null;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+      || typeof entry.command_id !== 'string'
+      || !MODERATOR_ID_PATTERN.test(entry.command_id)
+      || updatedAt === null) return moderatorError('invalid_item');
+    const existing = commands.get(entry.command_id);
+    if (existing !== undefined && existing !== updatedAt) return moderatorError('invalid_item');
+    commands.set(entry.command_id, updatedAt);
+  }
+
+  const itemStatements = [...items].map(([itemId, version]) => env.DB.prepare(`
+    UPDATE moderator_items
+    SET seen_version = ?2
+    WHERE item_id = ?1 AND seen_version < ?2
+  `).bind(itemId, version));
+  const commandStatements = [...commands].map(([commandId, updatedAt]) => env.DB.prepare(`
+    UPDATE moderator_commands
+    SET seen_at = ?2
+    WHERE command_id = ?1 AND (seen_at IS NULL OR seen_at < ?2)
+  `).bind(commandId, updatedAt));
+  const results = await env.DB.batch([...itemStatements, ...commandStatements]);
+  return json({
+    marked: {
+      items: results.slice(0, itemStatements.length).reduce(
+        (total, result) => total + moderatorChanges(result),
+        0,
+      ),
+      commands: results.slice(itemStatements.length).reduce(
+        (total, result) => total + moderatorChanges(result),
+        0,
+      ),
+    },
   });
 }
 
@@ -2398,6 +2520,7 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
   if (method === 'GET' && path === '/api/moderator') return getModerator(request, env);
+  if (method === 'POST' && path === '/api/moderator/read') return markModeratorRead(request, env);
   if (method === 'POST' && path === '/api/moderator/commands') {
     return createModeratorCommand(request, env);
   }
