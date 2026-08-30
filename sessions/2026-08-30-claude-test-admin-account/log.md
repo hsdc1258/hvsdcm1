@@ -22,3 +22,11 @@
   상태다. **그 두 파일은 건드리지도 stage하지도 않았다.**
 - 검증 → `node scripts/validate.mjs` 13,705 통과, `node --test worker/test.mjs` 79/79 통과,
   `usage-api-render.e2e.mjs` PASS.
+- 배포 → `npx wrangler deploy` (Version 173f0cb2, `OWNER_USERNAME="hvsdcm,claude-test"`),
+  main push로 Pages의 `assets/js/home.js` 갱신 확인.
+- 공개 환경 실측 → `POST /api/login` 200(user_id 18) / `GET /api/usage` 200 /
+  `GET /api/moderator` 200 / `GET /api/admin/stats` 200 / 토큰 없는 `GET /api/usage` 401.
+  브라우저에서 `hvsdcm1.xyz/usage`(모더 탭 배지 10)와 `hvsdcm1.xyz/admin`(개요·사용자·접속
+  기기·공용 답안) 렌더 확인.
+- 자격증명은 워크스페이스 루트 `.credentials.json`(gitignore `**/.credentials.json`)에만 둔다.
+  저장소에는 어디에도 적지 않았다.
