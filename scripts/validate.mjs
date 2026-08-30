@@ -2159,7 +2159,7 @@ function validateGlobalsAndOrder() {
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
-    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v1', '/behavior-lab/assets/js/app.js?v=20260831-v1'],
+    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260831-v2'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2544,8 +2544,10 @@ function validateBehaviorLab() {
     && workerSource.includes('unmatchedTaker > 2'),
   'worker/src/behavior-lab.js: long-short and taker rows must use exact timestamp joins with bounded unmatched edges');
   check(workerSource.includes('REQUEST_TIMEOUT_MS') && workerSource.includes('MAX_RESPONSE_BYTES')
-    && workerSource.includes('CACHE_TTL_MS') && workerSource.includes('CACHE_LIMIT'),
-  'worker/src/behavior-lab.js: upstream timeout, response size, TTL, and cache cardinality must stay bounded');
+    && workerSource.includes('TOTAL_DEADLINE_MS') && workerSource.includes('MAX_ACTIVE_DASHBOARD_LOADS')
+    && workerSource.includes('MAX_BEHAVIOR_QUEUE_DEPTH') && workerSource.includes('CACHE_TTL_MS')
+    && workerSource.includes('CACHE_LIMIT') && workerSource.includes('clock() + CACHE_TTL_MS'),
+  'worker/src/behavior-lab.js: total/fetch timeout, admission, behavior queue, response, completion TTL, and cache cardinality must stay bounded');
   check(!/authorization|api[-_ ]?key|passphrase|signature/iu.test(workerSource),
     'worker/src/behavior-lab.js: credential vocabulary is forbidden on the public market boundary');
   check(!/\/api\/v\d+\/(?:mix\/)?(?:account|order|position|trade|private)(?:\/|['"`])/iu.test(workerSource),
@@ -2570,6 +2572,10 @@ function validateBehaviorLab() {
     && coreSource.includes('BACKTEST_FEE_BPS_PER_SIDE = 6')
     && coreSource.includes('BACKTEST_SLIPPAGE_BPS_PER_SIDE = 4'),
   'behavior-lab core: chronological backtest and cost-inclusive manual draft semantics are incomplete');
+  check(coreSource.includes('evaluateSnapshotQuality') && coreSource.includes('componentMaxAges')
+    && coreSource.includes('createFreshManualDraft') && appSource.includes('setInterval(refreshLiveClock, 1_000)')
+    && /function createDraft\(\)[\s\S]*createFreshManualDraft/u.test(appSource),
+  'behavior-lab app: component/period live-clock freshness and action-time draft gating must stay fail-closed');
   const publicLinkAt = homeHtml.indexOf('href="/behavior-lab/"');
   const firstPrivateTemplateAt = homeHtml.indexOf('<template data-study>');
   check(publicLinkAt > 0 && firstPrivateTemplateAt > publicLinkAt,

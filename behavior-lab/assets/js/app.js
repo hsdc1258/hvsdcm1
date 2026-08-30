@@ -6,7 +6,9 @@
   const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'];
   const PERIODS = ['5m', '15m', '1h', '4h'];
   const core = window.BehaviorLabCore;
-  const state = { symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null };
+  const state = {
+    symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
+  };
 
   const elements = {
     backtestChronology: document.getElementById('backtestChronology'),
@@ -72,7 +74,7 @@
     return typeof value === 'number' && Number.isFinite(value);
   }
 
-  function validPayload(payload, symbol, period) {
+  function validPayload(payload, symbol, period, now = Date.now()) {
     if (!payload || payload.source !== 'live' || payload.quality !== 'live') return false;
     const { snapshot, signal } = payload;
     if (!snapshot || snapshot.source !== 'live' || snapshot.quality !== 'live'
@@ -85,7 +87,8 @@
     if (!snapshot.candles.every((candle) => ['ts', 'open', 'high', 'low', 'close', 'volume'].every((key) => finite(candle[key])))) return false;
     if (!snapshot.behaviorSeries.every((point) => ['ts', 'longRatio', 'shortRatio', 'buyVolume', 'sellVolume'].every((key) => finite(point[key])))) return false;
     return Boolean(signal && ['long', 'short', 'stand-aside'].includes(signal.direction)
-      && Array.isArray(signal.evidence) && Array.isArray(signal.counterSignals));
+      && Array.isArray(signal.evidence) && Array.isArray(signal.counterSignals)
+      && core.evaluateSnapshotQuality(snapshot, now).isLive);
   }
 
   function formatPrice(value) {
@@ -119,15 +122,19 @@
     }
   }
 
-  function clearDerived() {
+  function clearDraft() {
     state.draft = null;
-    elements.backtestEmpty.hidden = false;
-    elements.backtestResult.hidden = true;
     elements.draftPlaceholder.hidden = false;
     elements.draftErrors.hidden = true;
     elements.draftResult.hidden = true;
     elements.draftText.value = '';
     elements.copyDraft.textContent = '텍스트 복사';
+  }
+
+  function clearDerived() {
+    clearDraft();
+    elements.backtestEmpty.hidden = false;
+    elements.backtestResult.hidden = true;
   }
 
   function identity() {
@@ -187,6 +194,26 @@
     target.replaceChildren(fragment);
   }
 
+  function refreshLiveClock() {
+    if (!state.dashboard) return false;
+    const freshness = core.evaluateSnapshotQuality(state.dashboard.snapshot, Date.now());
+    state.freshness = freshness;
+    elements.freshnessText.textContent = formatAge(freshness.freshnessMs);
+    elements.dashboard.dataset.quality = freshness.quality;
+    if (!freshness.isLive) {
+      clearDraft();
+      elements.createDraft.disabled = true;
+      elements.draftBlocked.hidden = false;
+      elements.dashboardErrorText.textContent = '필수 component가 최신 상태가 아닙니다. 새 대시보드를 다시 불러오세요.';
+      elements.dashboardError.hidden = false;
+      setStatus('error', freshness.quality === 'stale' ? 'STALE · 새로고침 필요' : '데이터 검증 실패');
+      return false;
+    }
+    elements.dashboardError.hidden = true;
+    setStatus('live', 'LIVE · 8개 공개 GET 검증');
+    return true;
+  }
+
   function renderDashboard(payload) {
     const { snapshot, signal } = payload;
     clearDerived();
@@ -234,6 +261,7 @@
     state.controller?.abort();
     state.controller = new AbortController();
     state.dashboard = null;
+    state.freshness = null;
     setActiveChoices();
     clearDerived();
     elements.dashboard.setAttribute('aria-busy', 'true');
@@ -253,7 +281,6 @@
       if (!validPayload(payload, state.symbol, state.period)) throw new Error('검증되지 않은 응답을 표시하지 않았습니다.');
       state.dashboard = payload;
       renderDashboard(payload);
-      setStatus('live', 'LIVE · 8개 공개 GET 검증');
     } catch (error) {
       if (error.name === 'AbortError' || requestId !== state.request) return;
       elements.dashboard.setAttribute('aria-busy', 'false');
@@ -311,7 +338,8 @@
   }
 
   function updateDraftAvailability() {
-    const ready = Boolean(state.dashboard
+    const live = state.dashboard ? refreshLiveClock() : false;
+    const ready = Boolean(live
       && state.dashboard.signal.direction !== 'stand-aside'
       && finite(state.dashboard.snapshot.maxLeverage)
       && riskInputs.every((input) => input.value.trim()));
@@ -322,7 +350,7 @@
   function createDraft() {
     if (!state.dashboard) return;
     const before = identity();
-    const result = core.createManualDraft({
+    const result = core.createFreshManualDraft({
       seed: Number(elements.riskSeed.value),
       maxLossPct: Number(elements.riskLoss.value),
       leverageCap: Number(elements.riskLeverage.value),
@@ -334,8 +362,12 @@
       entry: state.dashboard.snapshot.ticker.last,
       direction: state.dashboard.signal.direction,
       marketMaxLeverage: state.dashboard.snapshot.maxLeverage,
-    });
+    }, state.dashboard.snapshot, Date.now());
     if (before !== identity()) return;
+    if (!result.freshness?.isLive) {
+      refreshLiveClock();
+      return;
+    }
     state.draft = result;
     elements.draftPlaceholder.hidden = true;
     elements.draftErrors.hidden = result.valid;
@@ -350,6 +382,7 @@
 
   async function copyDraft() {
     if (!state.draft?.valid || elements.draftText.value !== state.draft.text) return;
+    if (!refreshLiveClock()) return;
     try {
       await navigator.clipboard.writeText(state.draft.text);
     } catch {
@@ -384,12 +417,10 @@
   elements.createDraft.addEventListener('click', createDraft);
   elements.copyDraft.addEventListener('click', () => void copyDraft());
   riskInputs.forEach((input) => input.addEventListener('input', () => {
-    state.draft = null;
-    elements.draftPlaceholder.hidden = false;
-    elements.draftErrors.hidden = true;
-    elements.draftResult.hidden = true;
+    clearDraft();
     updateDraftAvailability();
   }));
 
+  window.setInterval(refreshLiveClock, 1_000);
   void loadDashboard();
 })();

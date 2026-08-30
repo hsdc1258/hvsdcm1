@@ -6,6 +6,62 @@
   const BACKTEST_SIDE_COST_RATE = (BACKTEST_FEE_BPS_PER_SIDE + BACKTEST_SLIPPAGE_BPS_PER_SIDE) / 10_000;
   const RISK_ROUND_TRIP_COST_RATE = 2 * (BACKTEST_FEE_BPS_PER_SIDE + BACKTEST_SLIPPAGE_BPS_PER_SIDE) / 10_000;
   const INITIAL_EQUITY = 10_000;
+  const FUTURE_TOLERANCE_MS = 60_000;
+  const PERIOD_MS = Object.freeze({ '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000 });
+  const REQUIRED_COMPONENTS = Object.freeze([
+    'tickers', 'ticker', 'candles', 'behavior', 'funding', 'openInterest', 'contracts',
+  ]);
+
+  function componentMaxAges(period) {
+    const interval = PERIOD_MS[period];
+    if (!interval) return null;
+    return {
+      tickers: 2 * 60_000,
+      ticker: 2 * 60_000,
+      candles: interval * 2.25,
+      behavior: interval * 3,
+      funding: 12 * 3_600_000,
+      openInterest: 5 * 60_000,
+      contracts: 24 * 3_600_000,
+    };
+  }
+
+  function evaluateSnapshotQuality(snapshot, now = Date.now()) {
+    const maxAges = componentMaxAges(snapshot?.period);
+    const components = {};
+    const failures = [];
+    let freshnessMs = 0;
+    let nextExpiryAt = Number.POSITIVE_INFINITY;
+    for (const name of REQUIRED_COMPONENTS) {
+      const item = snapshot?.components?.[name];
+      const updatedAt = item?.updatedAt;
+      const ageMs = Number.isFinite(updatedAt) && Number.isFinite(now) ? now - updatedAt : null;
+      const structurallyInvalid = !maxAges || !item || item.status === 'partial'
+        || !Number.isFinite(updatedAt) || updatedAt <= 0 || ageMs === null || ageMs < -FUTURE_TOLERANCE_MS;
+      const status = structurallyInvalid ? 'partial' : ageMs > maxAges[name] ? 'stale' : 'fresh';
+      components[name] = {
+        ...(item && typeof item === 'object' ? item : {}),
+        status,
+        updatedAt: Number.isFinite(updatedAt) ? updatedAt : null,
+        ageMs: ageMs === null ? null : Math.max(0, ageMs),
+      };
+      if (status !== 'fresh') failures.push(`${name}:${status}`);
+      if (ageMs !== null) freshnessMs = Math.max(freshnessMs, Math.max(0, ageMs));
+      if (!structurallyInvalid) nextExpiryAt = Math.min(nextExpiryAt, updatedAt + maxAges[name]);
+    }
+    const quality = failures.some((item) => item.endsWith(':partial')) ? 'partial'
+      : failures.length ? 'stale' : snapshot?.source === 'live' ? 'live' : 'partial';
+    return {
+      isLive: quality === 'live',
+      quality,
+      components,
+      failures,
+      freshnessMs,
+      nextExpiryAt: Number.isFinite(nextExpiryAt) ? nextExpiryAt : null,
+      sourceLabel: quality === 'live' ? 'LIVE · component 검증'
+        : quality === 'stale' ? 'STALE · component 최신성 초과' : 'PARTIAL · component 불완전',
+    };
+  }
 
   function average(candles, endExclusive, length, field) {
     const start = Math.max(0, endExclusive - length);
@@ -231,12 +287,32 @@
     };
   }
 
+  function createFreshManualDraft(input, context, snapshot, now = Date.now()) {
+    const freshness = evaluateSnapshotQuality(snapshot, now);
+    if (!freshness.isLive) {
+      return {
+        valid: false,
+        errors: ['현재 snapshot의 필수 component가 최신 상태가 아닙니다. 대시보드를 다시 불러오세요.'],
+        identity: {
+          symbol: context.symbol,
+          period: context.period,
+          snapshotUpdatedAt: context.snapshotUpdatedAt,
+          direction: context.direction,
+        },
+        freshness,
+      };
+    }
+    return { ...createManualDraft(input, context), freshness };
+  }
+
   window.BehaviorLabCore = Object.freeze({
     BACKTEST_FEE_BPS_PER_SIDE,
     BACKTEST_SLIPPAGE_BPS_PER_SIDE,
     RISK_ROUND_TRIP_COST_RATE,
     calculateNetReturn,
+    createFreshManualDraft,
     createManualDraft,
+    evaluateSnapshotQuality,
     runWalkForwardBacktest,
   });
 })();

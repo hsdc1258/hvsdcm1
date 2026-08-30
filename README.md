@@ -53,7 +53,7 @@ npm run db:init
 npm run dev
 ```
 
-Behavior Lab is intentionally narrower than a proxy. Its browser calls only `GET /api/behavior-lab/dashboard` on the Worker. The Worker itself constructs exactly eight allowlisted, unauthenticated `GET https://api.bitget.com/api/v2/mix/market/*` requests for one of four fixed symbols and four fixed periods, then rejects malformed, stale, partial or timestamp-misaligned data. It never falls back to a fixture that looks live. The browser runs the chronological price/volume walk-forward test and cost-inclusive manual draft locally; the draft has text/copy controls only and no exchange submission path.
+Behavior Lab is intentionally narrower than a proxy. Its browser calls only `GET /api/behavior-lab/dashboard` on the Worker. The Worker admits at most two distinct dashboard fan-outs per isolate, queues no dashboard overflow, enforces a total request deadline across the rate-limited behavior reads, and caches at most the 16 enum combinations from successful completion. Each admitted load constructs exactly eight allowlisted, unauthenticated `GET https://api.bitget.com/api/v2/mix/market/*` requests for one of four fixed symbols and four fixed periods, then rejects malformed, stale, partial or timestamp-misaligned data. It never falls back to a fixture that looks live. The browser advances the same component/period freshness gate with a live clock and clears/disables the draft as soon as the snapshot is no longer live. It runs the chronological price/volume walk-forward test and cost-inclusive manual draft locally; the draft has text/copy controls only and no exchange submission path.
 
 ## KICE past-paper data
 

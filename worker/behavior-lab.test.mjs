@@ -4,9 +4,12 @@ import test from 'node:test';
 
 import worker from './src/index.js';
 import {
+  BEHAVIOR_LAB_PUBLIC_BUDGET,
   BITGET_PUBLIC_HOST,
   BITGET_PUBLIC_PATHS,
   BehaviorLabRequestError,
+  behaviorLabBudgetSnapshot,
+  clearBehaviorLabCache,
   getBehaviorLabDashboard,
 } from './src/behavior-lab.js';
 
@@ -162,6 +165,108 @@ test('the public route keeps CORS, method, and unknown-route behavior while inva
     headers: { origin: 'https://hvsdcm1.xyz' },
   }), env);
   assert.equal(unknown.status, 404);
+});
+
+test('all 16 enums saturate within the module budget and overflow never starts upstream later', async () => {
+  clearBehaviorLabCache();
+  const ledger = [];
+  const startedAt = Date.now();
+  const requests = SYMBOLS.flatMap((symbol) => ['5m', '15m', '1h', '4h'].map((period) => (
+    getBehaviorLabDashboard(`https://worker.example/api/behavior-lab/dashboard?symbol=${symbol}&period=${period}`, {
+      nowMs: NOW,
+      behaviorGapMs: 5,
+      totalDeadlineMs: 500,
+      fetchImpl: transport(() => {}, ledger),
+    })
+  )));
+  const settled = await Promise.allSettled(requests);
+  const elapsedMs = Date.now() - startedAt;
+  const fulfilled = settled.filter((item) => item.status === 'fulfilled');
+  const rejected = settled.filter((item) => item.status === 'rejected');
+  assert.equal(fulfilled.length, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads);
+  assert.equal(rejected.length, 16 - BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads);
+  assert.ok(rejected.every((item) => item.reason instanceof BehaviorLabRequestError && item.reason.status === 503));
+  assert.ok(elapsedMs < BEHAVIOR_LAB_PUBLIC_BUDGET.totalDeadlineMs);
+
+  const snapshot = behaviorLabBudgetSnapshot();
+  assert.equal(snapshot.maxObservedActiveLoads, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads);
+  assert.ok(snapshot.maxObservedBehaviorQueueDepth <= BEHAVIOR_LAB_PUBLIC_BUDGET.maxBehaviorQueueDepth);
+  assert.equal(snapshot.upstreamStarts, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads * 8);
+  assert.equal(snapshot.activeDashboardLoads, 0);
+  assert.equal(snapshot.behaviorQueueDepth, 0);
+  assert.equal(snapshot.behaviorReservations, 0);
+  assert.ok(snapshot.cacheEntries <= BEHAVIOR_LAB_PUBLIC_BUDGET.maxCacheEntries);
+  const startsAtSettlement = ledger.length;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(ledger.length, startsAtSettlement);
+});
+
+test('the total deadline includes behavior queue wait and timed-out work never starts later', async () => {
+  clearBehaviorLabCache();
+  const ledger = [];
+  await assert.rejects(
+    getBehaviorLabDashboard('https://worker.example/api/behavior-lab/dashboard?symbol=BTCUSDT&period=5m', {
+      cache: false,
+      nowMs: NOW,
+      behaviorGapMs: 60,
+      timeoutMs: 1_000,
+      totalDeadlineMs: 20,
+      fetchImpl: transport(() => {}, ledger),
+    }),
+    (error) => error instanceof BehaviorLabRequestError && error.status === 503,
+  );
+  const startsAtTimeout = ledger.length;
+  assert.equal(startsAtTimeout, 7);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(ledger.length, startsAtTimeout);
+  assert.deepEqual(behaviorLabBudgetSnapshot(), {
+    activeDashboardLoads: 0,
+    behaviorQueueDepth: 0,
+    behaviorReservations: 0,
+    maxObservedActiveLoads: 1,
+    maxObservedBehaviorQueueDepth: 2,
+    upstreamStarts: 7,
+    inflightEntries: 0,
+    cacheEntries: 0,
+  });
+});
+
+test('same-key loads dedupe and successful cache TTL starts at completion', async () => {
+  clearBehaviorLabCache();
+  let cacheClock = 0;
+  const ledger = [];
+  const delayedByClock = async (input, init) => {
+    const url = input instanceof URL ? input : new URL(input);
+    cacheClock += 3_000;
+    ledger.push({ url, init });
+    return new Response(JSON.stringify(fixtureFor(url)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const url = 'https://worker.example/api/behavior-lab/dashboard?symbol=BTCUSDT&period=5m';
+  const options = {
+    nowMs: NOW,
+    behaviorGapMs: 0,
+    totalDeadlineMs: 60_000,
+    clock: () => cacheClock,
+    fetchImpl: delayedByClock,
+  };
+  const [first, deduped] = await Promise.all([
+    getBehaviorLabDashboard(url, options),
+    getBehaviorLabDashboard(url, options),
+  ]);
+  assert.deepEqual(deduped, first);
+  assert.equal(ledger.length, 8);
+  assert.equal(cacheClock, 24_000);
+
+  cacheClock = 30_000;
+  assert.deepEqual(await getBehaviorLabDashboard(url, options), first);
+  assert.equal(ledger.length, 8);
+
+  cacheClock = 40_000;
+  await getBehaviorLabDashboard(url, options);
+  assert.equal(ledger.length, 16);
 });
 
 test('the Worker boundary contains no credential, account, private, or trading request vocabulary', () => {

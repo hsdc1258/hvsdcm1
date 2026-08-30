@@ -18,15 +18,32 @@ const PERIOD_SET = new Set(BEHAVIOR_LAB_PERIODS);
 const PERIOD_TO_GRANULARITY = Object.freeze({ '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H' });
 const PERIOD_MS = Object.freeze({ '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000 });
 const REQUEST_TIMEOUT_MS = 6_000;
+const TOTAL_DEADLINE_MS = 12_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
 const CACHE_TTL_MS = 15_000;
 const CACHE_LIMIT = BEHAVIOR_LAB_SYMBOLS.length * BEHAVIOR_LAB_PERIODS.length;
+const MAX_ACTIVE_DASHBOARD_LOADS = 2;
+const MAX_BEHAVIOR_QUEUE_DEPTH = MAX_ACTIVE_DASHBOARD_LOADS * 2;
 const FUTURE_TOLERANCE_MS = 60_000;
 const ENVELOPE_MAX_AGE_MS = 5 * 60_000;
 const dashboardCache = new Map();
 const inflight = new Map();
 let behaviorTail = Promise.resolve();
 let behaviorLastStartedAt = 0;
+let activeDashboardLoads = 0;
+let behaviorQueueDepth = 0;
+let behaviorReservations = 0;
+let maxObservedActiveLoads = 0;
+let maxObservedBehaviorQueueDepth = 0;
+let observedUpstreamStarts = 0;
+
+export const BEHAVIOR_LAB_PUBLIC_BUDGET = Object.freeze({
+  maxActiveDashboardLoads: MAX_ACTIVE_DASHBOARD_LOADS,
+  maxDashboardQueueDepth: 0,
+  maxBehaviorQueueDepth: MAX_BEHAVIOR_QUEUE_DEPTH,
+  maxCacheEntries: CACHE_LIMIT,
+  totalDeadlineMs: TOTAL_DEADLINE_MS,
+});
 
 export class BehaviorLabRequestError extends Error {
   constructor(message, status = 502) {
@@ -41,10 +58,51 @@ export function clearBehaviorLabCache() {
   inflight.clear();
   behaviorTail = Promise.resolve();
   behaviorLastStartedAt = 0;
+  activeDashboardLoads = 0;
+  behaviorQueueDepth = 0;
+  behaviorReservations = 0;
+  maxObservedActiveLoads = 0;
+  maxObservedBehaviorQueueDepth = 0;
+  observedUpstreamStarts = 0;
+}
+
+export function behaviorLabBudgetSnapshot() {
+  return {
+    activeDashboardLoads,
+    behaviorQueueDepth,
+    behaviorReservations,
+    maxObservedActiveLoads,
+    maxObservedBehaviorQueueDepth,
+    upstreamStarts: observedUpstreamStarts,
+    inflightEntries: inflight.size,
+    cacheEntries: dashboardCache.size,
+  };
 }
 
 function publicFailure() {
   return new BehaviorLabRequestError('공개 시장 데이터를 검증하지 못했습니다. 잠시 후 다시 시도하세요.');
+}
+
+function deadlineFailure() {
+  return new BehaviorLabRequestError('공개 시장 요청 시간 한도를 초과했습니다. 잠시 후 다시 시도하세요.', 503);
+}
+
+function capacityFailure() {
+  return new BehaviorLabRequestError('공개 시장 요청이 많습니다. 잠시 후 다시 시도하세요.', 503);
+}
+
+function remainingMs(context) {
+  return context.deadlineAt - context.clock();
+}
+
+function requireActive(context) {
+  if (context.cancelled || remainingMs(context) <= 0) throw deadlineFailure();
+}
+
+function cancelContext(context) {
+  context.cancelled = true;
+  for (const controller of context.controllers) controller.abort();
+  context.controllers.clear();
 }
 
 function finite(value) {
@@ -128,7 +186,8 @@ async function readBoundedJson(response) {
   try { return JSON.parse(text); } catch { throw publicFailure(); }
 }
 
-async function publicGet(path, query, fetchImpl, timeoutMs, ledger) {
+async function publicGet(path, query, fetchImpl, timeoutMs, ledger, context) {
+  requireActive(context);
   const url = new URL(`https://${BITGET_PUBLIC_HOST}${path}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   if (url.protocol !== 'https:' || url.hostname !== BITGET_PUBLIC_HOST || !BITGET_PATH_SET.has(url.pathname)) {
@@ -140,34 +199,62 @@ async function publicGet(path, query, fetchImpl, timeoutMs, ledger) {
     }
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  context.controllers.add(controller);
+  const requestBudgetMs = Math.min(timeoutMs, remainingMs(context));
+  if (requestBudgetMs <= 0) {
+    context.controllers.delete(controller);
+    throw deadlineFailure();
+  }
+  const timeout = setTimeout(() => controller.abort(), requestBudgetMs);
   try {
+    requireActive(context);
+    observedUpstreamStarts += 1;
     ledger?.push({ method: 'GET', host: url.hostname, path: url.pathname, query: url.searchParams.toString() });
-    const response = await fetchImpl(url, {
+    const fetchPromise = fetchImpl(url, {
       method: 'GET',
       headers: { accept: 'application/json' },
       redirect: 'error',
       signal: controller.signal,
     });
+    const abortPromise = new Promise((_, reject) => {
+      const rejectAbort = () => reject(new Error('upstream aborted'));
+      if (controller.signal.aborted) rejectAbort();
+      else controller.signal.addEventListener('abort', rejectAbort, { once: true });
+    });
+    const response = await Promise.race([fetchPromise, abortPromise]);
     if (!response || !response.ok || response.status < 200 || response.status >= 300) throw publicFailure();
     return await readBoundedJson(response);
   } catch (error) {
     if (error instanceof BehaviorLabRequestError) throw error;
+    if (context.cancelled || remainingMs(context) <= 0) throw deadlineFailure();
     throw publicFailure();
   } finally {
     clearTimeout(timeout);
+    context.controllers.delete(controller);
   }
 }
 
-function behaviorPublicGet(job, gapMs) {
+function behaviorPublicGet(job, gapMs, context) {
+  behaviorReservations += 1;
+  behaviorQueueDepth += 1;
+  maxObservedBehaviorQueueDepth = Math.max(maxObservedBehaviorQueueDepth, behaviorQueueDepth);
   const next = behaviorTail.then(async () => {
-    const waitMs = Math.max(0, gapMs - (Date.now() - behaviorLastStartedAt));
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    behaviorLastStartedAt = Date.now();
+    behaviorQueueDepth -= 1;
+    requireActive(context);
+    const waitMs = Math.max(0, gapMs - (context.clock() - behaviorLastStartedAt));
+    if (waitMs > 0) {
+      const availableMs = remainingMs(context);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, Math.max(0, availableMs))));
+      requireActive(context);
+      if (waitMs > availableMs) throw deadlineFailure();
+    }
+    requireActive(context);
+    behaviorLastStartedAt = context.clock();
     return job();
   });
-  behaviorTail = next.then(() => undefined, () => undefined);
-  return next;
+  const tracked = next.finally(() => { behaviorReservations -= 1; });
+  behaviorTail = tracked.then(() => undefined, () => undefined);
+  return tracked;
 }
 
 function average(values) {
@@ -253,31 +340,35 @@ function parseDashboardRequest(requestUrl) {
 }
 
 async function loadDashboard(symbol, period, options) {
-  const nowMs = options.nowMs ?? Date.now();
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const behaviorGapMs = options.behaviorGapMs ?? 1_050;
   const ledger = options.ledger;
+  const context = options.context;
   const common = { productType: 'usdt-futures' };
   const ordinary = [
-    publicGet('/api/v2/mix/market/tickers', common, fetchImpl, timeoutMs, ledger),
-    publicGet('/api/v2/mix/market/ticker', { ...common, symbol }, fetchImpl, timeoutMs, ledger),
-    publicGet('/api/v2/mix/market/candles', { ...common, symbol, granularity: PERIOD_TO_GRANULARITY[period], limit: '260' }, fetchImpl, timeoutMs, ledger),
-    publicGet('/api/v2/mix/market/history-fund-rate', { ...common, symbol, pageSize: '20' }, fetchImpl, timeoutMs, ledger),
-    publicGet('/api/v2/mix/market/open-interest', { ...common, symbol }, fetchImpl, timeoutMs, ledger),
-    publicGet('/api/v2/mix/market/contracts', { ...common, symbol }, fetchImpl, timeoutMs, ledger),
+    publicGet('/api/v2/mix/market/tickers', common, fetchImpl, timeoutMs, ledger, context),
+    publicGet('/api/v2/mix/market/ticker', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
+    publicGet('/api/v2/mix/market/candles', { ...common, symbol, granularity: PERIOD_TO_GRANULARITY[period], limit: '260' }, fetchImpl, timeoutMs, ledger, context),
+    publicGet('/api/v2/mix/market/history-fund-rate', { ...common, symbol, pageSize: '20' }, fetchImpl, timeoutMs, ledger, context),
+    publicGet('/api/v2/mix/market/open-interest', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
+    publicGet('/api/v2/mix/market/contracts', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
   ];
   const longShortPromise = behaviorPublicGet(
-    () => publicGet('/api/v2/mix/market/long-short', { symbol, period }, fetchImpl, timeoutMs, ledger),
+    () => publicGet('/api/v2/mix/market/long-short', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
     behaviorGapMs,
+    context,
   );
   const takerPromise = behaviorPublicGet(
-    () => publicGet('/api/v2/mix/market/taker-buy-sell', { symbol, period }, fetchImpl, timeoutMs, ledger),
+    () => publicGet('/api/v2/mix/market/taker-buy-sell', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
     behaviorGapMs,
+    context,
   );
   const [allRaw, tickerRaw, candlesRaw, fundingRaw, interestRaw, contractsRaw, longShortRaw, takerRaw] = await Promise.all([
     ...ordinary, longShortPromise, takerPromise,
   ]);
+  requireActive(context);
+  const nowMs = options.nowMs ?? context.clock();
 
   const allEnvelope = unwrap(allRaw, nowMs);
   const allRows = Array.isArray(allEnvelope.data) ? allEnvelope.data : [];
@@ -410,21 +501,40 @@ async function loadDashboard(symbol, period, options) {
 }
 
 export async function getBehaviorLabDashboard(requestUrl, options = {}) {
+  const clock = options.clock ?? Date.now;
+  const arrivalAt = clock();
   const { symbol, period } = parseDashboardRequest(requestUrl);
   const key = `${symbol}|${period}`;
   const cache = options.cache === false ? null : dashboardCache;
-  const nowMs = options.nowMs ?? Date.now();
   const cached = cache?.get(key);
-  if (cached && cached.expiresAt > nowMs) return cached.value;
+  if (cached && cached.expiresAt > arrivalAt) return cached.value;
   if (cached) cache.delete(key);
   if (options.cache !== false && inflight.has(key)) return inflight.get(key);
-  const loading = loadDashboard(symbol, period, { ...options, nowMs });
+  if (activeDashboardLoads >= MAX_ACTIVE_DASHBOARD_LOADS
+    || behaviorReservations + 2 > MAX_BEHAVIOR_QUEUE_DEPTH) throw capacityFailure();
+  const context = {
+    arrivalAt,
+    deadlineAt: arrivalAt + (options.totalDeadlineMs ?? TOTAL_DEADLINE_MS),
+    clock,
+    cancelled: false,
+    controllers: new Set(),
+  };
+  activeDashboardLoads += 1;
+  maxObservedActiveLoads = Math.max(maxObservedActiveLoads, activeDashboardLoads);
+  const loading = (async () => {
+    try {
+      return await loadDashboard(symbol, period, { ...options, context });
+    } finally {
+      cancelContext(context);
+      activeDashboardLoads -= 1;
+    }
+  })();
   if (options.cache === false) return loading;
   inflight.set(key, loading);
   try {
     const value = await loading;
     if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
-    cache.set(key, { expiresAt: nowMs + CACHE_TTL_MS, value });
+    cache.set(key, { expiresAt: clock() + CACHE_TTL_MS, value });
     return value;
   } finally {
     inflight.delete(key);
