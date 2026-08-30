@@ -3029,7 +3029,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 12; number += 1) {
+  for (let number = 1; number <= 13; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3044,6 +3044,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0010': 'harness_project_snapshots',
       '0011': 'moderator_control_plane',
       '0012': 'moderator_read_state',
+      '0013': 'moderator_backfill_read',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -3162,19 +3163,24 @@ test('moderator migration enforces kind states, proposal separation, and one act
     ORDER BY name
   `).all().map((row) => row.name);
   assert.deepEqual(tables, ['moderator_commands', 'moderator_item_events', 'moderator_items']);
+  // 0012가 칸을 붙이고 0013이 곧바로 결론난 행을 읽음으로 올린다. 이 행은 resolved라
+  // 백필 대상이므로 seen_version이 version까지 따라 올라간다 — 결론이 난 것은 소식이
+  // 아니기 때문이다. 백필이 없으면 기능을 켠 첫 화면이 없애려던 더미 그대로다.
   assert.deepEqual(
     { ...database.prepare(`
       SELECT seen_version, version FROM moderator_items WHERE item_id = 'legacy-resolved'
     `).get() },
-    { seen_version: 0, version: 2 },
+    { seen_version: 2, version: 2 },
   );
+  // 명령은 백필하지 않는다. 실패한 명령은 사용자가 한 번은 보아야 하고, 수가 적어
+  // 목록을 어지럽히지도 않는다.
   assert.equal(
     database.prepare("SELECT seen_at FROM moderator_commands WHERE command_id = 'legacy-command'").get().seen_at,
     null,
   );
   const legacyList = await moderatorRequest(env, '/api/moderator?limit=100', { token: 'owner-token' });
   const legacyBody = await legacyList.json();
-  assert.equal(legacyBody.items.find((item) => item.item_id === 'legacy-resolved').unread, true);
+  assert.equal(legacyBody.items.find((item) => item.item_id === 'legacy-resolved').unread, false);
   assert.equal(legacyBody.commands.find((command) => command.command_id === 'legacy-command').unread, true);
   assert.throws(() => database.prepare(`
     INSERT INTO moderator_items(
@@ -3194,6 +3200,62 @@ test('moderator migration enforces kind states, proposal separation, and one act
   assert.match(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL, /changes\(\) > 0/u);
   assert.match(MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL, /source_item_id/u);
   assert.match(MODERATOR_COMMAND_CLAIM_SQL, /UPDATE moderator_commands[\s\S]*status = 'queued'/u);
+});
+
+test('the read backfill silences decided rows and leaves the ones needing a hand', async (t) => {
+  // 읽음 축을 켜는 순간 기존 행이 전부 안읽음이면, 첫 화면은 이 기능이 없애려던 바로 그
+  // 더미다 (2026-08-30 라이브 실측: 24건 전부 닫힌 상태였다). 결론이 난 행은 소식이
+  // 아니므로 한 번 읽은 것으로 본다. 손이 필요한 행은 그래도 남아야 한다.
+  const context = await moderatorTestContext(t, {
+    beforeReadStateMigration(database) {
+      const rows = [
+        ['back-open', 'important', 'open', 3],
+        ['back-ack', 'important', 'acknowledged', 4],
+        ['back-resolved', 'important', 'resolved', 5],
+        ['back-pending', 'proposal', 'pending', 2],
+        ['back-approved', 'proposal', 'approved', 6],
+        ['back-rejected', 'proposal', 'rejected', 7],
+        ['back-review', 'review', 'done', 8],
+      ];
+      for (const [itemId, kind, status, version] of rows) {
+        database.prepare(`
+          INSERT INTO moderator_items(
+            item_id, kind, status, issue_summary, action_summary, proposed_command,
+            version, created_at, updated_at
+          ) VALUES (?, ?, ?, 'Backfill issue', 'Backfill action', ?, ?,
+            '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z')
+        `).run(itemId, kind, status, kind === 'proposal' ? 'run backfill command' : null, version);
+      }
+    },
+  });
+  if (!context) return;
+  const { database, env } = context;
+
+  const seen = new Map(database.prepare(
+    'SELECT item_id, seen_version, version FROM moderator_items ORDER BY item_id',
+  ).all().map((row) => [row.item_id, row]));
+  // 결론이 난 다섯은 자기 version까지 읽은 것으로 올라간다.
+  for (const itemId of ['back-ack', 'back-resolved', 'back-approved', 'back-rejected', 'back-review']) {
+    assert.equal(seen.get(itemId).seen_version, seen.get(itemId).version, itemId);
+  }
+  // 손이 필요한 둘은 백필이 건드리지 않는다. WHERE 절이 그것을 명시적으로 뺀다.
+  assert.equal(seen.get('back-open').seen_version, 0);
+  assert.equal(seen.get('back-pending').seen_version, 0);
+
+  // 그래서 목록이 실제로 조용해진다: 일곱 중 손이 필요한 둘만 안읽음으로 남는다.
+  const listed = await moderatorRequest(env, '/api/moderator?unread=1', { token: 'owner-token' });
+  assert.equal(listed.status, 200);
+  const body = await listed.json();
+  assert.deepEqual(body.items.map((item) => item.item_id).sort(), ['back-open', 'back-pending']);
+  assert.equal(body.unread_counts.important, 1);
+  assert.equal(body.unread_counts.proposal, 1);
+  assert.equal(body.unread_counts.review, 0);
+
+  // 백필은 읽음 표시일 뿐 상태 전이가 아니다 — version을 올리거나 이벤트를 남기면
+  // 읽는 행위가 스스로를 다시 안읽음으로 만든다.
+  const events = database.prepare('SELECT COUNT(*) AS count FROM moderator_item_events').get();
+  assert.equal(Number(events.count), 0);
+  assert.equal(seen.get('back-resolved').version, 5);
 });
 
 test('moderator read markers preserve required actions and reactivate changed rows', async (t) => {
