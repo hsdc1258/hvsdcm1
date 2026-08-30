@@ -592,7 +592,8 @@ test('controller renders loading, empty, error/retry and manual refresh states',
   assert.match(failure.store.get('competitionBody').innerHTML, /data-competition-retry/u);
 });
 
-function usageContext() {
+function usageContext({ href = 'https://hvsdcm1.xyz/usage/', storedView = null } = {}) {
+  const pageUrl = new URL(href);
   const store = new Map();
   const tabs = ['ops', 'moderator', 'competition', 'guide'].map((name, index) => {
     const tab = element(`tab-${name}`);
@@ -618,11 +619,14 @@ function usageContext() {
   const context = {
     document,
     location: {
-      href: 'https://hvsdcm1.xyz/usage/', pathname: '/usage/', search: '',
+      href, pathname: pageUrl.pathname, search: pageUrl.search,
       replace() { throw new Error('owner gate unexpectedly redirected'); },
     },
     localStorage: {
-      values: new Map([['hvsdcm.token', 'gate-token']]),
+      values: new Map([
+        ['hvsdcm.token', 'gate-token'],
+        ...(storedView ? [['hvsdcm.usage.view', storedView]] : []),
+      ]),
       getItem(key) { return this.values.get(key) ?? null; },
       setItem(key, value) { this.values.set(key, String(value)); },
       removeItem(key) { this.values.delete(key); },
@@ -649,6 +653,19 @@ function usageContext() {
   vm.runInContext(USAGE_SOURCE, context, { filename: 'usage.js' });
   return { context, store, tabs, requests };
 }
+
+test('the competition deep link overrides a stored view and loads its API once', async () => {
+  const shell = usageContext({
+    href: 'https://hvsdcm1.xyz/usage/?view=competition',
+    storedView: 'guide',
+  });
+  await flush();
+  await flush();
+  assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 1);
+  assert.equal(shell.store.get('viewCompetition').hidden, false);
+  assert.equal(shell.tabs[2].attributes['aria-selected'], 'true');
+  assert.equal(shell.context.localStorage.values.get('hvsdcm.usage.view'), 'competition');
+});
 
 test('the ARIA tab is wired and the API stays lazy through first activation', async () => {
   const shell = usageContext();

@@ -2018,6 +2018,10 @@
 
   function readUsageView() {
     try {
+      const requested = new URL(location.href).searchParams.get('view');
+      if (USAGE_VIEW_KEYS.has(requested)) return requested;
+    } catch { /* 잘못된 URL이면 저장된 기본 뷰로 안전하게 돌아간다. */ }
+    try {
       const stored = localStorage.getItem(USAGE_VIEW_KEY);
       if (USAGE_VIEW_KEYS.has(stored)) return stored;
     } catch { /* 저장소를 못 읽으면 기본 뷰로 연다 — 화면은 계속 돈다. */ }
