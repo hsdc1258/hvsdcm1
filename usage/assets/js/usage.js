@@ -1799,12 +1799,14 @@
       pollTimer = null;
       freshnessTimer = null;
       moderatorPollTimer = null;
+      competitionDashboard?.deactivate();
       renderFreshness();
       renderModeratorFreshness();
       return;
     }
     void load();
     if (selectedUsageView === 'moderator') void loadModerator();
+    if (selectedUsageView === 'competition') competitionDashboard?.activate();
   });
   load();
 
@@ -1887,7 +1889,7 @@
     return parts.join(' / ');
   }
   const USAGE_VIEW_KEY = 'hvsdcm.usage.view';
-  const USAGE_VIEW_KEYS = new Set(['ops', 'moderator', 'guide']);
+  const USAGE_VIEW_KEYS = new Set(['ops', 'moderator', 'competition', 'guide']);
 
   // 분류는 **넷**이다 (2026-08-30 사용자 지시).
   //   중요 — 사용자가 반드시 알아야 할 내역
@@ -1994,6 +1996,7 @@
   const modElements = {
     view: document.getElementById('viewModerator'),
     opsView: document.getElementById('viewOps'),
+    competitionView: document.getElementById('viewCompetition'),
     guideView: document.getElementById('viewGuide'),
     brain: document.getElementById('modBrain'),
     filter: document.getElementById('modFilter'),
@@ -2009,6 +2012,9 @@
     tab: document.getElementById('tabModerator'),
     tabBadge: document.getElementById('modTabBadge'),
   };
+  // 공모전 모듈은 후보 데이터와 느린 갱신 주기를 스스로 소유한다. 기존 실행 현황의
+  // 5초 폴링에 합치지 않아, 이 탭을 열지 않은 방문은 API를 한 번도 부르지 않는다.
+  const competitionDashboard = window.COMPETITION_UI?.createDashboard?.({ request: api }) || null;
 
   function readUsageView() {
     try {
@@ -2910,8 +2916,11 @@
     }
     if (modElements.opsView) modElements.opsView.hidden = next !== 'ops';
     if (modElements.view) modElements.view.hidden = next !== 'moderator';
+    if (modElements.competitionView) modElements.competitionView.hidden = next !== 'competition';
     // 구조 뷰는 정지 마크업이다 — 열고 닫기만 하고 아무것도 가져오지 않는다.
     if (modElements.guideView) modElements.guideView.hidden = next !== 'guide';
+    if (next === 'competition' && !isHidden()) competitionDashboard?.activate();
+    else competitionDashboard?.deactivate();
     if (next === 'moderator') {
       clearTimeout(moderatorBadgeTimer);
       moderatorBadgeTimer = null;
