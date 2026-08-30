@@ -1832,7 +1832,7 @@
   // 대신 적으면 실행 모델을 확인하지 못한 상태가 성공으로 꾸며진다 (plan.md §8).
   const MODERATOR_UNKNOWN = '미확인';
   const USAGE_VIEW_KEY = 'hvsdcm.usage.view';
-  const USAGE_VIEW_KEYS = new Set(['ops', 'moderator']);
+  const USAGE_VIEW_KEYS = new Set(['ops', 'moderator', 'guide']);
 
   // 분류는 **넷**이다 (2026-08-30 사용자 지시).
   //   중요 — 사용자가 반드시 알아야 할 내역
@@ -1939,6 +1939,7 @@
   const modElements = {
     view: document.getElementById('viewModerator'),
     opsView: document.getElementById('viewOps'),
+    guideView: document.getElementById('viewGuide'),
     brain: document.getElementById('modBrain'),
     filter: document.getElementById('modFilter'),
     items: document.getElementById('modItems'),
@@ -1950,6 +1951,8 @@
     commandText: document.getElementById('modCommandText'),
     commandSubmit: document.getElementById('modCommandSubmit'),
     commandStatus: document.getElementById('modCommandStatus'),
+    tab: document.getElementById('tabModerator'),
+    tabBadge: document.getElementById('modTabBadge'),
   };
 
   function readUsageView() {
@@ -1974,6 +1977,10 @@
   let moderatorEditDraft = null;
   let moderatorData = null;
   let moderatorPollTimer = null;
+  // 사이드바 배지가 마지막으로 확인한 안읽음 수. null은 "아직 못 물어봤다"이고 0과 다르다 —
+  // 0은 "확인할 것이 없다"는 사실이지만 null은 사실이 아니므로 배지를 세우지 않는다.
+  let moderatorUnreadBadge = null;
+  let moderatorBadgeTimer = null;
   let moderatorInFlight = false;
   let moderatorSyncedAt = 0;
   let moderatorBusy = false;
@@ -1989,7 +1996,9 @@
     return `direct-${random}`;
   }
 
-  async function requestModerator(path, { method = 'GET', body = null, signal } = {}) {
+  // quiet: 실패해도 화면을 옮기지 않는다. 배지처럼 화면의 본체가 아닌 요청에만 쓴다 —
+  // 부가 정보 하나가 답하지 않는다고 사용자를 랜딩으로 내보내면 안 된다.
+  async function requestModerator(path, { method = 'GET', body = null, signal, quiet = false } = {}) {
     const separator = path.includes('?') ? '&' : '?';
     const url = method === 'GET' ? `${API_URL}${path}${separator}_=${Date.now()}` : `${API_URL}${path}`;
     const response = await fetch(url, {
@@ -2002,13 +2011,14 @@
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (response.status === 401) {
+      if (quiet) throw new Error('unauthorized');
       localStorage.removeItem('hvsdcm.token');
       location.replace(loginPath());
       throw new Error('unauthorized');
     }
     // 소유자가 아니면 Worker가 라우트의 존재까지 숨긴다(404). 화면도 같은 판정을 따른다.
     if (response.status === 404 || response.status === 403) {
-      location.replace('/');
+      if (!quiet) location.replace('/');
       throw new Error('unauthorized');
     }
     const data = await response.json().catch(() => ({}));
@@ -2425,6 +2435,10 @@
   }
 
   function renderModerator(data, now = Date.now()) {
+    // 모더 뷰를 그릴 때마다 배지도 같은 숫자를 쓴다. 두 표면이 서로 다른 수를 말하면
+    // 어느 쪽도 믿을 수 없게 된다.
+    moderatorUnreadBadge = moderatorUnreadTotal(data);
+    renderModeratorBadge();
     const mode = MODERATOR_MODE_KEYS.has(selectedModeratorMode) ? selectedModeratorMode : 'unread';
     const kind = MODERATOR_KIND_KEYS.has(selectedModeratorKind)
       ? selectedModeratorKind
@@ -2434,6 +2448,52 @@
     setModeratorHtml(modElements.items, mode === 'unread'
       ? renderModeratorUnread(data, now)
       : renderModeratorItems(data, kind, now));
+  }
+
+  // 사이드바의 안읽음 배지. 이것이 없으면 확인할 것이 있는지 알기 위해 매번 모더 탭을
+  // 열어야 하고, 그 수고가 "필요한 것만 딱 보이게 해달라"는 요구의 마지막 한 칸을 남긴다.
+  //
+  // 0이면 배지를 세우지 않는다. 0을 숫자로 적는 것은 "없다"를 굳이 표시해 두는 것이고,
+  // 그러면 배지가 늘 떠 있어 '있다'는 신호가 죽는다.
+  function renderModeratorBadge() {
+    const badge = modElements.tabBadge;
+    if (!badge) return;
+    const total = moderatorUnreadBadge;
+    if (total === null || total <= 0) {
+      badge.hidden = true;
+      badge.textContent = '';
+      modElements.tab?.removeAttribute?.('aria-label');
+      return;
+    }
+    badge.hidden = false;
+    // 세 자리가 넘으면 사이드바 항목의 라벨을 밀어낸다. 정확한 수는 탭 안에서 말한다.
+    badge.textContent = total > 99 ? '99+' : String(total);
+    // 숫자만 두면 보조기술에는 '3'으로만 읽혀 무엇의 3인지 알 수 없다.
+    modElements.tab?.setAttribute?.('aria-label', `모더, 안읽음 ${total}건`);
+  }
+
+  function scheduleModeratorBadgePoll() {
+    clearTimeout(moderatorBadgeTimer);
+    moderatorBadgeTimer = null;
+    // 모더 뷰가 열려 있으면 그쪽 폴링이 배지까지 갱신한다. 탭이 숨겨져 있으면 멈춘다.
+    if (isHidden() || selectedUsageView === 'moderator') return;
+    moderatorBadgeTimer = setTimeout(() => { void loadModeratorBadge(); }, MODERATOR_POLL_IDLE_MS);
+  }
+
+  // 배지는 부가 정보다. 모더 API가 무슨 이유로든 답하지 않아도 실행 현황 화면까지 끌고
+  // 내려가서는 안 된다 — 그래서 이 경로만 리다이렉트와 오류 표시를 끄고 조용히 실패한다.
+  // 개수만 필요하므로 limit=1로 부른다: unread_counts는 D1 전수 집계라 목록 길이와 무관하다.
+  async function loadModeratorBadge() {
+    try {
+      const data = await moderatorApi('/api/moderator?limit=1&unread=1', { quiet: true });
+      moderatorUnreadBadge = moderatorUnreadTotal(data);
+    } catch {
+      // 마지막으로 알던 수를 지우지 않는다. 한 번 실패했다고 배지를 없애면 확인할 것이
+      // 있는데도 없는 것처럼 보인다.
+    } finally {
+      renderModeratorBadge();
+      scheduleModeratorBadgePoll();
+    }
   }
 
   function renderModeratorFreshness() {
@@ -2756,10 +2816,18 @@
     }
     if (modElements.opsView) modElements.opsView.hidden = next !== 'ops';
     if (modElements.view) modElements.view.hidden = next !== 'moderator';
-    if (next === 'moderator') void loadModerator();
-    else {
+    // 구조 뷰는 정지 마크업이다 — 열고 닫기만 하고 아무것도 가져오지 않는다.
+    if (modElements.guideView) modElements.guideView.hidden = next !== 'guide';
+    if (next === 'moderator') {
+      clearTimeout(moderatorBadgeTimer);
+      moderatorBadgeTimer = null;
+      void loadModerator();
+    } else {
       clearTimeout(moderatorPollTimer);
       moderatorPollTimer = null;
+      // 실행 현황을 보는 동안에도 배지는 살아 있어야 한다. 모더 탭을 열어야만 확인할 것이
+      // 있는지 알 수 있다면, 탭을 여는 수고가 그대로 남아 배지의 목적이 사라진다.
+      void loadModeratorBadge();
     }
     renderModeratorFreshness();
   }
@@ -2800,5 +2868,6 @@
     renderModeratorControls, renderModeratorUnread, renderModeratorItem, renderModeratorCommand,
     moderatorUnreadRows, moderatorUnreadCounts,
     moderatorItemUnread, moderatorCommandUnread, moderatorNeedsAction,
+    renderModeratorBadge, loadModeratorBadge,
   };
 })();

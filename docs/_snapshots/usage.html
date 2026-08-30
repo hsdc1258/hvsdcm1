@@ -2458,6 +2458,27 @@ label.list-row {
 .md-composer-status:empty {
   display: none;
 }
+/* ---- 사이드바 안읽음 배지 ---- */
+/* 탭을 열지 않고도 확인할 것이 있는지 알기 위한 표시다. 강조색을 쓰지 않는다 — 이 화면에서
+   --accent는 '지금 돌고 있음'이라는 상태 하나의 것이고(DESIGN.md §3), 개수는 상태가 아니다.
+   대신 사이드바 항목 중 유일하게 채워진 필이라 그 자체로 눈에 걸린다.
+   --text on --surface-4 10.42 ✓ */
+.sidebar-item-badge {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-4);
+  color: var(--text);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+/* 선택된 항목은 이미 --surface-3 필 위에 있어 배지가 같은 계열이면 묻힌다. 선택 시에는
+   배지를 한 단계 어둡게 내려 항목 필과 갈라 둔다. --text on --surface 16.61 ✓ */
+.sidebar-item.is-active .sidebar-item-badge {
+  background: var(--surface);
+}
 /* ---- 보기 전환 (안읽음 · 전체) ---- */
 /* 두 축을 한 줄에 나란히 두지 않는다. 같은 모양의 컨트롤 둘과 넷이 붙어 서면 한 벌로
    읽혀서 무엇이 무엇을 거르는지 알 수 없다. 위가 보기, 아래가 분류다 — 그리고 분류는
@@ -2711,6 +2732,241 @@ label.list-row {
     flex: 1 1 auto;
   }
 }
+/* ==========================================================================
+   구조 뷰 — 조직도와 원리
+   이 뷰는 서버 데이터를 읽지 않는다. 읽히는 것이 전부이므로 조판은 **읽기 폭**을
+   먼저 지키고, 도해만 그 폭을 넘어선다.
+   - 강조색은 여전히 --accent 하나다. 상태색은 03절 판정 배지에만 쓴다(DESIGN.md §3).
+   - 장식 프리미티브를 새로 만들지 않는다. 카드·표·배지는 system.css의 것을 그대로 쓴다.
+   ========================================================================== */
+.gd {
+  display: grid;
+  gap: var(--space-7);
+  align-content: start;
+  min-width: 0;
+}
+.gd-lede {
+  max-width: 62ch;
+  color: var(--text-2);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body);
+}
+.gd-lede strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.gd-sec {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line-faint);
+}
+.gd-sec > .us-eyebrow {
+  color: var(--accent);
+}
+.gd-note {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+}
+.gd-note strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.gd-figure {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  min-width: 0;
+}
+/* 도해는 읽기 폭을 넘어선다. 넘치면 화면이 아니라 **이 상자**가 옆으로 구른다. */
+.gd-plate {
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow-x: auto;
+}
+.gd-plate svg {
+  display: block;
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+  color: var(--text);
+}
+.gd-node {
+  fill: var(--surface-2);
+  stroke: var(--line-strong);
+}
+/* 정본이 앉는 자리 하나만 밝다. 조직도에서 눈이 처음 닿아야 하는 곳이다. */
+.gd-node-top {
+  fill: var(--surface-3);
+}
+/* 점선 = 조건이 성립할 때만 서는 자리. 실선과 같은 무게로 그리면 늘 있는 역할로 읽힌다. */
+.gd-node-opt {
+  fill: none;
+  stroke: var(--line);
+  stroke-dasharray: 4 4;
+}
+.gd-wire {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.2;
+}
+.gd-t {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.gd-ts {
+  fill: var(--text-3);
+  font-size: 10.5px;
+}
+.gd-tw {
+  fill: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.gd-cap {
+  max-width: 74ch;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.gd-cap strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+/* 아홉 걸음. 번호는 장식이 아니라 순서 그 자체이므로 ol을 쓰고 카운터를 보인다. */
+.gd-flow {
+  display: grid;
+  gap: 1px;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: gd-step;
+  background: var(--line-faint);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+.gd-flow > li {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  counter-increment: gd-step;
+}
+.gd-flow > li > b {
+  color: var(--text);
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+}
+.gd-flow > li > b::before {
+  content: counter(gd-step, decimal-leading-zero) " ";
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+.gd-flow > li > span:last-child {
+  grid-column: 2;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+/* 담당 칩. 커널과 모델을 가르는 것이 이 목록의 요점이라 첫 칸을 그 사실에 준다.
+   상태가 아니라 분류이므로 상태색을 쓰지 않는다 — 면의 밝기로만 가른다. */
+.gd-who {
+  grid-row: span 2;
+  align-self: start;
+  min-width: 44px;
+  padding: 3px 8px;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-align: center;
+}
+.gd-who.is-model {
+  color: var(--text-4);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.gd-pair, .gd-quad {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  min-width: 0;
+}
+@media (min-width: 741px) {
+  .gd-pair, .gd-quad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.gd-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-4);
+  min-width: 0;
+}
+.gd-card > p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.gd-card strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.gd-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 1.15em;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.gd-table td:first-child {
+  color: var(--text);
+}
+.gd-table td:last-child {
+  color: var(--text-2);
+}
+.gd-foot {
+  margin: 0;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line-faint);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.gd-foot code {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+@media (max-width: 700px) {
+  .gd {
+    gap: var(--space-6);
+  }
+  .gd-plate {
+    padding: var(--space-3);
+  }
+  .gd-flow > li {
+    padding: var(--space-3);
+  }
+}
 </style>
 <style>
 /* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
@@ -2751,7 +3007,8 @@ label.list-row {
         <div class="sidebar-group" role="tablist" aria-orientation="vertical" aria-label="운영 화면">
           <p class="sidebar-label">운영</p>
           <button id="tabOps" class="sidebar-item is-active" type="button" role="tab" aria-selected="true" aria-controls="viewOps" data-usage-view="ops"><span class="sidebar-item-text">실행 현황</span></button>
-          <button id="tabModerator" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewModerator" data-usage-view="moderator" tabindex="-1"><span class="sidebar-item-text">모더</span></button>
+          <button id="tabModerator" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewModerator" data-usage-view="moderator" tabindex="-1"><span class="sidebar-item-text">모더</span><span id="modTabBadge" class="sidebar-item-badge" hidden></span></button>
+          <button id="tabGuide" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewGuide" data-usage-view="guide" tabindex="-1"><span class="sidebar-item-text">구조</span></button>
         </div>
 
         <div class="sidebar-group">
@@ -3591,6 +3848,200 @@ label.list-row {
 
           <div id="modItems" class="md-items"></div>
 
+        </section>
+
+        <!-- 구조 뷰. 서버 데이터가 없는 정지 화면이므로 마크업이 곧 정본이다 — 폴링이
+             갈아 끼우지 않으니 usage.js가 이 절을 그리지 않는다. 계약이 바뀌면 여기와
+             Claude 워크스페이스의 docs/HARNESS-KERNEL.md를 함께 고친다. -->
+        <section id="viewGuide" class="us-view" role="tabpanel" aria-labelledby="tabGuide" tabindex="0" hidden>
+          <header class="view-head">
+            <div class="view-head-main">
+              <div>
+                <h1 class="title-1">구조</h1>
+                <p>이 화면 뒤에서 무엇이 어떤 순서로 도는가</p>
+              </div>
+            </div>
+          </header>
+
+          <div class="gd">
+            <p class="gd-lede">중심에 모델은 없다. <strong>결정론적 코드</strong>가 처음부터 끝까지 실을 쥐고, 판단이 필요한 지점에서만 모델을 불렀다가 놓는다. 항상 켜져 있는 LLM 조직은 만들지 않는다 — 이 설계의 유일한 큰 결정이고 아래 모든 것이 거기서 나온다.</p>
+
+            <section class="gd-sec" aria-labelledby="gdOrgTitle">
+              <p class="us-eyebrow">01 · 조직</p>
+              <h2 id="gdOrgTitle" class="title-2">누가 누구를 부르나</h2>
+              <p class="gd-note">위에서 아래로 부른다. 아래는 위를 고치지 못한다. 점선은 조건이 실제로 성립할 때만 서는 자리다 — 조건 없이 만든 역할은 전달자 한 명이 늘어난 것에 지나지 않는다.</p>
+              <figure class="gd-figure">
+                <div class="gd-plate">
+                  <svg viewBox="0 0 940 546" role="img" aria-label="사용자에서 컨트롤러, 모더, 오케스트레이터를 거쳐 작업자·리뷰어·통합자로 내려가는 조직도. 팀장과 통합자는 조건부이고 WebGPT는 오케스트레이터가 옆으로 부른다.">
+                    <defs>
+                      <marker id="gdArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+                      </marker>
+                    </defs>
+
+                    <rect class="gd-node gd-node-top" x="350" y="16" width="240" height="56" rx="6"></rect>
+                    <text class="gd-t" x="470" y="41" text-anchor="middle">사용자</text>
+                    <text class="gd-ts" x="470" y="58" text-anchor="middle">원문과 정책의 정본 · 아무도 못 고친다</text>
+                    <line class="gd-wire" x1="470" y1="72" x2="470" y2="96" marker-end="url(#gdArrow)"></line>
+
+                    <rect class="gd-node" x="350" y="100" width="240" height="56" rx="6"></rect>
+                    <text class="gd-t" x="470" y="125" text-anchor="middle">컨트롤러</text>
+                    <text class="gd-ts" x="470" y="142" text-anchor="middle">모더의 설정을 감사·교체한다</text>
+                    <line class="gd-wire" x1="470" y1="156" x2="470" y2="180" marker-end="url(#gdArrow)"></line>
+
+                    <rect class="gd-node" x="350" y="184" width="240" height="56" rx="6"></rect>
+                    <text class="gd-t" x="470" y="209" text-anchor="middle">모더</text>
+                    <text class="gd-ts" x="470" y="226" text-anchor="middle">런타임 최상위 · 세션 · 예산 · 모델 · 병합</text>
+                    <line class="gd-wire" x1="470" y1="240" x2="470" y2="264" marker-end="url(#gdArrow)"></line>
+
+                    <rect class="gd-node" x="350" y="268" width="240" height="56" rx="6"></rect>
+                    <text class="gd-t" x="470" y="293" text-anchor="middle">오케스트레이터</text>
+                    <text class="gd-ts" x="470" y="310" text-anchor="middle">계획 · 재계획 · 최종 판정</text>
+
+                    <line class="gd-wire" x1="590" y1="296" x2="696" y2="296" marker-end="url(#gdArrow)"></line>
+                    <text class="gd-tw" x="643" y="283" text-anchor="middle">부른다</text>
+                    <rect class="gd-node" x="700" y="270" width="200" height="52" rx="6"></rect>
+                    <text class="gd-t" x="800" y="293" text-anchor="middle">WebGPT</text>
+                    <text class="gd-ts" x="800" y="309" text-anchor="middle">정제 · 교차검증</text>
+
+                    <line class="gd-wire" x1="470" y1="324" x2="470" y2="348" marker-end="url(#gdArrow)"></line>
+
+                    <rect class="gd-node gd-node-opt" x="350" y="352" width="240" height="56" rx="6"></rect>
+                    <text class="gd-t" x="470" y="377" text-anchor="middle">팀장</text>
+                    <text class="gd-ts" x="470" y="394" text-anchor="middle">같은 분야에 독립 작업이 여럿일 때만</text>
+
+                    <path class="gd-wire" d="M 470 408 L 470 432 M 160 432 L 780 432 M 160 432 L 160 454 M 470 432 L 470 454 M 780 432 L 780 454"></path>
+
+                    <rect class="gd-node" x="20" y="458" width="280" height="64" rx="6"></rect>
+                    <text class="gd-t" x="160" y="484" text-anchor="middle">작업자</text>
+                    <text class="gd-ts" x="160" y="502" text-anchor="middle">Codex가 기본 · 프론트는 Opus 5</text>
+
+                    <rect class="gd-node" x="330" y="458" width="280" height="64" rx="6"></rect>
+                    <text class="gd-t" x="470" y="484" text-anchor="middle">리뷰어</text>
+                    <text class="gd-ts" x="470" y="502" text-anchor="middle">구현자와 다른 공급자가 본다</text>
+
+                    <rect class="gd-node gd-node-opt" x="640" y="458" width="280" height="64" rx="6"></rect>
+                    <text class="gd-t" x="780" y="484" text-anchor="middle">통합자</text>
+                    <text class="gd-ts" x="780" y="502" text-anchor="middle">쓰는 사람이 둘 이상일 때만</text>
+                  </svg>
+                </div>
+                <figcaption class="gd-cap">권한은 하나의 사다리가 아니라 세 축이다. <strong>정책</strong>은 사용자 지시가 가장 위이고, <strong>런타임</strong>은 컨트롤러 → 모더 → 오케스트레이터 순이며, <strong>설정</strong>은 컨트롤러가 모더의 것을 감사한다. 같은 자리가 한 축에서는 위에, 다른 축에서는 아래에 있다.</figcaption>
+              </figure>
+            </section>
+
+            <section class="gd-sec" aria-labelledby="gdFlowTitle">
+              <p class="us-eyebrow">02 · 흐름</p>
+              <h2 id="gdFlowTitle" class="title-2">요청 하나가 배포까지 가는 길</h2>
+              <p class="gd-note">아홉 걸음이다. 모델은 자기 차례에만 켜졌다가 결과를 올려보내고 꺼진다 — 전역 상태를 보지도, 쓰지도 못한다.</p>
+              <ol class="gd-flow">
+                <li><span class="gd-who">커널</span><b>접수</b><span>사용자 원문을 그대로 굳힌다. 이 뒤로 아무도 못 고치고, 요약본과 어긋나면 원문이 이긴다.</span></li>
+                <li><span class="gd-who is-model">모델</span><b>정제</b><span>원문을 TaskSpec으로 옮긴다. 정제기가 없으면 원문 그대로 통과한다.</span></li>
+                <li><span class="gd-who">커널</span><b>정책 판정</b><span>범위 · 위험도 · 예산 · 승인 방식을 코드가 정한다. 여기서 갈리는 값이 03절의 표다.</span></li>
+                <li><span class="gd-who is-model">모델</span><b>계획</b><span>오케스트레이터가 Job 그래프를 짠다. 비싼 자리라 계획과 최종 판정에만 부른다.</span></li>
+                <li><span class="gd-who">커널</span><b>배정 · 격리</b><span>Job마다 worktree와 브랜치를 나눈다. 서로의 작업 트리에는 들어가지 못한다.</span></li>
+                <li><span class="gd-who is-model">모델</span><b>실행</b><span>Codex가 기본 실행자다. 프론트엔드와 시각 판단은 Opus 5가 직접 한다.</span></li>
+                <li><span class="gd-who">커널</span><b>게이트</b><span>그 제품의 checkout에서 그 제품의 명령이 exit 0으로 끝나야 한다.</span></li>
+                <li><span class="gd-who is-model">모델</span><b>독립 리뷰</b><span>구현한 쪽과 다른 공급자가 diff를 본다. 같은 계열의 자기검증은 검증이 아니다.</span></li>
+                <li><span class="gd-who">커널</span><b>릴리스 게이트 → 병합 · 배포</b><span>증거를 대조해 가부를 판정한다. 배포 뒤 health와 핵심 흐름까지 봐야 끝이다.</span></li>
+              </ol>
+            </section>
+
+            <section class="gd-sec" aria-labelledby="gdDecideTitle">
+              <p class="us-eyebrow">03 · 승인</p>
+              <h2 id="gdDecideTitle" class="title-2">사용자를 부르는 것은 둘뿐이다</h2>
+              <p class="gd-note">그 밖의 모든 것은 스스로 판정한다. 보호 경계를 넘는 요청은 사용자에게 떠넘기지 않고 그 자리에서 거부한다 — 물어보는 것 자체가 경계를 무르게 만들기 때문이다.</p>
+              <div class="table-wrap">
+                <table class="table gd-table">
+                  <thead>
+                    <tr><th scope="col">행동</th><th scope="col">판정</th><th scope="col">그렇게 정한 이유</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>읽기 · 검색 · 테스트 · 빌드</td><td><span class="badge badge-green">스스로</span></td><td>되돌릴 것이 없다.</td></tr>
+                    <tr><td>작업 트리 수정 · 커밋 · PR</td><td><span class="badge badge-green">스스로</span></td><td>격리된 가지 안이라 본류에 닿지 않는다.</td></tr>
+                    <tr><td>세션 통제 · 모델 교체 · 병렬도 조정</td><td><span class="badge badge-green">스스로</span></td><td>모더의 일이다. 이걸 물으면 감시가 감시를 못 한다.</td></tr>
+                    <tr><td>스테이징 · 프로덕션 배포</td><td><span class="badge badge-green">스스로</span></td><td>단, 배포 뒤 health와 핵심 흐름 확인이 조건이다.</td></tr>
+                    <tr><td>인터페이스 · 인프라 · 보안 변경의 병합</td><td><span class="badge badge-accent">모더 검토</span></td><td>되돌리는 값이 큰 자리다.</td></tr>
+                    <tr><td>결제 · 유료 구독 · 자격증명 발급과 입력</td><td><span class="badge badge-orange">사용자</span></td><td>사용자의 돈과 신원이다. 대신 판단하지 않는다.</td></tr>
+                    <tr><td>되돌릴 수 없는 원격 이력 말살</td><td><span class="badge badge-orange">사용자</span></td><td>force push와 filter-branch는 되살릴 수 없다.</td></tr>
+                    <tr><td>정책 변경 · 안전검사 해제 · 자기 권한 확대</td><td><span class="badge badge-red">거부</span></td><td>사용자에게 올리지 않고 그 자리에서 막는다.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="gd-note">불변 하나가 더 있다. <strong>작업을 만든 쪽이 그 작업의 고위험 행동을 승인하지 못한다.</strong> 모더가 스스로 만든 작업은 모더가 최종 승인할 수 없다.</p>
+            </section>
+
+            <section class="gd-sec" aria-labelledby="gdModTitle">
+              <p class="us-eyebrow">04 · 모더</p>
+              <h2 id="gdModTitle" class="title-2">모더는 무엇을 맡고 무엇을 맡지 않나</h2>
+              <p class="gd-note">모더는 24시간 돈다. 그래서 왼쪽 실행 현황 목록에서는 빠져 있다 — 상주 프로세스가 진행 중 목록을 혼자 차지하면 실제로 도는 세션이 가려지기 때문이다. 모더를 보는 자리는 <strong>모더 탭</strong>이다.</p>
+              <div class="gd-pair">
+                <div class="card gd-card">
+                  <h3 class="title-3">맡는 것</h3>
+                  <ul class="gd-list">
+                    <li>모든 세션이 정상 구동 중인지 검토한다.</li>
+                    <li>사용자의 직접 명령을 대기열에 넣고 실행 상태를 남긴다.</li>
+                    <li>스스로 판단한 것은 <strong>제안</strong>으로 올린다. 승인 전에는 실행되지 않는다.</li>
+                    <li>03절에서 사용자 몫이 아닌 것은 전부 스스로 판정한다.</li>
+                  </ul>
+                </div>
+                <div class="card gd-card">
+                  <h3 class="title-3">맡지 않는 것</h3>
+                  <ul class="gd-list">
+                    <li>사용자 정책과 원문은 고치지 못한다. 저장된 뒤로는 읽기 전용이다.</li>
+                    <li>자기가 만든 고위험 작업을 자기가 최종 승인하지 못한다.</li>
+                    <li>폐쇄된 보고 표면을 되살리지 않는다.</li>
+                    <li>제품 목적 밖의 아이디어를 기존 제품에 자동으로 병합하지 않는다.</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <section class="gd-sec" aria-labelledby="gdDoneTitle">
+              <p class="us-eyebrow">05 · 완료</p>
+              <h2 id="gdDoneTitle" class="title-2">무엇을 보고 끝났다고 하나</h2>
+              <p class="gd-note">가장 자주 깨졌던 자리다. 아래 넷은 전부 실제 사고에서 나왔다.</p>
+              <div class="gd-quad">
+                <div class="card gd-card">
+                  <h3 class="title-3">커밋으로 센다</h3>
+                  <p>위임의 성패는 exit code가 아니라 위임 시작 이후의 <strong>새 커밋</strong>이다. 이미 있던 커밋을 완료 증거로 세지 않는다.</p>
+                </div>
+                <div class="card gd-card">
+                  <h3 class="title-3">마지막 결론 줄을 읽는다</h3>
+                  <p>테스트가 전부 초록이어도 반환 보고의 결론이 <strong>실패</strong>면 실패다. 이걸 놓쳐 열린 결함 둘이 완료로 보고된 적이 있다.</p>
+                </div>
+                <div class="card gd-card">
+                  <h3 class="title-3">그 제품의 게이트로 잰다</h3>
+                  <p>워크스페이스 루트 게이트는 하네스만 검증한다. 제품은 그 제품의 checkout에서 그 제품의 명령으로 돌린다.</p>
+                </div>
+                <div class="card gd-card">
+                  <h3 class="title-3">공개 환경에서 눈으로 본다</h3>
+                  <p>완료는 테스트 초록이 아니라 <strong>사용자가 받는 마지막 산출물</strong>이다. 배포 후 실제로 호출해 보지 않았으면 미완료다.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="gd-sec" aria-labelledby="gdModelTitle">
+              <p class="us-eyebrow">06 · 배정</p>
+              <h2 id="gdModelTitle" class="title-2">어떤 모델을 어디에 쓰나</h2>
+              <p class="gd-note">능력이 아니라 실측된 제약에서 나온 표다. 한도를 아끼려고 낮추지 않는다.</p>
+              <div class="table-wrap">
+                <table class="table gd-table">
+                  <thead>
+                    <tr><th scope="col">역할</th><th scope="col">모델</th><th scope="col">근거</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>메인 오케스트레이터</td><td>Fable 5</td><td>비싸다. 계획 · 재계획 · 최종 판정에만 부른다.</td></tr>
+                    <tr><td>오케스트레이터 폴백</td><td>Sol Extra High</td><td>체크포인트로 승계한다. 대화가 아니라 파일이 상태를 쥔다.</td></tr>
+                    <tr><td>프론트엔드 · 시각 판단</td><td>Opus 5</td><td>Codex는 프론트를 못 한다. 한도 절약을 이유로 낮추지 않는다.</td></tr>
+                    <tr><td>그 밖 구현 · 조사 · 감사</td><td>Codex</td><td>한도가 넉넉하고 성능이 좋다. 기본 실행자다.</td></tr>
+                    <tr><td>교차검증 리뷰어</td><td>구현자와 다른 공급자</td><td>같은 계열의 자기검증은 검증이 아니다.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <p class="gd-foot">계약의 정본은 Claude 워크스페이스의 <code>docs/HARNESS-KERNEL.md</code>다. 이 화면과 어긋나면 그 문서가 맞다.</p>
+          </div>
         </section>
       </main>
     </div>

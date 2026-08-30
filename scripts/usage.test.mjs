@@ -2274,7 +2274,7 @@ test('the moderator view is a sibling view, and only one view renders at a time'
   const { readSource } = await import('./render-sandbox.mjs');
   const html = readSource('usage/index.html');
   const views = [...html.matchAll(/<section id="(view\w+)" class="us-view"([^>]*)>/gu)];
-  assert.equal(views.length, 2, '실행 현황과 모더 두 뷰가 있어야 한다');
+  assert.equal(views.length, 3, '실행 현황·모더·구조 세 뷰가 있어야 한다');
   const visible = views.filter(([, , attributes]) => !/\shidden(?=[\s>]|$)/u.test(attributes));
   assert.equal(visible.length, 1, '문서 초기 상태에서 열려 있는 뷰는 하나뿐이다');
   // UA의 [hidden] { display: none }은 저자 규칙에 항상 진다 — 기본 display가 none이어야 한다.
@@ -2282,9 +2282,43 @@ test('the moderator view is a sibling view, and only one view renders at a time'
   assert.match(css, /\.us-view \{\s*display: none;/u);
   // 사이드바 항목마다 짝이 되는 뷰가 있어야 한다.
   const tabs = [...html.matchAll(/data-usage-view="(\w+)"/gu)].map(([, name]) => name);
-  assert.deepEqual(tabs, ['ops', 'moderator']);
+  assert.deepEqual(tabs, ['ops', 'moderator', 'guide']);
   assert.ok(html.includes('aria-controls="viewOps"'));
   assert.ok(html.includes('aria-controls="viewModerator"'));
+  assert.ok(html.includes('aria-controls="viewGuide"'));
+});
+
+test('구조 뷰는 서버를 부르지 않는 정지 화면이고 조직도의 계층이 마크업에 있다', async () => {
+  const { readSource } = await import('./render-sandbox.mjs');
+  const html = readSource('usage/index.html');
+  const source = readSource('usage/assets/js/usage.js');
+  const css = readSource('usage/assets/css/usage.css');
+
+  const guide = html.slice(html.indexOf('<section id="viewGuide"'));
+  assert.ok(guide.length > 0, '구조 뷰가 문서에 있어야 한다');
+
+  // 조직도는 위에서 아래로 부르는 순서가 곧 내용이다. 순서가 뒤집히면 그림이 거짓말을 한다.
+  const chain = ['사용자', '컨트롤러', '모더', '오케스트레이터', '팀장', '작업자', '리뷰어', '통합자'];
+  let cursor = -1;
+  for (const role of chain) {
+    const at = guide.indexOf(`>${role}</text>`);
+    assert.ok(at > cursor, `조직도에 ${role}이(가) 순서대로 서야 한다`);
+    cursor = at;
+  }
+  // 조건부 자리는 실선과 다른 무게로 그린다 — 같으면 늘 있는 역할로 읽힌다.
+  assert.equal((guide.match(/gd-node-opt/gu) || []).length, 2, '팀장과 통합자만 조건부다');
+  assert.match(css, /\.gd-node-opt \{[^}]*stroke-dasharray/u);
+
+  // 사용자를 부르는 두 가지가 화면에 그대로 있어야 한다 (계약 §5).
+  assert.match(guide, /결제 · 유료 구독 · 자격증명 발급과 입력/u);
+  assert.match(guide, /되돌릴 수 없는 원격 이력 말살/u);
+
+  // 정지 화면이므로 폴링·fetch를 걸지 않는다. 여는 것은 hidden 토글 한 줄뿐이다.
+  assert.match(source, /modElements\.guideView\.hidden = next !== 'guide'/u);
+  assert.doesNotMatch(source, /guideView[\s\S]{0,200}?(fetch|setTimeout)\(/u);
+
+  // 도해가 넘칠 때 구르는 것은 화면이 아니라 그 상자다.
+  assert.match(css, /\.gd-plate \{[^}]*overflow-x: auto/u);
 });
 
 test('the command composer lives outside every polled container', async () => {
