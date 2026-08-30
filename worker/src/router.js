@@ -50,7 +50,8 @@ const FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_ALIASES = new Set([
   'refreshtoken', 'sessiontoken', 'accesskey', 'accesssecret', 'privatekey',
   'passphrase', 'password', 'passwd', 'pwd', 'credential', 'credentials', 'jwt',
   'signature', 'signingkey', 'clientoid', 'clientorderid', 'clordid', 'orderid',
-  'accountid', 'subaccountid', 'userid', 'uid', 'oid', 'privatefield',
+  'accountid', 'subaccountid', 'userid', 'uid', 'subuid', 'oid', 'tradeid',
+  'fillid', 'accesssign', 'privatefield',
   'privatedata', 'privateroute', 'privatechannel',
 ]);
 const FORBIDDEN_BEHAVIOR_PAPER_CREDENTIAL_TOKENS = new Set([
@@ -62,7 +63,7 @@ const FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_SUFFIXES = [
   'accesstoken', 'refreshtoken', 'sessiontoken', 'accesskey', 'accesssecret',
   'privatekey', 'passphrase', 'password', 'credential', 'credentials', 'signature',
   'clientoid', 'clientorderid', 'clordid', 'orderid', 'accountid', 'subaccountid',
-  'userid',
+  'userid', 'subuid', 'tradeid', 'fillid', 'accesssign',
 ];
 export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
@@ -1231,8 +1232,12 @@ function isForbiddenPaperPrivateKey(value) {
   if (tokens.some((token) => FORBIDDEN_BEHAVIOR_PAPER_CREDENTIAL_TOKENS.has(token))) return true;
   if (tokens.includes('key')
     && tokens.some((token) => ['api', 'access', 'private', 'auth', 'signing', 'exchange'].includes(token))) return true;
+  if (tokens.includes('sign')
+    && tokens.some((token) => ['api', 'access', 'private', 'auth', 'exchange', 'bitget'].includes(token))) return true;
   if (tokens.some((token) => ['id', 'oid', 'uid', 'uuid', 'number', 'no'].includes(token))
-    && tokens.some((token) => ['account', 'subaccount', 'user', 'client', 'order', 'position'].includes(token))) return true;
+    && tokens.some((token) => [
+      'account', 'subaccount', 'sub', 'user', 'client', 'order', 'trade', 'fill', 'position',
+    ].includes(token))) return true;
   return tokens.includes('private')
     && tokens.some((token) => ['field', 'data', 'route', 'channel', 'account', 'order'].includes(token));
 }
