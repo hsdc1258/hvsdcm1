@@ -2158,6 +2158,31 @@ test('the brain panel separates a concept that does not apply from one it could 
   assert.match(llm, /<dt>요약 모델<\/dt><dd class="md-fact-unknown">미확인</u);
 });
 
+// 사실이 사라져 모더가 스스로 닫은 항목과, 사용자가 읽고 닫은 항목은 둘 다 'resolved'로
+// 앉는다. 같은 배지로 그리면 사용자는 자기가 처리한 적 없는 항목을 자기가 처리한 것으로
+// 읽는다 (자기승인 배지와 같은 원칙).
+test('an item the moderator closed by itself says so, instead of borrowing the user badge', () => {
+  const renderers = createUsageRenderers();
+  const selfClosed = moderatorItem({
+    kind: 'important', status: 'resolved',
+    events: [{ event: 'resolved', payload: { by: 'moderator-daemon', reason: '사실이 사라졌습니다' } }],
+  });
+  const markup = renderers.renderModeratorItems(
+    moderatorFeed({ items: [selfClosed] }), 'important', NOW,
+  );
+  assert.match(markup, /모더 정리</u);
+
+  const userClosed = moderatorItem({
+    kind: 'important', status: 'resolved',
+    events: [{ event: 'resolved', payload: { by: 'owner' } }],
+  });
+  const byUser = renderers.renderModeratorItems(
+    moderatorFeed({ items: [userClosed] }), 'important', NOW,
+  );
+  assert.doesNotMatch(byUser, /모더 정리</u);
+  assert.match(byUser, /해결됨</u);
+});
+
 test('an empty classification says so instead of rendering an empty box', () => {
   const renderers = createUsageRenderers();
   const feed = moderatorFeed({ items: [], counts: { important: {}, proposal: {}, review: {} } });

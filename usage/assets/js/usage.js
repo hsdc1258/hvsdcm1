@@ -2115,10 +2115,21 @@
     return String(found?.payload?.policy_basis || '').trim();
   }
 
-  function moderatorStatusBadge(status, selfApproved = false) {
+  // 사실이 사라져 **모더가 스스로 닫은** 항목과, 사용자가 읽고 닫은 항목은 둘 다
+  // 'resolved'로 앉는다. 그 둘을 같은 배지로 그리면 사용자는 자기가 처리한 적 없는 항목을
+  // 자기가 처리한 것으로 읽는다. 데몬이 닫을 때 서버가 남기는 `by: moderator-daemon`이
+  // 둘을 가르는 유일한 사실이다 (자기승인 배지와 같은 원칙).
+  function moderatorSelfResolved(item) {
+    const events = Array.isArray(item?.events) ? item.events : [];
+    return events.some((event) => event?.event === 'resolved' && event?.payload?.by === 'moderator-daemon');
+  }
+
+  function moderatorStatusBadge(status, selfApproved = false, selfResolved = false) {
     const label = selfApproved && status === 'approved'
       ? '모더 승인'
-      : MODERATOR_STATUS_LABELS[status] || status || MODERATOR_UNKNOWN;
+      : selfResolved && status === 'resolved'
+        ? '모더 정리'
+        : MODERATOR_STATUS_LABELS[status] || status || MODERATOR_UNKNOWN;
     const tone = MODERATOR_STATUS_TONES[status];
     return `<span class="badge${tone ? ` badge-${tone}` : ''} disclosure-hint">${escapeHtml(label)}</span>`;
   }
@@ -2378,7 +2389,7 @@
             <span class="md-item-action">${escapeHtml(item?.action_summary || MODERATOR_UNKNOWN)}</span>
           </span>
           ${moderatorRowMarks(item?.kind, options)}
-          ${moderatorStatusBadge(item?.status, selfApproved)}
+          ${moderatorStatusBadge(item?.status, selfApproved, moderatorSelfResolved(item))}
         </summary>
         <div class="disclosure-body">
           ${quote}
