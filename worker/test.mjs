@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 14; number += 1) {
+  for (let number = 1; number <= 15; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3072,6 +3072,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0012': 'moderator_read_state',
       '0013': 'moderator_backfill_read',
       '0014': 'competitions',
+      '0015': 'competition_candidate_capacity',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4759,6 +4760,9 @@ test('competition cross-object trust probes fail closed without writing any repo
     ['rejected-with-application', (body) => {
       body.candidates[0].status = 'rejected';
     }],
+    ['verified-placeholder-organizer', (body) => {
+      body.candidates[0].organizer = '주최 기관 - 공식 확인 필요';
+    }],
   ];
   for (const [name, mutate] of probes) {
     const body = competitionFixture();
@@ -4806,6 +4810,157 @@ test('competition identifier slots reject private contact values without writes'
     assert.equal(response.status, 400, name);
   }
   assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition ingest rejects its exact active secret anywhere in the payload', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-active-secret-payload';
+  body.run.id = body.idempotency_key;
+  body.candidates[0].organizer = env.COMPETITION_INGEST_TOKEN;
+  const response = await competitionRequest(env, {
+    body,
+    token: env.COMPETITION_INGEST_TOKEN,
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'forbidden_data' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition ingest rejects its fully percent-encoded active secret without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  env.COMPETITION_INGEST_TOKEN = 'opaque-active-ingest-value-123456789';
+  const encodedToken = [...Buffer.from(env.COMPETITION_INGEST_TOKEN, 'utf8')]
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`)
+    .join('');
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-encoded-active-secret';
+  body.run.id = body.idempotency_key;
+  body.candidates[0].official_url = `https://organizer.example/${encodedToken}/rules`;
+  const response = await competitionRequest(env, {
+    body,
+    token: env.COMPETITION_INGEST_TOKEN,
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'forbidden_data' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition capacity migration preserves immutable rows, constraints, and indexes', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) {
+    t.skip('node:sqlite unavailable');
+    return;
+  }
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  database.exec(readFileSync(new URL('./migrations/0014_competitions.sql', import.meta.url), 'utf8'));
+  database.prepare(`
+    INSERT INTO competition_reports(
+      idempotency_key, payload_hash, schema_version, received_at, run_id, run_date,
+      run_status, started_at, finished_at, coverage_expected, coverage_checked,
+      coverage_succeeded, source_count, candidate_count, application_count
+    ) VALUES (?, ?, 1, ?, ?, ?, 'complete', ?, ?, 1, 1, 1, 1, 1, 0)
+  `).run(
+    'capacity-existing', 'a'.repeat(64), '2026-08-31T00:02:00.000Z',
+    'capacity-existing', '2026-08-31', '2026-08-31T00:00:00.000Z',
+    '2026-08-31T00:01:00.000Z',
+  );
+  database.prepare(`
+    INSERT INTO competition_sources(
+      idempotency_key, source_id, kind, name, reference_url, checked_at,
+      status, failure_code, manual_check, candidate_count
+    ) VALUES ('capacity-existing', 'source', 'listing', 'Source',
+      'https://list.example/contests', '2026-08-31T00:00:30.000Z',
+      'ok', 'none', 0, 1)
+  `).run();
+  database.prepare(`
+    INSERT INTO competition_candidates(
+      idempotency_key, contest_id, category, title, organizer, source_id,
+      discovery_url, discovered_at, recency, official_url, official_verification,
+      official_verified_at, acceptance, deadline_at, eligibility, rights_risk,
+      submission_risk, status, fit_score, effort_score
+    ) VALUES ('capacity-existing', 'contest', 'idea', 'Existing Contest', 'Organizer',
+      'source', 'https://list.example/contests/1', '2026-08-31T00:00:30.000Z',
+      'new', NULL, 'unverified', NULL, 'unknown', NULL, 'unknown', 'unknown',
+      'unknown', 'verifying', 50, 50)
+  `).run();
+
+  database.exec(readFileSync(
+    new URL('./migrations/0015_competition_candidate_capacity.sql', import.meta.url),
+    'utf8',
+  ));
+  assert.equal(database.prepare('PRAGMA foreign_key_check').all().length, 0);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_sources',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_candidates',
+  ).get().count), 1);
+  const capacityTables = database.prepare(`
+    SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name IN ('competition_reports', 'competition_sources')
+  `).all();
+  assert.equal(capacityTables.length, 2);
+  assert.ok(capacityTables.every((entry) => (
+    entry.sql.includes('candidate_count BETWEEN 0 AND 500')
+  )));
+  assert.throws(
+    () => database.prepare("UPDATE competition_reports SET run_status = 'failed'").run(),
+    /competition reports are immutable/u,
+  );
+});
+
+test('competition accepts and exactly replays the full 500-candidate contract', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-capacity-500';
+  body.run.id = body.idempotency_key;
+  body.sources[0].candidate_count = 500;
+  body.applications = [];
+  body.candidates = Array.from({ length: 500 }, (_, index) => ({
+    ...body.candidates[0],
+    contest_id: `capacity-contest-${index}`,
+    title: `Capacity Contest ${index}`,
+    official_url: null,
+    official_verification: 'unverified',
+    official_verified_at: null,
+    acceptance: 'unknown',
+    deadline_at: null,
+    eligibility: 'unknown',
+    rights_risk: 'unknown',
+    submission_risk: 'unknown',
+    status: 'verifying',
+  }));
+  const created = await competitionRequest(env, { body });
+  assert.equal(created.status, 201);
+  assert.deepEqual((await created.json()).counts, {
+    sources: 1,
+    candidates: 500,
+    applications: 0,
+  });
+  const replay = await competitionRequest(env, { body: structuredClone(body) });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replayed, true);
+  assert.equal(Number(database.prepare(
+    'SELECT candidate_count FROM competition_reports WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).candidate_count), 500);
+  assert.equal(Number(database.prepare(
+    'SELECT candidate_count FROM competition_sources WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).candidate_count), 500);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_candidates WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).count), 500);
 });
 
 test('competition migration rejects malformed timestamps in every normalized table', async (t) => {
@@ -4995,6 +5150,17 @@ test('competition URLs reject decoded PII, private-token aliases, and trailing-d
     'https://public.example/%252528authorization%252521%25253Dprivatevalue123%252529/rules',
     'https://localhost./rules',
     'https://foo.local./rules',
+    'https://[::ffff:127.0.0.1]/rules',
+    'https://[::ffff:7f00:1]/rules',
+    'https://[::ffff:a00:1]/rules',
+    'https://[::ffff:169.254.169.254]/meta',
+    'https://[64:ff9b::7f00:1]/rules',
+    'https://public.example/rules/ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules?ref=glpat-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules?ref=sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules/Bearer%20abcdefghijklmnopqrstuvwxyz123456',
+    'https://public.example/rules?ref=Bearer%20abcdefghijklmnopqrstuvwxyz123456',
+    'https://public.example/%3Cscript%3Ealert%281%29%3C%2Fscript%3E',
   ];
   const fields = [
     ['source.reference_url', (body, value) => { body.sources[0].reference_url = value; }],
@@ -5025,6 +5191,7 @@ test('competition URLs reject decoded PII, private-token aliases, and trailing-d
   const numericContest = competitionFixture();
   numericContest.idempotency_key = 'competition-public-numeric-path';
   numericContest.run.id = 'competition-public-numeric-path';
+  numericContest.sources[0].kind = 'official';
   numericContest.sources[0].reference_url = 'https://public.example/contests/20260831123';
   numericContest.candidates[0].discovery_url = 'https://public.example/entries/20260831123';
   numericContest.candidates[0].official_url = 'https://public.example/rules/20260831123';
@@ -5049,6 +5216,14 @@ test('competition free text rejects compact phones and secret assignments withou
     'Contact 010́1234́5678',
     'Contact 0212345678',
     'Feed(authorization=privatevalue123)',
+    '지원자 900101-1234567 아이디어 공모전',
+    '지원자: 홍길동 아이디어 공모전',
+    '신청자 성명=홍길동',
+    '지원자 홍길동의 지원 결과',
+    '주소 서울특별시 중구',
+    '홍길동 900101 5234567',
+    '<b>Example Contest</b>',
+    '<script>alert(1)</script>기관',
     'Notice,client_secret=privatevalue123',
     'Agency[refresh_token=privatevalue123]',
     'Secret private_key=privatevalue123',
@@ -5303,6 +5478,11 @@ test('competition schema rejects unknown, private, unsafe, inconsistent and over
   add((body) => { body.candidates[0].official_url = 'https://10.0.0.1/rules'; });
   add((body) => { body.candidates[0].official_url = 'https://user:secret@organizer.example/rules'; });
   add((body) => { body.candidates[0].official_url = 'https://organizer.example/rules#private'; });
+  add((body) => { body.candidates[0].official_url = 'https://list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www2.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://rules.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www.list.example../official-looking-rules'; });
   add((body) => {
     body.candidates[0].discovery_url = 'https://list.example/contests/123?email=person%40example.com';
   });
@@ -5335,7 +5515,7 @@ test('competition schema rejects unknown, private, unsafe, inconsistent and over
       authorization: 'Bearer competition-token',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ padding: 'x'.repeat(128_001) }),
+    body: JSON.stringify({ padding: 'x'.repeat(1_000_001) }),
   }), env);
   assert.equal(tooLarge.status, 413);
   assertCompetitionNoStore(tooLarge);

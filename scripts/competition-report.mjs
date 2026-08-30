@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const MAX_REPORT_BYTES = 128_000;
+export const MAX_REPORT_BYTES = 1_000_000;
+export const MAX_COMPETITION_CANDIDATES = 500;
 export const DEFAULT_TIMEOUT_MS = 30_000;
 export const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
+const MAX_ACKNOWLEDGEMENT_BYTES = 65_536;
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
@@ -14,6 +16,11 @@ const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE = /(?:^|[^\p{L}\p{N}])(?:\+?\d{1,3}[- .]?)?(?:\(?\d{2,4}\)?[- .])\d{3,4}[- .]\d{4}(?=$|[^\p{L}\p{N}])/u;
+const KOREAN_RESIDENT_ID = /(?:^|[^\d])\d{6}[- ]?[1-8]\d{6}(?!\d)/u;
+const LABELED_IDENTITY = /(?:applicant(?:[_. -]?name)?|지원자|신청자|성명)\s*[:=]\s*\S+/iu;
+const LABELED_IDENTITY_TEXT = /(?:(?:지원자|신청자)\s+(?!(?:누구나|모두|전원)(?:\s|$))[가-힣]{2,4}(?:의|님|씨)|(?:성명|주소|address)\s+(?!(?:미정|없음)(?:\s|$))\S+)/iu;
+const STANDALONE_CREDENTIAL = /(?:bearer\s+[A-Z0-9._~+/-]{8,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk_(?:live|test)_[A-Za-z0-9]{16,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|mfa\.[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/iu;
+const RAW_MARKUP = /(?:<\/?[A-Za-z][^>]*>|<!--|<!DOCTYPE)/iu;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
   'session', 'api_key', 'secret', 'credential', 'signature', 'private_key', 'signing_key',
@@ -89,7 +96,12 @@ function string(value, label, { max = 240, maxBytes = null, pattern, privatePatt
   }
   if (pattern && !pattern.test(value)) fail(`${label} has an invalid format`);
   const normalized = value.normalize('NFKC');
-  if (privatePatterns) scanPrivateText(normalized, label);
+  if (privatePatterns) {
+    if (/(?:<\/?[A-Za-z][^>]*>|<!--|<!DOCTYPE)/iu.test(normalized)) {
+      fail(`${label} must not contain raw markup`);
+    }
+    scanPrivateText(normalized, label);
+  }
   return value;
 }
 
@@ -211,7 +223,10 @@ function hasPrivateAssignment(value) {
 }
 
 function hasPrivatePatternOnce(value) {
-  return EMAIL.test(value) || PHONE.test(value) || hasKoreanPhone(value) || hasPrivateAssignment(value);
+  return EMAIL.test(value) || PHONE.test(value) || KOREAN_RESIDENT_ID.test(value)
+    || LABELED_IDENTITY.test(value) || LABELED_IDENTITY_TEXT.test(value)
+    || STANDALONE_CREDENTIAL.test(value) || RAW_MARKUP.test(value)
+    || hasKoreanPhone(value) || hasPrivateAssignment(value);
 }
 
 function hasPrivatePattern(value) {
@@ -248,6 +263,38 @@ function scanPrivateUrlComponent(value, label) {
   fail(`${label} has excessive URL encoding`);
 }
 
+function stringContainsSecretInDecodedForms(value, secret) {
+  const normalizedSecret = String(secret).normalize('NFKC');
+  const foldedSecret = privacyFold(normalizedSecret);
+  let decoded = String(value).normalize('NFKC');
+  for (let pass = 0; pass < 8; pass += 1) {
+    const folded = privacyFold(decoded);
+    if (decoded.includes(normalizedSecret) || folded.includes(foldedSecret)) return true;
+    if (!/%[0-9A-F]{2}/iu.test(decoded)) return false;
+    let next;
+    try { next = decodeURIComponent(decoded).normalize('NFKC'); }
+    catch { return false; }
+    if (next === decoded) return false;
+    decoded = next;
+  }
+  return false;
+}
+
+function reportContainsSecret(value, secret) {
+  const pending = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current === 'string') {
+      if (stringContainsSecretInDecodedForms(current, secret)) return true;
+    } else if (Array.isArray(current)) {
+      pending.push(...current);
+    } else if (current && typeof current === 'object') {
+      pending.push(...Object.values(current));
+    }
+  }
+  return false;
+}
+
 function publicHttpsUrl(value, label, { nullable = false } = {}) {
   if (nullable && value === null) return null;
   string(value, label, { max: 2_048 });
@@ -271,6 +318,7 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
   const nonPublicIpv6 = host.includes(':') && (
     host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd')
     || /^fe[89ab]/u.test(host) || host.startsWith('ff') || host.startsWith('2001:db8:')
+    || host.startsWith('::ffff:') || host.startsWith('64:ff9b:')
   );
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')
     || host.endsWith('.internal') || (!host.includes('.') && !host.includes(':'))
@@ -286,6 +334,39 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
     }
   }
   return url.href;
+}
+
+export function isCompetitionPublicTextSafe(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    scanPrivateText(value, 'competition discovery text');
+    return true;
+  } catch (error) {
+    if (error instanceof CompetitionReportError) return false;
+    throw error;
+  }
+}
+
+export function isCompetitionPublicUrlSafe(value) {
+  try {
+    publicHttpsUrl(value, 'competition discovery URL');
+    return true;
+  } catch (error) {
+    if (error instanceof CompetitionReportError) return false;
+    throw error;
+  }
+}
+
+export function isCompetitionPlaceholderOrganizer(value) {
+  if (typeof value !== 'string') return false;
+  const normalized = value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  return new Set([
+    '주최기관공식확인필요',
+    '주최기관확인필요',
+    '공식확인필요',
+    'organizerverificationrequired',
+    'organizerunverified',
+  ]).has(normalized);
 }
 
 function rejectForbiddenKeys(value, label = 'report') {
@@ -341,7 +422,7 @@ function validateSource(source, index) {
   oneOf(source.status, SOURCE_STATUSES, `${label}.status`);
   oneOf(source.failure_code, SOURCE_FAILURE_CODES, `${label}.failure_code`);
   if (typeof source.manual_check !== 'boolean') fail(`${label}.manual_check must be boolean`);
-  integer(source.candidate_count, `${label}.candidate_count`, { max: 200 });
+  integer(source.candidate_count, `${label}.candidate_count`, { max: MAX_COMPETITION_CANDIDATES });
   const failed = source.status === 'failed' || source.status === 'partial';
   if (failed !== (source.failure_code !== 'none')) fail(`${label}.failure_code must match failed or partial status`);
   if (['timeout', 'http_403'].includes(source.failure_code) && source.manual_check !== true) {
@@ -381,6 +462,9 @@ function validateCandidate(candidate, index, sourceIds) {
   integer(candidate.fit_score, `${label}.fit_score`, { max: 100 });
   integer(candidate.effort_score, `${label}.effort_score`, { max: 100 });
   const verified = candidate.official_verification === 'verified';
+  if (verified && isCompetitionPlaceholderOrganizer(candidate.organizer)) {
+    fail(`${label}.organizer must identify the officially verified organizer`);
+  }
   if (verified !== Boolean(candidate.official_url && candidate.official_verified_at)) {
     fail(`${label} official verification must bind both official URL and verification time`);
   }
@@ -424,6 +508,16 @@ function validateApplication(application, index, candidates) {
   if (candidate.status !== 'active') fail(`${label} must reference an active candidate`);
 }
 
+function canonicalPublicHost(value) {
+  return new URL(value).hostname.toLowerCase().replace(/\.+$/u, '').replace(/^www\d*\./u, '');
+}
+
+function matchesListingHost(host, listingHosts) {
+  return [...listingHosts].some((listingHost) => host === listingHost
+    || host.endsWith('.' + listingHost)
+    || listingHost.endsWith('.' + host));
+}
+
 export function validateCompetitionReport(report) {
   rejectForbiddenKeys(report);
   exactKeys(report, ['version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications'], [], 'report');
@@ -449,6 +543,9 @@ export function validateCompetitionReport(report) {
   const candidates = new Map();
   const candidateCountBySource = new Map(sources.map((source) => [source.id, 0]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const listingHosts = new Set(sources
+    .filter((source) => source.kind === 'listing')
+    .map((source) => canonicalPublicHost(source.reference_url)));
   const observationAt = report.run.finished_at || report.run.started_at;
   const observationTime = Date.parse(observationAt);
   sources.forEach((source, index) => {
@@ -456,13 +553,19 @@ export function validateCompetitionReport(report) {
       fail(`report.sources[${index}].checked_at follows the report observation`);
     }
   });
-  boundedArray(report.candidates, 'report.candidates', 200).forEach((candidate, index) => {
+  const candidateList = boundedArray(
+    report.candidates,
+    'report.candidates',
+    MAX_COMPETITION_CANDIDATES,
+  );
+  candidateList.forEach((candidate, index) => {
     validateCandidate(candidate, index, sourceIds);
     const key = `${candidate.contest_id}|${candidate.category}`;
     if (candidates.has(key)) fail(`report.candidates[${index}] duplicates a contest/category key`);
     candidates.set(key, candidate);
     candidateCountBySource.set(candidate.source_id, candidateCountBySource.get(candidate.source_id) + 1);
     const source = sourceById.get(candidate.source_id);
+    if (source.kind === 'listing') listingHosts.add(canonicalPublicHost(candidate.discovery_url));
     if (Date.parse(candidate.discovered_at) > observationTime
       || (candidate.official_verified_at && Date.parse(candidate.official_verified_at) > observationTime)) {
       fail(`report.candidates[${index}] contains evidence after the report observation`);
@@ -472,6 +575,12 @@ export function validateCompetitionReport(report) {
     }
     if (['timeout', 'http_403'].includes(source.failure_code) && candidate.acceptance === 'closed') {
       fail(`report.candidates[${index}] cannot use timeout or HTTP 403 as closure evidence`);
+    }
+  });
+  candidateList.forEach((candidate, index) => {
+    if (candidate.official_verification === 'verified'
+      && matchesListingHost(canonicalPublicHost(candidate.official_url), listingHosts)) {
+      fail(`report.candidates[${index}].official_url must not point to a discovery listing origin`);
     }
   });
   sources.forEach((source, index) => {
@@ -547,7 +656,7 @@ function safeResponseText(text, secrets = []) {
   return safe.slice(0, 240);
 }
 
-function validateAcknowledgement(data, report) {
+function validateAcknowledgement(data, report, responseStatus) {
   if (!record(data) || data.ok !== true || data.version !== 1
     || data.idempotency_key !== report.idempotency_key || data.run_id !== report.run.id
     || typeof data.replayed !== 'boolean' || !record(data.counts)) {
@@ -559,6 +668,12 @@ function validateAcknowledgement(data, report) {
     ['applications', report.applications.length],
   ]) {
     if (data.counts[key] !== expected) fail(`competition API acknowledgement count mismatch for ${key}`, { code: 'invalid_acknowledgement' });
+  }
+  if (!((responseStatus === 201 && data.replayed === false)
+    || (responseStatus === 200 && data.replayed === true))) {
+    fail('competition API acknowledgement status does not match replay state', {
+      code: 'invalid_acknowledgement',
+    });
   }
   return {
     ok: true,
@@ -574,6 +689,50 @@ function validateAcknowledgement(data, report) {
   };
 }
 
+async function readBoundedAcknowledgement(response, signal) {
+  const declared = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_ACKNOWLEDGEMENT_BYTES) {
+    fail('competition API acknowledgement is too large', { code: 'invalid_acknowledgement' });
+  }
+  const aborted = new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+      return;
+    }
+    signal.addEventListener('abort', () => {
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    }, { once: true });
+  });
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let body = '';
+    try {
+      while (true) {
+        const { done, value } = await Promise.race([reader.read(), aborted]);
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > MAX_ACKNOWLEDGEMENT_BYTES) {
+          reader.cancel('competition acknowledgement exceeded the byte limit').catch(() => {});
+          fail('competition API acknowledgement is too large', { code: 'invalid_acknowledgement' });
+        }
+        body += decoder.decode(value, { stream: true });
+      }
+      reader.releaseLock();
+      return body + decoder.decode();
+    } catch (error) {
+      reader.cancel('competition acknowledgement read stopped').catch(() => {});
+      throw error;
+    }
+  }
+  const body = String(await Promise.race([response.text(), aborted]));
+  if (Buffer.byteLength(body, 'utf8') > MAX_ACKNOWLEDGEMENT_BYTES) {
+    fail('competition API acknowledgement is too large', { code: 'invalid_acknowledgement' });
+  }
+  return body;
+}
+
 export async function sendCompetitionReport(report, {
   apiUrl,
   token,
@@ -581,40 +740,47 @@ export async function sendCompetitionReport(report, {
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
   validateCompetitionReport(report);
-  if (!nonEmpty(apiUrl) || !nonEmpty(token)) fail('competition reporter is missing API URL or token', { code: 'misconfigured' });
+  const normalizedToken = nonEmpty(token);
+  if (!nonEmpty(apiUrl) || !normalizedToken) fail('competition reporter is missing API URL or token', { code: 'misconfigured' });
   if (typeof fetchImpl !== 'function') fail('fetch is unavailable', { code: 'misconfigured' });
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) fail('timeout must be from 1000 to 120000 ms');
+  const body = JSON.stringify(report);
+  if (normalizedToken.length >= 16 && reportContainsSecret(report, normalizedToken)) {
+    fail('competition report contains the active ingest secret', { code: 'forbidden_data' });
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response;
+  let responseText;
   try {
     response = await fetchImpl(`${apiUrl.replace(/\/+$/u, '')}/api/competitions/report`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${normalizedToken}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(report),
+      body,
       signal: controller.signal,
     });
+    responseText = await readBoundedAcknowledgement(response, controller.signal);
   } catch (error) {
-    const message = error?.name === 'AbortError' ? 'competition report request timed out' : 'competition report request failed';
-    fail(message, { code: error?.name === 'AbortError' ? 'timeout' : 'network_error', status: 0 });
+    if (error instanceof CompetitionReportError) throw error;
+    const timedOut = error?.name === 'AbortError' || controller.signal.aborted;
+    const message = timedOut ? 'competition report request timed out' : 'competition report request failed';
+    fail(message, { code: timedOut ? 'timeout' : 'network_error', status: 0 });
   } finally {
     clearTimeout(timer);
   }
-
-  const responseText = await response.text();
   if (!response.ok) {
-    fail(`competition API rejected the report (HTTP ${response.status}): ${safeResponseText(responseText, [token])}`, {
+    fail(`competition API rejected the report (HTTP ${response.status}): ${safeResponseText(responseText, [normalizedToken])}`, {
       code: response.status === 401 ? 'unauthorized' : 'http_error',
       status: response.status,
     });
   }
   let data;
   try { data = JSON.parse(responseText); } catch { fail('competition API returned non-JSON success', { code: 'invalid_acknowledgement' }); }
-  return validateAcknowledgement(data, report);
+  return validateAcknowledgement(data, report, response.status);
 }
 
 function parseArgs(argv) {
