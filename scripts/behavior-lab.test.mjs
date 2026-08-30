@@ -102,7 +102,7 @@ test('published app bearer-gates dashboard and paper reads while retaining no ex
   assert.equal((appSource.match(/\/api\/behavior-lab\/paper/gu) || []).length, 1);
   assert.doesNotMatch(appSource, /api\.bitget\.com/iu);
   assert.match(appSource, /localStorage\.getItem\('hvsdcm\.token'\)/u);
-  assert.match(appSource, /authorization: `Bearer \$\{token\}`/u);
+  assert.match(appSource, /authorization: `Bearer \$\{ownerToken\(\)\}`/u);
   assert.doesNotMatch(htmlSource, /<form\b|type=["']submit["']|\baction=/iu);
   assert.match(htmlSource, /id="copyDraft"[^>]*type="button"/u);
   assert.match(htmlSource, /제출 기능은 존재하지 않습니다/u);

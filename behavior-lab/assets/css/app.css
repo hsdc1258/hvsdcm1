@@ -1017,6 +1017,12 @@ html {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
 }
+.paper-report[data-freshness="stale"] {
+  opacity: .72;
+}
+.adaptive-audit span, .adaptive-reasons li {
+  overflow-wrap: anywhere;
+}
 .paper-kv {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
