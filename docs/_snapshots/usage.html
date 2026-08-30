@@ -2446,6 +2446,26 @@ label.list-row {
 .md-composer-status:empty {
   display: none;
 }
+/* ---- 보기 전환 (안읽음 · 전체) ---- */
+/* 두 축을 한 줄에 나란히 두지 않는다. 같은 모양의 컨트롤 둘과 넷이 붙어 서면 한 벌로
+   읽혀서 무엇이 무엇을 거르는지 알 수 없다. 위가 보기, 아래가 분류다 — 그리고 분류는
+   '전체'에서만 그려지므로 실제로는 한 번에 한 줄이거나 두 줄이다. */
+.md-controls {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  min-width: 0;
+}
+.md-mode-set {
+  max-width: 100%;
+  overflow: hidden;
+}
+.md-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+}
 /* ---- 분류 필터 ---- */
 .md-filter-set {
   max-width: 100%;
@@ -2467,8 +2487,11 @@ label.list-row {
   color: var(--text-2);
 }
 /* ---- 그룹 머리 ---- */
+/* 좁은 폭에서는 개수 줄과 '모두 읽음'이 제목과 같은 줄에 다 서지 못한다. 넘치게 두면
+   버튼이 컨테이너 밖으로 밀려 눌리지 않는다 — 들어가면 한 줄, 안 들어가면 두 줄이다. */
 .md-group-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
@@ -2478,6 +2501,14 @@ label.list-row {
   color: var(--text-3);
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
+}
+/* 개수와 '모두 읽음'은 목록의 것이지 화면 전체의 것이 아니다. 상단 툴바로 올리면
+   새로고침 옆에 서서 화면을 새로 고치는 버튼처럼 보인다. */
+.md-group-aside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
 }
 /* 분류가 무엇을 뜻하는지 한 문장. 제안 그룹에서는 이 줄이 "승인 전에는 실행되지
    않는다"는 계약을 말한다 — 버튼 옆 힌트로만 두면 목록을 훑는 사람이 못 읽는다.
@@ -2549,6 +2580,27 @@ label.list-row {
   font-size: var(--fs-caption);
   font-weight: 400;
 }
+/* 분류 라벨. 안읽음 목록은 분류 넷을 가로질러 한 줄로 서므로, 각 행이 자기 출처를
+   말하지 않으면 중요 항목과 명령 기록이 같은 무게로 섞인다. 색은 쓰지 않는다 — 이
+   화면에서 색은 상태의 것이다 (DESIGN.md §3). --text-3 on --surface 4.99 ✓ 캡션 */
+.md-item-kind {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+/* 방금 읽은 줄. **자리는 지키고 무게만 낮춘다** — 펼치는 순간 목록에서 빠지면 다음 줄이
+   커서 밑으로 올라와 엉뚱한 것을 누르게 된다. 새로고침하거나 보기를 바꾸면 나간다.
+   흐림은 opacity가 아니라 토큰 교체로 낸다: opacity는 위에 적어 둔 대비값을 전부
+   무효로 만들어, 읽은 줄이 읽을 수 없는 줄이 된다.
+   --text-2 on --surface 7.03 ✓ · --text-3 on --surface 4.99 ✓ 캡션 */
+.md-item.is-read > .md-item-head .md-item-issue {
+  color: var(--text-2);
+  font-weight: 400;
+}
+.md-item.is-read > .md-item-head .md-item-action, .md-item.is-read > .md-item-head .md-item-kind {
+  color: var(--text-3);
+}
 /* 명령 ID는 접힌 행에서도 보여야 한다 — 웹에서 보낸 명령과 D1·로컬 증거를 같은
    문자열로 맞추는 것이 이 화면의 쓸모다. --text-3 on --surface 4.99 ✓ 캡션 */
 .md-item-id {
@@ -2617,6 +2669,8 @@ label.list-row {
   .md-item-id {
     display: none;
   }
+  /* 분류 라벨은 접지 않는다. ID와 달리 이 값은 펼친 본문에 같은 값이 없고, 안읽음
+     목록에서 그 행이 무엇인지 말하는 유일한 문자열이다. 두 글자라 폭도 거의 안 든다. */
   .md-item-issue {
     display: -webkit-box;
     white-space: normal;
@@ -2737,6 +2791,7 @@ label.list-row {
               <span>완료</span><strong data-view-count="1">1</strong>
             </button>
         </div>
+
         <div class="h-session-view-panels">
 
             <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-active"

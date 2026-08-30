@@ -10,6 +10,7 @@
 //   API 계약은 worker/test.mjs가, 조판은 docs/_snapshots/usage.html이 본다.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import {
   createFakeClock, createUsageAppSandbox, createUsageRenderers, renderUsageDashboard,
@@ -497,6 +498,38 @@ test('session tabs carry no status dot and every remaining dot pairs with a text
     assert.match(row, /class="status-dot is-(?:accent|idle|warn|danger)"/u);
     assert.match(row, /class="wt-cell wt-state" role="cell">[^<]*<\/div>/u);
   }
+});
+
+test('실행 현황은 24시간 상주 프로세스를 목록에서 빼고 그 사실을 말한다', () => {
+  const renderers = createUsageRenderers();
+  // 모더 데몬은 주기마다 heartbeat를 올리므로 서버가 항상 active로 돌려준다. 이 화면의
+  // 상위 탭은 "사람이 연 세션"을 세는 자리이므로 상주 프로세스는 여기 서지 않는다
+  // (사용자 지시 2026-08-30: "모더는 24시간 돌기때문에 제외").
+  const daemon = harnessTask({ id: 'moderator-daemon', name: '모더 데몬' });
+  const kernel = harnessTask({ id: 'kernel-state', name: '커널 상태' });
+  const real = harnessTask({ id: 'real-session', name: '진짜 세션' });
+
+  assert.equal(renderers.isResidentTask(daemon), true);
+  assert.equal(renderers.isResidentTask(kernel), true);
+  assert.equal(renderers.isResidentTask(real), false);
+  assert.deepEqual(renderers.sessionTasks([daemon, real, kernel]).map((task) => task.id), ['real-session']);
+
+  // 탭 숫자도 같은 함수를 지난다 — 목록에는 없는데 탭이 3을 세면 둘 중 하나가 거짓말이다.
+  const views = renderers.renderSessionViews([daemon, kernel, real], NOW, 2);
+  assert.match(views, /data-session-view="active"[^>]*>[\s\S]*?data-view-count="1"/u);
+  assert.doesNotMatch(views, /모더 데몬|커널 상태/u);
+  assert.match(views, /진짜 세션/u);
+  // 감추되 숨기지 않는다: 무엇이 빠졌는지 화면이 각주로 말한다.
+  assert.match(views, /상주 프로세스 2건은 이 목록에서 빠집니다/u);
+
+  // 상주 프로세스가 없으면 각주도 없다 — 늘 붙어 있는 안내는 읽히지 않는다.
+  assert.doesNotMatch(renderers.renderSessionViews([real], NOW, 0), /상주 프로세스/u);
+
+  // 대시보드 전체 경로도 같다: buildDashboard가 payload에서 직접 걸러 낸다.
+  const dashboard = renderers.buildDashboard({ snapshots: [], tasks: [daemon, real] }, NOW);
+  assert.doesNotMatch(dashboard, /모더 데몬/u);
+  assert.match(dashboard, /진짜 세션/u);
+  assert.match(dashboard, /상주 프로세스 1건은 이 목록에서 빠집니다/u);
 });
 
 test('active, stale, and completed tabs separate session state while the worktree includes every reported actor', () => {
@@ -2054,6 +2087,151 @@ test('the record classification never becomes the default, because nothing there
     commands: [{ command_id: 'cmd_1', source: 'direct', status: 'succeeded', command_text: 'x' }],
   });
   assert.notEqual(renderers.moderatorDefaultKind(feed), 'record');
+});
+
+// ---- 읽음 / 안읽음 --------------------------------------------------------
+//
+// 이 축이 왜 있는가: 2026-08-30 실측으로 라이브 모더 항목 22건이 **전부 닫힌 상태**였는데
+// 화면은 27줄을 그대로 세우고 있었다. 아래 테스트들이 잠그는 계약은 하나다 — 기본 화면에는
+// 아직 보지 않았거나 손이 필요한 것만 선다.
+
+const unreadFeed = (overrides = {}) => moderatorFeed({
+  counts: {
+    important: { open: 1, resolved: 8 },
+    proposal: { pending: 1, rejected: 8 },
+    review: { done: 1 },
+  },
+  unread_counts: { important: 1, proposal: 1, review: 1, record: 1 },
+  items: [
+    moderatorItem({ item_id: 'item_imp', kind: 'important', status: 'open', unread: true, updated_at: iso(3 * HOUR) }),
+    moderatorItem({ item_id: 'item_pro', kind: 'proposal', status: 'pending', unread: true, updated_at: iso(4 * HOUR) }),
+    moderatorItem({
+      item_id: 'item_rev', kind: 'review', status: 'done', unread: true,
+      proposed_command: null, updated_at: iso(HOUR),
+    }),
+  ],
+  commands: [moderatorCommand({ command_id: 'cmd_fail', status: 'failed', unread: true, updated_at: iso(2 * HOUR) })],
+  ...overrides,
+});
+
+const rowOrder = (markup) => [...markup.matchAll(/data-mod-(?:item|command)-row="([^"]+)"/gu)].map(([, id]) => id);
+
+test('the unread view is one list across all four classifications, hands-needed first', () => {
+  const renderers = createUsageRenderers();
+  const markup = renderers.renderModeratorUnread(unreadFeed(), NOW);
+  // 손이 필요한 둘(중요 open · 제안 pending)이 먼저, 그다음 최근 순이다. 분류로 쪼개면
+  // "확인할 것이 없다"를 알기 위해 탭을 넷 다 눌러야 해서 목적이 뒤집힌다.
+  assert.deepEqual(rowOrder(markup), ['item_imp', 'item_pro', 'item_rev', 'cmd_fail']);
+  // 한 목록에 섞이므로 각 행이 자기 출처를 말해야 한다.
+  for (const label of ['중요', '제안', '검토', '기록']) {
+    assert.match(markup, new RegExp(`<span class="md-item-kind">${label}</span>`, 'u'));
+  }
+});
+
+test('an item that needs a hand stays unread however often it is marked read', () => {
+  const renderers = createUsageRenderers();
+  // 서버가 이미 본 판(seen_version)을 최신으로 올려 놓아도 손이 필요하면 안읽음이다.
+  const open = moderatorItem({ kind: 'important', status: 'open', version: 7, seen_version: 7 });
+  const pending = moderatorItem({ kind: 'proposal', status: 'pending', version: 3, seen_version: 9 });
+  const resolved = moderatorItem({ kind: 'important', status: 'resolved', version: 7, seen_version: 7 });
+  assert.equal(renderers.moderatorItemUnread(open), true);
+  assert.equal(renderers.moderatorItemUnread(pending), true);
+  assert.equal(renderers.moderatorItemUnread(resolved), false);
+  assert.equal(renderers.moderatorNeedsAction(open), true);
+  assert.equal(renderers.moderatorNeedsAction(resolved), false);
+});
+
+test('unread falls back to the same rule when the server has not shipped the column yet', () => {
+  const renderers = createUsageRenderers();
+  // 배포 순서 때문에 프론트가 먼저 나갈 수 있다. 그때 화면이 조용히 비면 안 된다 —
+  // seen_version이 없으면 0이므로 전부 안읽음이고, 그것이 정직한 초기 상태다.
+  const legacy = moderatorItem({ kind: 'review', status: 'done', version: 2 });
+  delete legacy.unread;
+  delete legacy.seen_version;
+  assert.equal(renderers.moderatorItemUnread(legacy), true);
+  const seen = { ...legacy, seen_version: 2 };
+  assert.equal(renderers.moderatorItemUnread(seen), false);
+  const command = moderatorCommand({ updated_at: iso(HOUR) });
+  assert.equal(renderers.moderatorCommandUnread(command), true);
+  assert.equal(renderers.moderatorCommandUnread({ ...command, seen_at: command.updated_at }), false);
+});
+
+test('unread counts come from the server, so items past the page limit are still counted', () => {
+  const renderers = createUsageRenderers();
+  // 목록은 limit 50으로 잘려 오지만 개수는 D1 전수 집계다. 받은 배열에서 세면
+  // 페이지 밖의 안읽음이 없는 것이 되어 화면이 "확인할 것이 없다"고 거짓말한다.
+  const feed = unreadFeed({ items: [], commands: [], unread_counts: { important: 61, proposal: 0, review: 0, record: 4 } });
+  // 샌드박스(vm) 안에서 만든 객체라 프로토타입이 다르다 — 값만 본다.
+  const counts = renderers.moderatorUnreadCounts(feed);
+  assert.deepEqual(
+    ['important', 'proposal', 'review', 'record'].map((key) => counts[key]),
+    [61, 0, 0, 4],
+  );
+  assert.match(renderers.renderModeratorUnread(feed, NOW), /안읽음 65건/u);
+});
+
+test('an empty unread view says so plainly and offers nothing to press', () => {
+  const renderers = createUsageRenderers();
+  const feed = unreadFeed({ items: [], commands: [], unread_counts: { important: 0, proposal: 0, review: 0, record: 0 } });
+  const markup = renderers.renderModeratorUnread(feed, NOW);
+  assert.match(markup, /확인할 것이 없습니다/u);
+  assert.doesNotMatch(markup, /class="md-list"/u);
+  assert.doesNotMatch(markup, /data-mod-action="read-all"/u);
+});
+
+test('mark-all-read appears only while a row can actually be cleared by reading it', () => {
+  const renderers = createUsageRenderers();
+  assert.match(renderers.renderModeratorUnread(unreadFeed(), NOW), /data-mod-action="read-all"/u);
+  // 손이 필요한 줄만 남으면 버튼을 감춘다 — 눌러도 목록이 그대로여서 고장 난 것처럼 보인다.
+  const handsOnly = unreadFeed({
+    items: [moderatorItem({ item_id: 'item_imp', kind: 'important', status: 'open', unread: true })],
+    commands: [],
+    unread_counts: { important: 1, proposal: 0, review: 0, record: 0 },
+  });
+  const markup = renderers.renderModeratorUnread(handsOnly, NOW);
+  assert.doesNotMatch(markup, /data-mod-action="read-all"/u);
+  assert.match(markup, /안읽음 1건 · 손이 필요한 것 1건/u);
+});
+
+test('the classification chips belong to the all view, and only the unread toggle carries a count', () => {
+  const renderers = createUsageRenderers();
+  const feed = unreadFeed();
+  const unread = renderers.renderModeratorControls(feed, 'unread', 'important');
+  // 같은 모양의 컨트롤 둘과 넷이 나란히 서면 무엇이 무엇을 거르는지 알 수 없다.
+  assert.doesNotMatch(unread, /data-mod-kind=/u);
+  assert.match(unread, /data-mod-mode="unread" aria-pressed="true"/u);
+  const all = renderers.renderModeratorControls(feed, 'all', 'important');
+  assert.match(all, /data-mod-kind="important"/u);
+  assert.equal([...all.matchAll(/data-mod-kind=/gu)].length, 4, '분류 넷은 전체 보기에 그대로 남는다');
+  // '전체'에는 개수를 적지 않는다: 안읽음 모드에서는 서버가 안읽음만 돌려주므로 기록의
+  // 전체 개수를 셀 수 없고, 셀 수 없는 값을 적으면 화면이 조용히 틀린 수를 말한다.
+  const modeButtons = all.split('data-mod-mode=');
+  assert.match(modeButtons[1], /md-filter-count/u);
+  assert.doesNotMatch(modeButtons[2].split('</button>')[0], /md-filter-count/u);
+});
+
+test('every unread row can be reached by the read wiring, commands included', () => {
+  const renderers = createUsageRenderers();
+  // 기록(명령)에도 data-*-row가 있어야 펼침이 읽음으로 이어진다. 없으면 실패한 명령이
+  // 영원히 안읽음으로 남아 목록이 다시 쌓인다.
+  const markup = renderers.renderModeratorUnread(unreadFeed(), NOW);
+  assert.match(markup, /data-mod-command-row="cmd_fail"/u);
+  assert.match(markup, /data-mod-item-row="item_imp"/u);
+});
+
+test('a row read in this sitting is dimmed but keeps its place', () => {
+  const renderers = createUsageRenderers();
+  const item = moderatorItem({ kind: 'review', status: 'done' });
+  const read = renderers.renderModeratorItem(item, NOW, { showKind: true, read: true });
+  const unread = renderers.renderModeratorItem(item, NOW, { showKind: true, read: false });
+  assert.match(read, /class="disclosure md-item is-read"/u);
+  assert.match(read, /<span class="sr-only">읽음<\/span>/u);
+  assert.doesNotMatch(unread, /is-read/u);
+  // 흐림은 opacity가 아니라 토큰 교체여야 한다 — opacity는 적어 둔 대비값을 전부 무효로
+  // 만들어 읽은 줄이 읽을 수 없는 줄이 된다.
+  const css = fs.readFileSync('usage/assets/css/usage.css', 'utf8');
+  const block = css.slice(css.indexOf('.md-item.is-read'));
+  assert.doesNotMatch(block.slice(0, 400), /opacity/u);
 });
 
 test('summaries and commands from the server are escaped, never injected as markup', () => {

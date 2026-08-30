@@ -5,3 +5,5 @@ gichul-src/
 worker/.wrangler/
 *.log
 .claude/
+.preview/
+.wrangler/

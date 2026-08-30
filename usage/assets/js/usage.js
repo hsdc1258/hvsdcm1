@@ -94,6 +94,22 @@
   // 상태 점의 색. 상태색은 상태 표시에만 쓴다(DESIGN.md §3) — 중단은 경고, 진행은 강조,
   // 완료는 무채색이다.
   const TASK_STATUS_TONE = { active: ' is-accent', stale: ' is-warn', complete: ' is-idle' };
+  // 24시간 상주하는 인프라는 **세션이 아니다.** 모더 데몬은 주기마다 heartbeat를 올리므로
+  // 진행 중 목록에 영구히 서서 실제로 도는 세션 하나를 가린다. 커널 상태 보고도 마찬가지로
+  // 사람이 여는 작업이 아니다. 그래서 실행 현황은 이 둘을 세지 않는다 (사용자 지시 2026-08-30).
+  // **죽이는 것이 아니라 자리를 옮기는 것이다** — 모더의 표면은 왼쪽 모더 탭이고, 커널 상태는
+  // 화면이 아니라 `.kernel/state.json`이 정본이다. 여기서 빼도 보고는 계속 들어온다.
+  const RESIDENT_TASK_IDS = new Set(['moderator-daemon', 'kernel-state']);
+
+  function isResidentTask(task) {
+    return RESIDENT_TASK_IDS.has(String(task?.id ?? '').trim());
+  }
+
+  // 실행 현황이 보는 작업 집합. **탭 개수·목록·폴링 주기가 모두 이 한 함수를 지난다** —
+  // 한 곳에서만 거르면 "탭은 1이라는데 목록은 비었다" 같은 어긋남이 생긴다.
+  function sessionTasks(tasks) {
+    return (Array.isArray(tasks) ? tasks : []).filter((task) => task && !isResidentTask(task));
+  }
   // 수집 원본의 건강 상태. `outcome`이 가질 수 있는 값은 Worker가 닫아 둔 집합
   // (`success|no-data|failed`)과 Worker 자신이 붙이는 `stale`, 그리고 health 행이 없는
   // 구 스냅샷의 `legacy`뿐이다 — 여기 없는 값이 오면 서버 문자열을 그대로 보여 준다.
@@ -1476,8 +1492,8 @@
     return renderPostList(groups, status, now, footer);
   }
 
-  function renderSessionViews(inputTasks, now) {
-    const tasks = sortTasks(Array.isArray(inputTasks) ? [...inputTasks] : []);
+  function renderSessionViews(inputTasks, now, residentCount = 0) {
+    const tasks = sortTasks(sessionTasks(inputTasks));
     // 개수도 상태 판정과 **같은 함수**에서 나온다. 탭의 숫자와 그 탭이 실제로 세우는
     // 세션 수가 다른 화면은 둘 중 하나가 반드시 거짓말이다.
     const counts = Object.fromEntries(SESSION_VIEWS.map((view) => [view.key, 0]));
@@ -1497,6 +1513,7 @@
             </button>`;
   }).join('')}
         </div>
+        ${residentCount > 0 ? `<p class="h-session-resident">상주 프로세스 ${residentCount}건은 이 목록에서 빠집니다 — 모더는 왼쪽 <strong>모더</strong> 탭에서 봅니다.</p>` : ''}
         <div class="h-session-view-panels">
           ${views.map((view) => `
             <section class="h-session-view-panel" role="tabpanel" id="hSessionViewPanel-${view.key}"
@@ -1509,7 +1526,9 @@
 
   function buildDashboard(input, now) {
     const rawSnapshots = Array.isArray(input) ? input : input?.snapshots;
-    const rawTasks = Array.isArray(input?.tasks) ? input.tasks : [];
+    const allTasks = Array.isArray(input?.tasks) ? input.tasks : [];
+    const rawTasks = sessionTasks(allTasks);
+    const residentCount = allTasks.length - rawTasks.length;
     const bySource = new Map((Array.isArray(rawSnapshots) ? rawSnapshots : [])
       .filter((snapshot) => snapshot && SOURCE_LABELS[snapshot.source])
       .map((snapshot) => [snapshot.source, snapshot]));
@@ -1524,7 +1543,7 @@
       <div class="us-command-layout">
         <section class="us-pipeline-workspace" aria-labelledby="harnessTitle">
           <h2 id="harnessTitle" class="sr-only">실행 파이프라인</h2>
-          <div class="h-session-list">${renderSessionViews(tasks, now)}</div>
+          <div class="h-session-list">${renderSessionViews(tasks, now, residentCount)}</div>
         </section>
         <aside class="us-quota-rail" aria-labelledby="quotaTitle">
           <header class="us-quota-head">
@@ -1710,7 +1729,7 @@
   }
 
   function renderDashboard(data, { announce }) {
-    const tasks = sortTasks(Array.isArray(data?.tasks) ? data.tasks : []);
+    const tasks = sortTasks(sessionTasks(data?.tasks));
     // 빠른 폴링은 **실제로 도는 세션**이 있을 때만 한다. 중단된 세션을 진행 중으로 세면
     // 아무도 보고하지 않는 화면이 5초마다 API를 두드린다.
     activeSessionCount = tasks.filter((task) => taskStatusKey(task) === 'active').length;
@@ -1862,6 +1881,23 @@
     review: new Set(['queued', 'running']),
     [MODERATOR_RECORD_KIND]: new Set(),
   };
+  // 분류 넷 위에 축을 하나 더 얹는다: **읽음 / 안읽음**.
+  //
+  // 왜: 분류 넷은 *출처*의 분류지 "지금 나한테 필요한가"의 분류가 아니다. 2026-08-30
+  // 실측으로 라이브 항목 22건이 **전부 닫힌 상태**(acknowledged·resolved·approved·
+  // rejected·done)였는데 화면은 27줄을 그대로 세우고 있었다. 끝난 것이 나가지 않으니
+  // 쌓인다. 그래서 기본 화면을 안읽음 **한 목록**으로 두고, 분류 넷은 '전체' 보기에
+  // 그대로 남긴다(분류 넷은 2026-08-30 사용자 지시다). 안읽음에서까지 분류로 쪼개면
+  // "확인할 것이 없다"는 사실을 알기 위해 탭을 넷 다 눌러야 해서 목적이 뒤집힌다.
+  const MODERATOR_MODES = [
+    { key: 'unread', label: '안읽음' },
+    { key: 'all', label: '전체' },
+  ];
+  const MODERATOR_MODE_KEYS = new Set(MODERATOR_MODES.map((mode) => mode.key));
+  const MODERATOR_UNREAD_LEAD = '분류를 가로질러, 아직 보지 않았거나 손이 필요한 것만 모았습니다. '
+    + '펼쳐서 읽으면 읽음이 되고, 확인 · 승인 · 거부가 필요한 것은 그 행동을 해야 나갑니다.';
+  const MODERATOR_UNREAD_EMPTY = '확인할 것이 없습니다. 새로 올라온 것도, 손이 필요한 것도 없습니다.';
+
   const MODERATOR_STATUS_LABELS = {
     open: '확인 필요', acknowledged: '확인함', resolved: '해결됨',
     pending: '승인 대기', approved: '승인함', rejected: '거부함',
@@ -1926,6 +1962,12 @@
 
   let selectedUsageView = readUsageView();
   let selectedModeratorKind = '';
+  // 기본은 언제나 안읽음이다. 사람이 '전체'를 골랐어도 다음 방문은 다시 받은편지함에서
+  // 시작한다 — 그 선택을 기억하면 다음 날 또 스물일곱 줄로 맞이하게 된다.
+  let selectedModeratorMode = 'unread';
+  // 이번 보기 동안 읽은 줄. 펼쳐 읽는 순간 목록에서 빠지면 다음 줄이 커서 밑으로 올라와
+  // 엉뚱한 것을 누르게 된다. 자리는 지키되 무게를 낮추고, 새로고침 · 보기 전환에서 나간다.
+  const moderatorJustRead = new Map();
   // 폴링이 목록을 다시 그려도 사람이 열어 둔 행과 편집 중인 글은 살아남아야 한다.
   const moderatorOpenItems = new Set();
   let moderatorEditingId = '';
@@ -2041,6 +2083,93 @@
     return result;
   }
 
+  // 손이 필요한 항목은 **보는 것만으로 읽음이 되지 않는다.** 눈으로 지워 버리면 할 일이
+  // 조용히 사라진다 — '확인함 · 승인 · 거부'라는 행동으로만 목록에서 나간다. 서버가
+  // 같은 규칙으로 unread를 판정하므로(worker/src/router.js) 여기서는 서버 값을 믿고,
+  // 그 칸이 아직 없는 서버를 만나면 같은 규칙으로 직접 센다.
+  function moderatorNeedsAction(item) {
+    return (item?.kind === 'important' && item.status === 'open')
+      || (item?.kind === 'proposal' && item.status === 'pending');
+  }
+
+  function moderatorItemUnread(item) {
+    if (typeof item?.unread === 'boolean') return item.unread;
+    if (moderatorNeedsAction(item)) return true;
+    return (finiteNumber(item?.seen_version) ?? 0) < (finiteNumber(item?.version) ?? 0);
+  }
+
+  function moderatorCommandUnread(command) {
+    if (typeof command?.unread === 'boolean') return command.unread;
+    const seen = String(command?.seen_at || '');
+    return seen === '' || seen < String(command?.updated_at || '');
+  }
+
+  function moderatorKindLabel(key) {
+    return MODERATOR_KINDS.find((entry) => entry.key === key)?.label || MODERATOR_UNKNOWN;
+  }
+
+  // 개수는 서버의 unread_counts를 쓴다. 받은 목록에서 세면 페이지(limit 50) 밖의 안읽음을
+  // 놓쳐 "확인할 것이 없다"는 거짓말을 화면이 하게 된다. 서버가 그 칸을 아직 주지 않으면
+  // 받은 목록으로 대신 세되, 그때는 그 한계가 그대로 남는다.
+  function moderatorUnreadCounts(data) {
+    const server = data?.unread_counts && typeof data.unread_counts === 'object' ? data.unread_counts : null;
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const commands = Array.isArray(data?.commands) ? data.commands : [];
+    const result = {};
+    for (const kind of MODERATOR_KINDS) {
+      const reported = server ? finiteNumber(server[kind.key]) : null;
+      result[kind.key] = reported ?? (kind.key === MODERATOR_RECORD_KIND
+        ? commands.filter(moderatorCommandUnread).length
+        : items.filter((item) => item?.kind === kind.key && moderatorItemUnread(item)).length);
+    }
+    return result;
+  }
+
+  function moderatorUnreadTotal(data) {
+    const counts = moderatorUnreadCounts(data);
+    return MODERATOR_KINDS.reduce((sum, kind) => sum + (counts[kind.key] || 0), 0);
+  }
+
+  // 안읽음 목록은 분류를 가로질러 한 줄로 선다. 정렬은 '손이 필요한 것 먼저, 그다음
+  // 최근 순'이다 — 사용자가 물은 것이 "내가 필요한 것"이기 때문이다.
+  function moderatorUnreadRows(data) {
+    const seen = new Set();
+    const rows = [];
+    const push = (row) => {
+      if (seen.has(row.key)) return;
+      seen.add(row.key);
+      rows.push(row);
+    };
+    for (const item of Array.isArray(data?.items) ? data.items : []) {
+      if (!moderatorItemUnread(item)) continue;
+      push({
+        key: `item:${String(item?.item_id || '')}`,
+        type: 'item',
+        value: item,
+        needsAction: moderatorNeedsAction(item),
+        at: String(item?.updated_at || ''),
+        read: false,
+      });
+    }
+    for (const command of Array.isArray(data?.commands) ? data.commands : []) {
+      if (!moderatorCommandUnread(command)) continue;
+      push({
+        key: `command:${String(command?.command_id || '')}`,
+        type: 'command',
+        value: command,
+        needsAction: false,
+        at: String(command?.updated_at || ''),
+        read: false,
+      });
+    }
+    for (const row of moderatorJustRead.values()) push({ ...row, read: true });
+    rows.sort((left, right) => {
+      if (left.needsAction !== right.needsAction) return left.needsAction ? -1 : 1;
+      return right.at.localeCompare(left.at);
+    });
+    return rows;
+  }
+
   // 기본 선택은 **손이 필요한 쪽**이다. 아무 분류도 열려 있지 않으면 기록이 있는 첫
   // 분류를 열고, 그것도 없으면 중요를 연다. 사람이 한 번 고르면 그 선택이 이긴다.
   function moderatorDefaultKind(data) {
@@ -2052,6 +2181,25 @@
     for (const kind of candidates) if (counts[kind.key].open > 0) return kind.key;
     for (const kind of candidates) if (counts[kind.key].total > 0) return kind.key;
     return 'important';
+  }
+
+  // 보기 전환과 분류 칩. 분류 칩은 '전체'에서만 선다 — 두 축을 같은 모양으로 나란히
+  // 두면 컨트롤 넷과 컨트롤 둘이 한 벌로 읽혀, 무엇이 무엇을 거르는지 알 수 없다.
+  // '전체'에는 개수를 적지 않는다: 안읽음 모드에서 서버가 안읽음만 돌려주므로 기록의
+  // 전체 개수를 셀 수 없고, 셀 수 없는 값을 적으면 화면이 조용히 틀린 수를 말한다.
+  function renderModeratorControls(data, mode, selected) {
+    const unread = moderatorUnreadTotal(data);
+    const modes = MODERATOR_MODES.map((entry) => {
+      const count = entry.key === 'unread'
+        ? `<span class="md-filter-count">${unread}</span>`
+        : '';
+      return `<button class="segmented-btn md-mode-btn" type="button" data-mod-mode="${entry.key}" aria-pressed="${entry.key === mode}">`
+        + `<span class="md-mode-label">${entry.label}</span>${count}</button>`;
+    }).join('');
+    return `<div class="md-controls">
+        <div class="segmented md-mode-set" role="group" aria-label="보기">${modes}</div>
+        ${mode === 'all' ? renderModeratorFilter(data, selected) : ''}
+      </div>`;
   }
 
   function renderModeratorFilter(data, selected) {
@@ -2094,7 +2242,9 @@
     return '';
   }
 
-  function renderModeratorItem(item, now) {
+  // showKind: 안읽음 목록은 분류를 가로지르므로 각 줄이 자기 출처를 말해야 한다.
+  // read: 이번 보기 동안 읽은 줄. 무게만 낮추고 자리는 지킨다.
+  function renderModeratorItem(item, now, options = {}) {
     const id = String(item?.item_id || '');
     const pending = item?.kind === 'proposal' && item.status === 'pending';
     const command = String(item?.proposed_command || '').trim();
@@ -2105,12 +2255,13 @@
           ${pending ? '<p class="md-quote-note">아직 실행되지 않았습니다. 승인해야 대기열에 들어갑니다.</p>' : ''}
         </div>`
       : '';
-    return `<details class="disclosure md-item" data-mod-item-row="${escapeHtml(id)}"${moderatorOpenItems.has(id) ? ' open' : ''}>
+    return `<details class="disclosure md-item${options.read ? ' is-read' : ''}" data-mod-item-row="${escapeHtml(id)}"${moderatorOpenItems.has(id) ? ' open' : ''}>
         <summary class="disclosure-head md-item-head">
           <span class="md-item-body">
             <span class="disclosure-title md-item-issue">${escapeHtml(item?.issue_summary || MODERATOR_UNKNOWN)}</span>
             <span class="md-item-action">${escapeHtml(item?.action_summary || MODERATOR_UNKNOWN)}</span>
           </span>
+          ${moderatorRowMarks(item?.kind, options)}
           ${moderatorStatusBadge(item?.status)}
         </summary>
         <div class="disclosure-body">
@@ -2153,6 +2304,34 @@
       ${rows}`;
   }
 
+  // 안읽음 한 목록. 분류 넷의 머리·리드·개수 조판을 그대로 쓴다 — 다섯 번째 화면이
+  // 아니라 같은 목록을 다르게 거른 것이기 때문이다.
+  function renderModeratorUnread(data, now) {
+    const rows = moderatorUnreadRows(data);
+    const total = moderatorUnreadTotal(data);
+    const needsAction = rows.filter((row) => row.needsAction).length;
+    // '모두 읽음'은 읽음으로 지울 수 있는 줄이 있을 때만 선다. 손이 필요한 줄만 남았는데
+    // 버튼이 서 있으면, 눌러도 목록이 그대로여서 버튼이 고장 난 것처럼 보인다.
+    const clearable = rows.some((row) => !row.read && !row.needsAction);
+    const countLine = needsAction > 0
+      ? `안읽음 ${total}건 · 손이 필요한 것 ${needsAction}건`
+      : `안읽음 ${total}건`;
+    const body = rows.length === 0
+      ? `<p class="us-empty">${MODERATOR_UNREAD_EMPTY}</p>`
+      : `<div class="md-list">${rows.map((row) => (row.type === 'item'
+        ? renderModeratorItem(row.value, now, { showKind: true, read: row.read })
+        : renderModeratorCommand(row.value, now, { showKind: true, read: row.read }))).join('')}</div>`;
+    return `<div class="md-group-head">
+        <h2 class="list-group-head">안읽음</h2>
+        <div class="md-group-aside">
+          <p class="md-group-count">${countLine}</p>
+          ${clearable ? '<button class="btn btn-secondary btn-sm" type="button" data-mod-action="read-all">모두 읽음</button>' : ''}
+        </div>
+      </div>
+      <p class="md-lead">${MODERATOR_UNREAD_LEAD}</p>
+      ${body}`;
+  }
+
   function moderatorCommandLines(command) {
     const issue = String(command?.issue_summary || '').trim();
     const action = String(command?.action_summary || '').trim();
@@ -2163,16 +2342,27 @@
     };
   }
 
-  function renderModeratorCommand(command, now) {
+  // 읽음 표시와 분류 라벨. 색은 쓰지 않는다 — 이 화면에서 색은 상태의 것이다
+  // (DESIGN.md §3). 읽음은 눈으로는 무게로, 보조기술에는 낱말로 전한다.
+  function moderatorRowMarks(kind, options = {}) {
+    const read = options.read ? '<span class="sr-only">읽음</span>' : '';
+    const label = options.showKind
+      ? `<span class="md-item-kind">${escapeHtml(moderatorKindLabel(kind))}</span>`
+      : '';
+    return `${read}${label}`;
+  }
+
+  function renderModeratorCommand(command, now, options = {}) {
     const lines = moderatorCommandLines(command);
     const id = String(command?.command_id || '');
-    return `<details class="disclosure md-item">
+    return `<details class="disclosure md-item${options.read ? ' is-read' : ''}" data-mod-command-row="${escapeHtml(id)}"${moderatorOpenItems.has(id) ? ' open' : ''}>
         <summary class="disclosure-head md-item-head">
           <span class="md-item-body">
             <span class="disclosure-title md-item-issue">${escapeHtml(lines.issue)}</span>
             <span class="md-item-action">${escapeHtml(lines.action)}</span>
           </span>
           <span class="md-item-id">${escapeHtml(id || MODERATOR_UNKNOWN)}</span>
+          ${moderatorRowMarks(MODERATOR_RECORD_KIND, options)}
           ${moderatorStatusBadge(command?.status)}
         </summary>
         <div class="disclosure-body">
@@ -2209,12 +2399,15 @@
   }
 
   function renderModerator(data, now = Date.now()) {
+    const mode = MODERATOR_MODE_KEYS.has(selectedModeratorMode) ? selectedModeratorMode : 'unread';
     const kind = MODERATOR_KIND_KEYS.has(selectedModeratorKind)
       ? selectedModeratorKind
       : moderatorDefaultKind(data);
     setModeratorHtml(modElements.brain, renderModeratorBrain(data, now));
-    setModeratorHtml(modElements.filter, renderModeratorFilter(data, kind));
-    setModeratorHtml(modElements.items, renderModeratorItems(data, kind, now));
+    setModeratorHtml(modElements.filter, renderModeratorControls(data, mode, kind));
+    setModeratorHtml(modElements.items, mode === 'unread'
+      ? renderModeratorUnread(data, now)
+      : renderModeratorItems(data, kind, now));
   }
 
   function renderModeratorFreshness() {
@@ -2251,7 +2444,11 @@
       modElements.refreshStatus.textContent = '모더 상태를 확인하고 있습니다.';
     }
     try {
-      const data = await moderatorApi(MODERATOR_PATH);
+      // 안읽음 모드는 서버에서 거른다. 여기서 거르면 limit 50 페이지 밖의 안읽음이
+      // 화면에 영영 오지 않는다 — 쌓임을 막으려는 화면이 쌓인 것을 숨기게 된다.
+      const data = await moderatorApi(selectedModeratorMode === 'unread'
+        ? `${MODERATOR_PATH}&unread=1`
+        : MODERATOR_PATH);
       moderatorData = data;
       moderatorSyncedAt = Date.now();
       renderModerator(data);
@@ -2266,6 +2463,82 @@
       moderatorInFlight = false;
       scheduleModeratorPoll();
       renderModeratorFreshness();
+    }
+  }
+
+  function moderatorRowById(id) {
+    for (const key of [`item:${id}`, `command:${id}`]) {
+      const cached = moderatorJustRead.get(key);
+      if (cached) return cached;
+    }
+    const item = (Array.isArray(moderatorData?.items) ? moderatorData.items : [])
+      .find((entry) => String(entry?.item_id || '') === id);
+    if (item) {
+      return {
+        key: `item:${id}`,
+        type: 'item',
+        value: item,
+        needsAction: moderatorNeedsAction(item),
+        at: String(item?.updated_at || ''),
+        read: false,
+      };
+    }
+    const command = (Array.isArray(moderatorData?.commands) ? moderatorData.commands : [])
+      .find((entry) => String(entry?.command_id || '') === id);
+    if (!command) return null;
+    return {
+      key: `command:${id}`,
+      type: 'command',
+      value: command,
+      needsAction: false,
+      at: String(command?.updated_at || ''),
+      read: false,
+    };
+  }
+
+  // 읽음은 **서버에** 남긴다. localStorage에 두면 브라우저 데이터를 지우거나 폰에서 열 때
+  // 쌓임이 그대로 되살아난다 — 그러면 이 기능은 이 브라우저에서만 참인 위안이 된다.
+  //
+  // 본 version(항목) · updated_at(명령)을 그대로 되돌려 주므로, 읽는 사이에 바뀐 것을
+  // 읽음으로 덮어쓰지 않는다. 서버는 그 값보다 낮게 내리지 않는다.
+  async function markModeratorRead(rows) {
+    const targets = rows.filter((row) => row && !row.read);
+    const items = [];
+    const commands = [];
+    for (const row of targets) {
+      if (row.type === 'item') {
+        const version = finiteNumber(row.value?.version);
+        const itemId = String(row.value?.item_id || '');
+        if (itemId && version !== null) items.push({ item_id: itemId, version });
+      } else {
+        const commandId = String(row.value?.command_id || '');
+        const updatedAt = String(row.value?.updated_at || '');
+        if (commandId && updatedAt) commands.push({ command_id: commandId, updated_at: updatedAt });
+      }
+    }
+    if (items.length === 0 && commands.length === 0) return;
+    // 화면을 먼저 흐린다. 읽음은 되돌릴 수 있는 표시라 응답을 기다리며 손을 멈춰 세울
+    // 이유가 없다. 실패하면 아래에서 되돌리고 다음 폴링이 원래 상태를 다시 그린다.
+    for (const row of targets) moderatorJustRead.set(row.key, { ...row, read: true });
+    if (moderatorData) renderModerator(moderatorData);
+    try {
+      // 서버가 한 번에 받는 상한은 200건이다. '모두 읽음'이 그보다 많으면 나눠 보낸다.
+      const batches = Math.max(1, Math.ceil(Math.max(items.length, commands.length) / 200));
+      for (let batch = 0; batch < batches; batch += 1) {
+        const offset = batch * 200;
+        await moderatorApi('/api/moderator/read', {
+          method: 'POST',
+          body: {
+            items: items.slice(offset, offset + 200),
+            commands: commands.slice(offset, offset + 200),
+          },
+        });
+      }
+    } catch (error) {
+      if (error.message === 'unauthorized') return;
+      for (const row of targets) moderatorJustRead.delete(row.key);
+      if (modElements.error) modElements.error.textContent = error.message || '읽음으로 표시하지 못했습니다.';
+      if (moderatorData) renderModerator(moderatorData);
     }
   }
 
@@ -2354,8 +2627,23 @@
 
   function wireModerator() {
     modElements.form?.addEventListener?.('submit', submitModeratorCommand);
-    modElements.reload?.addEventListener?.('click', () => { void loadModerator({ announce: true }); });
+    // 새로고침은 "다 봤다"는 뜻이기도 하다 — 이번 보기에서 읽은 줄은 여기서 목록을 뜬다.
+    modElements.reload?.addEventListener?.('click', () => {
+      moderatorJustRead.clear();
+      void loadModerator({ announce: true });
+    });
     modElements.filter?.addEventListener?.('click', (event) => {
+      const modeButton = event.target?.closest?.('[data-mod-mode]');
+      if (modeButton) {
+        const mode = modeButton.dataset?.modMode || '';
+        if (!MODERATOR_MODE_KEYS.has(mode) || mode === selectedModeratorMode) return;
+        selectedModeratorMode = mode;
+        moderatorJustRead.clear();
+        // 질의 인자가 달라지므로 다시 받아야 한다. 그 전에 한 번 그려 전환이 즉시 보이게 한다.
+        if (moderatorData) renderModerator(moderatorData);
+        void loadModerator();
+        return;
+      }
       const button = event.target?.closest?.('[data-mod-kind]');
       if (!button) return;
       selectedModeratorKind = button.dataset?.modKind || selectedModeratorKind;
@@ -2363,10 +2651,18 @@
     });
     // 열고 접은 상태는 폴링을 넘어 살아남아야 한다 — 5초마다 손이 닫는 목록은 못 읽는다.
     modElements.items?.addEventListener?.('toggle', (event) => {
-      const row = event.target?.dataset?.modItemRow;
+      const dataset = event.target?.dataset;
+      const row = dataset?.modItemRow || dataset?.modCommandRow;
       if (!row) return;
-      if (event.target.open) moderatorOpenItems.add(row);
-      else moderatorOpenItems.delete(row);
+      if (!event.target.open) {
+        moderatorOpenItems.delete(row);
+        return;
+      }
+      moderatorOpenItems.add(row);
+      // **펼치는 것이 읽는 행위다.** 화면에 떴다는 이유로 읽음 처리하면, 자리를 비운 사이에
+      // 올라온 것이 한 번도 눈에 걸리지 않고 지나간다.
+      const target = moderatorRowById(row);
+      if (target) void markModeratorRead([target]);
     }, true);
     modElements.items?.addEventListener?.('input', (event) => {
       if (event.target?.dataset?.modEdit) moderatorEditDraft = event.target.value;
@@ -2396,6 +2692,10 @@
           return;
         }
         void sendModeratorDecision(itemId, 'edit', draft);
+        return;
+      }
+      if (action === 'read-all') {
+        void markModeratorRead(moderatorUnreadRows(moderatorData).filter((row) => !row.needsAction));
         return;
       }
       if (['approve', 'reject', 'acknowledge'].includes(action)) {
@@ -2457,6 +2757,7 @@
 
   window.USAGE_RENDER = {
     buildDashboard, renderSessionViews, renderSessionView, renderTask,
+    sessionTasks, isResidentTask,
     renderTaskBody, renderPostList, taskPresentation, taskStatusKey, taskInput,
     sessionWorktree, renderWorktree, worktreeGuide,
     phaseTimeline, sessionUsageDeltas, actorNodes, phaseNodesOf,
@@ -2465,5 +2766,8 @@
     // 모더 뷰 — 게이트가 렌더러를 실제로 실행해 계약을 본다 (scripts/usage.test.mjs).
     renderModeratorBrain, renderModeratorFilter, renderModeratorItems, renderModeratorCommands,
     moderatorCounts, moderatorDefaultKind, activateUsageView, loadModerator,
+    renderModeratorControls, renderModeratorUnread, renderModeratorItem, renderModeratorCommand,
+    moderatorUnreadRows, moderatorUnreadCounts,
+    moderatorItemUnread, moderatorCommandUnread, moderatorNeedsAction,
   };
 })();
