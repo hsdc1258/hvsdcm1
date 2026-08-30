@@ -1252,6 +1252,18 @@ function containsForbiddenPaperPrivateAssignment(value) {
   return false;
 }
 
+// Scan identifier-shaped fragments independently of assignment syntax. This catches quoted or
+// nested-looking JSON keys even when an allowed outer assignment would otherwise consume the text.
+function containsForbiddenPaperPrivateIdentifier(value) {
+  let identifiers = 0;
+  const identifierPattern = /[A-Za-z][A-Za-z0-9]*(?:(?:[-_./])[A-Za-z0-9]+)*/gu;
+  for (const match of value.matchAll(identifierPattern)) {
+    identifiers += 1;
+    if (identifiers > 64 || match[0].length > 96 || isForbiddenPaperPrivateKey(match[0])) return true;
+  }
+  return false;
+}
+
 // Trade and position details are display-only and versioned by the local simulator. Preserve safe,
 // bounded scalar fields without allowing arbitrary depth or non-finite JSON values into D1.
 function normalizePaperDetail(value, { maxKeys = 32, maxString = 240 } = {}) {
@@ -1493,6 +1505,7 @@ export function normalizeBehaviorPaperReport(input) {
 
 function containsForbiddenPaperPrivateText(value) {
   return /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/iu.test(value)
+    || containsForbiddenPaperPrivateIdentifier(value)
     || containsForbiddenPaperPrivateAssignment(value)
     || /(?:^|[\s"'`])\/api\/[^\s"'`]*(?:account|orders?|positions?|private|trade)(?:\/|[\s"'`]|$)/iu.test(value)
     || /\bwss?:\/\/[^\s"'`]+\/private(?:\/|\b)/iu.test(value)
