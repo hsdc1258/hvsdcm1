@@ -2036,8 +2036,24 @@
     return `<div><dt>${escapeHtml(label)}</dt><dd${attribute}>${escapeHtml(text || MODERATOR_UNKNOWN)}</dd></div>`;
   }
 
-  function moderatorStatusBadge(status) {
-    const label = MODERATOR_STATUS_LABELS[status] || status || MODERATOR_UNKNOWN;
+  // 승인한 주체가 누구인지는 상태만으로 알 수 없다. 사용자가 누른 승인과 모더가 스스로
+  // 내린 판정이 둘 다 'approved'로 앉기 때문이다. 서버가 남기는 moderator_approved
+  // 이벤트가 그 둘을 가르는 유일한 사실이므로 배지 문구도 거기서 끌어온다.
+  function moderatorSelfApproved(item) {
+    const events = Array.isArray(item?.events) ? item.events : [];
+    return events.some((event) => event?.event === 'moderator_approved');
+  }
+
+  function moderatorApprovalBasis(item) {
+    const events = Array.isArray(item?.events) ? item.events : [];
+    const found = events.find((event) => event?.event === 'moderator_approved');
+    return String(found?.payload?.policy_basis || '').trim();
+  }
+
+  function moderatorStatusBadge(status, selfApproved = false) {
+    const label = selfApproved && status === 'approved'
+      ? '모더 승인'
+      : MODERATOR_STATUS_LABELS[status] || status || MODERATOR_UNKNOWN;
     const tone = MODERATOR_STATUS_TONES[status];
     return `<span class="badge${tone ? ` badge-${tone}` : ''} disclosure-hint">${escapeHtml(label)}</span>`;
   }
@@ -2247,12 +2263,22 @@
   function renderModeratorItem(item, now, options = {}) {
     const id = String(item?.item_id || '');
     const pending = item?.kind === 'proposal' && item.status === 'pending';
+    const selfApproved = moderatorSelfApproved(item);
+    const basis = moderatorApprovalBasis(item);
     const command = String(item?.proposed_command || '').trim();
+    const quoteLabel = pending
+      ? '승인하면 실행할 명령'
+      : selfApproved ? '모더가 스스로 승인해 실행한 명령' : '이 제안의 명령';
+    const quoteNote = pending
+      ? '<p class="md-quote-note">아직 실행되지 않았습니다. 승인해야 대기열에 들어갑니다.</p>'
+      : selfApproved
+        ? `<p class="md-quote-note">사용자 승인 대상이 아니라 바로 대기열에 들어갔습니다${basis ? ` — ${escapeHtml(basis)}` : ''}.</p>`
+        : '';
     const quote = command
       ? `<div class="md-quote">
-          <p class="md-quote-label">${pending ? '승인하면 실행할 명령' : '이 제안의 명령'}</p>
+          <p class="md-quote-label">${quoteLabel}</p>
           <p class="md-quote-body">${escapeHtml(command)}</p>
-          ${pending ? '<p class="md-quote-note">아직 실행되지 않았습니다. 승인해야 대기열에 들어갑니다.</p>' : ''}
+          ${quoteNote}
         </div>`
       : '';
     return `<details class="disclosure md-item${options.read ? ' is-read' : ''}" data-mod-item-row="${escapeHtml(id)}"${moderatorOpenItems.has(id) ? ' open' : ''}>
@@ -2262,7 +2288,7 @@
             <span class="md-item-action">${escapeHtml(item?.action_summary || MODERATOR_UNKNOWN)}</span>
           </span>
           ${moderatorRowMarks(item?.kind, options)}
-          ${moderatorStatusBadge(item?.status)}
+          ${moderatorStatusBadge(item?.status, selfApproved)}
         </summary>
         <div class="disclosure-body">
           ${quote}

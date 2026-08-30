@@ -1965,6 +1965,28 @@ test('a decided proposal keeps its command visible but loses every decision butt
   assert.doesNotMatch(markup, /아직 실행되지 않았습니다/u);
 });
 
+test('a moderator-approved proposal says who approved it and why nobody was asked', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    items: [moderatorItem({
+      status: 'approved',
+      decided_at: iso(HOUR),
+      events: [{
+        id: 1, event: 'moderator_approved', version: 1, occurred_at: iso(HOUR),
+        payload: { kind: 'proposal', decided_by: 'moderator', policy_basis: '§5 계약 안의 통상 작업' },
+      }],
+    })],
+  });
+  const markup = renderers.renderModeratorItems(feed, 'proposal', NOW);
+  // 사용자가 누른 승인과 모더가 스스로 내린 판정이 같은 '승인함'으로 보이면, 화면이
+  // 사용자에게 하지 않은 일을 했다고 말하는 셈이 된다.
+  assert.match(markup, /모더 승인/u);
+  assert.doesNotMatch(markup, />승인함</u);
+  assert.match(markup, /모더가 스스로 승인해 실행한 명령/u);
+  assert.match(markup, /§5 계약 안의 통상 작업/u);
+  assert.doesNotMatch(markup, /data-mod-action=/u);
+});
+
 test('an important item can only be acknowledged — the screen never offers to run it', () => {
   const renderers = createUsageRenderers();
   const feed = moderatorFeed({

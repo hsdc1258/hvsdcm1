@@ -4205,3 +4205,103 @@ test('unexpected server errors do not expose internal details', async () => {
     console.error = originalError;
   }
 });
+
+// 사용자 지시(2026-08-30): 모더가 승인을 요구하는 것은 신규 기능 추가 제안·결제·중요 파일
+// 삭제뿐이다. 계약 안의 통상 작업까지 승인 대기로 쌓는 것은 그 지시 위반이므로, 데몬이
+// 스스로 판정한 작업은 승인된 상태로 들어와 곧바로 명령 큐에 앉는다. 다만 그 경로는
+// 근거(policy_basis)를 반드시 남겨야 하고, 그 밖의 조합은 전부 거부된다.
+test('moderator-owned work enters the queue without user approval and records why', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { env, database } = context;
+
+  const created = await moderatorRequest(env, '/api/moderator/daemon/items', {
+    method: 'POST',
+    token: 'daemon-token',
+    body: {
+      item_id: 'proposal-owned-1',
+      kind: 'proposal',
+      status: 'approved',
+      moderator_owned: true,
+      policy_basis: '§5 계약 안의 통상 작업이라 사용자 승인 대상이 아니다',
+      issue_summary: '실패한 게이트를 고쳐야 합니다',
+      action_summary: '계약 안의 통상 작업이라 모더가 승인 없이 소유했습니다',
+      proposed_command: '실패한 최소 게이트를 고치고 다시 돌려라.',
+    },
+  });
+  assert.equal(created.status, 201);
+  const body = await created.json();
+  assert.equal(body.item.status, 'approved');
+  assert.equal(body.item.unread, true);
+  assert.equal(body.command.status, 'queued');
+  assert.equal(body.command.command_text, '실패한 최소 게이트를 고치고 다시 돌려라.');
+
+  const event = database.prepare(`
+    SELECT event, payload FROM moderator_item_events WHERE item_id = 'proposal-owned-1'
+  `).get();
+  assert.equal(event.event, 'moderator_approved');
+  assert.deepEqual(JSON.parse(event.payload), {
+    kind: 'proposal',
+    decided_by: 'moderator',
+    policy_basis: '§5 계약 안의 통상 작업이라 사용자 승인 대상이 아니다',
+  });
+
+  const claimed = await moderatorRequest(env, '/api/moderator/daemon/claim', {
+    method: 'POST', token: 'daemon-token',
+  });
+  const claimedBody = await claimed.json();
+  assert.equal(claimedBody.command.command_text, '실패한 최소 게이트를 고치고 다시 돌려라.');
+  assert.equal(claimedBody.command.status, 'claimed');
+});
+
+test('the self-approving path is refused without a policy basis or outside an approved proposal', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { env, database } = context;
+  const base = {
+    kind: 'proposal',
+    status: 'approved',
+    moderator_owned: true,
+    policy_basis: '§5 계약 안의 통상 작업',
+    issue_summary: '이슈',
+    action_summary: '조치',
+    proposed_command: '무언가를 하라.',
+  };
+  const refusals = [
+    { ...base, item_id: 'owned-no-basis', policy_basis: undefined },
+    { ...base, item_id: 'owned-pending', status: 'pending' },
+    { ...base, item_id: 'owned-important', kind: 'important', proposed_command: undefined },
+    { ...base, item_id: 'owned-review', kind: 'review', status: 'queued', proposed_command: undefined },
+  ];
+  for (const payload of refusals) {
+    const response = await moderatorRequest(env, '/api/moderator/daemon/items', {
+      method: 'POST', token: 'daemon-token', body: payload,
+    });
+    assert.equal(response.status, 400, payload.item_id);
+  }
+  const queued = database.prepare('SELECT COUNT(*) AS count FROM moderator_commands').get();
+  assert.equal(Number(queued.count), 0);
+});
+
+test('an ordinary daemon proposal still waits for the user and queues nothing', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { env, database } = context;
+  const created = await moderatorRequest(env, '/api/moderator/daemon/items', {
+    method: 'POST',
+    token: 'daemon-token',
+    body: {
+      item_id: 'proposal-asks-1',
+      kind: 'proposal',
+      issue_summary: '신규 기능 후보를 찾았습니다',
+      action_summary: '신규 기능 추가는 사용자 승인 대상이라 제안으로만 올렸습니다',
+      proposed_command: '승인된 exploration 작업을 수행하라.',
+    },
+  });
+  assert.equal(created.status, 201);
+  const body = await created.json();
+  assert.equal(body.item.status, 'pending');
+  assert.equal(body.command, null);
+  const queued = database.prepare('SELECT COUNT(*) AS count FROM moderator_commands').get();
+  assert.equal(Number(queued.count), 0);
+});

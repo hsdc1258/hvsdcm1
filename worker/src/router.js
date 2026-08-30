@@ -1845,6 +1845,12 @@ function normalizeDaemonItem(input) {
   const reviewLease = moderatorFact(input.review_lease_id, 160);
   const defaultStatus = kind === 'important' ? 'open' : kind === 'proposal' ? 'pending' : '';
   const status = input.status === undefined ? defaultStatus : String(input.status);
+  // The moderator decides everything the user policy does not reserve for the user:
+  // new-feature proposals, payment and credentials, critical deletion. Work it decided
+  // itself arrives already approved and carries the policy clause that let it through,
+  // so the tab can always show why nobody was asked.
+  const moderatorOwned = input.moderator_owned === true;
+  const policyBasis = moderatorFact(input.policy_basis, 200);
   if (!VALID_MODERATOR_KINDS.has(kind)
     || !MODERATOR_ID_PATTERN.test(itemId)
     || !issueSummary
@@ -1853,6 +1859,8 @@ function normalizeDaemonItem(input) {
     || !worker
     || !sourceTask.ok
     || !reviewLease.ok
+    || !policyBasis.ok
+    || (moderatorOwned && (kind !== 'proposal' || status !== 'approved' || !policyBasis.value))
     || (kind === 'proposal' ? !proposedCommand : proposedCommand !== null)) return null;
   return {
     itemId,
@@ -1865,6 +1873,8 @@ function normalizeDaemonItem(input) {
     worker,
     sourceTaskId: sourceTask.value,
     reviewLeaseId: reviewLease.value,
+    moderatorOwned,
+    policyBasis: policyBasis.value,
   };
 }
 
@@ -1920,9 +1930,10 @@ async function createOrUpdateDaemonItem(request, env) {
   }
 
   const validInitial = (normalized.kind === 'important' && normalized.status === 'open')
-    || (normalized.kind === 'proposal' && normalized.status === 'pending');
+    || (normalized.kind === 'proposal' && normalized.status === 'pending')
+    || (normalized.kind === 'proposal' && normalized.status === 'approved' && normalized.moderatorOwned);
   if (!validInitial || normalized.reviewLeaseId !== null) return moderatorError('invalid_transition');
-  const results = await env.DB.batch([
+  const statements = [
     env.DB.prepare(`
       INSERT INTO moderator_items(
         item_id, kind, status, issue_summary, action_summary, proposed_command, version,
@@ -1943,13 +1954,40 @@ async function createOrUpdateDaemonItem(request, env) {
       normalized.worker.reasoning,
       normalized.sourceTaskId,
       timestamp,
-      normalized.kind === 'review' ? timestamp : null,
+      normalized.kind === 'review' || normalized.moderatorOwned ? timestamp : null,
     ),
-    env.DB.prepare(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL)
-      .bind(normalized.itemId, 'created', timestamp, JSON.stringify({ kind: normalized.kind })),
-  ]);
+    env.DB.prepare(MODERATOR_ITEM_EVENT_AFTER_CHANGE_SQL).bind(
+      normalized.itemId,
+      normalized.moderatorOwned ? 'moderator_approved' : 'created',
+      timestamp,
+      JSON.stringify(normalized.moderatorOwned
+        ? { kind: normalized.kind, decided_by: 'moderator', policy_basis: normalized.policyBasis }
+        : { kind: normalized.kind }),
+    ),
+  ];
+  // Queue insertion reuses the approval statement, so a moderator-owned item reaches the
+  // executor through exactly the same path a user-approved proposal does. There is no
+  // second way for a command to enter the queue.
+  if (normalized.moderatorOwned) {
+    statements.push(env.DB.prepare(MODERATOR_PROPOSAL_COMMAND_AFTER_EVENT_SQL).bind(
+      moderatorId('cmd'),
+      `proposal:${normalized.itemId}`,
+      MODERATOR_REQUESTED_MODEL,
+      MODERATOR_REQUESTED_REASONING,
+      timestamp,
+      normalized.itemId,
+    ));
+  }
+  const results = await env.DB.batch(statements);
   if (moderatorChanges(results[0]) !== 1) return moderatorError('item_conflict', 409);
-  return json({ item: serializeModeratorItem(await moderatorItemById(env, normalized.itemId)), duplicate: false }, 201);
+  const command = normalized.moderatorOwned
+    ? await moderatorCommandBySourceItem(env, normalized.itemId)
+    : null;
+  return json({
+    item: serializeModeratorItem(await moderatorItemById(env, normalized.itemId)),
+    command: serializeModeratorCommand(command),
+    duplicate: false,
+  }, 201);
 }
 
 async function claimModeratorCommand(request, env) {
