@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "idempotency_key": "competition-daily-2026-08-31-001",
+  "run": {
+    "id": "competition-2026-08-31-001",
+    "date": "2026-08-31",
+    "started_at": "2026-08-31T00:00:00+09:00",
+    "finished_at": "2026-08-31T00:05:00+09:00",
+    "status": "complete",
+    "source_coverage": {
+      "expected": 1,
+      "checked": 1,
+      "succeeded": 1
+    }
+  },
+  "sources": [
+    {
+      "id": "contest-listing",
+      "kind": "listing",
+      "name": "Contest Listing",
+      "reference_url": "https://list.example/contests/123",
+      "checked_at": "2026-08-31T00:01:00+09:00",
+      "status": "ok",
+      "failure_code": "none",
+      "manual_check": false,
+      "candidate_count": 1
+    }
+  ],
+  "candidates": [
+    {
+      "contest_id": "organizer-2026-image",
+      "category": "image",
+      "title": "Example Image Contest",
+      "organizer": "Example Organizer",
+      "source_id": "contest-listing",
+      "discovery_url": "https://list.example/contests/123",
+      "discovered_at": "2026-08-31T00:01:00+09:00",
+      "recency": "new",
+      "official_url": "https://organizer.example/rules",
+      "official_verification": "verified",
+      "official_verified_at": "2026-08-31T00:02:00+09:00",
+      "acceptance": "open",
+      "deadline_at": "2026-09-15T14:59:00Z",
+      "eligibility": "eligible",
+      "rights_risk": "low",
+      "submission_risk": "low",
+      "status": "active",
+      "fit_score": 80,
+      "effort_score": 20
+    }
+  ],
+  "applications": [
+    {
+      "contest_id": "organizer-2026-image",
+      "category": "image",
+      "profile_id": "hmac-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "state": "WAITING_ARTIFACTS",
+      "blocker": "artifacts",
+      "next_action": "prepare_artifacts",
+      "updated_at": "2026-08-31T00:04:00+09:00"
+    }
+  ]
+}

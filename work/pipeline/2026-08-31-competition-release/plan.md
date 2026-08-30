@@ -1,0 +1,12 @@
+# Competition release integration plan
+
+- Run deadline: 2026-08-31T03:44:11+09:00.
+- Smallest E2E proof: `node --test scripts/competition-report.test.mjs` proves a strict redacted fixture can be dry-run, transmitted to `/api/competitions/report`, rejected with a bad secret, and replayed idempotently without the helper logging or persisting the token.
+- Requested outcome: integrate the completed `codex/competition-api` and `codex/competition-ui` commits, add the local reporter contract/helper/tests, update the existing daily 10:00 heartbeat without duplicating it, configure a dedicated Worker secret, migrate, deploy, and verify the owner-only live flow.
+- Non-goals: no contest submission, PII transmission, legal consent, fee payment, identity or eligibility invention, new public page, or edits to sibling-owned API/UI paths before their explicit completion commits.
+- Owned pre-integration paths: `scripts/competition-report.mjs`, `scripts/competition-report.test.mjs`, `scripts/fixtures/competition-report.valid.json`, documentation/validation wiring, and this run evidence. Sibling-owned Worker/migration and `usage/` files enter only through the two named cherry-picks.
+- Compatibility and data boundary: the helper accepts only the API's strict redacted report shape; every candidate retains discovery and organizer-controlled official URLs separately; deadlines require an offset; failed/403/timeout discovery coverage remains explicit; local secret material stays outside Git and automation prompts.
+- Deployment boundary: apply migration before Worker code, then deploy Worker and Pages. Push the reviewed integration commit to `main` only while `origin/main` still matches the verified base/ancestor.
+- Completion evidence: `npm test`; `git diff --check`; reporter dry-run, bad-secret, and replay/idempotency proofs; independent blocker/major 0 review; migration/Worker/Pages deploy results; GitHub Actions success; public HTTP; and a real owner browser check of `/usage/?view=competition` plus anonymous 401 and signed-in non-owner 404.
+- Producer route: Codex `gpt-5.6-sol` high. Reviewer route: fresh independent Codex `gpt-5.6-sol` high. Final verdict: main orchestrator using the checked router's `final-verdict` route.
+- Approval boundary: only an exact future action-time contest submission, PII transfer, legal consent, signature, or payment requires user confirmation. The requested reversible secret configuration, migration, deployment, and `main` integration remain in scope.
