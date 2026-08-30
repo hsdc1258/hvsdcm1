@@ -235,6 +235,71 @@ test('paper report schema fixes the simulation, $100 seed, session, deadline, fi
   }
 });
 
+test('known paper log event types accept seq 14 in real SQLite without weakening other log fields', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) return t.skip('node:sqlite unavailable');
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  initializeOwnerPaperSqlite(database);
+  const env = envFor(sqliteD1(database));
+  const audit = adaptiveReportWithHistory(20);
+  const realtimeLog = {
+    sequence: 14,
+    at: '2026-08-30T19:00:01.000Z',
+    type: 'realtime-no-trade',
+    message: 'BTCUSDT 1분 후보를 보류했습니다: microstructure-not-persistent.',
+  };
+  const baseline = paperReport({
+    sequence: 13,
+    adaptive: audit,
+    recent_logs: [{ ...realtimeLog, sequence: 13, type: 'realtime-decision' }],
+  });
+  const candidate = paperReport({
+    sequence: 14,
+    generated_at: '2026-08-30T19:00:01.000Z',
+    last_cycle_at: '2026-08-30T19:00:01.000Z',
+    adaptive: audit,
+    recent_logs: [realtimeLog],
+  });
+
+  const normalized = normalizeBehaviorPaperReport(candidate);
+  assert.equal(normalized.recent_logs[0].type, 'realtime-no-trade');
+  assert.equal((await post(baseline, env)).status, 200);
+  assert.equal((await post(candidate, env)).status, 200);
+
+  const ownerResponse = await get(env);
+  assert.equal(ownerResponse.status, 200);
+  const owner = await ownerResponse.json();
+  assert.equal(owner.report.sequence, 14);
+  assert.deepEqual(owner.report.recent_logs, [realtimeLog]);
+
+  const sentinel = 'paper-log-private-sentinel';
+  const rejectedLogs = [
+    [{ ...realtimeLog, type: 'ACCESS-SIGN' }],
+    [{ ...realtimeLog, type: 'realtime-no-trade-extra' }],
+    [{ ...realtimeLog, message: JSON.stringify({ api: { key: sentinel } }) }],
+    [{ ...realtimeLog, apiKey: sentinel }],
+  ];
+  for (const recent_logs of rejectedLogs) {
+    const rejected = paperReport({
+      sequence: 15,
+      generated_at: '2026-08-30T19:00:02.000Z',
+      last_cycle_at: '2026-08-30T19:00:02.000Z',
+      adaptive: audit,
+      recent_logs,
+    });
+    assert.equal(normalizeBehaviorPaperReport(rejected), null);
+    assert.equal((await post(rejected, env)).status, 400);
+  }
+
+  const storedBytes = database.prepare('SELECT payload FROM usage_snapshots').get().payload;
+  assert.equal(storedBytes.includes(sentinel), false);
+  assert.equal(JSON.parse(storedBytes).sequence, 14);
+  const finalOwnerBytes = await (await get(env)).text();
+  assert.equal(finalOwnerBytes.includes(sentinel), false);
+});
+
 test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy reports readable', () => {
   const legacy = normalizeBehaviorPaperReport(paperReport());
   assert.equal(Object.hasOwn(legacy, 'adaptive'), false);

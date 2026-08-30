@@ -32,6 +32,12 @@ export const BEHAVIOR_PAPER_SESSION_ID = 'paper-20260831-100usd';
 export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
+const VALID_BEHAVIOR_PAPER_LOG_TYPES = new Set([
+  'session-started', 'cycle-error', 'risk-halted', 'entry-cutoff', 'position-opened',
+  'signal-observed', 'no-signal', 'position-closed', 'position-marked', 'session-terminal',
+  'settlement-pending', 'checkpoint', 'strategy-upgraded', 'realtime-no-trade', 'realtime-decision',
+  'strategy-promoted', 'strategy-rolled-back', 'strategy-checkpoint',
+]);
 const VALID_BEHAVIOR_ADAPTIVE_STREAM_STATUSES = new Set(['connecting', 'live', 'stale', 'stopped', 'error']);
 const VALID_BEHAVIOR_ADAPTIVE_PROMOTION_STATUSES = new Set(['collecting', 'held', 'promoted', 'rolled-back']);
 const VALID_BEHAVIOR_ADAPTIVE_PROMOTION_REASONS = new Set([
@@ -1306,9 +1312,22 @@ function normalizePaperLogs(value) {
       logs.push({ message });
       continue;
     }
-    const normalized = normalizePaperDetail(entry, { maxKeys: 12, maxString: 500 });
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const entries = Object.entries(entry);
+    if (entries.length > 12) return null;
+    const normalized = normalizePaperDetail(
+      Object.fromEntries(entries.filter(([key]) => key !== 'type')),
+      { maxKeys: 12, maxString: 500 },
+    );
     if (normalized === null) return null;
-    logs.push(normalized);
+    if (!Object.prototype.hasOwnProperty.call(entry, 'type')) {
+      logs.push(normalized);
+      continue;
+    }
+    // Event type is a closed engine enum; every other log field stays on the private-text scanner above.
+    const type = boundedPaperText(entry.type, 32, true);
+    if (!VALID_BEHAVIOR_PAPER_LOG_TYPES.has(type)) return null;
+    logs.push(Object.fromEntries(entries.map(([key]) => [key, key === 'type' ? type : normalized[key]])));
   }
   return logs;
 }
