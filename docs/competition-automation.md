@@ -77,9 +77,12 @@ exact report is an acknowledged replay, not another logical write; reusing a key
 is rejected by the API.
 
 The report schema rejects raw identity, contact details, application prose, signatures, cookies,
-consents, payments, receipts, and final-submission payloads. Active work remains capped at three and may
-refer only to an officially verified, eligible, currently open candidate with an offset-qualified
-deadline.
+consents, payments, receipts, final-submission payloads, and private data or tokens embedded in URL
+paths or queries. The run date is bound to the start time's KST calendar day and future observations
+have only a five-minute clock-skew allowance. Source counts must equal their reported candidates;
+timeouts and HTTP 403 responses require manual follow-up and never prove closure. Active work remains
+capped at three and may refer only to an officially verified, eligible, currently open, unexpired
+`active` candidate with an offset-qualified deadline.
 
 ## Human approval boundary
 

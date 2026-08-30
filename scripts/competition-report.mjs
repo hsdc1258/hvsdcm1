@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const MAX_REPORT_BYTES = 128_000;
 export const DEFAULT_TIMEOUT_MS = 30_000;
+export const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
@@ -13,6 +14,10 @@ const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE = /(?:^|\s)\+?\d[\d ().-]{7,}\d(?:\s|$)/u;
+const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:token|access[_-]?token|auth|session|api[_-]?key|secret|credential)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
+const SENSITIVE_QUERY_KEYS = new Set([
+  'token', 'access_token', 'auth', 'session', 'api_key', 'secret', 'credential',
+]);
 
 const FORBIDDEN_KEYS = /(?:^|_)(?:pii|applicant_name|legal_name|full_name|first_name|last_name|email|e_mail|phone|mobile|contact|address|birth|birthday|dob|password|account_token|cookie|signature|consent|legal_consent|terms_acceptance|payment|card|bank|receipt|application_answer|application_answers|application_prose|essay|final_submission|submission_payload|legal_acceptance|identity_document|government_id|tax_id)(?:$|_)/iu;
 const RUN_STATUSES = new Set(['running', 'complete', 'partial', 'failed']);
@@ -140,11 +145,36 @@ function calendarDate(value, label) {
   return value;
 }
 
+function kstDate(instant) {
+  return new Date(Date.parse(instant) + 9 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+}
+
+function normalizedSensitiveKey(value) {
+  return String(value).normalize('NFKC').trim().toLowerCase().replace(/[\s-]+/gu, '_');
+}
+
+function scanPrivateUrlComponent(value, label) {
+  let decoded = String(value).normalize('NFKC');
+  for (let pass = 0; pass < 8; pass += 1) {
+    if (EMAIL.test(decoded) || PHONE.test(decoded) || PRIVATE_TOKEN.test(decoded)) {
+      fail(`${label} contains private data`);
+    }
+    let next;
+    try { next = decodeURIComponent(decoded).normalize('NFKC'); }
+    catch { fail(`${label} has invalid URL encoding`); }
+    if (next === decoded) return decoded;
+    decoded = next;
+  }
+  fail(`${label} has excessive URL encoding`);
+}
+
 function publicHttpsUrl(value, label, { nullable = false } = {}) {
   if (nullable && value === null) return null;
   string(value, label, { max: 2_048 });
+  const normalizedRaw = value.normalize('NFKC');
+  scanPrivateUrlComponent(normalizedRaw, label);
   let url;
-  try { url = new URL(value); } catch { fail(`${label} must be an absolute HTTPS URL`); }
+  try { url = new URL(normalizedRaw); } catch { fail(`${label} must be an absolute HTTPS URL`); }
   if (url.protocol !== 'https:' || url.username || url.password || url.hash || !url.hostname) {
     fail(`${label} must be an absolute public HTTPS URL`);
   }
@@ -168,8 +198,10 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
     fail(`${label} must not target a local or private host`);
   }
   for (const [key, queryValue] of url.searchParams) {
-    const normalizedKey = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replaceAll('-', '_').toLowerCase();
-    if (FORBIDDEN_KEYS.test(normalizedKey) || EMAIL.test(queryValue) || PHONE.test(queryValue)) {
+    const decodedKey = scanPrivateUrlComponent(key, `${label} query`);
+    scanPrivateUrlComponent(queryValue, `${label} query`);
+    const normalizedKey = decodedKey.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replaceAll('-', '_').toLowerCase();
+    if (FORBIDDEN_KEYS.test(normalizedKey) || SENSITIVE_QUERY_KEYS.has(normalizedSensitiveKey(decodedKey))) {
       fail(`${label} query contains private data`);
     }
   }
@@ -200,6 +232,11 @@ function validateRun(run) {
   timestamp(run.started_at, 'report.run.started_at');
   timestamp(run.finished_at, 'report.run.finished_at', { nullable: true });
   if (run.finished_at && Date.parse(run.finished_at) < Date.parse(run.started_at)) fail('report.run.finished_at precedes started_at');
+  if (run.date !== kstDate(run.started_at)) fail('report.run.date must match the KST date of started_at');
+  const observationAt = run.finished_at || run.started_at;
+  if (Date.parse(observationAt) > Date.now() + MAX_FUTURE_SKEW_MS) {
+    fail('report.run observation time is too far in the future');
+  }
   oneOf(run.status, RUN_STATUSES, 'report.run.status');
   exactKeys(run.source_coverage, ['expected', 'checked', 'succeeded'], [], 'report.run.source_coverage');
   const expected = integer(run.source_coverage.expected, 'report.run.source_coverage.expected', { min: 1, max: 32 });
@@ -229,6 +266,9 @@ function validateSource(source, index) {
   if (failed !== (source.failure_code !== 'none')) fail(`${label}.failure_code must match failed or partial status`);
   if (['timeout', 'http_403'].includes(source.failure_code) && source.manual_check !== true) {
     fail(`${label}.manual_check must be true for timeout or HTTP 403 coverage`);
+  }
+  if (['pending', 'no_results', 'failed'].includes(source.status) && source.candidate_count !== 0) {
+    fail(`${label}.candidate_count must be zero for ${source.status} coverage`);
   }
 }
 
@@ -301,6 +341,7 @@ function validateApplication(application, index, candidates) {
     || candidate.submission_risk === 'blocked') {
     fail(`${label} cannot enter active work before official, eligibility, and acceptance verification`);
   }
+  if (candidate.status !== 'active') fail(`${label} must reference an active candidate`);
 }
 
 export function validateCompetitionReport(report) {
@@ -326,11 +367,27 @@ export function validateCompetitionReport(report) {
   }
 
   const candidates = new Map();
+  const candidateCountBySource = new Map(sources.map((source) => [source.id, 0]));
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const observationAt = report.run.finished_at || report.run.started_at;
   boundedArray(report.candidates, 'report.candidates', 200).forEach((candidate, index) => {
     validateCandidate(candidate, index, sourceIds);
     const key = `${candidate.contest_id}|${candidate.category}`;
     if (candidates.has(key)) fail(`report.candidates[${index}] duplicates a contest/category key`);
     candidates.set(key, candidate);
+    candidateCountBySource.set(candidate.source_id, candidateCountBySource.get(candidate.source_id) + 1);
+    const source = sourceById.get(candidate.source_id);
+    if (candidate.status === 'active' && Date.parse(candidate.deadline_at) <= Date.parse(observationAt)) {
+      fail(`report.candidates[${index}] cannot remain active after its deadline`);
+    }
+    if (['timeout', 'http_403'].includes(source.failure_code) && candidate.acceptance === 'closed') {
+      fail(`report.candidates[${index}] cannot use timeout or HTTP 403 as closure evidence`);
+    }
+  });
+  sources.forEach((source, index) => {
+    if (source.candidate_count !== candidateCountBySource.get(source.id)) {
+      fail(`report.sources[${index}].candidate_count does not match reported candidates`);
+    }
   });
 
   const applications = boundedArray(report.applications, 'report.applications', 3);
@@ -341,7 +398,7 @@ export function validateCompetitionReport(report) {
     if (applicationKeys.has(key)) fail(`report.applications[${index}] is duplicated`);
     applicationKeys.add(key);
     const candidate = candidates.get(key);
-    if (Date.parse(candidate.deadline_at) <= Date.parse(report.run.started_at)) {
+    if (Date.parse(candidate.deadline_at) <= Date.parse(observationAt)) {
       fail(`report.applications[${index}] references a candidate whose deadline has passed`);
     }
   });

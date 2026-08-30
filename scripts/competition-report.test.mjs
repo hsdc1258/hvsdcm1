@@ -65,6 +65,8 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.candidates[0].official_url = 'http://127.0.0.1/rules'; },
     (report) => { report.candidates[0].official_url = 'https://localhost./rules'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?email=person@example.test'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules/person%2540example.test'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?access-token=privatevalue123'; },
     (report) => { report.applications[0].profile_id = 'sha256:guessable'; },
     (report) => { report.sources[0].failure_code = 'timeout'; },
     (report) => { report.candidates[0].submission_risk = 'blocked'; },
@@ -74,6 +76,41 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     mutate(report);
     assert.throws(() => validateCompetitionReport(report), CompetitionReportError);
   }
+});
+
+test('strict consistency rejects untrusted coverage, expired active work, and non-active applications', () => {
+  for (const mutate of [
+    (report) => { report.sources[0].candidate_count = 0; },
+    (report) => { report.sources[0].status = 'no_results'; },
+    (report) => { report.candidates[0].deadline_at = report.run.finished_at; },
+    (report) => { report.candidates[0].status = 'deferred'; },
+    (report) => {
+      report.sources[0].status = 'partial';
+      report.sources[0].failure_code = 'http_403';
+      report.sources[0].manual_check = true;
+      report.candidates[0].acceptance = 'closed';
+      report.candidates[0].status = 'rejected';
+      report.applications = [];
+    },
+  ]) {
+    const report = validReport();
+    mutate(report);
+    assert.throws(() => validateCompetitionReport(report), CompetitionReportError);
+  }
+});
+
+test('run date is KST-bound and observation time allows no more than five minutes of future skew', () => {
+  const wrongDate = validReport();
+  wrongDate.run.date = '2026-08-30';
+  assert.throws(() => validateCompetitionReport(wrongDate), CompetitionReportError);
+
+  const future = validReport();
+  const started = new Date(Date.now() + 10 * 60 * 1_000);
+  const finished = new Date(Date.now() + 11 * 60 * 1_000);
+  future.run.started_at = started.toISOString();
+  future.run.finished_at = finished.toISOString();
+  future.run.date = new Date(started.getTime() + 9 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+  assert.throws(() => validateCompetitionReport(future), CompetitionReportError);
 });
 
 test('reporter sends the exact body idempotency key with only the dedicated bearer token', async () => {

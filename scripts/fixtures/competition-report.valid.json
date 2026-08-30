@@ -4,8 +4,8 @@
   "run": {
     "id": "competition-2026-08-31-001",
     "date": "2026-08-31",
-    "started_at": "2026-08-31T00:00:00+09:00",
-    "finished_at": "2026-08-31T00:05:00+09:00",
+    "started_at": "2026-08-31T01:10:00+09:00",
+    "finished_at": "2026-08-31T01:15:00+09:00",
     "status": "complete",
     "source_coverage": {
       "expected": 1,
@@ -19,7 +19,7 @@
       "kind": "listing",
       "name": "Contest Listing",
       "reference_url": "https://list.example/contests/123",
-      "checked_at": "2026-08-31T00:01:00+09:00",
+      "checked_at": "2026-08-31T01:11:00+09:00",
       "status": "ok",
       "failure_code": "none",
       "manual_check": false,
@@ -34,13 +34,13 @@
       "organizer": "Example Organizer",
       "source_id": "contest-listing",
       "discovery_url": "https://list.example/contests/123",
-      "discovered_at": "2026-08-31T00:01:00+09:00",
+      "discovered_at": "2026-08-31T01:11:00+09:00",
       "recency": "new",
       "official_url": "https://organizer.example/rules",
       "official_verification": "verified",
-      "official_verified_at": "2026-08-31T00:02:00+09:00",
+      "official_verified_at": "2026-08-31T01:12:00+09:00",
       "acceptance": "open",
-      "deadline_at": "2026-09-15T14:59:00Z",
+      "deadline_at": "2026-09-03T15:00:00+09:00",
       "eligibility": "eligible",
       "rights_risk": "low",
       "submission_risk": "low",
@@ -57,7 +57,7 @@
       "state": "WAITING_ARTIFACTS",
       "blocker": "artifacts",
       "next_action": "prepare_artifacts",
-      "updated_at": "2026-08-31T00:04:00+09:00"
+      "updated_at": "2026-08-31T01:14:00+09:00"
     }
   ]
 }
