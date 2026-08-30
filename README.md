@@ -10,10 +10,10 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | `/WordMaster/` | 2,000-word meaning quiz with personal error-rate/recent sorting | `WordMaster/assets/js/app.js` | `wordmaster2000.quiz.v1` |
 | `/smstudy/` | Social studies concepts and 78 sortable KICE questions | `smstudy/assets/js/app.js` | `samun2027.study.v1` |
 | `/gichul/` | Login-only KICE past-paper filtering, viewing and client-side PDF merge | `gichul/app.js` | filter settings |
-| `/behavior-lab/` | Public, read-only Bitget market behavior dashboard with local backtest and inert manual draft | `behavior-lab/assets/js/app.js` | none |
+| `/behavior-lab/` | Human-owner-only Bitget behavior dashboard and fixed $100 paper-session status | `behavior-lab/assets/js/app.js` | account token |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
 | `/usage/` | Owner-only Codex limits and live AI harness hierarchy | `usage/assets/js/usage.js` | account token |
-| Worker | JSON API, D1 access, authenticated R2 learning/PDF proxy and one public Behavior Lab dashboard boundary | `worker/src/index.js` | D1 tables and R2 objects |
+| Worker | JSON API, D1 access, authenticated R2 learning/PDF proxy and owner-only Behavior Lab boundaries | `worker/src/index.js` | D1 tables and R2 objects |
 
 There is no front-end bundle step. HTML loads checked-in CSS and JavaScript directly, while learning content is fetched after login from authenticated Worker routes. The checked-in `_learning/` source is excluded by the default Jekyll Pages build and is converted into private R2 payloads before release.
 
@@ -53,7 +53,15 @@ npm run db:init
 npm run dev
 ```
 
-Behavior Lab is intentionally narrower than a proxy. Its browser calls only `GET /api/behavior-lab/dashboard` on the Worker. The Worker admits at most two distinct dashboard fan-outs per isolate, queues no dashboard overflow, enforces a total request deadline across the rate-limited behavior reads, and caches at most the 16 enum combinations from successful completion. Each admitted load constructs exactly eight allowlisted, unauthenticated `GET https://api.bitget.com/api/v2/mix/market/*` requests for one of four fixed symbols and four fixed periods, then rejects malformed, stale, partial or timestamp-misaligned data. It never falls back to a fixture that looks live. The browser advances the same component/period freshness gate with a live clock and clears/disables the draft as soon as the snapshot is no longer live. It runs the chronological price/volume walk-forward test and cost-inclusive manual draft locally; the draft has text/copy controls only and no exchange submission path.
+Behavior Lab is intentionally narrower than a proxy. Its static shell remains covered until `GET /api/behavior-lab/paper` confirms a bearer session for the one normalized `BEHAVIOR_OWNER_USERNAME`; unauthenticated reads return 401 and every other valid account receives 404. The owner browser can then call `GET /api/behavior-lab/dashboard` and the separate paper tab. Each admitted dashboard load constructs exactly eight allowlisted, unauthenticated public-market `GET https://api.bitget.com/api/v2/mix/market/*` requests for one of four fixed symbols and four fixed periods, then rejects malformed, stale, partial or timestamp-misaligned data. It never falls back to a fixture that looks live. The browser advances the same freshness gate with a live clock, runs the chronological backtest locally, and keeps the manual draft text/copy-only.
+
+The fixed paper session reports to `POST /api/behavior-lab/paper/report` with the dedicated `BEHAVIOR_PAPER_REPORT_TOKEN`. The Worker accepts only the exact simulation session/deadline, a 100-USDT seed, finite bounded metrics and strictly increasing sequences. Its latest bounded snapshot occupies the reserved `usage_snapshots` source `behavior-paper:paper-20260831-100usd`; the ordinary usage API remains allowlisted to `codex` and `claude`, so this row is readable only through the exact-owner paper route with `private, no-store`. Set the report secret before deployment:
+
+```bash
+cd worker
+npx wrangler secret put BEHAVIOR_PAPER_REPORT_TOKEN
+npm run deploy
+```
 
 ## KICE past-paper data
 

@@ -2159,7 +2159,7 @@ function validateGlobalsAndOrder() {
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
-    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260831-v2'],
+    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260831-v3'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2183,7 +2183,7 @@ function validateGlobalsAndOrder() {
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260830-badge-v1', '/usage/assets/css/usage.css?v=20260830-badge-v1'],
     'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260831-v1'],
+    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260831-v3'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2556,7 +2556,7 @@ function validateBehaviorLab() {
     'worker/src/behavior-lab.js: upstream failure must not fall back to fixture/demo data');
   check(routerSource.includes("method === 'GET' && path === '/api/behavior-lab/dashboard'")
     && (routerSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length === 1,
-  'worker/src/router.js: exactly one public Behavior Lab dashboard route must exist');
+  'worker/src/router.js: exactly one Behavior Lab dashboard route must exist');
 
   check((appSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length === 1,
     'behavior-lab app: the browser must fetch only the single Worker dashboard route');
@@ -2576,10 +2576,14 @@ function validateBehaviorLab() {
     && coreSource.includes('createFreshManualDraft') && appSource.includes('setInterval(refreshLiveClock, 1_000)')
     && /function createDraft\(\)[\s\S]*createFreshManualDraft/u.test(appSource),
   'behavior-lab app: component/period live-clock freshness and action-time draft gating must stay fail-closed');
-  const publicLinkAt = homeHtml.indexOf('href="/behavior-lab/"');
-  const firstPrivateTemplateAt = homeHtml.indexOf('<template data-study>');
-  check(publicLinkAt > 0 && firstPrivateTemplateAt > publicLinkAt,
-    'index.html: Behavior Lab must be a logged-out-visible public drawer entry before login-gated templates');
+  check(!homeHtml.includes('href="/behavior-lab/"'),
+    'index.html: private Behavior Lab must not be advertised on the static home drawer');
+  check(pageHtml.includes('content="noindex, nofollow, noarchive"')
+    && /id="labShell"[^>]*\bhidden\b/u.test(pageHtml)
+    && appSource.includes("localStorage.getItem('hvsdcm.token')")
+    && appSource.includes('authorization: `Bearer ${token}`')
+    && appSource.includes('/api/behavior-lab/paper'),
+  'behavior-lab: owner gate, bearer reads, noindex, and paper tab contract are incomplete');
 
   const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   const architecture = readFileSync(path.join(ROOT, 'docs/ARCHITECTURE.md'), 'utf8');

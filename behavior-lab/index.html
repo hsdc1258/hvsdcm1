@@ -3,33 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="인증 없는 공개 시장 데이터로 쏠림과 추세를 관찰하는 한국어 Behavior Lab.">
-  <meta name="robots" content="index, follow">
+  <meta name="description" content="소유자 전용 시장 행동 분석과 모의투자 현황.">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v1">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v3">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260831-v2" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260831-v3" defer></script>
 </head>
 <body class="behavior-page">
-  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <section id="ownerGate" class="owner-gate" aria-live="polite">
+    <div class="owner-gate-card">
+      <p class="eyebrow">PRIVATE / OWNER ONLY</p>
+      <h1 id="ownerGateTitle">접근 권한 확인 중</h1>
+      <p id="ownerGateMessage">저장된 계정 세션을 확인하고 있습니다.</p>
+      <div class="owner-gate-actions">
+        <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
+        <a id="ownerLoginLink" class="copy-action" href="/?login=1&amp;next=%2Fbehavior-lab%2F" hidden>홈에서 로그인</a>
+      </div>
+    </div>
+  </section>
+
+  <div id="labShell" hidden>
+    <a class="skip-link" href="#main">본문으로 건너뛰기</a>
   <header class="lab-topbar">
     <div class="lab-topbar-inner">
       <a class="lab-home" href="/" aria-label="hvsdcm 홈으로"><span aria-hidden="true">←</span> hvsdcm</a>
-      <span class="read-only-mark">PUBLIC READ-ONLY</span>
+      <span class="read-only-mark">OWNER · READ-ONLY</span>
     </div>
   </header>
 
   <main id="main" class="lab-main" tabindex="-1">
     <section class="lab-hero" aria-labelledby="labTitle">
-      <p class="eyebrow">BEHAVIOR LAB / PUBLIC MARKET OBSERVATION</p>
+      <p class="eyebrow">BEHAVIOR LAB / PRIVATE OBSERVATION</p>
       <h1 id="labTitle">행동을 읽되,<br>실행하지 않습니다.</h1>
       <p class="hero-copy">Bitget의 인증 없는 공개 선물 시장 데이터만 검증해 추세·군중 쏠림·적극 체결을 하나의 설명 가능한 후보로 정리합니다.</p>
       <div class="boundary-strip" aria-label="불변 경계">
         <span>API 키 없음</span><span>계정 연결 없음</span><span>주문 제출 없음</span>
       </div>
     </section>
+
+    <nav class="lab-tabs" aria-label="Behavior Lab 화면">
+      <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel">시장 분석</button>
+      <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel">$100 모의투자</button>
+    </nav>
+
+    <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab">
 
     <section class="control-deck" aria-labelledby="marketControlsTitle">
       <div class="section-heading-row">
@@ -144,8 +164,63 @@
         </article>
       </section>
     </div>
+    </section>
+
+    <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
+      <div class="paper-heading section-heading-row">
+        <div>
+          <p class="section-index">FORWARD PAPER SESSION / 100 USDT</p>
+          <h2>오늘 08:00까지 모의투자</h2>
+          <p class="section-copy">실제 자금·계정·주문 없이 공개 시장 데이터와 정해진 규칙만으로 기록한 시뮬레이션입니다.</p>
+        </div>
+        <div class="paper-actions">
+          <span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span>
+          <button id="refreshPaper" class="text-button" type="button">새로고침</button>
+        </div>
+      </div>
+
+      <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
+      <div id="paperEmpty" class="empty-state" hidden><strong>WAITING FOR FIRST CYCLE</strong><p>첫 검증된 5분 주기 보고가 도착하면 여기에 표시됩니다.</p></div>
+      <div id="paperReport" class="paper-report" aria-busy="true" hidden>
+        <div class="paper-meta">
+          <span>마감 <b id="paperDeadline">—</b></span>
+          <span>마지막 주기 <b id="paperLastCycle">—</b></span>
+          <span>보고 순번 <b id="paperSequence">—</b></span>
+        </div>
+        <div class="paper-metrics">
+          <article><span>현재 자산</span><strong id="paperEquity">—</strong><small>시드 100 USDT</small></article>
+          <article><span>순손익 / 수익률</span><strong id="paperNetPnl">—</strong><small id="paperReturn">—</small></article>
+          <article><span>최대 낙폭</span><strong id="paperDrawdown">—</strong><small>세션 고점 대비</small></article>
+          <article><span>수수료 + 슬리피지</span><strong id="paperCosts">—</strong><small id="paperCostDetail">—</small></article>
+          <article><span>종료 거래</span><strong id="paperTrades">—</strong><small id="paperRecord">—</small></article>
+          <article><span>현금 / 미실현</span><strong id="paperCash">—</strong><small id="paperUnrealized">—</small></article>
+        </div>
+
+        <article class="panel paper-position-panel">
+          <div class="section-heading-row compact"><div><p class="section-index">OPEN POSITION</p><h2>현재 포지션</h2></div></div>
+          <div id="paperPosition" class="paper-kv"></div>
+        </article>
+
+        <div class="paper-detail-grid">
+          <article class="panel">
+            <div><p class="section-index">RECENT TRADES</p><h2>최근 거래</h2></div>
+            <div class="paper-table-wrap"><table><thead><tr><th>심볼</th><th>방향</th><th>진입 → 청산</th><th>순손익</th><th>사유</th></tr></thead><tbody id="paperTradesBody"></tbody></table></div>
+          </article>
+          <article class="panel">
+            <div><p class="section-index">BOUNDED LOG</p><h2>최근 로그</h2></div>
+            <ol id="paperLogs" class="paper-logs"></ol>
+          </article>
+        </div>
+
+        <article class="panel paper-limitations-panel">
+          <div><p class="section-index">LIMITATIONS</p><h2>해석 한계</h2></div>
+          <ul id="paperLimitations"></ul>
+        </article>
+      </div>
+    </section>
   </main>
 
   <footer class="lab-footer"><div><b>Behavior Lab</b><p>교육·연구용 관찰 도구. 미래 성과나 수익을 보장하지 않습니다.</p></div><a href="/">hvsdcm</a></footer>
+  </div>
 </body>
 </html>

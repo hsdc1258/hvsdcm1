@@ -20,6 +20,14 @@ const MAX_PROGRESS_BYTES = 800_000;
 const MAX_USAGE_BYTES = 64_000;
 const MAX_HARNESS_BYTES = 64_000;
 const MAX_HARNESS_INPUT_BYTES = 4_096;
+const MAX_BEHAVIOR_PAPER_BYTES = 64_000;
+const MAX_BEHAVIOR_PAPER_SEQUENCE = 1_000_000;
+const MAX_BEHAVIOR_PAPER_TRADES = 25;
+const MAX_BEHAVIOR_PAPER_LOGS = 50;
+export const BEHAVIOR_PAPER_SESSION_ID = 'paper-20260831-100usd';
+export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
+export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
+const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
 export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
@@ -1123,6 +1131,246 @@ function ownerUsernames(env) {
 function isOwnerSession(session, env) {
   const username = String(session?.username || '').trim().toLowerCase();
   return username.length > 0 && ownerUsernames(env).includes(username);
+}
+
+// Behavior Lab is deliberately stricter than the broader owner control plane. This setting is one
+// normalized human username, never a comma-separated list and never OWNER_USERNAME's test accounts.
+function behaviorOwnerUsername(env) {
+  const username = String(env.BEHAVIOR_OWNER_USERNAME || '').normalize('NFKC').trim().toLowerCase();
+  return username && username.length <= 80 && !username.includes(',') ? username : '';
+}
+
+function isBehaviorOwnerSession(session, env) {
+  const username = String(session?.username || '').normalize('NFKC').trim().toLowerCase();
+  const expected = behaviorOwnerUsername(env);
+  return Boolean(username && expected && username === expected);
+}
+
+async function behaviorOwner(request, env) {
+  const session = await authenticate(request, env);
+  if (!session) return { response: json({ error: '로그인이 필요합니다.' }, 401) };
+  if (!isBehaviorOwnerSession(session, env)) {
+    return { response: json({ error: 'Not found' }, 404) };
+  }
+  return { session, response: null };
+}
+
+function boundedPaperNumber(value, minimum, maximum, integer = false) {
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && value >= minimum
+    && value <= maximum
+    && (!integer || Number.isInteger(value))
+    ? value
+    : null;
+}
+
+function boundedPaperText(value, maximum, required = false) {
+  if (typeof value !== 'string') return required ? null : '';
+  const normalized = value.normalize('NFKC').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, '').trim();
+  return (!normalized && required) || normalized.length > maximum ? null : normalized;
+}
+
+function normalizePaperTimestamp(value, nullable = false) {
+  if (nullable && value === null) return null;
+  const text = boundedPaperText(value, 40, true);
+  const parsed = text ? Date.parse(text) : Number.NaN;
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined;
+}
+
+// Trade and position details are display-only and versioned by the local simulator. Preserve safe,
+// bounded scalar fields without allowing arbitrary depth or non-finite JSON values into D1.
+function normalizePaperDetail(value, { maxKeys = 32, maxString = 240 } = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length > maxKeys) return null;
+  const normalized = {};
+  for (const [key, item] of entries) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,47}$/u.test(key)) return null;
+    if (item === null || typeof item === 'boolean') {
+      normalized[key] = item;
+    } else if (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1_000_000_000_000) {
+      normalized[key] = item;
+    } else if (typeof item === 'string') {
+      const text = boundedPaperText(item, maxString);
+      if (text === null) return null;
+      normalized[key] = text;
+    } else {
+      return null;
+    }
+  }
+  return normalized;
+}
+
+function normalizePaperLogs(value) {
+  if (!Array.isArray(value) || value.length > MAX_BEHAVIOR_PAPER_LOGS) return null;
+  const logs = [];
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      const message = boundedPaperText(entry, 500, true);
+      if (!message) return null;
+      logs.push({ message });
+      continue;
+    }
+    const normalized = normalizePaperDetail(entry, { maxKeys: 12, maxString: 500 });
+    if (normalized === null) return null;
+    logs.push(normalized);
+  }
+  return logs;
+}
+
+function normalizePaperLimitations(value) {
+  const entries = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 12) return null;
+  const normalized = entries.map((entry) => boundedPaperText(entry, 400, true));
+  return normalized.some((entry) => entry === null) ? null : normalized;
+}
+
+export function normalizeBehaviorPaperReport(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  if (input.session_id !== BEHAVIOR_PAPER_SESSION_ID || input.simulation !== true) return null;
+  const deadlineAt = normalizePaperTimestamp(input.deadline_at);
+  if (deadlineAt !== BEHAVIOR_PAPER_DEADLINE) return null;
+  const generatedAt = normalizePaperTimestamp(input.generated_at);
+  const lastCycleAt = normalizePaperTimestamp(input.last_cycle_at, true);
+  if (!generatedAt || lastCycleAt === undefined) return null;
+  const status = boundedPaperText(input.status, 16, true);
+  if (!VALID_BEHAVIOR_PAPER_STATUSES.has(status)) return null;
+
+  const sequence = boundedPaperNumber(input.sequence, 1, MAX_BEHAVIOR_PAPER_SEQUENCE, true);
+  const seedEquity = boundedPaperNumber(input.seed_equity, 100, 100);
+  const equity = boundedPaperNumber(input.equity, 0, 1_000_000);
+  const cash = boundedPaperNumber(input.cash, 0, 1_000_000);
+  const realizedPnl = boundedPaperNumber(input.realized_pnl, -1_000_000, 1_000_000);
+  const unrealizedPnl = boundedPaperNumber(input.unrealized_pnl, -1_000_000, 1_000_000);
+  const netPnl = boundedPaperNumber(input.net_pnl, -1_000_000, 1_000_000);
+  const returnPct = boundedPaperNumber(input.return_pct, -100, 1_000_000);
+  const maxDrawdownPct = boundedPaperNumber(input.max_drawdown_pct, 0, 100);
+  const fees = boundedPaperNumber(input.fees, 0, 1_000_000);
+  const slippageCost = boundedPaperNumber(input.slippage_cost, 0, 1_000_000);
+  const tradeCount = boundedPaperNumber(input.trade_count, 0, 10_000, true);
+  const winCount = boundedPaperNumber(input.win_count, 0, 10_000, true);
+  const lossCount = boundedPaperNumber(input.loss_count, 0, 10_000, true);
+  const numbers = [sequence, seedEquity, equity, cash, realizedPnl, unrealizedPnl, netPnl,
+    returnPct, maxDrawdownPct, fees, slippageCost, tradeCount, winCount, lossCount];
+  if (numbers.some((value) => value === null) || winCount + lossCount > tradeCount) return null;
+
+  let openPosition = null;
+  if (input.open_position !== null) {
+    openPosition = normalizePaperDetail(input.open_position);
+    const symbol = openPosition?.symbol;
+    const direction = openPosition?.direction ?? openPosition?.side;
+    if (!['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(symbol)
+      || !['long', 'short'].includes(direction)) return null;
+  }
+  if (!Array.isArray(input.recent_trades) || input.recent_trades.length > MAX_BEHAVIOR_PAPER_TRADES) return null;
+  const recentTrades = input.recent_trades.map((trade) => normalizePaperDetail(trade));
+  if (recentTrades.some((trade) => trade === null)) return null;
+  const recentLogs = normalizePaperLogs(input.recent_logs);
+  const limitations = normalizePaperLimitations(input.limitations);
+  if (!recentLogs || !limitations) return null;
+
+  return {
+    session_id: BEHAVIOR_PAPER_SESSION_ID,
+    sequence,
+    generated_at: generatedAt,
+    deadline_at: BEHAVIOR_PAPER_DEADLINE,
+    status,
+    simulation: true,
+    seed_equity: seedEquity,
+    equity,
+    cash,
+    realized_pnl: realizedPnl,
+    unrealized_pnl: unrealizedPnl,
+    net_pnl: netPnl,
+    return_pct: returnPct,
+    max_drawdown_pct: maxDrawdownPct,
+    fees,
+    slippage_cost: slippageCost,
+    trade_count: tradeCount,
+    win_count: winCount,
+    loss_count: lossCount,
+    open_position: openPosition,
+    recent_trades: recentTrades,
+    recent_logs: recentLogs,
+    last_cycle_at: lastCycleAt,
+    limitations,
+  };
+}
+
+async function readBehaviorPaperJson(request) {
+  const declaredLength = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BEHAVIOR_PAPER_BYTES) {
+    return { error: json({ error: '모의투자 보고가 너무 큽니다.' }, 413) };
+  }
+  const reader = request.body?.getReader();
+  if (!reader) return { value: null };
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  let size = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BEHAVIOR_PAPER_BYTES) {
+        await reader.cancel();
+        return { error: json({ error: '모의투자 보고가 너무 큽니다.' }, 413) };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return { value: JSON.parse(text) };
+  } catch {
+    return { value: null };
+  }
+}
+
+async function reportBehaviorPaper(request, env) {
+  if (!(await ingestTokenMatches(request, env.BEHAVIOR_PAPER_REPORT_TOKEN))) {
+    return json({ error: '인증이 필요합니다.' }, 401);
+  }
+  const body = await readBehaviorPaperJson(request);
+  if (body.error) return body.error;
+  const report = normalizeBehaviorPaperReport(body.value);
+  if (!report) return json({ error: '잘못된 모의투자 보고입니다.' }, 400);
+  const receivedAt = new Date().toISOString();
+  const inserted = await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source) DO UPDATE SET
+      captured_at = excluded.captured_at,
+      payload = excluded.payload
+    WHERE CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+      > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER), -1)
+  `).bind(
+    BEHAVIOR_PAPER_SNAPSHOT_SOURCE,
+    receivedAt,
+    JSON.stringify(report),
+  ).run();
+  if (inserted?.meta?.changes !== 1) {
+    return json({ error: '더 최신인 보고가 이미 저장되어 있습니다.' }, 409);
+  }
+  return json({ ok: true, session_id: report.session_id, sequence: report.sequence });
+}
+
+async function getBehaviorPaper(request, env) {
+  const owner = await behaviorOwner(request, env);
+  if (owner.response) return owner.response;
+  const row = await env.DB.prepare(`
+    SELECT captured_at, payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_PAPER_SNAPSHOT_SOURCE).first();
+  if (!row) {
+    return json({ session_id: BEHAVIOR_PAPER_SESSION_ID, deadline_at: BEHAVIOR_PAPER_DEADLINE, report: null }, 200,
+      { 'cache-control': 'private, no-store' });
+  }
+  let report;
+  try { report = normalizeBehaviorPaperReport(JSON.parse(row.payload)); } catch { report = null; }
+  if (!report) return json({ error: '보고 데이터를 읽지 못했습니다.' }, 500);
+  return json({ report, received_at: row.captured_at }, 200, { 'cache-control': 'private, no-store' });
 }
 
 function completedTaskLimit(request) {
@@ -2589,12 +2837,22 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/admin/login') return adminLogin(request, env);
 
   if (method === 'GET' && path === '/api/behavior-lab/dashboard') {
+    const owner = await behaviorOwner(request, env);
+    if (owner.response) return owner.response;
     try {
-      return json(await getBehaviorLabDashboard(request.url), 200, { 'cache-control': 'public, max-age=10' });
+      return json(await getBehaviorLabDashboard(request.url), 200, { 'cache-control': 'private, no-store' });
     } catch (error) {
-      if (error instanceof BehaviorLabRequestError) return json({ error: error.message }, error.status);
+      if (error instanceof BehaviorLabRequestError) {
+        return json({ error: error.message }, error.status, { 'cache-control': 'private, no-store' });
+      }
       throw error;
     }
+  }
+  if (method === 'GET' && path === '/api/behavior-lab/paper') {
+    return getBehaviorPaper(request, env);
+  }
+  if (method === 'POST' && path === '/api/behavior-lab/paper/report') {
+    return reportBehaviorPaper(request, env);
   }
 
   if (method === 'GET' && path === '/api/me') {

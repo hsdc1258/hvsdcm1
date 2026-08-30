@@ -97,13 +97,18 @@ test('component freshness advances with a fake clock and blocks a once-valid man
   assert.equal(future.components.ticker.status, 'partial');
 });
 
-test('published app fetches only the one Worker dashboard route and has no submission surface', () => {
+test('published app bearer-gates dashboard and paper reads while retaining no exchange submission surface', () => {
   assert.equal((appSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length, 1);
+  assert.equal((appSource.match(/\/api\/behavior-lab\/paper/gu) || []).length, 1);
   assert.doesNotMatch(appSource, /api\.bitget\.com/iu);
-  assert.doesNotMatch(appSource, /authorization|api[-_ ]?key|passphrase|signature/iu);
+  assert.match(appSource, /localStorage\.getItem\('hvsdcm\.token'\)/u);
+  assert.match(appSource, /authorization: `Bearer \$\{token\}`/u);
   assert.doesNotMatch(htmlSource, /<form\b|type=["']submit["']|\baction=/iu);
   assert.match(htmlSource, /id="copyDraft"[^>]*type="button"/u);
   assert.match(htmlSource, /제출 기능은 존재하지 않습니다/u);
+  assert.match(htmlSource, /content="noindex, nofollow, noarchive"/u);
+  assert.match(htmlSource, /id="labShell"[^>]*\bhidden\b/u);
+  assert.match(htmlSource, /id="paperTabPanel"/u);
   assert.doesNotMatch(appSource, /scheduler|notification|health/iu);
   assert.match(appSource, /setInterval\(refreshLiveClock, 1_000\)/u);
   assert.match(appSource, /function createDraft\(\)[\s\S]*createFreshManualDraft/u);
