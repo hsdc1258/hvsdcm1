@@ -32,10 +32,15 @@ function check(condition, message) {
   if (!condition) failures.push(message);
 }
 
+// 검사 대상은 이 체크아웃의 소스뿐이다. `.claude/`는 에이전트가 만든 중첩 워크트리가
+// 사는 곳이라 저장소 전체의 사본이 그 안에 또 들어 있다 — 걸러내지 않으면 남의 브랜치
+// 파일이 이 체크아웃의 위반으로 보고돼 게이트가 상시 빨간불이 된다(2026-08-30 실측).
+const SKIPPED_DIRECTORIES = new Set(['.git', 'node_modules', '.wrangler', '.claude']);
+
 function walk(directory, predicate) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.wrangler') continue;
+    if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...walk(absolute, predicate));
     else if (predicate(absolute)) files.push(absolute);
