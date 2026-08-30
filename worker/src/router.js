@@ -1256,10 +1256,17 @@ function containsForbiddenPaperPrivateAssignment(value) {
 // nested-looking JSON keys even when an allowed outer assignment would otherwise consume the text.
 function containsForbiddenPaperPrivateIdentifier(value) {
   let identifiers = 0;
+  const recent = [];
   const identifierPattern = /[A-Za-z][A-Za-z0-9]*(?:(?:[-_./])[A-Za-z0-9]+)*/gu;
   for (const match of value.matchAll(identifierPattern)) {
     identifiers += 1;
     if (identifiers > 64 || match[0].length > 96 || isForbiddenPaperPrivateKey(match[0])) return true;
+    recent.push(match[0]);
+    if (recent.length > 3) recent.shift();
+    for (let width = 2; width <= recent.length; width += 1) {
+      const combined = recent.slice(-width).join('_');
+      if (combined.length <= 96 && isForbiddenPaperPrivateKey(combined)) return true;
+    }
   }
   return false;
 }
