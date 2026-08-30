@@ -11,6 +11,10 @@
   // 여기서 이름을 지워도 Worker 쪽 vars를 같이 지워야 실제 접근이 막힌다.
   const OWNER_USERNAMES = ['hvsdcm', 'claude-test'];
   const isOwner = (username) => OWNER_USERNAMES.includes(String(username || '').trim().toLowerCase());
+  // Behavior Lab은 에이전트 테스트 계정까지 허용하는 일반 운영 화면과 다르다.
+  // 랜딩 진입점도 Worker의 BEHAVIOR_OWNER_USERNAME과 같은 사람 소유자 한 명만 만든다.
+  const BEHAVIOR_OWNER_USERNAME = 'hvsdcm';
+  const isBehaviorOwner = (username) => String(username || '').normalize('NFKC').trim().toLowerCase() === BEHAVIOR_OWNER_USERNAME;
 
   // 드로어의 로그인-후 템플릿. ownerOnly 항목은 소유자에게만 **노드를 만든다** —
   // CSS 숨김이 아니라 렌더 시점 분기다 (LESSONS 승격 규칙 "권한별 은닉").
@@ -21,6 +25,7 @@
 
   const elements = {
     account: document.getElementById('account'),
+    behaviorOwnerMount: document.getElementById('behaviorOwnerMount'),
     closeLogin: document.getElementById('closeLogin'),
     drawer: document.getElementById('drawer'),
     drawerLogout: document.getElementById('drawerLogout'),
@@ -130,6 +135,16 @@
     }
     // 템플릿 안의 슬롯은 주입되기 전까지 문서에 없다 — 주입 직후에 다시 칠한다.
     paintEmoji(document);
+  }
+
+  // 메인 랜딩의 Behavior Lab 카드는 사람 소유자에게만 복제한다. <template> 내용은
+  // 비소유자 DOM에 렌더되지 않으며, 링크 대상도 자체 owner API 게이트를 다시 거친다.
+  function mountBehaviorOwnerEntry(username) {
+    if (!isBehaviorOwner(username) || !elements.behaviorOwnerMount) return;
+    const template = document.querySelector('template[data-behavior-owner]');
+    if (!template) return;
+    elements.behaviorOwnerMount.replaceChildren(template.content.cloneNode(true));
+    paintEmoji(elements.behaviorOwnerMount);
   }
 
   // 로그인 후 이동은 동일 출처의 내부 경로만 허용한다.
@@ -258,6 +273,7 @@
   const token = localStorage.getItem('hvsdcm.token');
   if (savedUsername && token) {
     mountDrawerTemplates(isOwner(savedUsername));
+    mountBehaviorOwnerEntry(savedUsername);
     showUser(savedUsername);
   }
   // 등장 대상은 이제 정적 본문뿐이지만(드로어는 화면 밖) 관찰 시작 순서는 유지한다 —
