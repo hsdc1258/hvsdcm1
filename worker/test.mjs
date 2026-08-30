@@ -3050,7 +3050,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 13; number += 1) {
+  for (let number = 1; number <= 14; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3066,6 +3066,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0011': 'moderator_control_plane',
       '0012': 'moderator_read_state',
       '0013': 'moderator_backfill_read',
+      '0014': 'competitions',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4394,4 +4395,896 @@ test('an ordinary daemon proposal still waits for the user and queues nothing', 
   assert.equal(body.command, null);
   const queued = database.prepare('SELECT COUNT(*) AS count FROM moderator_commands').get();
   assert.equal(Number(queued.count), 0);
+});
+
+const COMPETITION_PROFILE_ID = `hmac-sha256:${'0123456789abcdef'.repeat(4)}`;
+const COMPETITION_KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
+
+function competitionKstDate(milliseconds) {
+  return new Date(milliseconds + COMPETITION_KST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function setCompetitionTimeline(fixture, startedAt) {
+  const start = Math.floor(startedAt / 1_000) * 1_000;
+  const finished = start + 5 * 60_000;
+  fixture.run.date = competitionKstDate(start);
+  fixture.run.started_at = new Date(start).toISOString();
+  fixture.run.finished_at = new Date(finished).toISOString();
+  fixture.sources[0].checked_at = new Date(start + 60_000).toISOString();
+  if (fixture.candidates[0]) {
+    fixture.candidates[0].discovered_at = new Date(start + 60_000).toISOString();
+    fixture.candidates[0].official_verified_at = new Date(start + 2 * 60_000).toISOString();
+    fixture.candidates[0].deadline_at = new Date(finished + 3 * DAY_MS).toISOString();
+  }
+  if (fixture.applications[0]) {
+    fixture.applications[0].updated_at = new Date(start + 4 * 60_000).toISOString();
+  }
+  return fixture;
+}
+
+function assertCompetitionNoStore(response) {
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+}
+
+function competitionFixture() {
+  const fixture = {
+    version: 1,
+    idempotency_key: 'competition-daily-2026-08-31-001',
+    run: {
+      id: 'competition-2026-08-31-001',
+      date: '2026-08-31',
+      started_at: '2026-08-31T00:00:00+09:00',
+      finished_at: '2026-08-31T00:05:00+09:00',
+      status: 'complete',
+      source_coverage: { expected: 1, checked: 1, succeeded: 1 },
+    },
+    sources: [{
+      id: 'contest-listing',
+      kind: 'listing',
+      name: 'Contest Listing',
+      reference_url: 'https://list.example/contests/123',
+      checked_at: '2026-08-31T00:01:00+09:00',
+      status: 'ok',
+      failure_code: 'none',
+      manual_check: false,
+      candidate_count: 1,
+    }],
+    candidates: [{
+      contest_id: 'organizer-2026-image',
+      category: 'image',
+      title: 'Example Image Contest',
+      organizer: 'Example Organizer',
+      source_id: 'contest-listing',
+      discovery_url: 'https://list.example/contests/123',
+      discovered_at: '2026-08-31T00:01:00+09:00',
+      recency: 'new',
+      official_url: 'https://organizer.example/rules',
+      official_verification: 'verified',
+      official_verified_at: '2026-08-31T00:02:00+09:00',
+      acceptance: 'open',
+      deadline_at: '2026-09-03T14:59:00Z',
+      eligibility: 'eligible',
+      rights_risk: 'low',
+      submission_risk: 'low',
+      status: 'active',
+      fit_score: 80,
+      effort_score: 20,
+    }],
+    applications: [{
+      contest_id: 'organizer-2026-image',
+      category: 'image',
+      profile_id: COMPETITION_PROFILE_ID,
+      state: 'WAITING_ARTIFACTS',
+      blocker: 'artifacts',
+      next_action: 'prepare_artifacts',
+      updated_at: '2026-08-31T00:04:00+09:00',
+    }],
+  };
+  const currentKstDate = competitionKstDate(Date.now());
+  const currentKstMidnight = Date.parse(`${currentKstDate}T00:00:00+09:00`);
+  return setCompetitionTimeline(fixture, Math.max(currentKstMidnight, Date.now() - 10 * 60_000));
+}
+
+function competitionRequest(env, { method = 'POST', token = 'competition-token', body } = {}) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  return worker.fetch(new Request('https://api.test/api/competitions/report', {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), env);
+}
+
+async function competitionTestContext(t) {
+  const context = await moderatorTestContext(t);
+  if (!context) return null;
+  context.env.COMPETITION_INGEST_TOKEN = 'competition-token';
+  return context;
+}
+
+test('competition routes fail closed at the owner and dedicated-ingest-token boundaries', async () => {
+  const noDatabase = {
+    prepare() { throw new Error('competition authentication boundary reached the database'); },
+  };
+  for (const token of ['', 'wrong-token']) {
+    const response = await competitionRequest({
+      ALLOWED_ORIGIN: 'https://example.test',
+      COMPETITION_INGEST_TOKEN: 'competition-token',
+      DB: noDatabase,
+    }, { token, body: competitionFixture() });
+    assert.equal(response.status, 401);
+    assertCompetitionNoStore(response);
+    assert.deepEqual(await response.json(), { error: '인증이 필요합니다.' });
+  }
+  const unrelatedToken = await competitionRequest({
+    ALLOWED_ORIGIN: 'https://example.test',
+    COMPETITION_INGEST_TOKEN: '',
+    USAGE_INGEST_TOKEN: 'competition-token',
+    HARNESS_INGEST_TOKEN: 'competition-token',
+    MODERATOR_DAEMON_TOKEN: 'competition-token',
+    DB: noDatabase,
+  }, { body: competitionFixture() });
+  assert.equal(unrelatedToken.status, 401);
+  assertCompetitionNoStore(unrelatedToken);
+
+  const anonymous = await worker.fetch(new Request('https://api.test/api/competitions'), {
+    ALLOWED_ORIGIN: 'https://example.test',
+  });
+  assert.equal(anonymous.status, 401);
+  assertCompetitionNoStore(anonymous);
+  assert.deepEqual(await anonymous.json(), { error: '로그인이 필요합니다.' });
+
+  const nonOwnerDb = {
+    prepare(sql) {
+      if (sql.includes('SELECT s.*, u.username')) {
+        return {
+          bind() {
+            return {
+              async first() {
+                return { token_hash: 'student-hash', role: 'user', disabled: 0, username: 'student' };
+              },
+            };
+          },
+        };
+      }
+      if (sql.includes('UPDATE sessions')) {
+        return { bind() { return { async run() { return { success: true }; } }; } };
+      }
+      throw new Error('non-owner reached competition data');
+    },
+  };
+  const nonOwner = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer student-token' },
+  }), {
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm',
+    DB: nonOwnerDb,
+  });
+  assert.equal(nonOwner.status, 404);
+  assertCompetitionNoStore(nonOwner);
+  assert.deepEqual(await nonOwner.json(), { error: 'Not found' });
+});
+
+test('competition report round-trips through normalized SQLite and exact replay adds no rows', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionFixture();
+  const created = await competitionRequest(env, { body: fixture });
+  assert.equal(created.status, 201);
+  assertCompetitionNoStore(created);
+  assert.deepEqual(await created.json(), {
+    ok: true,
+    version: 1,
+    idempotency_key: fixture.idempotency_key,
+    run_id: fixture.run.id,
+    replayed: false,
+    counts: { sources: 1, candidates: 1, applications: 1 },
+  });
+
+  const replay = await competitionRequest(env, { body: structuredClone(fixture) });
+  assert.equal(replay.status, 200);
+  assertCompetitionNoStore(replay);
+  assert.equal((await replay.json()).replayed, true);
+  for (const table of [
+    'competition_reports', 'competition_sources', 'competition_candidates',
+    'competition_applications',
+  ]) {
+    assert.equal(Number(database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count), 1);
+  }
+
+  const looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(looked.status, 200);
+  assertCompetitionNoStore(looked);
+  const body = await looked.json();
+  assert.deepEqual(Object.keys(body), ['summary', 'runs', 'sources', 'candidates', 'applications']);
+  assert.deepEqual(body.summary, {
+    latest_scan_at: fixture.run.finished_at,
+    partial: false,
+    today: {
+      discovered: 1,
+      verified: 1,
+      ready: 1,
+      awaiting_approval: 0,
+      deadline_soon: 1,
+    },
+  });
+  assert.deepEqual(body.runs, [{
+    id: fixture.run.id,
+    date: fixture.run.date,
+    started_at: fixture.run.started_at,
+    finished_at: fixture.run.finished_at,
+    status: 'complete',
+    source_coverage: { expected: 1, checked: 1, succeeded: 1 },
+  }]);
+  assert.deepEqual(body.sources, [{
+    id: 'contest-listing',
+    kind: 'listing',
+    name: 'Contest Listing',
+    reference_url: 'https://list.example/contests/123',
+    status: 'ok',
+    checked_at: fixture.sources[0].checked_at,
+    candidate_count: 1,
+    failure_code: 'none',
+    manual_check: false,
+  }]);
+  assert.deepEqual(body.candidates, [{
+    contest_id: 'organizer-2026-image',
+    category: 'image',
+    title: 'Example Image Contest',
+    organizer: 'Example Organizer',
+    source_id: 'contest-listing',
+    discovery_url: 'https://list.example/contests/123',
+    discovered_at: fixture.candidates[0].discovered_at,
+    recency: 'new',
+    official_url: 'https://organizer.example/rules',
+    official_verification: 'verified',
+    official_verified_at: fixture.candidates[0].official_verified_at,
+    acceptance: 'open',
+    deadline_at: fixture.candidates[0].deadline_at,
+    eligibility: 'eligible',
+    status: 'active',
+    rights_risk: 'low',
+    submission_risk: 'low',
+    fit_score: 80,
+    effort_score: 20,
+  }]);
+  assert.deepEqual(body.applications, [{
+    contest_id: 'organizer-2026-image',
+    category: 'image',
+    state: 'WAITING_ARTIFACTS',
+    updated_at: fixture.applications[0].updated_at,
+    blocker: 'artifacts',
+    next_action: 'prepare_artifacts',
+  }]);
+  assert.throws(
+    () => database.prepare("UPDATE competition_reports SET run_status = 'failed'").run(),
+    /immutable/u,
+  );
+});
+
+test('competition idempotency binds the key to one payload and concurrent conflict cannot mix children', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const left = competitionFixture();
+  const right = structuredClone(left);
+  right.candidates[0].title = 'Different Contest Title';
+  const responses = await Promise.all([
+    competitionRequest(env, { body: left }),
+    competitionRequest(env, { body: right }),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409]);
+  const conflict = responses.find((response) => response.status === 409);
+  assertCompetitionNoStore(conflict);
+  assert.deepEqual(await conflict.json(), { error: 'idempotency_conflict' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 1);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_candidates').get().count), 1);
+  const storedTitle = database.prepare('SELECT title FROM competition_candidates').get().title;
+  assert.ok(['Example Image Contest', 'Different Contest Title'].includes(storedTitle));
+  const storedHash = database.prepare('SELECT payload_hash FROM competition_reports').get().payload_hash;
+  assert.match(storedHash, /^[a-f0-9]{64}$/u);
+});
+
+test('competition cross-object trust probes fail closed without writing any report rows', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const probes = [
+    ['expired-active', (body) => {
+      body.candidates[0].deadline_at = body.run.finished_at;
+    }],
+    ['timeout-closed', (body) => {
+      body.run.status = 'partial';
+      body.run.source_coverage.succeeded = 0;
+      body.sources[0].status = 'partial';
+      body.sources[0].failure_code = 'timeout';
+      body.sources[0].manual_check = true;
+      body.candidates[0].status = 'rejected';
+      body.candidates[0].acceptance = 'closed';
+      body.applications = [];
+    }],
+    ['no-results-with-candidate', (body) => {
+      body.sources[0].status = 'no_results';
+    }],
+    ['rejected-with-application', (body) => {
+      body.candidates[0].status = 'rejected';
+    }],
+  ];
+  for (const [name, mutate] of probes) {
+    const body = competitionFixture();
+    body.idempotency_key = `competition-probe-${name}`;
+    body.run.id = `competition-probe-${name}`;
+    mutate(body);
+    const response = await competitionRequest(env, { body });
+    assert.equal(response.status, 400, name);
+    assertCompetitionNoStore(response);
+    assert.deepEqual(await response.json(), { error: 'invalid_report' }, name);
+    assert.equal(
+      Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count),
+      0,
+      name,
+    );
+  }
+});
+
+test('competition migration rejects malformed timestamps in every normalized table', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database } = context;
+  const canonical = '2026-08-31T00:00:00.000Z';
+  const malformed = 'xxxx-xx-xxTxx:xx:xx.xxxZ';
+  const reportInsert = database.prepare(`
+    INSERT INTO competition_reports(
+      idempotency_key, payload_hash, schema_version, received_at,
+      run_id, run_date, run_status, started_at, finished_at,
+      coverage_expected, coverage_checked, coverage_succeeded,
+      source_count, candidate_count, application_count
+    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, ?, ?)
+  `);
+  const insertReport = ({
+    key, receivedAt = canonical, runDate = '2026-08-31', startedAt = canonical,
+    finishedAt = '2026-08-31T00:05:00.000Z', status = 'complete',
+    candidateCount = 0, applicationCount = 0,
+  }) => reportInsert.run(
+    key, 'a'.repeat(64), receivedAt, key, runDate, status, startedAt, finishedAt,
+    candidateCount, applicationCount,
+  );
+  const invalidReports = [
+    { key: 'bad-received-at', receivedAt: malformed },
+    { key: 'bad-received-hour', receivedAt: '2026-09-01T24:00:00.000Z' },
+    { key: 'bad-run-date', runDate: 'xxxx-xx-xx' },
+    { key: 'bad-started-at', startedAt: malformed },
+    { key: 'bad-started-hour', startedAt: '2026-08-31T24:00:00.000Z' },
+    { key: 'bad-finished-at', finishedAt: '2026-08-31T00:05:xx.xxxZ' },
+    { key: 'bad-finished-hour', finishedAt: '2026-08-31T24:00:00.000Z' },
+  ];
+  for (const probe of invalidReports) {
+    assert.throws(() => insertReport(probe), /CHECK constraint failed/u, probe.key);
+  }
+
+  insertReport({ key: 'timestamp-parent', candidateCount: 1, applicationCount: 1 });
+  const sourceInsert = database.prepare(`
+    INSERT INTO competition_sources(
+      idempotency_key, source_id, kind, name, reference_url, checked_at,
+      status, failure_code, manual_check, candidate_count
+    ) VALUES ('timestamp-parent', ?, 'listing', 'Public listing',
+      'https://public.example/contests', ?, 'ok', 'none', 0, 1)
+  `);
+  assert.throws(
+    () => sourceInsert.run('bad-source-time', '2026-08-31T00:01:xx.xxxZ'),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => sourceInsert.run('bad-source-hour', '2026-08-30T24:01:00.000Z'),
+    /CHECK constraint failed/u,
+  );
+  sourceInsert.run('timestamp-source', '2026-08-31T00:01:00.000Z');
+
+  const candidateInsert = database.prepare(`
+    INSERT INTO competition_candidates(
+      idempotency_key, contest_id, category, title, organizer, source_id,
+      discovery_url, discovered_at, recency, official_url, official_verification,
+      official_verified_at, acceptance, deadline_at, eligibility, rights_risk,
+      submission_risk, status, fit_score, effort_score
+    ) VALUES ('timestamp-parent', ?, 'test', 'Public contest', 'Public organizer',
+      'timestamp-source', 'https://public.example/contest', ?, 'new', ?, ?, ?, ?, ?, ?,
+      'low', 'low', ?, 50, 50)
+  `);
+  const insertCandidate = ({
+    id, discoveredAt = '2026-08-31T00:01:00.000Z', officialUrl = null,
+    verification = 'unverified', verifiedAt = null, acceptance = 'unknown',
+    deadlineAt = null, eligibility = 'unknown', status = 'discovered',
+  }) => candidateInsert.run(
+    id, discoveredAt, officialUrl, verification, verifiedAt, acceptance, deadlineAt,
+    eligibility, status,
+  );
+  assert.throws(
+    () => insertCandidate({ id: 'bad-discovered', discoveredAt: '2026-08-31T00:01:xx.xxxZ' }),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => insertCandidate({ id: 'bad-discovered-hour', discoveredAt: '2026-08-30T24:01:00.000Z' }),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => insertCandidate({
+      id: 'bad-verified',
+      officialUrl: 'https://official.example/rules',
+      verification: 'verified',
+      verifiedAt: '2026-08-31T00:02:xx.xxxZ',
+    }),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => insertCandidate({
+      id: 'bad-verified-hour',
+      discoveredAt: '2026-08-30T23:00:00.000Z',
+      officialUrl: 'https://official.example/rules',
+      verification: 'verified',
+      verifiedAt: '2026-08-30T24:01:00.000Z',
+    }),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => insertCandidate({ id: 'bad-deadline', deadlineAt: '2026-09-03T14:59:xx.xxxZ' }),
+    /CHECK constraint failed/u,
+  );
+  assert.throws(
+    () => insertCandidate({ id: 'bad-deadline-hour', deadlineAt: '2026-09-03T24:00:00.000Z' }),
+    /CHECK constraint failed/u,
+  );
+  insertCandidate({
+    id: 'timestamp-candidate',
+    discoveredAt: '2026-08-30T23:00:00.000Z',
+    officialUrl: 'https://official.example/rules',
+    verification: 'verified',
+    verifiedAt: '2026-08-30T23:30:00.000Z',
+    acceptance: 'open',
+    deadlineAt: '2026-09-03T14:59:00.000Z',
+    eligibility: 'eligible',
+    status: 'active',
+  });
+
+  assert.throws(() => database.prepare(`
+    INSERT INTO competition_applications(
+      idempotency_key, contest_id, category, profile_id, state, blocker, next_action, updated_at
+    ) VALUES ('timestamp-parent', 'timestamp-candidate', 'test', ?,
+      'WAITING_ARTIFACTS', 'artifacts', 'prepare_artifacts', '2026-08-31T00:04:xx.xxxZ')
+  `).run(COMPETITION_PROFILE_ID), /CHECK constraint failed/u);
+  assert.throws(() => database.prepare(`
+    INSERT INTO competition_applications(
+      idempotency_key, contest_id, category, profile_id, state, blocker, next_action, updated_at
+    ) VALUES ('timestamp-parent', 'timestamp-candidate', 'test', ?,
+      'WAITING_ARTIFACTS', 'artifacts', 'prepare_artifacts', '2026-08-30T24:01:00.000Z')
+  `).run(COMPETITION_PROFILE_ID), /CHECK constraint failed/u);
+});
+
+test('competition URLs reject decoded PII, private-token aliases, and trailing-dot local hosts', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const unsafeUrls = [
+    'https://public.example/person@example.com/rules',
+    'https://public.example/person%40example.com/rules',
+    'https://public.example/person%2540example.com/rules',
+    'https://public.example/010-1234-5678/rules',
+    'https://public.example/%30%31%30%2D%31%32%33%34%2D%35%36%37%38/rules',
+    'https://public.example/01012345678/rules',
+    'https://public.example/%30%31%30%31%32%33%34%35%36%37%38/rules',
+    'https://public.example/0212345678/rules',
+    'https://public.example/rules?email=person@example.com',
+    'https://public.example/rules?person=person%2540example.com',
+    'https://public.example/rules?access_token=privatevalue123',
+    'https://public.example/rules?access%255Ftoken=privatevalue123',
+    'https://public.example/rules?client_secret=privatevalue123',
+    'https://public.example/rules?client-secret=privatevalue123',
+    'https://public.example/rules?clientSecret=privatevalue123',
+    'https://public.example/rules?client.secret=privatevalue123',
+    'https://public.example/rules?CLIENT%255FSECRET=privatevalue123',
+    'https://public.example/rules?refresh_token=privatevalue123',
+    'https://public.example/rules?refreshToken=privatevalue123',
+    'https://public.example/rules?authorization=privatevalue123',
+    'https://public.example/rules?signature=privatevalue123',
+    'https://public.example/private_key=privatevalue123/rules',
+    'https://public.example/rules?auth_token=privatevalue123',
+    'https://public.example/rules?session_id=privatevalue123',
+    'https://public.example/rules?oauthCode=privatevalue123',
+    'https://public.example/rules?x-amz-signature=privatevalue123',
+    'https://public.example/access_token/privatevalue123/rules',
+    'https://public.example/access%255Ftoken%252Fprivatevalue123/rules',
+    'https://public.example/clientSecret/privatevalue123/rules',
+    'https://public.example/client%255Fsecret%252Fprivatevalue123/rules',
+    'https://public.example/authToken/privatevalue123/rules',
+    'https://public.example/x-amz-signature/privatevalue123/rules',
+    'https://public.example/(authorization=privatevalue123)/rules',
+    'https://public.example/[client_secret=privatevalue123]/rules',
+    'https://public.example/,refresh_token=privatevalue123/rules',
+    'https://public.example/%28authorization%3Dprivatevalue123%29/rules',
+    'https://public.example/%22authorization%22=%22privatevalue123%22/rules',
+    'https://public.example/proxy_authorization=privatevalue123/rules',
+    'https://public.example/api%20key=privatevalue123/rules',
+    'https://public.example/(authorization!=privatevalue123)/rules',
+    'https://public.example/[client_secret·=privatevalue123]/rules',
+    'https://public.example/authorization！=privatevalue123/rules',
+    'https://public.example/authori\u0301zation=privatevalue123/rules',
+    'https://public.example/authori%CC%81zation=privatevalue123/rules',
+    'https://public.example/person\u200B@example.com/rules',
+    'https://public.example/person%E2%80%8B@example.com/rules',
+    'https://public.example/perso\u0301n@example.com/rules',
+    'https://public.example/%252528authorization%252521%25253Dprivatevalue123%252529/rules',
+    'https://localhost./rules',
+    'https://foo.local./rules',
+  ];
+  const fields = [
+    ['source.reference_url', (body, value) => { body.sources[0].reference_url = value; }],
+    ['candidate.discovery_url', (body, value) => { body.candidates[0].discovery_url = value; }],
+    ['candidate.official_url', (body, value) => { body.candidates[0].official_url = value; }],
+  ];
+  let caseNumber = 0;
+  for (const [field, assign] of fields) {
+    for (const value of unsafeUrls) {
+      caseNumber += 1;
+      const body = competitionFixture();
+      body.idempotency_key = `competition-url-probe-${caseNumber}`;
+      body.run.id = `competition-url-probe-${caseNumber}`;
+      assign(body, value);
+      const response = await competitionRequest(env, { body });
+      assert.equal(response.status, 400, `${field}: ${value}`);
+      assertCompetitionNoStore(response);
+      assert.ok(
+        ['invalid_report', 'forbidden_data'].includes((await response.json()).error),
+        `${field}: ${value}`,
+      );
+    }
+  }
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_sources').get().count), 0);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_candidates').get().count), 0);
+
+  const numericContest = competitionFixture();
+  numericContest.idempotency_key = 'competition-public-numeric-path';
+  numericContest.run.id = 'competition-public-numeric-path';
+  numericContest.sources[0].reference_url = 'https://public.example/contests/20260831123';
+  numericContest.candidates[0].discovery_url = 'https://public.example/entries/20260831123';
+  numericContest.candidates[0].official_url = 'https://public.example/rules/20260831123';
+  const accepted = await competitionRequest(env, { body: numericContest });
+  assert.equal(accepted.status, 201);
+  assertCompetitionNoStore(accepted);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 1);
+});
+
+test('competition free text rejects compact phones and secret assignments without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const unsafeTexts = [
+    '담당자 01012345678',
+    'Contact 010 12345678',
+    'Contact 010·1234·5678',
+    'Contact 010​1234​5678',
+    'Contact 010͏1234͏5678',
+    'Contact 010️1234️5678',
+    'Contact 010̸1234̸5678',
+    'Contact 010́1234́5678',
+    'Contact 0212345678',
+    'Feed(authorization=privatevalue123)',
+    'Notice,client_secret=privatevalue123',
+    'Agency[refresh_token=privatevalue123]',
+    'Secret private_key=privatevalue123',
+    'Encoded %28authorization%3Dprivatevalue123%29',
+    'Quoted "authorization"="privatevalue123"',
+    'Proxy proxy_authorization=privatevalue123',
+    'Spaced api key=privatevalue123',
+    'Punctuated authorization!=privatevalue123',
+    'Middle dot client_secret·=privatevalue123',
+    'Full width authorization！=privatevalue123',
+    'Combining mark authori\u0301zation=privatevalue123',
+    'Format mark person\u200B@example.com',
+    'Combining mark perso\u0301n@example.com',
+    '문의 %30%31%30%31%32%33%34%35%36%37%38',
+  ];
+  const fields = [
+    ['source-name', (body, value) => { body.sources[0].name = value; }],
+    ['candidate-title', (body, value) => { body.candidates[0].title = value; }],
+    ['organizer', (body, value) => { body.candidates[0].organizer = value; }],
+  ];
+  let caseNumber = 0;
+  for (const [field, assign] of fields) {
+    for (const value of unsafeTexts) {
+      caseNumber += 1;
+      const body = competitionFixture();
+      body.idempotency_key = `competition-private-text-${caseNumber}`;
+      body.run.id = `competition-private-text-${caseNumber}`;
+      assign(body, value);
+      const response = await competitionRequest(env, { body });
+      assert.equal(response.status, 400, `${field}: ${value}`);
+      assertCompetitionNoStore(response);
+      assert.deepEqual(await response.json(), { error: 'forbidden_data' }, `${field}: ${value}`);
+      assert.equal(
+        Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count),
+        0,
+        `${field}: ${value}`,
+      );
+    }
+  }
+
+  const publicNumber = competitionFixture();
+  publicNumber.idempotency_key = 'competition-public-number-title';
+  publicNumber.run.id = 'competition-public-number-title';
+  publicNumber.candidates[0].title = 'Contest 20260831123';
+  const accepted = await competitionRequest(env, { body: publicNumber });
+  assert.equal(accepted.status, 201);
+  assertCompetitionNoStore(accepted);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 1);
+});
+
+test('competition partial source keeps timeout and 403 evidence visibly separate from closed contests', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { env } = context;
+  const fixture = competitionFixture();
+  fixture.idempotency_key = 'competition-daily-2026-08-31-partial';
+  fixture.run.id = 'competition-2026-08-31-partial';
+  fixture.run.status = 'partial';
+  fixture.run.source_coverage.succeeded = 0;
+  fixture.sources[0].status = 'partial';
+  fixture.sources[0].failure_code = 'http_403';
+  fixture.sources[0].manual_check = true;
+  fixture.sources[0].candidate_count = 0;
+  fixture.candidates = [];
+  fixture.applications = [];
+  const created = await competitionRequest(env, { body: fixture });
+  assert.equal(created.status, 201);
+  assertCompetitionNoStore(created);
+  const looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assertCompetitionNoStore(looked);
+  const body = await looked.json();
+  assert.equal(body.summary.partial, true);
+  assert.deepEqual(body.sources, [{
+    id: 'contest-listing',
+    kind: 'listing',
+    name: 'Contest Listing',
+    reference_url: 'https://list.example/contests/123',
+    status: 'partial',
+    checked_at: fixture.sources[0].checked_at,
+    candidate_count: 0,
+    failure_code: 'http_403',
+    manual_check: true,
+  }]);
+  assert.deepEqual(body.candidates, []);
+  assert.deepEqual(body.applications, []);
+});
+
+test('competition report day uses Asia/Seoul and stale latest scans zero every today count', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const staleKstDate = competitionKstDate(Date.now() - DAY_MS);
+  const boundaryStart = Date.parse(`${staleKstDate}T00:01:00+09:00`);
+  const fixture = setCompetitionTimeline(competitionFixture(), boundaryStart);
+  fixture.idempotency_key = 'competition-kst-boundary';
+  fixture.run.id = 'competition-kst-boundary';
+  fixture.run.started_at = `${staleKstDate}T00:01:00+09:00`;
+  fixture.run.date = staleKstDate;
+  const created = await competitionRequest(env, { body: fixture });
+  assert.equal(created.status, 201);
+  assertCompetitionNoStore(created);
+
+  const looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(looked.status, 200);
+  assertCompetitionNoStore(looked);
+  const body = await looked.json();
+  assert.equal(body.runs[0].date, staleKstDate);
+  assert.equal(body.runs[0].started_at, new Date(boundaryStart).toISOString());
+  assert.deepEqual(body.summary.today, {
+    discovered: 0,
+    verified: 0,
+    ready: 0,
+    awaiting_approval: 0,
+    deadline_soon: 0,
+  });
+
+  const mismatched = setCompetitionTimeline(competitionFixture(), boundaryStart);
+  mismatched.idempotency_key = 'competition-kst-mismatch';
+  mismatched.run.id = 'competition-kst-mismatch';
+  mismatched.run.date = competitionKstDate(boundaryStart - DAY_MS);
+  const rejected = await competitionRequest(env, { body: mismatched });
+  assert.equal(rejected.status, 400);
+  assertCompetitionNoStore(rejected);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 1);
+});
+
+test('competition rejects observations beyond the five-minute future skew without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = setCompetitionTimeline(competitionFixture(), Date.now() + 10 * 60_000);
+  fixture.idempotency_key = 'competition-future-scan';
+  fixture.run.id = 'competition-future-scan';
+  const response = await competitionRequest(env, { body: fixture });
+  assert.equal(response.status, 400);
+  assertCompetitionNoStore(response);
+  assert.deepEqual(await response.json(), { error: 'invalid_report' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition evidence cannot follow its report observation while older evidence remains valid', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const probes = [
+    ['future-source-check', (body, future) => { body.sources[0].checked_at = future; }],
+    ['future-discovery', (body, future) => { body.candidates[0].discovered_at = future; }],
+    ['future-active-verification', (body, future) => {
+      body.candidates[0].official_verified_at = future;
+    }],
+    ['future-application-update', (body, future) => { body.applications[0].updated_at = future; }],
+  ];
+  for (const [name, mutate] of probes) {
+    const body = competitionFixture();
+    body.idempotency_key = `competition-${name}`;
+    body.run.id = `competition-${name}`;
+    const futureEvidence = new Date(Date.parse(body.run.finished_at) + 60_000).toISOString();
+    mutate(body, futureEvidence);
+    const response = await competitionRequest(env, { body });
+    assert.equal(response.status, 400, name);
+    assertCompetitionNoStore(response);
+    assert.deepEqual(await response.json(), { error: 'invalid_report' }, name);
+    assert.equal(
+      Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count),
+      0,
+      name,
+    );
+  }
+
+  const beforeDiscovery = competitionFixture();
+  beforeDiscovery.idempotency_key = 'competition-application-before-discovery';
+  beforeDiscovery.run.id = 'competition-application-before-discovery';
+  beforeDiscovery.applications[0].updated_at = new Date(
+    Date.parse(beforeDiscovery.candidates[0].discovered_at) - 60_000,
+  ).toISOString();
+  const beforeDiscoveryResponse = await competitionRequest(env, { body: beforeDiscovery });
+  assert.equal(beforeDiscoveryResponse.status, 400);
+  assertCompetitionNoStore(beforeDiscoveryResponse);
+  assert.deepEqual(await beforeDiscoveryResponse.json(), { error: 'invalid_report' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+
+  const carried = competitionFixture();
+  carried.idempotency_key = 'competition-carried-evidence';
+  carried.run.id = 'competition-carried-evidence';
+  const olderDiscovery = new Date(Date.parse(carried.run.started_at) - 2 * DAY_MS).toISOString();
+  carried.sources[0].checked_at = olderDiscovery;
+  carried.candidates[0].discovered_at = olderDiscovery;
+  carried.candidates[0].official_verified_at = new Date(Date.parse(olderDiscovery) + 60_000).toISOString();
+  carried.applications[0].updated_at = new Date(Date.parse(olderDiscovery) + 2 * 60_000).toISOString();
+  const accepted = await competitionRequest(env, { body: carried });
+  assert.equal(accepted.status, 201);
+  assertCompetitionNoStore(accepted);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 1);
+});
+
+test('competition latest snapshot follows observation time and deduplicates repeated run ids', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const staleKstDate = competitionKstDate(Date.now() - DAY_MS);
+  const midnight = Date.parse(`${staleKstDate}T00:00:00+09:00`);
+  const newer = setCompetitionTimeline(competitionFixture(), midnight + 20 * 60 * 60_000);
+  newer.idempotency_key = 'competition-repeat-newer';
+  newer.run.id = 'competition-repeated-run';
+  newer.candidates[0].title = 'Newer observed snapshot';
+  const older = setCompetitionTimeline(competitionFixture(), midnight + 18 * 60 * 60_000);
+  older.idempotency_key = 'competition-repeat-older';
+  older.run.id = 'competition-repeated-run';
+  older.candidates[0].title = 'Older late-delivered snapshot';
+
+  const first = await competitionRequest(env, { body: newer });
+  const second = await competitionRequest(env, { body: older });
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 201);
+  const looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(looked.status, 200);
+  const body = await looked.json();
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 2);
+  assert.equal(body.runs.length, 1);
+  assert.equal(body.runs[0].id, 'competition-repeated-run');
+  assert.equal(body.runs[0].started_at, newer.run.started_at);
+  assert.equal(body.candidates[0].title, 'Newer observed snapshot');
+});
+
+test('competition schema rejects unknown, private, unsafe, inconsistent and oversized reports without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const invalid = [];
+  const add = (mutate) => {
+    const fixture = competitionFixture();
+    mutate(fixture);
+    invalid.push(fixture);
+  };
+  add((body) => { body.run.unexpected = true; });
+  add((body) => { body.candidates[0].application_answers = { why: 'private prose' }; });
+  add((body) => { body.candidates[0].submission_payload = { action: 'submit' }; });
+  add((body) => { body.applications[0].final_submission = true; });
+  add((body) => { body.applications[0].legal_consent = true; });
+  add((body) => { body.applications[0].payment = { amount: 10 }; });
+  add((body) => { body.applications[0].receipt = 'organizer receipt'; });
+  add((body) => { body.applications[0].email = 'person@example.com'; });
+  add((body) => { body.candidates[0].discovery_url = 'http://list.example/contests/123'; });
+  add((body) => { body.candidates[0].official_url = 'https://127.0.0.1/rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://localhost/rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://10.0.0.1/rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://user:secret@organizer.example/rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://organizer.example/rules#private'; });
+  add((body) => {
+    body.candidates[0].discovery_url = 'https://list.example/contests/123?email=person%40example.com';
+  });
+  add((body) => { body.run.started_at = '2026-08-31T00:00:00'; });
+  add((body) => { body.candidates[0].status = 'preparing'; });
+  add((body) => { body.candidates[0].eligibility = 'unknown'; });
+  add((body) => {
+    body.sources[0].status = 'failed';
+    body.sources[0].failure_code = 'timeout';
+    body.sources[0].manual_check = false;
+    body.run.status = 'partial';
+    body.run.source_coverage.succeeded = 0;
+  });
+  add((body) => {
+    body.applications = Array.from({ length: 4 }, (_, index) => ({
+      ...body.applications[0],
+      contest_id: `organizer-2026-image-${index}`,
+      profile_id: `hmac-sha256:${String(index).repeat(64)}`,
+    }));
+  });
+  for (const body of invalid) {
+    const response = await competitionRequest(env, { body });
+    assert.equal(response.status, 400);
+    assertCompetitionNoStore(response);
+    assert.ok(['invalid_report', 'forbidden_data'].includes((await response.json()).error));
+  }
+  const tooLarge = await worker.fetch(new Request('https://api.test/api/competitions/report', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer competition-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ padding: 'x'.repeat(128_001) }),
+  }), env);
+  assert.equal(tooLarge.status, 413);
+  assertCompetitionNoStore(tooLarge);
+  assert.deepEqual(await tooLarge.json(), { error: 'report_too_large' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_sources').get().count), 0);
+});
+
+test('competition accepted-report batch rolls back every normalized table on a child failure', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  database.exec(`
+    CREATE TRIGGER competition_test_source_failure
+    BEFORE INSERT ON competition_sources
+    BEGIN SELECT RAISE(ABORT, 'forced competition child failure'); END;
+  `);
+  t.mock.method(console, 'error', () => {});
+  const response = await competitionRequest(env, { body: competitionFixture() });
+  assert.equal(response.status, 500);
+  assertCompetitionNoStore(response);
+  assert.deepEqual(await response.json(), { error: '서버 오류' });
+  for (const table of [
+    'competition_reports', 'competition_sources', 'competition_candidates',
+    'competition_applications',
+  ]) {
+    assert.equal(Number(database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count), 0);
+  }
 });
