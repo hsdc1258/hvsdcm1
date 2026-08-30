@@ -267,7 +267,9 @@ test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy re
   const allowedVocabulary = normalizeBehaviorPaperReport(paperReport({
     recent_logs: [{
       strategy_id: 'adaptive-trend-v1', orderflow_imbalance: 0.42, accounting_mode: 'paper',
-      message: 'Public API orderflow strategy checkpoint',
+      signal_strength: 0.8, signed_volume: -12, trade_count: 4, filled_ratio: 0.5,
+      access_mode: 'public', subperiod_id: 'one-minute',
+      message: 'Public API orderflow strategy signal=long',
     }],
     limitations: ['Public API market data only; no credentials are used.'],
   }));
@@ -444,6 +446,17 @@ test('credential and private identifier aliases fail closed before real SQLite p
     ['log-accountId', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', accountId: sentinel }]; }],
     ['trade-clOrdId', (report, sentinel) => { report.recent_trades[0].clOrdId = sentinel; }],
     ['log-authToken', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', authToken: sentinel }]; }],
+    ['log-accessSign', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', accessSign: sentinel }]; }],
+    ['trade-ACCESS_SIGN', (report, sentinel) => { report.recent_trades[0].ACCESS_SIGN = sentinel; }],
+    ['position-subUid', (report, sentinel) => { report.open_position.subUid = sentinel; }],
+    ['log-SUB_UID', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', SUB_UID: sentinel }]; }],
+    ['log-subuid', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', subuid: sentinel }]; }],
+    ['trade-tradeId', (report, sentinel) => { report.recent_trades[0].tradeId = sentinel; }],
+    ['log-TRADE_ID', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', TRADE_ID: sentinel }]; }],
+    ['log-tradeid', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', tradeid: sentinel }]; }],
+    ['position-fillId', (report, sentinel) => { report.open_position.fillId = sentinel; }],
+    ['log-FILL_ID', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', FILL_ID: sentinel }]; }],
+    ['log-fillid', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', fillid: sentinel }]; }],
     ['text-lower-snake-secret', (report, sentinel) => {
       report.recent_logs = [{ message: `bitget_api_secret=${sentinel}` }];
     }],
@@ -455,6 +468,12 @@ test('credential and private identifier aliases fail closed before real SQLite p
     }],
     ['text-lower-compact-secret', (report, sentinel) => {
       report.limitations = [`bitgetapisecret=${sentinel}`];
+    }],
+    ['text-access-sign', (report, sentinel) => {
+      report.recent_logs = [{ message: `ACCESS-SIGN=${sentinel}` }];
+    }],
+    ['text-bitget-sign', (report, sentinel) => {
+      report.recent_logs = [{ message: `BITGET-SIGN=${sentinel}` }];
     }],
     ['text-client-oid', (report, sentinel) => {
       report.recent_trades[0].note = `clientOid: ${sentinel}`;
