@@ -2522,15 +2522,20 @@
     for (const row of targets) moderatorJustRead.set(row.key, { ...row, read: true });
     if (moderatorData) renderModerator(moderatorData);
     try {
-      // 서버가 한 번에 받는 상한은 200건이다. '모두 읽음'이 그보다 많으면 나눠 보낸다.
-      const batches = Math.max(1, Math.ceil(Math.max(items.length, commands.length) / 200));
-      for (let batch = 0; batch < batches; batch += 1) {
-        const offset = batch * 200;
+      // 서버가 한 번에 받는 상한은 **items와 commands를 합쳐** 200건이다
+      // (worker/src/router.js MAX_MODERATOR_READ_ENTRIES). 둘을 따로 200씩 자르면
+      // 한 번에 400건이 나가 413으로 되돌아온다. 그래서 이어 붙인 뒤 자른다.
+      const queue = [
+        ...items.map((entry) => ({ items: [entry], commands: [] })),
+        ...commands.map((entry) => ({ items: [], commands: [entry] })),
+      ];
+      for (let offset = 0; offset < queue.length; offset += 200) {
+        const chunk = queue.slice(offset, offset + 200);
         await moderatorApi('/api/moderator/read', {
           method: 'POST',
           body: {
-            items: items.slice(offset, offset + 200),
-            commands: commands.slice(offset, offset + 200),
+            items: chunk.flatMap((entry) => entry.items),
+            commands: chunk.flatMap((entry) => entry.commands),
           },
         });
       }
