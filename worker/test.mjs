@@ -28,6 +28,10 @@ import {
 } from './src/lib.js';
 
 const ROUTER_SOURCE = readFileSync(new URL('./src/router.js', import.meta.url), 'utf8');
+const COMPETITION_REPORTER_FIXTURE = JSON.parse(readFileSync(
+  new URL('../scripts/fixtures/competition-report.valid.json', import.meta.url),
+  'utf8',
+));
 
 test('project delivery uses the newest task summary instead of mixing historical release SHAs', () => {
   const oldTask = {
@@ -4564,6 +4568,29 @@ test('competition routes fail closed at the owner and dedicated-ingest-token bou
   assert.equal(nonOwner.status, 404);
   assertCompetitionNoStore(nonOwner);
   assert.deepEqual(await nonOwner.json(), { error: 'Not found' });
+});
+
+test('checked-in reporter fixture is accepted by the Worker competition contract', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const fixture = setCompetitionTimeline(
+    structuredClone(COMPETITION_REPORTER_FIXTURE),
+    Math.max(
+      Date.parse(`${competitionKstDate(Date.now())}T00:00:00+09:00`),
+      Date.now() - 10 * 60_000,
+    ),
+  );
+  const response = await competitionRequest(context.env, { body: fixture });
+  assert.equal(response.status, 201);
+  assertCompetitionNoStore(response);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    version: 1,
+    idempotency_key: fixture.idempotency_key,
+    run_id: fixture.run.id,
+    replayed: false,
+    counts: { sources: 1, candidates: 1, applications: 1 },
+  });
 });
 
 test('competition report round-trips through normalized SQLite and exact replay adds no rows', async (t) => {
