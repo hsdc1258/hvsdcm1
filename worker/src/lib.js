@@ -114,6 +114,20 @@ export async function authenticate(request, env, requiredRole = 'user') {
   return session;
 }
 
+// Owner-only operational routes share this single fail-closed username rule. An empty or missing
+// OWNER_USERNAME never grants access, and an authenticated non-owner is hidden behind a 404.
+export function ownerUsernames(env) {
+  return String(env.OWNER_USERNAME || '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => name.length > 0);
+}
+
+export function isOwnerSession(session, env) {
+  const username = String(session?.username || '').trim().toLowerCase();
+  return username.length > 0 && ownerUsernames(env).includes(username);
+}
+
 export async function logActivity(env, userId, event, app = null, detail = null) {
   await env.DB.prepare(`
     INSERT INTO activity(user_id, event, app, created_at, detail)
