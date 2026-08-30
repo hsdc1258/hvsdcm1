@@ -18,6 +18,10 @@ Critical invariants:
 - Add D1 schema changes as a new numbered file under `worker/migrations/`; never rewrite an applied migration.
 - Session IP addresses and user-agent strings are admin-only personal data. Do not expose them from user or public routes, logs, or front-end pages.
 - Never commit `ADMIN_PASSWORD`, tokens or local Wrangler state.
+- 에이전트 전용 테스트 계정(`claude-test`)이 있다. 사용자 화면·`/admin`·`/usage`(모더 탭)를
+  모두 연다. 자격증명은 저장소에 없고 Codex 워크스페이스의 `config/credentials.json`이
+  단일 원본이다. 쓰는 법은 `node scripts/test-account.mjs --check`(경로가 다르면
+  `HVSDCM_CREDENTIALS`로 지정). 이 계정 이름·토큰·비밀번호를 저장소 안 어디에도 적지 않는다.
 
 Generated or data-heavy files should receive invariant checks and a short ownership comment; do not add noisy line-by-line comments. Prefer explanations of constraints and reasons over restating syntax.
 

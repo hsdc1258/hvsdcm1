@@ -30,3 +30,14 @@
   기기·공용 답안) 렌더 확인.
 - 자격증명은 워크스페이스 루트 `.credentials.json`(gitignore `**/.credentials.json`)에만 둔다.
   저장소에는 어디에도 적지 않았다.
+- 요청("Codex에서도 쓰게해줘야지") → 자격증명의 단일 원본을 Claude 워크스페이스 루트에서
+  `C:\Users\won\Desktop\Codex\config\credentials.json`으로 옮겼다(거기 .gitignore의
+  `config/*.json`). Claude 쪽 사본은 지웠다 — 두 곳에 두면 갱신 때 갈라지고, 구독이 끊기면
+  Claude 쪽은 사라진다.
+- 요청 → `scripts/test-account.mjs` 추가. 경로를 코드에 박지 않고 이 체크아웃 기준 상대
+  경로로 찾으며 `HVSDCM_CREDENTIALS`로 덮어쓴다. `--check` / `--user-token` /
+  `--admin-token` / `--renew-admin`(30일 만료 재발급).
+- 요청 → 가리키는 글을 셋에 남겼다: 이 저장소 `AGENTS.md`, `Codex/AGENTS.md`,
+  `Claude/docs/products.md`. 값은 어디에도 적지 않고 경로와 명령만 적었다.
+- 검증 → `node scripts/test-account.mjs --check` 로그인 200 · usage 200 · moderator 200 ·
+  admin/stats 200. validate 13,707 통과, `worker/test.mjs` 79/79 통과.
