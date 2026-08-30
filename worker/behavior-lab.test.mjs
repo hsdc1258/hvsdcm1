@@ -94,10 +94,50 @@ test('dashboard makes exactly the eight accepted public Bitget GETs and returns 
     assert.equal(url.protocol, 'https:');
     assert.equal(url.hostname, BITGET_PUBLIC_HOST);
     assert.equal(init.method, 'GET');
+    assert.equal(init.redirect, 'manual');
     assert.deepEqual(init.headers, { accept: 'application/json' });
     assert.equal('credentials' in init, false);
     assert.equal('body' in init, false);
   }
+});
+
+test('the upstream request uses Workerd-supported manual redirect refusal', async () => {
+  const ledger = [];
+  const workerdTransport = async (input, init) => {
+    if (init.redirect === 'error') {
+      throw new TypeError('Invalid redirect value, must be one of "follow" or "manual"');
+    }
+    assert.equal(init.redirect, 'manual');
+    const url = input instanceof URL ? input : new URL(input);
+    ledger.push(url.pathname);
+    return new Response(JSON.stringify(fixtureFor(url)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const result = await getBehaviorLabDashboard(
+    'https://worker.example/api/behavior-lab/dashboard?symbol=BTCUSDT&period=5m',
+    { cache: false, nowMs: NOW, behaviorGapMs: 0, fetchImpl: workerdTransport },
+  );
+  assert.equal(result.source, 'live');
+  assert.equal(ledger.length, 8);
+
+  await assert.rejects(
+    getBehaviorLabDashboard('https://worker.example/api/behavior-lab/dashboard?symbol=ETHUSDT&period=15m', {
+      cache: false,
+      nowMs: NOW,
+      behaviorGapMs: 0,
+      fetchImpl: async (input, init) => {
+        assert.equal(init.redirect, 'manual');
+        const url = input instanceof URL ? input : new URL(input);
+        if (url.pathname === '/api/v2/mix/market/ticker') {
+          return new Response(null, { status: 302, headers: { location: 'https://example.invalid/' } });
+        }
+        return new Response(JSON.stringify(fixtureFor(url)), { status: 200 });
+      },
+    }),
+    (error) => error instanceof BehaviorLabRequestError && error.status === 502,
+  );
 });
 
 test('unknown enums, duplicated keys, extra query input, and injection stop before network access', async () => {

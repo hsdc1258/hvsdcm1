@@ -2535,8 +2535,8 @@ function validateBehaviorLab() {
   check(requestedPaths.length === 8 && [...requestedPaths].sort().join('\n') === [...expectedPaths].sort().join('\n'),
     'worker/src/behavior-lab.js: one dashboard load must construct every accepted path exactly once');
   check(workerSource.includes("BITGET_PUBLIC_HOST = 'api.bitget.com'")
-    && workerSource.includes("method: 'GET'") && workerSource.includes("redirect: 'error'"),
-  'worker/src/behavior-lab.js: upstream must stay https api.bitget.com GET with redirect refusal');
+    && workerSource.includes("method: 'GET'") && workerSource.includes("redirect: 'manual'"),
+  'worker/src/behavior-lab.js: upstream must stay https api.bitget.com GET with Workerd-compatible manual redirect refusal');
   check(/BEHAVIOR_LAB_SYMBOLS = Object\.freeze\(\['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'\]\)/u.test(workerSource)
     && /BEHAVIOR_LAB_PERIODS = Object\.freeze\(\['5m', '15m', '1h', '4h'\]\)/u.test(workerSource),
   'worker/src/behavior-lab.js: symbol and period enums must remain fixed');

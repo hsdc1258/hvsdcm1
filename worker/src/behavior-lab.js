@@ -213,7 +213,8 @@ async function publicGet(path, query, fetchImpl, timeoutMs, ledger, context) {
     const fetchPromise = fetchImpl(url, {
       method: 'GET',
       headers: { accept: 'application/json' },
-      redirect: 'error',
+      // Workerd implements no-follow as manual; redirect:"error" throws before any network I/O.
+      redirect: 'manual',
       signal: controller.signal,
     });
     const abortPromise = new Promise((_, reject) => {
