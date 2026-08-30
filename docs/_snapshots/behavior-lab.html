@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="인증 없는 공개 시장 데이터로 쏠림과 추세를 관찰하는 한국어 Behavior Lab.">
-  <meta name="robots" content="index, follow">
+  <meta name="description" content="소유자 전용 시장 행동 분석과 모의투자 현황.">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <style>/* assets/css/system.css (inlined) */
@@ -1502,6 +1502,41 @@ html {
 .behavior-page [hidden] {
   display: none !important;
 }
+.owner-gate {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 20% 12%, rgba(48, 209, 88, .08), transparent 34%), var(--bg);
+}
+.owner-gate-card {
+  width: min(520px, 100%);
+  padding: clamp(28px, 5vw, 48px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+.owner-gate-card h1 {
+  margin: 0;
+  font-size: var(--fs-title-1);
+}
+.owner-gate-card > p:not(.eyebrow) {
+  margin: var(--space-3) 0 0;
+  color: var(--text-2);
+  line-height: var(--lh-body);
+}
+.owner-gate-actions {
+  margin-top: var(--space-6);
+  display: flex;
+  gap: var(--space-2);
+}
+.owner-gate-actions .copy-action {
+  width: auto;
+  margin: 0;
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+}
 .lab-topbar {
   position: sticky;
   top: 0;
@@ -1590,6 +1625,31 @@ html {
   border-radius: var(--radius-full);
   color: var(--text-2);
   font-size: var(--fs-caption);
+}
+.lab-tabs {
+  margin-bottom: var(--space-5);
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
+.lab-tab {
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 700;
+}
+.lab-tab:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.lab-tab.is-active {
+  background: var(--surface-4);
+  color: var(--text);
 }
 .control-deck, .panel, .ticker-section {
   min-width: 0;
@@ -2282,6 +2342,154 @@ html {
   color: var(--text-2);
   text-decoration: none;
 }
+.paper-tab-panel, .paper-report, .paper-position-panel, .paper-limitations-panel, .paper-detail-grid > .panel {
+  display: grid;
+  gap: var(--space-5);
+}
+.paper-heading {
+  padding: clamp(20px, 2.4vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+.paper-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.paper-report[aria-busy="true"] {
+  opacity: .55;
+}
+.paper-meta {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.paper-meta b {
+  margin-left: 6px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+.paper-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.paper-metrics article {
+  min-width: 0;
+  min-height: 150px;
+  padding: var(--space-5);
+  display: grid;
+  align-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+.paper-metrics span, .paper-metrics small {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.paper-metrics strong {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-title-1);
+}
+.paper-metrics strong.is-positive {
+  color: var(--green);
+}
+.paper-metrics strong.is-negative {
+  color: var(--red-bright);
+}
+.paper-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--line);
+}
+.paper-kv > div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: 5px;
+  background: var(--surface-2);
+}
+.paper-kv span {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.paper-kv b {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+.paper-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  gap: var(--space-5);
+}
+.paper-table-wrap {
+  overflow-x: auto;
+}
+.paper-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-caption);
+}
+.paper-table-wrap th, .paper-table-wrap td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line-faint);
+  text-align: left;
+  white-space: nowrap;
+}
+.paper-table-wrap th {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.paper-table-wrap td {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+.paper-logs {
+  max-height: 420px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  display: grid;
+  gap: 1px;
+  list-style: none;
+  border-radius: var(--radius-m);
+  background: var(--line-faint);
+}
+.paper-logs li {
+  padding: var(--space-3);
+  display: grid;
+  gap: 5px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.paper-logs time {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+.paper-limitations-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
 @media (max-width: 900px) {
   .market-grid, .signal-grid {
     grid-template-columns: 1fr;
@@ -2294,6 +2502,12 @@ html {
   }
   .window-list em {
     grid-column: 2;
+  }
+  .paper-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .paper-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 700px) {
@@ -2321,6 +2535,13 @@ html {
   .error-panel, .lab-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+  .paper-actions, .owner-gate-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .paper-metrics {
+    grid-template-columns: 1fr;
   }
   .text-button {
     align-self: flex-start;
@@ -2394,23 +2615,43 @@ html {
   <br><strong>정적으로 반영한 상태</strong> — Worker 응답 전의 fail-closed 초기 상태다. 심볼·주기 컨트롤, 가격·행동·신호, 백테스트, 위험 한도, 텍스트 초안 영역의 전체 조판을 담는다.
   <br><strong>주의</strong> — live dashboard와 버튼 상호작용은 API 응답이 필요하므로 이 사본에서는 비어 있다. 실제 desktop/mobile 상호작용은 별도 로컬 HTTP 브라우저 증거로 확인한다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
-  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <section id="ownerGate" class="owner-gate" aria-live="polite">
+    <div class="owner-gate-card">
+      <p class="eyebrow">PRIVATE / OWNER ONLY</p>
+      <h1 id="ownerGateTitle">접근 권한 확인 중</h1>
+      <p id="ownerGateMessage">저장된 계정 세션을 확인하고 있습니다.</p>
+      <div class="owner-gate-actions">
+        <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
+        <a id="ownerLoginLink" class="copy-action" href="/?login=1&amp;next=%2Fbehavior-lab%2F" hidden>홈에서 로그인</a>
+      </div>
+    </div>
+  </section>
+
+  <div id="labShell" hidden>
+    <a class="skip-link" href="#main">본문으로 건너뛰기</a>
   <header class="lab-topbar">
     <div class="lab-topbar-inner">
       <a class="lab-home" href="/" aria-label="hvsdcm 홈으로"><span aria-hidden="true">←</span> hvsdcm</a>
-      <span class="read-only-mark">PUBLIC READ-ONLY</span>
+      <span class="read-only-mark">OWNER · READ-ONLY</span>
     </div>
   </header>
 
   <main id="main" class="lab-main" tabindex="-1">
     <section class="lab-hero" aria-labelledby="labTitle">
-      <p class="eyebrow">BEHAVIOR LAB / PUBLIC MARKET OBSERVATION</p>
+      <p class="eyebrow">BEHAVIOR LAB / PRIVATE OBSERVATION</p>
       <h1 id="labTitle">행동을 읽되,<br>실행하지 않습니다.</h1>
       <p class="hero-copy">Bitget의 인증 없는 공개 선물 시장 데이터만 검증해 추세·군중 쏠림·적극 체결을 하나의 설명 가능한 후보로 정리합니다.</p>
       <div class="boundary-strip" aria-label="불변 경계">
         <span>API 키 없음</span><span>계정 연결 없음</span><span>주문 제출 없음</span>
       </div>
     </section>
+
+    <nav class="lab-tabs" aria-label="Behavior Lab 화면">
+      <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel">시장 분석</button>
+      <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel">$100 모의투자</button>
+    </nav>
+
+    <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab">
 
     <section class="control-deck" aria-labelledby="marketControlsTitle">
       <div class="section-heading-row">
@@ -2525,8 +2766,63 @@ html {
         </article>
       </section>
     </div>
+    </section>
+
+    <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
+      <div class="paper-heading section-heading-row">
+        <div>
+          <p class="section-index">FORWARD PAPER SESSION / 100 USDT</p>
+          <h2>오늘 08:00까지 모의투자</h2>
+          <p class="section-copy">실제 자금·계정·주문 없이 공개 시장 데이터와 정해진 규칙만으로 기록한 시뮬레이션입니다.</p>
+        </div>
+        <div class="paper-actions">
+          <span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span>
+          <button id="refreshPaper" class="text-button" type="button">새로고침</button>
+        </div>
+      </div>
+
+      <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
+      <div id="paperEmpty" class="empty-state" hidden><strong>WAITING FOR FIRST CYCLE</strong><p>첫 검증된 5분 주기 보고가 도착하면 여기에 표시됩니다.</p></div>
+      <div id="paperReport" class="paper-report" aria-busy="true" hidden>
+        <div class="paper-meta">
+          <span>마감 <b id="paperDeadline">—</b></span>
+          <span>마지막 주기 <b id="paperLastCycle">—</b></span>
+          <span>보고 순번 <b id="paperSequence">—</b></span>
+        </div>
+        <div class="paper-metrics">
+          <article><span>현재 자산</span><strong id="paperEquity">—</strong><small>시드 100 USDT</small></article>
+          <article><span>순손익 / 수익률</span><strong id="paperNetPnl">—</strong><small id="paperReturn">—</small></article>
+          <article><span>최대 낙폭</span><strong id="paperDrawdown">—</strong><small>세션 고점 대비</small></article>
+          <article><span>수수료 + 슬리피지</span><strong id="paperCosts">—</strong><small id="paperCostDetail">—</small></article>
+          <article><span>종료 거래</span><strong id="paperTrades">—</strong><small id="paperRecord">—</small></article>
+          <article><span>현금 / 미실현</span><strong id="paperCash">—</strong><small id="paperUnrealized">—</small></article>
+        </div>
+
+        <article class="panel paper-position-panel">
+          <div class="section-heading-row compact"><div><p class="section-index">OPEN POSITION</p><h2>현재 포지션</h2></div></div>
+          <div id="paperPosition" class="paper-kv"></div>
+        </article>
+
+        <div class="paper-detail-grid">
+          <article class="panel">
+            <div><p class="section-index">RECENT TRADES</p><h2>최근 거래</h2></div>
+            <div class="paper-table-wrap"><table><thead><tr><th>심볼</th><th>방향</th><th>진입 → 청산</th><th>순손익</th><th>사유</th></tr></thead><tbody id="paperTradesBody"></tbody></table></div>
+          </article>
+          <article class="panel">
+            <div><p class="section-index">BOUNDED LOG</p><h2>최근 로그</h2></div>
+            <ol id="paperLogs" class="paper-logs"></ol>
+          </article>
+        </div>
+
+        <article class="panel paper-limitations-panel">
+          <div><p class="section-index">LIMITATIONS</p><h2>해석 한계</h2></div>
+          <ul id="paperLimitations"></ul>
+        </article>
+      </div>
+    </section>
   </main>
 
   <footer class="lab-footer"><div><b>Behavior Lab</b><p>교육·연구용 관찰 도구. 미래 성과나 수익을 보장하지 않습니다.</p></div><a href="/">hvsdcm</a></footer>
+  </div>
 </body>
 </html>

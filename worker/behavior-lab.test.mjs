@@ -184,14 +184,35 @@ test('stale, null, malformed, and timestamp-misaligned upstream data fail closed
   }
 });
 
-test('the public route keeps CORS, method, and unknown-route behavior while invalid input stays bounded', async () => {
-  const env = { ALLOWED_ORIGIN: 'https://hvsdcm1.xyz' };
+test('the owner-only route keeps CORS, method, and unknown-route behavior while invalid input stays bounded', async () => {
+  const env = {
+    ALLOWED_ORIGIN: 'https://hvsdcm1.xyz',
+    BEHAVIOR_OWNER_USERNAME: 'hvsdcm',
+    DB: {
+      prepare(sql) {
+        return {
+          bind() { return this; },
+          async first() {
+            if (sql.includes('SELECT s.*, u.username')) {
+              return { token_hash: 'stored', role: 'user', disabled: 0, username: 'hvsdcm' };
+            }
+            throw new Error(`Unexpected first SQL: ${sql}`);
+          },
+          async run() {
+            if (sql.includes('UPDATE sessions')) return { success: true };
+            throw new Error(`Unexpected run SQL: ${sql}`);
+          },
+        };
+      },
+    },
+  };
   const invalid = await worker.fetch(new Request(
     'https://worker.example/api/behavior-lab/dashboard?symbol=BTCUSDT&period=bad',
-    { headers: { origin: 'https://hvsdcm1.xyz' } },
+    { headers: { origin: 'https://hvsdcm1.xyz', authorization: 'Bearer owner-session' } },
   ), env);
   assert.equal(invalid.status, 400);
   assert.equal(invalid.headers.get('access-control-allow-origin'), 'https://hvsdcm1.xyz');
+  assert.match(invalid.headers.get('cache-control'), /no-store/u);
   assert.deepEqual(await invalid.json(), { error: '지원하지 않는 심볼 또는 주기입니다.' });
 
   const wrongMethod = await worker.fetch(new Request(
