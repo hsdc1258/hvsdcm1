@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 14; number += 1) {
+  for (let number = 1; number <= 15; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3072,6 +3072,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0012': 'moderator_read_state',
       '0013': 'moderator_backfill_read',
       '0014': 'competitions',
+      '0015': 'competition_candidate_capacity',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4847,6 +4848,119 @@ test('competition ingest rejects its fully percent-encoded active secret without
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: 'forbidden_data' });
   assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition capacity migration preserves immutable rows, constraints, and indexes', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) {
+    t.skip('node:sqlite unavailable');
+    return;
+  }
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  database.exec(readFileSync(new URL('./migrations/0014_competitions.sql', import.meta.url), 'utf8'));
+  database.prepare(`
+    INSERT INTO competition_reports(
+      idempotency_key, payload_hash, schema_version, received_at, run_id, run_date,
+      run_status, started_at, finished_at, coverage_expected, coverage_checked,
+      coverage_succeeded, source_count, candidate_count, application_count
+    ) VALUES (?, ?, 1, ?, ?, ?, 'complete', ?, ?, 1, 1, 1, 1, 1, 0)
+  `).run(
+    'capacity-existing', 'a'.repeat(64), '2026-08-31T00:02:00.000Z',
+    'capacity-existing', '2026-08-31', '2026-08-31T00:00:00.000Z',
+    '2026-08-31T00:01:00.000Z',
+  );
+  database.prepare(`
+    INSERT INTO competition_sources(
+      idempotency_key, source_id, kind, name, reference_url, checked_at,
+      status, failure_code, manual_check, candidate_count
+    ) VALUES ('capacity-existing', 'source', 'listing', 'Source',
+      'https://list.example/contests', '2026-08-31T00:00:30.000Z',
+      'ok', 'none', 0, 1)
+  `).run();
+  database.prepare(`
+    INSERT INTO competition_candidates(
+      idempotency_key, contest_id, category, title, organizer, source_id,
+      discovery_url, discovered_at, recency, official_url, official_verification,
+      official_verified_at, acceptance, deadline_at, eligibility, rights_risk,
+      submission_risk, status, fit_score, effort_score
+    ) VALUES ('capacity-existing', 'contest', 'idea', 'Existing Contest', 'Organizer',
+      'source', 'https://list.example/contests/1', '2026-08-31T00:00:30.000Z',
+      'new', NULL, 'unverified', NULL, 'unknown', NULL, 'unknown', 'unknown',
+      'unknown', 'verifying', 50, 50)
+  `).run();
+
+  database.exec(readFileSync(
+    new URL('./migrations/0015_competition_candidate_capacity.sql', import.meta.url),
+    'utf8',
+  ));
+  assert.equal(database.prepare('PRAGMA foreign_key_check').all().length, 0);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_sources',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_candidates',
+  ).get().count), 1);
+  const capacityTables = database.prepare(`
+    SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name IN ('competition_reports', 'competition_sources')
+  `).all();
+  assert.equal(capacityTables.length, 2);
+  assert.ok(capacityTables.every((entry) => (
+    entry.sql.includes('candidate_count BETWEEN 0 AND 500')
+  )));
+  assert.throws(
+    () => database.prepare("UPDATE competition_reports SET run_status = 'failed'").run(),
+    /competition reports are immutable/u,
+  );
+});
+
+test('competition accepts and exactly replays the full 500-candidate contract', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-capacity-500';
+  body.run.id = body.idempotency_key;
+  body.sources[0].candidate_count = 500;
+  body.applications = [];
+  body.candidates = Array.from({ length: 500 }, (_, index) => ({
+    ...body.candidates[0],
+    contest_id: `capacity-contest-${index}`,
+    title: `Capacity Contest ${index}`,
+    official_url: null,
+    official_verification: 'unverified',
+    official_verified_at: null,
+    acceptance: 'unknown',
+    deadline_at: null,
+    eligibility: 'unknown',
+    rights_risk: 'unknown',
+    submission_risk: 'unknown',
+    status: 'verifying',
+  }));
+  const created = await competitionRequest(env, { body });
+  assert.equal(created.status, 201);
+  assert.deepEqual((await created.json()).counts, {
+    sources: 1,
+    candidates: 500,
+    applications: 0,
+  });
+  const replay = await competitionRequest(env, { body: structuredClone(body) });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replayed, true);
+  assert.equal(Number(database.prepare(
+    'SELECT candidate_count FROM competition_reports WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).candidate_count), 500);
+  assert.equal(Number(database.prepare(
+    'SELECT candidate_count FROM competition_sources WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).candidate_count), 500);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_candidates WHERE idempotency_key = ?',
+  ).get(body.idempotency_key).count), 500);
 });
 
 test('competition migration rejects malformed timestamps in every normalized table', async (t) => {
