@@ -2073,6 +2073,91 @@ test('the brain panel names the judging model and the summarising model apart', 
   assert.match(unknown, /<dt>뇌 모델<\/dt><dd class="md-fact-unknown">미확인</u);
 });
 
+// 화면은 사람이 읽는 자리다. 하네스가 위임 실행자의 이름을 알아내지 못하면 `pid-15960`이
+// 그대로 올라오는데, 그 값은 사용자에게 아무 뜻이 없고 프로세스가 끝나면 되짚을 수도 없다.
+// 값을 지어내지 않되, 그것이 이름이 아니라 프로세스 번호라는 사실은 화면이 말해 준다.
+test('a session known only by its process id is named as such, not shown as a bare slug', () => {
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    items: [moderatorItem({ kind: 'important', status: 'open', source_task_id: 'pid-15960' })],
+  });
+  const markup = renderers.renderModeratorItems(feed, 'important', NOW);
+  assert.match(markup, /이름 없는 위임 실행 \(프로세스 15960\)/u);
+  assert.doesNotMatch(markup, /<dd[^>]*>pid-15960</u);
+  // 이름이 있는 세션은 그대로 둔다 — 지어내지도, 감싸지도 않는다.
+  const named = renderers.renderModeratorItems(
+    moderatorFeed({ items: [moderatorItem({ kind: 'important', status: 'open' })] }), 'important', NOW,
+  );
+  assert.match(named, /2026-08-29-모더-시각화/u);
+});
+
+// 한 행에 모델 사실 넷을 세우면 결정론적 커널이 만든 항목에서 셋이 'none'과 '미확인'으로
+// 채워져, 매 줄이 실패처럼 읽힌다 (2026-08-30 실측: 라이브 항목 30건 전부). 사실은
+// 하나뿐이다 — 누가 이 판단을 했는가.
+test('an item row states who judged it once, instead of four mostly-empty model fields', () => {
+  const renderers = createUsageRenderers();
+  const kernelItem = moderatorItem({
+    kind: 'important', status: 'open',
+    brain_model: 'deterministic-kernel', brain_reasoning: 'none',
+    worker_model: null, worker_reasoning: null,
+  });
+  const markup = renderers.renderModeratorItems(
+    moderatorFeed({ items: [kernelItem] }), 'important', NOW,
+  );
+  assert.match(markup, /<dt>판단 주체<\/dt><dd>결정론적 커널 · 모델을 부르지 않았습니다</u);
+  assert.doesNotMatch(markup, /deterministic-kernel/u);
+  assert.doesNotMatch(markup, /<dt>요약 모델</u);
+  // 실제 모델이 판단한 항목은 그 이름과 추론을 그대로 말한다.
+  const llmRow = renderers.renderModeratorItems(
+    moderatorFeed({ items: [moderatorItem({ kind: 'important', status: 'open' })] }), 'important', NOW,
+  );
+  assert.match(llmRow, /<dt>판단 주체<\/dt><dd>gpt-5\.6-sol · 추론 xhigh \/ 요약 gpt-5\.6-luna</u);
+  // 아무 것도 모르면 지어내지 않는다.
+  const unknownRow = renderers.renderModeratorItems(
+    moderatorFeed({
+      items: [moderatorItem({ kind: 'important', status: 'open', brain_model: null, worker_model: null })],
+    }), 'important', NOW,
+  );
+  assert.match(unknownRow, /<dt>판단 주체<\/dt><dd class="md-fact-unknown">미확인</u);
+});
+
+// 모더가 살아 있는지는 데몬의 하트비트로만 알 수 있다. 마지막 항목 시각을 그 자리에
+// 세우면 데몬이 죽어도 화면은 옛 항목 시각에 얼어붙어 죽음을 생존처럼 보고한다.
+test('the brain panel reports the daemon heartbeat, and says so when it has gone quiet', () => {
+  const renderers = createUsageRenderers();
+  const fresh = renderers.renderModeratorBrain(
+    moderatorFeed({ daemon: { heartbeat_at: iso(2 * 60 * 1000), stale_after_ms: 15 * 60 * 1000 } }), NOW,
+  );
+  assert.match(fresh, /<dt>모더 마지막 점검</u);
+  assert.doesNotMatch(fresh, /그 뒤로 점검이 없습니다/u);
+  assert.match(fresh, /<dt>마지막 항목</u);
+
+  const quiet = renderers.renderModeratorBrain(
+    moderatorFeed({ daemon: { heartbeat_at: iso(HOUR), stale_after_ms: 15 * 60 * 1000 } }), NOW,
+  );
+  assert.match(quiet, /그 뒤로 점검이 없습니다/u);
+
+  // 하트비트 자체가 없으면 그것도 사실이다. 마지막 항목 시각으로 대신 채우지 않는다.
+  const never = renderers.renderModeratorBrain(moderatorFeed(), NOW);
+  assert.match(never, /<dt>모더 마지막 점검<\/dt><dd>보고된 적 없음</u);
+});
+
+// 결정론적 커널은 요약 모델을 부르지 않는다. 없는 개념에 '미확인'을 붙이면 매번 확인에
+// 실패한 것처럼 읽힌다 — '해당 없음'과 '미확인'은 다른 사실이다.
+test('the brain panel separates a concept that does not apply from one it could not confirm', () => {
+  const renderers = createUsageRenderers();
+  const kernel = renderers.renderModeratorBrain({
+    brain: { model: 'deterministic-kernel', reasoning: 'none', worker_model: null, worker_reasoning: null },
+  }, NOW);
+  assert.match(kernel, /<dt>뇌 모델<\/dt><dd class="md-fact-mono">결정론적 커널</u);
+  assert.match(kernel, /<dt>뇌 추론<\/dt><dd>없음</u);
+  assert.match(kernel, /<dt>요약 모델<\/dt><dd class="md-fact-mono">해당 없음</u);
+  assert.doesNotMatch(kernel, /요약 모델<\/dt><dd[^>]*>미확인/u);
+  // 실제 모델이 뇌인데 요약 모델을 확인하지 못한 경우는 여전히 '미확인'이다.
+  const llm = renderers.renderModeratorBrain({ brain: { model: 'gpt-5.6-sol', reasoning: 'xhigh' } }, NOW);
+  assert.match(llm, /<dt>요약 모델<\/dt><dd class="md-fact-unknown">미확인</u);
+});
+
 test('an empty classification says so instead of rendering an empty box', () => {
   const renderers = createUsageRenderers();
   const feed = moderatorFeed({ items: [], counts: { important: {}, proposal: {}, review: {} } });

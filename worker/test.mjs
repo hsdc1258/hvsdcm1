@@ -3610,6 +3610,75 @@ test('daemon close resolves an open important item and records its reason', asyn
   });
 });
 
+// 데몬이 올리는 항목의 id는 `important:<해시>`라 콜론을 담는다. 클라이언트는 그것을
+// encodeURIComponent로 감싸 보내므로 경로에는 `important%3A...`가 실려 온다. 서버가 그것을
+// 풀지 않던 동안 자동 닫기가 100% 400으로 거절됐고, 이미 죽은 프로세스의 '중요' 항목이
+// 화면에 영구히 남았다 (2026-08-30 실측). 이 테스트가 그 회귀를 막는다.
+test('daemon close accepts a percent-encoded item id that contains a colon', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const itemId = 'important:8d1f82f78fe87fe07b7678da1fd82203d488a453';
+  insertModeratorItemForTest(database, {
+    itemId, kind: 'important', status: 'open', version: 1,
+  });
+
+  const response = await closeModeratorItem(
+    env, encodeURIComponent(itemId), '멈춤 상태가 더 이상 관측되지 않아 자동으로 닫았습니다.',
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.item.item_id, itemId);
+  assert.equal(body.item.status, 'resolved');
+});
+
+// 상주 보고자(모더 데몬 자신, 커널 상태)는 "지금 돌고 있는 작업"이 아니다. 세면
+// active_task_count가 영원히 1 이상이 되어, 그 값이 0일 때만 도는 유휴 검토가 한 번도
+// 실행되지 않는다 (2026-08-30 실측: 모더 탭의 '검토'가 계속 비어 있었던 이유).
+test('resident reporters are excluded from the active session count', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fresh = new Date().toISOString();
+  const insertTask = (taskId) => database.prepare(`
+    INSERT INTO harness_tasks(task_id, status, updated_at, payload, heartbeat_at)
+    VALUES (?, 'active', ?, '{}', ?)
+  `).run(taskId, fresh, fresh);
+  insertTask('moderator-daemon');
+  insertTask('kernel-state');
+
+  const onlyResident = await moderatorRequest(env, '/api/moderator', { token: 'owner-token' });
+  assert.equal(onlyResident.status, 200);
+  assert.equal((await onlyResident.json()).active_sessions, 0);
+
+  insertTask('task_real_work');
+  const withReal = await moderatorRequest(env, '/api/moderator', { token: 'owner-token' });
+  assert.equal((await withReal.json()).active_sessions, 1);
+});
+
+// 모더가 살아 있는지는 **데몬의 하트비트**가 말한다. 마지막 항목 시각(brain.updated_at)을
+// 그 자리에 세우면 데몬이 죽어도 화면은 옛 항목 시각을 계속 보여 준다.
+test('the moderator feed reports the daemon heartbeat apart from the last item time', async (t) => {
+  const context = await moderatorTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const heartbeatAt = '2026-08-30T07:20:00.000Z';
+  database.prepare(`
+    INSERT INTO harness_tasks(task_id, status, updated_at, payload, heartbeat_at)
+    VALUES ('moderator-daemon', 'active', ?, '{}', ?)
+  `).run('2026-08-30T07:00:00.000Z', heartbeatAt);
+  insertModeratorItemForTest(database, {
+    itemId: 'important-old', kind: 'important', status: 'open',
+    updatedAt: '2026-08-30T06:00:00.000Z',
+  });
+
+  const response = await moderatorRequest(env, '/api/moderator', { token: 'owner-token' });
+  const body = await response.json();
+  assert.equal(body.daemon.heartbeat_at, heartbeatAt);
+  assert.notEqual(body.brain.updated_at, heartbeatAt);
+  assert.equal(body.daemon.stale_after_ms, 15 * 60 * 1000);
+});
+
 test('daemon close rejects a pending proposal and records its reason', async (t) => {
   const context = await moderatorTestContext(t);
   if (!context) return;

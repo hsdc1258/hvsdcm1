@@ -1831,6 +1831,61 @@
   // API가 null을 주면 그것은 "확인되지 않았다"는 사실이다. 빈칸으로 두거나 요청 모델을
   // 대신 적으면 실행 모델을 확인하지 못한 상태가 성공으로 꾸며진다 (plan.md §8).
   const MODERATOR_UNKNOWN = '미확인';
+  // **개념이 없는 칸과 확인하지 못한 칸을 구별한다.** 둘 다 '미확인'으로 적으면 화면이
+  // 매 줄 실패처럼 읽힌다 — 2026-08-30 실측: 라이브 항목 30건이 전부 '요약 모델 미확인 ·
+  // 요약 추론 미확인'을 달고 있었는데, 그 항목들은 결정론적 커널이 만든 것이라 요약
+  // 모델이라는 개념 자체가 없었다.
+  const MODERATOR_NOT_APPLICABLE = '해당 없음';
+  // 기계 슬러그를 한국어 화면에 그대로 세우지 않는다 (phrasing 계약과 같은 원칙).
+  // 표에 없는 값은 실제 모델 이름이므로 그대로 둔다 — 이름을 지어내지 않는다.
+  const MODERATOR_MODEL_LABELS = { 'deterministic-kernel': '결정론적 커널' };
+  const MODERATOR_REASONING_LABELS = { none: '없음' };
+  const MODERATOR_DETERMINISTIC_MODEL = 'deterministic-kernel';
+
+  function moderatorModelName(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    return MODERATOR_MODEL_LABELS[text] || text;
+  }
+
+  function moderatorReasoningName(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    return MODERATOR_REASONING_LABELS[text] || text;
+  }
+
+  // 세션 이름은 사람이 읽는 이름이어야 한다. 하네스가 위임 실행자의 이름을 알아내지
+  // 못하면 `pid-15960` 같은 값이 그대로 올라오는데, 그것은 사용자에게 아무 뜻도 없고
+  // 프로세스가 끝나면 영영 되짚을 수도 없다. 값을 지어내지는 않되, 그것이 이름이 아니라
+  // 프로세스 번호라는 사실은 화면이 말해 준다.
+  const MODERATOR_PID_PATTERN = /^pid-(\d+)$/u;
+
+  function moderatorSessionName(value) {
+    const text = String(value ?? '').trim();
+    const pid = MODERATOR_PID_PATTERN.exec(text);
+    return pid ? `이름 없는 위임 실행 (프로세스 ${pid[1]})` : text;
+  }
+
+  // 항목 한 줄에 모델 사실 넷(뇌 모델·뇌 추론·요약 모델·요약 추론)을 세우면, 결정론적
+  // 커널이 만든 항목에서는 넷 중 셋이 'none'과 '미확인'으로 채워진다. 사실은 하나뿐이다:
+  // **누가 이 판단을 했는가.** 그 하나만 문장으로 적는다.
+  function moderatorDecidedBy(source) {
+    const brain = String(source?.brain_model ?? '').trim();
+    const worker = String(source?.worker_model ?? '').trim();
+    // 빈 문자열로 돌려 moderatorFact가 '미확인' 판정을 붙이게 한다 — 결측의 표기는
+    // 그 한 곳에서만 정한다.
+    if (!brain && !worker) return '';
+    if (brain === MODERATOR_DETERMINISTIC_MODEL && !worker) {
+      return `${MODERATOR_MODEL_LABELS[MODERATOR_DETERMINISTIC_MODEL]} · 모델을 부르지 않았습니다`;
+    }
+    const parts = [];
+    if (brain) {
+      const reasoning = moderatorReasoningName(source?.brain_reasoning);
+      parts.push(reasoning ? `${moderatorModelName(brain)} · 추론 ${reasoning}` : moderatorModelName(brain));
+    }
+    if (worker) parts.push(`요약 ${moderatorModelName(worker)}`);
+    return parts.join(' / ');
+  }
   const USAGE_VIEW_KEY = 'hvsdcm.usage.view';
   const USAGE_VIEW_KEYS = new Set(['ops', 'moderator', 'guide']);
 
@@ -2068,20 +2123,45 @@
     return `<span class="badge${tone ? ` badge-${tone}` : ''} disclosure-hint">${escapeHtml(label)}</span>`;
   }
 
+  // 모더가 살아 있는지는 **데몬의 하트비트**로만 알 수 있다. 예전에는 이 자리에 마지막
+  // 항목 시각(brain.updated_at)이 '모델 마지막 보고'라는 이름으로 서 있었다 — 데몬이
+  // 죽어도 그 숫자는 마지막 항목 시각에 얼어붙어, 화면이 죽음을 생존처럼 보고했다.
+  function moderatorLiveness(data, now) {
+    const heartbeatAt = Date.parse(String(data?.daemon?.heartbeat_at || ''));
+    if (!Number.isFinite(heartbeatAt)) {
+      return { text: '보고된 적 없음', stale: true };
+    }
+    const staleAfter = finiteNumber(data?.daemon?.stale_after_ms) ?? 15 * 60 * 1000;
+    const age = now - heartbeatAt;
+    return {
+      text: age > staleAfter
+        ? `${relativeTime(data.daemon.heartbeat_at, now)} — 그 뒤로 점검이 없습니다`
+        : relativeTime(data.daemon.heartbeat_at, now),
+      stale: age > staleAfter,
+    };
+  }
+
   function renderModeratorBrain(data, now = Date.now()) {
     const brain = data?.brain && typeof data.brain === 'object' ? data.brain : {};
     const commands = finiteNumber(data?.active_commands) ?? 0;
     const sessions = finiteNumber(data?.active_sessions) ?? 0;
-    const reported = relativeTime(brain.updated_at, now);
+    const liveness = moderatorLiveness(data, now);
+    const workerModel = String(brain.worker_model ?? '').trim();
+    // 결정론적 커널은 요약 모델을 부르지 않는다. 그 칸을 '미확인'으로 두면 매번 확인에
+    // 실패한 것처럼 읽히므로, 개념이 없다는 사실을 그대로 적는다.
+    const summaryFallback = String(brain.model ?? '').trim() === MODERATOR_DETERMINISTIC_MODEL
+      ? MODERATOR_NOT_APPLICABLE
+      : '';
     return `<p class="us-eyebrow">모더가 쓰는 모델</p>
       <dl class="md-facts">
-        ${moderatorFact('뇌 모델', brain.model, true)}
-        ${moderatorFact('뇌 추론', brain.reasoning)}
-        ${moderatorFact('요약 모델', brain.worker_model, true)}
-        ${moderatorFact('요약 추론', brain.worker_reasoning)}
+        ${moderatorFact('뇌 모델', moderatorModelName(brain.model), true)}
+        ${moderatorFact('뇌 추론', moderatorReasoningName(brain.reasoning))}
+        ${moderatorFact('요약 모델', workerModel ? moderatorModelName(workerModel) : summaryFallback, true)}
+        ${moderatorFact('요약 추론', workerModel ? moderatorReasoningName(brain.worker_reasoning) : summaryFallback)}
         ${moderatorFact('대기 · 실행 중 명령', `${commands}건`)}
         ${moderatorFact('활성 세션', `${sessions}개`)}
-        ${moderatorFact('모델 마지막 보고', reported)}
+        ${moderatorFact('모더 마지막 점검', liveness.text)}
+        ${moderatorFact('마지막 항목', relativeTime(brain.updated_at, now))}
       </dl>`;
   }
 
@@ -2303,11 +2383,8 @@
         <div class="disclosure-body">
           ${quote}
           <dl class="md-facts">
-            ${moderatorFact('뇌 모델', item?.brain_model, true)}
-            ${moderatorFact('뇌 추론', item?.brain_reasoning)}
-            ${moderatorFact('요약 모델', item?.worker_model, true)}
-            ${moderatorFact('요약 추론', item?.worker_reasoning)}
-            ${moderatorFact('연결된 세션', item?.source_task_id, true)}
+            ${moderatorFact('판단 주체', moderatorDecidedBy(item))}
+            ${moderatorFact('연결된 세션', moderatorSessionName(item?.source_task_id))}
             ${moderatorFact('마지막 갱신', relativeTime(item?.updated_at, now))}
           </dl>
           ${moderatorItemActions(item)}
@@ -2409,9 +2486,9 @@
           <dl class="md-facts">
             ${moderatorFact('명령 ID', id, true)}
             ${moderatorFact('출처', MODERATOR_SOURCE_LABELS[command?.source] || command?.source)}
-            ${moderatorFact('요청 모델', command?.requested_model, true)}
-            ${moderatorFact('실행 모델', command?.actual_model, true)}
-            ${moderatorFact('실행 추론', command?.actual_reasoning)}
+            ${moderatorFact('요청 모델', moderatorModelName(command?.requested_model), true)}
+            ${moderatorFact('실행 모델', moderatorModelName(command?.actual_model), true)}
+            ${moderatorFact('실행 추론', moderatorReasoningName(command?.actual_reasoning))}
             ${moderatorFact('시도', `${finiteNumber(command?.attempts) ?? 0}회`)}
             ${moderatorFact('마지막 갱신', relativeTime(command?.updated_at, now))}
           </dl>

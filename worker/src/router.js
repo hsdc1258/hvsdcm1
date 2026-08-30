@@ -77,10 +77,26 @@ const MODERATOR_REVIEW_PROJECT = Object.freeze({
 const MODERATOR_REQUESTED_MODEL = 'gpt-5.6-sol';
 const MODERATOR_REQUESTED_REASONING = 'xhigh';
 const VALID_MODERATOR_KINDS = new Set(['important', 'proposal', 'review']);
+// 하네스에 상주하는 보고자들. 이들은 "지금 돌고 있는 작업"이 아니라 감시 장치 자신이므로
+// 활성 세션 수에 넣지 않는다. 넣으면 active_task_count가 영원히 1 이상이 되어, 그 값이
+// 0일 때만 도는 **유휴 검토가 한 번도 실행되지 않는다** (2026-08-30 실측).
+// 화면(usage.js RESIDENT_TASK_IDS)은 이미 같은 집합을 걸러 왔고, 서버가 그것을 따라간다.
+const MODERATOR_DAEMON_TASK_ID = 'moderator-daemon';
+const MODERATOR_RESIDENT_TASK_IDS = [MODERATOR_DAEMON_TASK_ID, 'kernel-state'];
 const VALID_MODERATOR_REASONING = new Set([
   'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra',
 ]);
 const MODERATOR_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+// 모더 항목 id는 `important:<해시>`처럼 콜론을 담는다. 클라이언트가 encodeURIComponent로
+// 감싸면 경로에는 `important%3A...`가 실려 오는데, URL.pathname은 퍼센트 인코딩을 풀지
+// 않는다. 풀지 않은 채로 MODERATOR_ID_PATTERN에 넣으면 `%`가 걸려 전부 invalid_item이
+// 됐다 — 2026-08-30 실측: 데몬의 항목 자동 닫기가 이 한 줄 때문에 100% 실패했고, 그래서
+// 이미 죽은 프로세스에 대한 '중요' 항목이 화면에 영구히 남았다.
+function moderatorPathId(raw) {
+  const text = String(raw ?? '');
+  if (!text.includes('%')) return text;
+  try { return decodeURIComponent(text); } catch { return text; }
+}
 const MODERATOR_IDEMPOTENCY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 const MODERATOR_ITEM_UNREAD_SQL = `(
   (kind = 'important' AND status = 'open')
@@ -1455,9 +1471,22 @@ async function moderatorActiveTaskCount(env, at = moderatorTimestamp()) {
     SELECT COUNT(*) AS count
     FROM harness_tasks
     WHERE status = 'active'
+      AND task_id NOT IN (${MODERATOR_RESIDENT_TASK_IDS.map((_, index) => `?${index + 2}`).join(', ')})
       AND julianday(COALESCE(NULLIF(heartbeat_at, ''), updated_at)) > julianday(?1)
-  `).bind(cutoff).first();
+  `).bind(cutoff, ...MODERATOR_RESIDENT_TASK_IDS).first();
   return Number(row?.count || 0);
+}
+
+// 모더 데몬이 스스로 남기는 하트비트. `/api/moderator`는 이것으로 "모더가 살아 있는가"를
+// 말한다 — 예전에는 마지막 **항목**의 시각을 그 자리에 세워서, 데몬이 죽어도 화면은
+// 마지막 항목 시각을 그대로 보여 주었고 사용자가 그것을 생존 신호로 읽었다.
+async function moderatorDaemonHeartbeat(env) {
+  const row = await env.DB.prepare(`
+    SELECT COALESCE(NULLIF(heartbeat_at, ''), updated_at) AS at
+    FROM harness_tasks
+    WHERE task_id = ?1
+  `).bind(MODERATOR_DAEMON_TASK_ID).first();
+  return row?.at ?? null;
 }
 
 async function moderatorActiveCommandCount(env) {
@@ -1553,6 +1582,7 @@ async function getModerator(request, env) {
     brainRow,
     activeSessions,
     activeCommands,
+    daemonHeartbeatAt,
   ] = await Promise.all([
     env.DB.prepare(`
       SELECT * FROM moderator_commands
@@ -1587,6 +1617,7 @@ async function getModerator(request, env) {
     `).first(),
     moderatorActiveTaskCount(env),
     moderatorActiveCommandCount(env),
+    moderatorDaemonHeartbeat(env),
   ]);
   const counts = { important: {}, proposal: {}, review: {} };
   for (const row of countRows.results || []) {
@@ -1606,6 +1637,8 @@ async function getModerator(request, env) {
       worker_reasoning: brainRow?.worker_reasoning ?? null,
       updated_at: brainRow?.updated_at ?? null,
     },
+    // 모더 자신의 생존. brain.updated_at(마지막 항목 시각)과 **다른 사실**이다.
+    daemon: { heartbeat_at: daemonHeartbeatAt, stale_after_ms: HARNESS_STALE_MS },
     active_sessions: activeSessions,
     active_commands: activeCommands,
     counts,
@@ -2581,19 +2614,19 @@ export async function route(request, env) {
   }
   const moderatorCommandStateMatch = path.match(/^\/api\/moderator\/daemon\/commands\/([^/]+)\/state$/u);
   if (method === 'POST' && moderatorCommandStateMatch) {
-    return updateModeratorCommandState(request, env, moderatorCommandStateMatch[1]);
+    return updateModeratorCommandState(request, env, moderatorPathId(moderatorCommandStateMatch[1]));
   }
   const moderatorDaemonCloseMatch = path.match(/^\/api\/moderator\/daemon\/items\/([^/]+)\/close$/u);
   if (method === 'POST' && moderatorDaemonCloseMatch) {
-    return closeModeratorDaemonItem(request, env, moderatorDaemonCloseMatch[1]);
+    return closeModeratorDaemonItem(request, env, moderatorPathId(moderatorDaemonCloseMatch[1]));
   }
   const moderatorDecisionMatch = path.match(/^\/api\/moderator\/items\/([^/]+)\/decision$/u);
   if (method === 'POST' && moderatorDecisionMatch) {
-    return decideModeratorItem(request, env, moderatorDecisionMatch[1]);
+    return decideModeratorItem(request, env, moderatorPathId(moderatorDecisionMatch[1]));
   }
   const moderatorAcknowledgeMatch = path.match(/^\/api\/moderator\/items\/([^/]+)\/acknowledge$/u);
   if (method === 'POST' && moderatorAcknowledgeMatch) {
-    return acknowledgeModeratorItem(request, env, moderatorAcknowledgeMatch[1]);
+    return acknowledgeModeratorItem(request, env, moderatorPathId(moderatorAcknowledgeMatch[1]));
   }
   if (method === 'GET' && path === '/api/gichul/manifest') return gichulManifest(request, env);
 
