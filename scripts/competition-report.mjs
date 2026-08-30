@@ -148,7 +148,7 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
   if (url.protocol !== 'https:' || url.username || url.password || url.hash || !url.hostname) {
     fail(`${label} must be an absolute public HTTPS URL`);
   }
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, '');
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, '').replace(/\.+$/u, '');
   const octets = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host) ? host.split('.').map(Number) : null;
   const nonPublicIpv4 = octets?.length === 4 && octets.every((part) => part >= 0 && part <= 255)
     && (octets[0] === 0 || octets[0] === 10 || octets[0] === 127

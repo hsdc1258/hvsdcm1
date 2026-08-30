@@ -63,6 +63,7 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.run.unexpected = true; },
     (report) => { report.candidates[0].deadline_at = '2026-09-15T14:59:00'; },
     (report) => { report.candidates[0].official_url = 'http://127.0.0.1/rules'; },
+    (report) => { report.candidates[0].official_url = 'https://localhost./rules'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?email=person@example.test'; },
     (report) => { report.applications[0].profile_id = 'sha256:guessable'; },
     (report) => { report.sources[0].failure_code = 'timeout'; },
