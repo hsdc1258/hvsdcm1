@@ -462,12 +462,41 @@
     return 'later';
   }
 
+  function deadlineExpired(deadline, now) {
+    const instant = time(deadline);
+    return instant !== null && now >= instant;
+  }
+
+  function applicationAtDeadline(application, deadline, now) {
+    if (!deadlineExpired(deadline, now) || ['applied', 'closed'].includes(application.status)) {
+      return application;
+    }
+    return {
+      ...application,
+      status: 'closed',
+      blockers: [...new Set([...application.blockers, '마감 지남'])],
+      blockersKnown: true,
+      nextAction: '마감 지남 · 추가 진행 금지',
+      deadlineExpired: true,
+    };
+  }
+
+  function candidateAtDeadline(candidate, now) {
+    if (!deadlineExpired(candidate.deadline, now)) return candidate;
+    return {
+      ...candidate,
+      status: 'closed',
+      deadlineExpired: true,
+      application: applicationAtDeadline(candidate.application, candidate.deadline, now),
+    };
+  }
+
   function filterCandidates(candidates, filters = {}, now = Date.now()) {
     const query = text(filters.search).toLocaleLowerCase('ko-KR');
     const status = text(filters.status) || 'all';
     const eligibility = text(filters.eligibility) || 'all';
     const deadline = text(filters.deadline) || 'all';
-    const result = candidates.filter((candidate) => {
+    const result = candidates.map((candidate) => candidateAtDeadline(candidate, now)).filter((candidate) => {
       const haystack = [candidate.title, candidate.organizer, candidate.eligibility, candidate.discoveryName]
         .join(' ').toLocaleLowerCase('ko-KR');
       return (!query || haystack.includes(query))
@@ -574,7 +603,7 @@
         ${link(candidate.discoveryUrl, `발견 경로 · ${candidate.discoveryName}`, 'cp-discovery-link')}
       </div>
       <dl class="cp-candidate-facts">
-        <div><dt>마감</dt><dd>${escapeHtml(candidate.deadline ? day(candidate.deadline) : '미확인')}</dd></div>
+        <div><dt>마감</dt><dd>${escapeHtml(candidate.deadline ? dateTime(candidate.deadline) : '미확인')}${candidate.deadlineExpired ? ' · <strong class="cp-deadline-expired">마감 지남</strong>' : ''}</dd></div>
         <div><dt>공식 공고 검증</dt><dd><span class="cp-inline-state${tone(candidate.officialVerification)}">${escapeHtml(officialVerification)}</span>${escapeHtml(officialVerificationTime)}</dd></div>
         <div><dt>최신성</dt><dd>${escapeHtml(candidate.recency)}</dd></div>
         <div><dt>적합도 점수</dt><dd>${candidate.fitScore ?? '미확인'}</dd></div>
@@ -591,11 +620,19 @@
     </article>`;
   }
 
-  function renderApplicationBoard(applications) {
+  function renderApplicationBoard(applications, candidates, now) {
+    const candidatesByKey = new Map(candidates.map((candidate) => [
+      applicationKey({ contest_id: candidate.id, category: candidate.category }), candidate,
+    ]));
+    const currentApplications = applications.map((application) => {
+      const candidate = candidatesByKey.get(applicationKey(application))
+        || candidates.find((entry) => entry.id === application.id);
+      return applicationAtDeadline(application, candidate?.deadline, now);
+    });
     const order = ['verifying', 'preparing', 'awaiting-approval', 'approved', 'applied', 'blocked', 'watching', 'closed', 'unknown'];
     const groups = order.map((status) => ({
       status,
-      rows: applications.filter((application) => application.status === status),
+      rows: currentApplications.filter((application) => application.status === status),
     })).filter((group) => group.rows.length);
     const board = groups.length ? groups.map((group) => `<section class="cp-board-column" aria-label="${escapeHtml(STATUS_LABELS[group.status])}">
       <header><h3>${escapeHtml(STATUS_LABELS[group.status])}</h3><span>${group.rows.length}</span></header>
@@ -606,7 +643,7 @@
       </article>`).join('')}</div>
     </section>`).join('') : '<p class="us-empty">지원 상태 기록이 없습니다.</p>';
     return `<section class="cp-applications" aria-labelledby="cpApplicationsTitle">
-      <div class="cp-section-head"><div><p class="us-eyebrow">APPLICATIONS · VIEW ONLY</p><h2 id="cpApplicationsTitle" class="title-2">지원 상태 보드</h2></div><p>읽기 전용 · ${applications.length}건</p></div>
+      <div class="cp-section-head"><div><p class="us-eyebrow">APPLICATIONS · VIEW ONLY</p><h2 id="cpApplicationsTitle" class="title-2">지원 상태 보드</h2></div><p>읽기 전용 · ${currentApplications.length}건</p></div>
       <div class="cp-board" role="region" aria-label="지원 상태 보드 가로 목록" tabindex="0">${board}</div>
     </section>`;
   }
@@ -626,7 +663,7 @@
     const notices = data.partial
       ? `<div class="cp-notice" role="status"><strong>일부 결과만 표시합니다.</strong><span>${escapeHtml(data.errors[0] || '실패하거나 불완전한 원본이 있습니다. 원본별 상태를 확인해 주세요.')}</span></div>`
       : '';
-    return `${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications)}${renderCandidates(data, filters, now)}`;
+    return `${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
   }
 
   function scrollApplicationBoard(board, key) {

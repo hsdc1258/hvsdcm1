@@ -495,6 +495,39 @@ test('candidate search, status, eligibility, deadline and deadline sorting are d
   );
 });
 
+test('a candidate that expires after the report fails closed at render and filter time', () => {
+  const { ui } = competitionContext();
+  const reportedAt = Date.parse('2026-08-31T03:00:00+09:00');
+  const deadline = new Date(reportedAt + 30_000).toISOString();
+  const viewedAt = reportedAt + 60_000;
+  const normalized = ui.normalizePayload({
+    summary: { latest_scan_at: new Date(reportedAt).toISOString(), today: {} },
+    runs: [{ id: 'deadline-run', finished_at: new Date(reportedAt).toISOString(), status: 'complete' }],
+    sources: [],
+    candidates: [{
+      contest_id: 'deadline-contest', category: 'idea', title: '곧 마감 후보',
+      organizer: '예시 기관', official_url: 'https://organizer.example/rules',
+      official_verification: 'verified', acceptance: 'open', eligibility: 'eligible',
+      deadline_at: deadline, status: 'active', recency: 'new',
+    }],
+    applications: [{
+      contest_id: 'deadline-contest', category: 'idea', state: 'PREPARED',
+      blocker: 'none', next_action: 'stage_form', updated_at: new Date(reportedAt).toISOString(),
+    }],
+  });
+
+  const markup = ui.renderDashboard(normalized, {}, viewedAt);
+  assert.match(markup, /종료/u);
+  assert.match(markup, /마감 지남/u);
+  assert.match(markup, /추가 진행 금지/u);
+  assert.doesNotMatch(markup, /지원 준비/u);
+  assert.equal(ui.filterCandidates(normalized.candidates, { status: 'preparing' }, viewedAt).length, 0);
+  assert.deepEqual(
+    Array.from(ui.filterCandidates(normalized.candidates, { status: 'closed' }, viewedAt), (item) => item.id),
+    ['deadline-contest'],
+  );
+});
+
 test('controller renders loading, empty, error/retry and manual refresh states', async () => {
   const success = competitionContext();
   const responses = [fixture(), fixture({ candidates: [] })];
