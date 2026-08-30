@@ -4716,6 +4716,24 @@ test('competition idempotency binds the key to one payload and concurrent confli
   assert.match(storedHash, /^[a-f0-9]{64}$/u);
 });
 
+test('competition idempotency preserves raw field values across storage normalization', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const first = competitionFixture();
+  first.idempotency_key = 'competition-raw-value-idempotency';
+  first.run.id = 'competition-raw-value-idempotency';
+  first.candidates[0].title = 'Example  Image Contest';
+  const second = structuredClone(first);
+  second.candidates[0].title = 'Example Image Contest';
+
+  const created = await competitionRequest(context.env, { body: first });
+  assert.equal(created.status, 201);
+  const conflict = await competitionRequest(context.env, { body: second });
+  assert.equal(conflict.status, 409);
+  assertCompetitionNoStore(conflict);
+  assert.deepEqual(await conflict.json(), { error: 'idempotency_conflict' });
+});
+
 test('competition cross-object trust probes fail closed without writing any report rows', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;
@@ -4756,6 +4774,37 @@ test('competition cross-object trust probes fail closed without writing any repo
       name,
     );
   }
+});
+
+test('competition identifier slots reject private contact values without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const probes = [
+    ['idempotency', (body) => { body.idempotency_key = '01012345678'; }],
+    ['run', (body) => { body.run.id = '0212345678'; }],
+    ['source', (body) => {
+      body.sources[0].id = '01012345678';
+      body.candidates[0].source_id = '01012345678';
+    }],
+    ['contest', (body) => {
+      body.candidates[0].contest_id = '01012345678';
+      body.applications[0].contest_id = '01012345678';
+    }],
+    ['category', (body) => {
+      body.candidates[0].category = '0212345678';
+      body.applications[0].category = '0212345678';
+    }],
+  ];
+  for (const [name, mutate] of probes) {
+    const body = competitionFixture();
+    body.idempotency_key = `competition-private-id-${name}`;
+    body.run.id = `competition-private-id-${name}`;
+    mutate(body);
+    const response = await competitionRequest(env, { body });
+    assert.equal(response.status, 400, name);
+  }
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
 });
 
 test('competition migration rejects malformed timestamps in every normalized table', async (t) => {

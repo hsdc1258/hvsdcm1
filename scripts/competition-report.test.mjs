@@ -77,10 +77,12 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.candidates[0].organizer = '기관 01012345678'; },
     (report) => { report.sources[0].name = '담당자 010·1234·5678'; },
     (report) => { report.sources[0].name = '담당자 0212345678'; },
+    (report) => { report.candidates[0].title = 'Contest:+1-212-555-1212'; },
     (report) => { report.candidates[0].title = '안내 (authorization)=privatevalue123'; },
     (report) => { report.candidates[0].title = '안내 private_key=privatevalue123'; },
     (report) => { report.candidates[0].organizer = '기관, client secret: privatevalue123'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?private_key=privatevalue123'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/submission=privatevalue123'; },
     (report) => { report.sources[0].name = '담당자 0\u030110\u03011234\u03015678'; },
     (report) => { report.candidates[0].title = '안내【authorization】::privatevalue123'; },
     (report) => { report.candidates[0].title = 'authori\u0301zation=privatevalue123'; },
@@ -90,6 +92,20 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.sources[0].failure_code = 'timeout'; },
     (report) => { report.candidates[0].submission_risk = 'blocked'; },
     (report) => { report.run.date = '2026-02-30'; },
+    (report) => { report.idempotency_key = '01012345678'; },
+    (report) => { report.run.id = '0212345678'; },
+    (report) => {
+      report.sources[0].id = '01012345678';
+      report.candidates[0].source_id = '01012345678';
+    },
+    (report) => {
+      report.candidates[0].contest_id = '01012345678';
+      report.applications[0].contest_id = '01012345678';
+    },
+    (report) => {
+      report.candidates[0].category = '0212345678';
+      report.applications[0].category = '0212345678';
+    },
   ]) {
     const report = validReport();
     mutate(report);

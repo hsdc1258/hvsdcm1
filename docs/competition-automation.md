@@ -73,8 +73,9 @@ node scripts/competition-secret.mjs put `
 `COMPETITION_API_URL`, `COMPETITION_INGEST_TOKEN`, and `COMPETITION_REPORT_CONFIG` provide equivalent
 environment-based configuration. The helper sends the token only as a dedicated bearer credential,
 requires a response bound to the same body `idempotency_key`, and never prints the token. Repeating the
-exact report is an acknowledged replay, not another logical write; reusing a key with different content
-is rejected by the API.
+exact report is an acknowledged replay, not another logical write; reusing a key with different raw
+field values is rejected by the API even when storage normalization would produce the same saved text.
+JSON object key order alone does not create a conflict.
 
 The report schema rejects raw identity, contact details, application prose, signatures, cookies,
 consents, payments, receipts, final-submission payloads, and private data or tokens embedded in

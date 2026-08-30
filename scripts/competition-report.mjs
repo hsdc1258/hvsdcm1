@@ -13,14 +13,14 @@ const PROFILE_ID = /^hmac-sha256:[0-9a-f]{64}$/u;
 const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/u;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
-const PHONE = /(?:^|\s)\+?\d[\d ().-]{7,}\d(?:\s|$)/u;
+const PHONE = /(?:^|[^\p{L}\p{N}])(?:\+?\d{1,3}[- .]?)?(?:\(?\d{2,4}\)?[- .])\d{3,4}[- .]\d{4}(?=$|[^\p{L}\p{N}])/u;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
   'session', 'api_key', 'secret', 'credential', 'signature', 'private_key', 'signing_key',
 ]);
 
 const FORBIDDEN_KEYS = /(?:^|_)(?:pii|applicant_name|legal_name|full_name|first_name|last_name|email|e_mail|phone|mobile|contact|address|birth|birthday|dob|password|private_key|signing_key|account_token|cookie|signature|consent|legal_consent|terms_acceptance|payment|card|bank|receipt|application_answer|application_answers|application_prose|essay|final_submission|submission_payload|legal_acceptance|identity_document|government_id|tax_id)(?:$|_)/iu;
-const FORBIDDEN_ASSIGNMENT_SUFFIX = /(?:pii|applicantname|legalname|fullname|firstname|lastname|email|phone|mobile|contact|address|birth|birthday|dob|password|privatekey|signingkey|accounttoken|cookie|signature|consent|legalconsent|termsacceptance|payment|card|bank|receipt|applicationanswer|applicationanswers|applicationprose|essay|finalsubmission|submissionpayload|legalacceptance|identitydocument|governmentid|taxid)$/u;
+const FORBIDDEN_ASSIGNMENT_SUFFIX = /(?:pii|applicantname|legalname|fullname|firstname|lastname|email|phone|mobile|contact|address|birth|birthday|dob|password|privatekey|signingkey|accounttoken|cookie|signature|consent|legalconsent|termsacceptance|payment|card|bank|receipt|answer|answers|applicationanswer|applicationanswers|applicationprose|essay|submission|finalsubmission|submissionpayload|legalacceptance|identitydocument|governmentid|taxid)$/u;
 const RUN_STATUSES = new Set(['running', 'complete', 'partial', 'failed']);
 const SOURCE_KINDS = new Set(['listing', 'official', 'search']);
 const SOURCE_STATUSES = new Set(['pending', 'ok', 'no_results', 'partial', 'failed']);
@@ -307,7 +307,7 @@ function boundedArray(value, label, max) {
 
 function validateRun(run) {
   exactKeys(run, ['id', 'date', 'started_at', 'finished_at', 'status', 'source_coverage'], [], 'report.run');
-  string(run.id, 'report.run.id', { max: 160, pattern: IDENTIFIER });
+  string(run.id, 'report.run.id', { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   calendarDate(run.date, 'report.run.date');
   timestamp(run.started_at, 'report.run.started_at');
   timestamp(run.finished_at, 'report.run.finished_at', { nullable: true });
@@ -333,7 +333,7 @@ function validateSource(source, index) {
     'id', 'kind', 'name', 'reference_url', 'checked_at', 'status', 'failure_code',
     'manual_check', 'candidate_count',
   ], [], label);
-  string(source.id, `${label}.id`, { max: 160, pattern: IDENTIFIER });
+  string(source.id, `${label}.id`, { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   oneOf(source.kind, SOURCE_KINDS, `${label}.kind`);
   string(source.name, `${label}.name`, { max: 240, maxBytes: 240, privatePatterns: true });
   publicHttpsUrl(source.reference_url, `${label}.reference_url`);
@@ -360,11 +360,11 @@ function validateCandidate(candidate, index, sourceIds) {
     'deadline_at', 'eligibility', 'rights_risk', 'submission_risk', 'status', 'fit_score',
     'effort_score',
   ], [], label);
-  string(candidate.contest_id, `${label}.contest_id`, { max: 160, pattern: IDENTIFIER });
-  string(candidate.category, `${label}.category`, { max: 80, pattern: CATEGORY });
+  string(candidate.contest_id, `${label}.contest_id`, { max: 160, pattern: IDENTIFIER, privatePatterns: true });
+  string(candidate.category, `${label}.category`, { max: 80, pattern: CATEGORY, privatePatterns: true });
   string(candidate.title, `${label}.title`, { max: 240, maxBytes: 240, privatePatterns: true });
   string(candidate.organizer, `${label}.organizer`, { max: 160, maxBytes: 160, privatePatterns: true });
-  string(candidate.source_id, `${label}.source_id`, { max: 160, pattern: IDENTIFIER });
+  string(candidate.source_id, `${label}.source_id`, { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   if (!sourceIds.has(candidate.source_id)) fail(`${label}.source_id does not reference a reported source`);
   publicHttpsUrl(candidate.discovery_url, `${label}.discovery_url`);
   timestamp(candidate.discovered_at, `${label}.discovered_at`);
@@ -403,8 +403,8 @@ function validateApplication(application, index, candidates) {
   exactKeys(application, [
     'contest_id', 'category', 'profile_id', 'state', 'blocker', 'next_action', 'updated_at',
   ], [], label);
-  string(application.contest_id, `${label}.contest_id`, { max: 160, pattern: IDENTIFIER });
-  string(application.category, `${label}.category`, { max: 80, pattern: CATEGORY });
+  string(application.contest_id, `${label}.contest_id`, { max: 160, pattern: IDENTIFIER, privatePatterns: true });
+  string(application.category, `${label}.category`, { max: 80, pattern: CATEGORY, privatePatterns: true });
   string(application.profile_id, `${label}.profile_id`, { max: 76, pattern: PROFILE_ID });
   oneOf(application.state, APPLICATION_STATES, `${label}.state`);
   oneOf(application.blocker, APPLICATION_BLOCKERS, `${label}.blocker`);
@@ -428,7 +428,7 @@ export function validateCompetitionReport(report) {
   rejectForbiddenKeys(report);
   exactKeys(report, ['version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications'], [], 'report');
   if (report.version !== 1) fail('report.version must equal 1');
-  string(report.idempotency_key, 'report.idempotency_key', { max: 160, pattern: IDENTIFIER });
+  string(report.idempotency_key, 'report.idempotency_key', { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   validateRun(report.run);
 
   const sources = boundedArray(report.sources, 'report.sources', 32);

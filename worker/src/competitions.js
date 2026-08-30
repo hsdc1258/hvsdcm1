@@ -138,6 +138,16 @@ function bytes(value) {
   return encoder.encode(value).byteLength;
 }
 
+function canonicalRawJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalRawJson).join(',')}]`;
+  if (isObject(value)) {
+    return `{${Object.keys(value).sort().map((key) => (
+      `${JSON.stringify(key)}:${canonicalRawJson(value[key])}`
+    )).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function hasKoreanPhone(value) {
   for (const match of String(value).matchAll(
     /(?:^|[^\d])(\+?\d(?:[\p{P}\p{Z}\p{Cf}\p{S}\p{M}]*\d){8,12})(?!\d)/gu,
@@ -212,6 +222,7 @@ function normalizedText(value, maxBytes, { privatePatterns = false } = {}) {
 
 function normalizedId(value, pattern = ID_PATTERN) {
   if (typeof value !== 'string' || value !== value.trim() || !pattern.test(value)) fail();
+  scanPrivateText(value);
   return value;
 }
 
@@ -669,7 +680,10 @@ async function reportCompetitionsInternal(request, env) {
     if (error instanceof ReportValidationError) return competitionError(error.code);
     throw error;
   }
-  const payloadHash = await sha256(JSON.stringify(report));
+  // Idempotency binds one key to the caller's exact field values. Object key order is irrelevant,
+  // but storage normalization (for example, collapsing repeated spaces) must not turn different
+  // report content into an acknowledged replay.
+  const payloadHash = await sha256(canonicalRawJson(parsed.value));
   const existing = await env.DB.prepare(`
     SELECT idempotency_key, payload_hash, run_id, source_count, candidate_count, application_count
     FROM competition_reports
