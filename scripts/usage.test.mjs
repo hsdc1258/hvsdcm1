@@ -2445,7 +2445,7 @@ test('the moderator view is a sibling view, and only one view renders at a time'
   const { readSource } = await import('./render-sandbox.mjs');
   const html = readSource('usage/index.html');
   const views = [...html.matchAll(/<section id="(view\w+)" class="us-view"([^>]*)>/gu)];
-  assert.equal(views.length, 3, '실행 현황·모더·구조 세 뷰가 있어야 한다');
+  assert.equal(views.length, 4, '실행 현황·모더·공모전·구조 네 뷰가 있어야 한다');
   const visible = views.filter(([, , attributes]) => !/\shidden(?=[\s>]|$)/u.test(attributes));
   assert.equal(visible.length, 1, '문서 초기 상태에서 열려 있는 뷰는 하나뿐이다');
   // UA의 [hidden] { display: none }은 저자 규칙에 항상 진다 — 기본 display가 none이어야 한다.
@@ -2453,9 +2453,10 @@ test('the moderator view is a sibling view, and only one view renders at a time'
   assert.match(css, /\.us-view \{\s*display: none;/u);
   // 사이드바 항목마다 짝이 되는 뷰가 있어야 한다.
   const tabs = [...html.matchAll(/data-usage-view="(\w+)"/gu)].map(([, name]) => name);
-  assert.deepEqual(tabs, ['ops', 'moderator', 'guide']);
+  assert.deepEqual(tabs, ['ops', 'moderator', 'competition', 'guide']);
   assert.ok(html.includes('aria-controls="viewOps"'));
   assert.ok(html.includes('aria-controls="viewModerator"'));
+  assert.ok(html.includes('aria-controls="viewCompetition"'));
   assert.ok(html.includes('aria-controls="viewGuide"'));
 });
 
