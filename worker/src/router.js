@@ -44,6 +44,26 @@ const VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS = new Set([
   'shadow-fill', 'shadow-result', 'position-transition', 'checkpoint', 'promotion', 'rollback',
   'report-attempt', 'report-error', 'engine-stop',
 ]);
+const FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_ALIASES = new Set([
+  'authorization', 'authentication', 'auth', 'apikey', 'apisecret', 'apitoken',
+  'secret', 'secretkey', 'token', 'authtoken', 'bearertoken', 'accesstoken',
+  'refreshtoken', 'sessiontoken', 'accesskey', 'accesssecret', 'privatekey',
+  'passphrase', 'password', 'passwd', 'pwd', 'credential', 'credentials', 'jwt',
+  'signature', 'signingkey', 'clientoid', 'clientorderid', 'clordid', 'orderid',
+  'accountid', 'subaccountid', 'userid', 'uid', 'oid', 'privatefield',
+  'privatedata', 'privateroute', 'privatechannel',
+]);
+const FORBIDDEN_BEHAVIOR_PAPER_CREDENTIAL_TOKENS = new Set([
+  'authorization', 'authentication', 'secret', 'token', 'passphrase', 'password',
+  'passwd', 'pwd', 'credential', 'credentials', 'jwt', 'signature',
+]);
+const FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_SUFFIXES = [
+  'apikey', 'apisecret', 'apitoken', 'secretkey', 'authtoken', 'bearertoken',
+  'accesstoken', 'refreshtoken', 'sessiontoken', 'accesskey', 'accesssecret',
+  'privatekey', 'passphrase', 'password', 'credential', 'credentials', 'signature',
+  'clientoid', 'clientorderid', 'clordid', 'orderid', 'accountid', 'subaccountid',
+  'userid',
+];
 export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
@@ -1184,6 +1204,49 @@ function normalizePaperTimestamp(value, nullable = false) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined;
 }
 
+// Detail keys come from the simulator, but they are still untrusted ingest data. Split camelCase,
+// snake_case and environment-style aliases into the same small token vocabulary before deciding
+// whether a key could carry exchange credentials or private account/order identifiers.
+function normalizePaperIdentifierTokens(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 96) return null;
+  const separated = value.normalize('NFKC')
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/gu, '$1 $2')
+    .replace(/[^A-Za-z0-9]+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  if (!separated) return null;
+  const tokens = separated.split(/\s+/u);
+  return separated.length <= 96 && tokens.length <= 12 && tokens.every((token) => token.length <= 48)
+    ? tokens
+    : null;
+}
+
+function isForbiddenPaperPrivateKey(value) {
+  const tokens = normalizePaperIdentifierTokens(value);
+  if (!tokens) return true;
+  const compact = tokens.join('');
+  if (FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_ALIASES.has(compact)) return true;
+  if (FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_SUFFIXES.some((alias) => compact.endsWith(alias))) return true;
+  if (tokens.some((token) => FORBIDDEN_BEHAVIOR_PAPER_CREDENTIAL_TOKENS.has(token))) return true;
+  if (tokens.includes('key')
+    && tokens.some((token) => ['api', 'access', 'private', 'auth', 'signing', 'exchange'].includes(token))) return true;
+  if (tokens.some((token) => ['id', 'oid', 'uid', 'uuid', 'number', 'no'].includes(token))
+    && tokens.some((token) => ['account', 'subaccount', 'user', 'client', 'order', 'position'].includes(token))) return true;
+  return tokens.includes('private')
+    && tokens.some((token) => ['field', 'data', 'route', 'channel', 'account', 'order'].includes(token));
+}
+
+function containsForbiddenPaperPrivateAssignment(value) {
+  let assignments = 0;
+  const assignmentPattern = /(?:^|[^A-Za-z0-9])((?:[A-Za-z][A-Za-z0-9]{0,47})(?:(?:[-_.]|\s+)[A-Za-z][A-Za-z0-9]{0,47}){0,7})\s*(?:=|:)\s*\S+/gu;
+  for (const match of value.matchAll(assignmentPattern)) {
+    assignments += 1;
+    if (assignments > 24 || isForbiddenPaperPrivateKey(match[1])) return true;
+  }
+  return false;
+}
+
 // Trade and position details are display-only and versioned by the local simulator. Preserve safe,
 // bounded scalar fields without allowing arbitrary depth or non-finite JSON values into D1.
 function normalizePaperDetail(value, { maxKeys = 32, maxString = 240 } = {}) {
@@ -1193,7 +1256,7 @@ function normalizePaperDetail(value, { maxKeys = 32, maxString = 240 } = {}) {
   const normalized = {};
   for (const [key, item] of entries) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,47}$/u.test(key)) return null;
-    if (/^(?:authorization|api[-_ ]?key|secret|token|passphrase|access[-_ ]?(?:key|secret|token)|private[-_ ]?key|account[-_ ]?id|order[-_ ]?id)$/iu.test(key)) return null;
+    if (isForbiddenPaperPrivateKey(key)) return null;
     if (item === null || typeof item === 'boolean') {
       normalized[key] = item;
     } else if (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1_000_000_000_000) {
@@ -1425,8 +1488,7 @@ export function normalizeBehaviorPaperReport(input) {
 
 function containsForbiddenPaperPrivateText(value) {
   return /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/iu.test(value)
-    || /\b(?:api[-_ ]?key|secret|token|passphrase|access[-_ ]?(?:key|secret|token)|private[-_ ]?key)\b\s*(?:=|:)\s*\S+/iu.test(value)
-    || /\b[A-Z][A-Z0-9_]{2,}(?:TOKEN|SECRET|KEY|PASSPHRASE)\s*=\s*\S+/u.test(value)
+    || containsForbiddenPaperPrivateAssignment(value)
     || /(?:^|[\s"'`])\/api\/[^\s"'`]*(?:account|orders?|positions?|private|trade)(?:\/|[\s"'`]|$)/iu.test(value)
     || /\bwss?:\/\/[^\s"'`]+\/private(?:\/|\b)/iu.test(value)
     || /\b(?:account[-_ ]?id|order[-_ ]?id|private[-_ ]?(?:route|field|data))\b(?:\s*(?:=|:)\s*\S+)?/iu.test(value);
@@ -1489,8 +1551,12 @@ async function reportBehaviorPaper(request, env) {
           AND (
             CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
               > CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER)
-            OR json_extract(excluded.payload, '$.adaptive.audit.hash')
-              = json_extract(usage_snapshots.payload, '$.adaptive.audit.hash')
+            OR (
+              json_extract(excluded.payload, '$.adaptive.audit.hash')
+                = json_extract(usage_snapshots.payload, '$.adaptive.audit.hash')
+              AND json_extract(excluded.payload, '$.adaptive.audit')
+                = json_extract(usage_snapshots.payload, '$.adaptive.audit')
+            )
           )
         )
       )

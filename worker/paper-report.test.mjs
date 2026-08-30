@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -83,6 +84,18 @@ function paperReport(overrides = {}) {
   };
 }
 
+function adaptiveReportWithHistory(auditSequence = 20) {
+  const report = adaptiveReport(auditSequence);
+  report.audit.recent.unshift({
+    sequence: auditSequence - 1,
+    at: '2026-08-30T18:59:58.000Z',
+    kind: 'checkpoint',
+    message: 'checkpoint',
+    hash: HASH_A,
+  });
+  return report;
+}
+
 function paperStateJson(report) {
   const copy = structuredClone(report);
   delete copy.generated_at;
@@ -127,8 +140,11 @@ function memoryDb({ username = 'hvsdcm' } = {}) {
               && (auditSequence > latestAuditSequence || parsed.adaptive.audit.hash === latest.adaptive.audit.hash));
             const samePaperImmutable = !latest || parsed.sequence > latest.sequence
               || paperStateJson(parsed) === paperStateJson(latest);
+            const sameAuditReferenceImmutable = !latest || !latest.adaptive
+              || auditSequence > latestAuditSequence
+              || JSON.stringify(parsed.adaptive?.audit) === JSON.stringify(latest.adaptive.audit);
             if (!paperMonotonic || !adaptivePreserved || !auditMonotonic || (!paperAdvanced && !auditAdvanced)
-              || !samePaperImmutable) return { success: true, meta: { changes: 0 } };
+              || !samePaperImmutable || !sameAuditReferenceImmutable) return { success: true, meta: { changes: 0 } };
             reports[0] = { source, sequence: parsed.sequence, auditSequence, payload, captured_at: capturedAt };
             return { success: true, meta: { changes: 1 } };
           }
@@ -175,6 +191,23 @@ function sqliteD1(database) {
     },
   });
   return { prepare(sql) { return wrap(database.prepare(sql)); } };
+}
+
+function initializeOwnerPaperSqlite(database, ownerToken = 'owner-session') {
+  for (const migration of ['0001_init.sql', '0004_session_ip_address.sql', '0005_usage_snapshots.sql']) {
+    database.exec(readFileSync(new URL(`./migrations/${migration}`, import.meta.url), 'utf8'));
+  }
+  const timestamp = Date.now();
+  database.prepare(`
+    INSERT INTO users(username, password_hash, password_salt, created_at, disabled)
+    VALUES (?, 'hash', 'salt', ?, 0)
+  `).run('hvsdcm', timestamp);
+  const userId = database.prepare('SELECT id FROM users WHERE username = ?').get('hvsdcm').id;
+  const tokenHash = createHash('sha256').update(ownerToken).digest('hex');
+  database.prepare(`
+    INSERT INTO sessions(token_hash, user_id, role, created_at, expires_at, last_seen_at)
+    VALUES (?, ?, 'user', ?, ?, ?)
+  `).run(tokenHash, userId, timestamp, timestamp + 60_000, timestamp);
 }
 
 test('paper report schema fixes the simulation, $100 seed, session, deadline, finite bounds, and bounded details', () => {
@@ -230,6 +263,16 @@ test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy re
   ]) {
     assert.equal(normalizeBehaviorPaperReport(paperReport({ adaptive })), null, JSON.stringify(adaptive));
   }
+
+  const allowedVocabulary = normalizeBehaviorPaperReport(paperReport({
+    recent_logs: [{
+      strategy_id: 'adaptive-trend-v1', orderflow_imbalance: 0.42, accounting_mode: 'paper',
+      message: 'Public API orderflow strategy checkpoint',
+    }],
+    limitations: ['Public API market data only; no credentials are used.'],
+  }));
+  assert.ok(allowedVocabulary);
+  assert.equal(allowedVocabulary.recent_logs[0].strategy_id, 'adaptive-trend-v1');
 });
 
 test('paper ingest requires its dedicated bearer and advances paper or same-session audit sequence without downgrade', async () => {
@@ -315,6 +358,45 @@ test('paper and adaptive audit upsert is atomic and monotonic in real SQLite', a
   assert.equal(Object.hasOwn(JSON.parse(row.payload), '_paper_state_hash'), false);
 });
 
+test('an equal adaptive audit reference cannot rewrite bounded history during a paper advance', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) return t.skip('node:sqlite unavailable');
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  database.exec(readFileSync(new URL('./migrations/0005_usage_snapshots.sql', import.meta.url), 'utf8'));
+  const env = envFor(sqliteD1(database));
+  const stored = () => JSON.parse(database.prepare('SELECT payload FROM usage_snapshots').get().payload);
+  const baselineAudit = adaptiveReportWithHistory(20);
+
+  assert.equal((await post(paperReport({ sequence: 2, adaptive: baselineAudit }), env)).status, 200);
+  const committedAudit = structuredClone(stored().adaptive.audit);
+  const mutations = [
+    ['timestamp', 409, (audit) => { audit.audit.recent[0].at = '2026-08-30T18:50:00.000Z'; }],
+    ['kind', 409, (audit) => { audit.audit.recent[0].kind = 'rollback'; }],
+    ['hash', 409, (audit) => { audit.audit.recent[0].hash = HASH_B; }],
+    ['length', 409, (audit) => { audit.audit.recent.shift(); }],
+    ['order', 400, (audit) => { audit.audit.recent.reverse(); }],
+  ];
+  for (const [label, expectedStatus, mutate] of mutations) {
+    const changed = structuredClone(baselineAudit);
+    mutate(changed);
+    const response = await post(paperReport({
+      sequence: 3, equity: 103, net_pnl: 3, return_pct: 3, adaptive: changed,
+    }), env);
+    assert.equal(response.status, expectedStatus, label);
+    assert.deepEqual(stored().adaptive.audit, committedAudit, label);
+  }
+
+  const advanced = await post(paperReport({
+    sequence: 3, equity: 103, net_pnl: 3, return_pct: 3,
+    generated_at: '2026-08-30T19:00:01.000Z', adaptive: baselineAudit,
+  }), env);
+  assert.equal(advanced.status, 200);
+  assert.equal(stored().sequence, 3);
+  assert.deepEqual(stored().adaptive.audit, committedAudit);
+});
+
 test('credential, environment, account, order, and private-route sentinels never reach stored or owner response bytes', async () => {
   const sentinels = [
     'Bearer exchange-private-sentinel', 'Basic ZXhjaGFuZ2UtcHJpdmF0ZQ==',
@@ -343,6 +425,68 @@ test('credential, environment, account, order, and private-route sentinels never
     reasonAdaptive.promotion.reasons = [sentinel];
     assert.equal((await post(paperReport({ adaptive: reasonAdaptive }), envFor(reasonDb))).status, 400, sentinel);
     assert.equal(reasonDb.reports.length, 0, sentinel);
+  }
+});
+
+test('credential and private identifier aliases fail closed before real SQLite persistence', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
+  if (!DatabaseSync) return t.skip('node:sqlite unavailable');
+
+  const cases = [
+    ['log-secretKey', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', secretKey: sentinel }]; }],
+    ['trade-apiSecret', (report, sentinel) => { report.recent_trades[0].apiSecret = sentinel; }],
+    ['position-clientOid', (report, sentinel) => { report.open_position.clientOid = sentinel; }],
+    ['log-uid', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', uid: sentinel }]; }],
+    ['log-api_secret', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', api_secret: sentinel }]; }],
+    ['trade-secret_key', (report, sentinel) => { report.recent_trades[0].secret_key = sentinel; }],
+    ['position-client_oid', (report, sentinel) => { report.open_position.client_oid = sentinel; }],
+    ['log-accountId', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', accountId: sentinel }]; }],
+    ['trade-clOrdId', (report, sentinel) => { report.recent_trades[0].clOrdId = sentinel; }],
+    ['log-authToken', (report, sentinel) => { report.recent_logs = [{ event: 'checkpoint', authToken: sentinel }]; }],
+    ['text-lower-snake-secret', (report, sentinel) => {
+      report.recent_logs = [{ message: `bitget_api_secret=${sentinel}` }];
+    }],
+    ['text-lower-secret-key', (report, sentinel) => {
+      report.recent_logs = [{ message: `bitget_secret_key=${sentinel}` }];
+    }],
+    ['text-camel-secret-key', (report, sentinel) => {
+      report.limitations = [`bitgetSecretKey=${sentinel}`];
+    }],
+    ['text-lower-compact-secret', (report, sentinel) => {
+      report.limitations = [`bitgetapisecret=${sentinel}`];
+    }],
+    ['text-client-oid', (report, sentinel) => {
+      report.recent_trades[0].note = `clientOid: ${sentinel}`;
+    }],
+  ];
+
+  for (const [index, [label, mutate]] of cases.entries()) {
+    const sentinel = `synthetic-private-${index}-sentinel`;
+    const candidate = paperReport({ sequence: 2, adaptive: adaptiveReport(20) });
+    mutate(candidate, sentinel);
+    assert.equal(normalizeBehaviorPaperReport(candidate), null, label);
+
+    const database = new DatabaseSync(':memory:');
+    try {
+      initializeOwnerPaperSqlite(database);
+      const env = envFor(sqliteD1(database));
+      assert.equal((await post(paperReport({ sequence: 1, adaptive: adaptiveReport(19) }), env)).status, 200, label);
+      const response = await post(candidate, env);
+      assert.equal(response.status, 400, label);
+      const responseBytes = await response.text();
+      const storedBytes = database.prepare('SELECT payload FROM usage_snapshots').get().payload;
+      const ownerResponse = await get(env);
+      assert.equal(ownerResponse.status, 200, label);
+      const ownerBytes = await ownerResponse.text();
+      assert.equal(storedBytes.includes(sentinel), false, label);
+      assert.equal(responseBytes.includes(sentinel), false, label);
+      assert.equal(ownerBytes.includes(sentinel), false, label);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM usage_snapshots').get().count, 1, label);
+      assert.equal(JSON.parse(storedBytes).sequence, 1, label);
+    } finally {
+      database.close();
+    }
   }
 });
 
