@@ -12,6 +12,7 @@
 // 그 리스트만 쓰던 save/review/anywhere 키는 함께 지운다 — 아무도 안 읽는 매핑을 남기면
 // 다음 사람이 "어딘가 쓰이겠거니" 하고 값을 고친다.
 window.SITE_EMOJI = {
+  behaviorLab: '🧭',
   WordMaster: '📗',
   smstudy: '📘',
   gichul: '📙',

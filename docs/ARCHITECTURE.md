@@ -14,6 +14,7 @@ The front end is static and requires no bundler. GitHub Pages serves the reposit
 6. The local Codex control plane sends one authenticated harness report alongside each Discord progress report. The Worker merges actors by stable ID and returns every retained harness task to the owner-only usage screen, which separates parallel tasks into `active`, derived `stale`, and `complete` views. The active view offers portfolio and organization modes and places each retained active session exactly once below its reported phase; completed and stale tasks stay in their dedicated lists. Each session connects to a compact hierarchy containing only the actors actually present in the report by stable parent ID; it never invents a Main Codex for a report with no actors. Display titles remove a trailing `(MM-DD)` suffix and demote that date to small metadata beside phase progress. A selected session still renders the canonical eight reported phases (legacy four-key reports stay valid as a subset; the screen's `PHASES` and the Worker's `VALID_HARNESS_PHASES` are cross-checked source-to-source by `scripts/validate.mjs`), module progress, evidence and its own reporting tree. Model plus reasoning, role, assignment, status and progress come directly from each actor report; gate and evidence remain non-person session metadata. A desktop `aside` shows only Codex account-limit snapshots and reflows below the pipeline on narrower screens.
 7. The past-paper screen fetches its R2-resident manifest and PDFs only through bearer-authenticated Worker routes. Selection extraction and merging remain in the browser; neither the static Pages deployment nor logged-out HTML contains the exam list.
 8. The owner-only moderator control plane keeps proposed work in `moderator_items` until an explicit approval transaction creates one `moderator_commands` row. A separately authenticated local daemon atomically claims one queued command with a lease, reports forward-only execution states, and can acquire an idle-review lease only when no live harness task, active command, or other review exists.
+9. The public Behavior Lab screen calls only `GET /api/behavior-lab/dashboard?symbol=...&period=...` on the Worker. The Worker chooses from fixed symbol and period enums, admits at most two distinct module-local fan-outs with no overflow queue, applies a total deadline across behavior queue wait and fetch, constructs the exact eight accepted Bitget public-market GETs, joins long-short and taker rows by identical timestamp, and caches no more than the 16 enum combinations from successful completion. It returns only a completely fresh, strictly numeric live snapshot. Any capacity, deadline, upstream, schema, freshness or join failure is an explicit error; no fixture is substituted. The browser re-evaluates every component timestamp against the accepted period-specific limits on a live clock and again at draft/copy time, removing `LIVE` and clearing/disabling the draft on stale, future or invalid state. It derives the chronological price/volume walk-forward backtest and cost-inclusive manual text draft locally. It contains no exchange credentials, account/private route, order submission, scheduler, notification or health surface.
 
 The local record is a fast browser cache, while D1 is the cross-device source of truth. The one-time session marker `hvsdcm.loaded.<app>` prevents repeated reloads during hydration.
 
@@ -30,6 +31,7 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `smstudy/assets/js/data.js`: public authenticated-content loader; the companion data filenames remain empty compatibility stubs for script-order stability.
 - `smstudy/assets/js/app.js`: social-studies state, source error-rate sorting, grading and rendering.
 - `gichul/`: login-gated past-paper filtering, viewing, extraction and client-side merge UI. The data list itself is not checked into this directory. The screen loads `account.js` in gate-only mode (`data-app`, no `data-key` — there is no study progress to sync), then the vendored icon set, then `assets/vendor/pdf-lib/`, then `gichul/app.js`; filter options, labels and results are all derived from the manifest that `GET /api/gichul/manifest` returns after authentication.
+- `behavior-lab/`: public classic-script dashboard. `assets/js/app.js` fetches the one Worker dashboard route and renders live-only market/signal state; `assets/js/core.js` owns the deterministic walk-forward and inert manual draft calculations. It creates no localStorage record and does not load account code.
 - `assets/vendor/pdf-lib/`: pinned pdf-lib UMD bundle plus its MIT text, used for in-browser merging and selection-section extraction. `scripts/validate.mjs` locks the bundle bytes with a sha256 so it cannot be swapped silently.
 
 ## Worker ownership
@@ -37,6 +39,7 @@ The local record is a fast browser cache, while D1 is the cross-device source of
 - `worker/src/index.js`: CORS, top-level exception boundary and Worker entrypoint.
 - `worker/src/router.js`: endpoint matching and domain handlers.
 - `worker/src/lib.js`: HTTP, hashing, token, authentication and activity helpers.
+- `worker/src/behavior-lab.js`: fixed-host/fixed-path public Bitget adapter, strict response/freshness/join validation, bounded timeout/response/cache controls and explanatory signal construction. It has no D1/R2 or credential dependency.
 - `worker/migrations/`: append-only D1 schema history.
 - R2 binding `GICHUL`: generated past-paper manifest/PDFs plus WordMaster and social-studies payloads/images. All are private behind Worker session checks rather than static Pages assets.
 
@@ -54,6 +57,7 @@ Harness payload version 1 remains backward compatible while accepting `title`, a
 | --- | --- | --- |
 | `POST /api/login` | public | User login |
 | `POST /api/admin/login` | public | Admin login |
+| `GET /api/behavior-lab/dashboard?symbol=...&period=...` | public | Validated live Bitget public-market snapshot and explanatory candidate; fixed enum and exact eight upstream GET boundary |
 | `GET /api/me` | user | Current user |
 | `POST /api/logout` | token | Delete current session |
 | `GET/PUT /api/progress/:app` | user | Read or replace app progress |

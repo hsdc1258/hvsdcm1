@@ -10,9 +10,10 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | `/WordMaster/` | 2,000-word meaning quiz with personal error-rate/recent sorting | `WordMaster/assets/js/app.js` | `wordmaster2000.quiz.v1` |
 | `/smstudy/` | Social studies concepts and 78 sortable KICE questions | `smstudy/assets/js/app.js` | `samun2027.study.v1` |
 | `/gichul/` | Login-only KICE past-paper filtering, viewing and client-side PDF merge | `gichul/app.js` | filter settings |
+| `/behavior-lab/` | Public, read-only Bitget market behavior dashboard with local backtest and inert manual draft | `behavior-lab/assets/js/app.js` | none |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
 | `/usage/` | Owner-only Codex limits and live AI harness hierarchy | `usage/assets/js/usage.js` | account token |
-| Worker | JSON API, D1 access and authenticated R2 learning/PDF proxy | `worker/src/index.js` | D1 tables and R2 objects |
+| Worker | JSON API, D1 access, authenticated R2 learning/PDF proxy and one public Behavior Lab dashboard boundary | `worker/src/index.js` | D1 tables and R2 objects |
 
 There is no front-end bundle step. HTML loads checked-in CSS and JavaScript directly, while learning content is fetched after login from authenticated Worker routes. The checked-in `_learning/` source is excluded by the default Jekyll Pages build and is converted into private R2 payloads before release.
 
@@ -51,6 +52,8 @@ npm install
 npm run db:init
 npm run dev
 ```
+
+Behavior Lab is intentionally narrower than a proxy. Its browser calls only `GET /api/behavior-lab/dashboard` on the Worker. The Worker admits at most two distinct dashboard fan-outs per isolate, queues no dashboard overflow, enforces a total request deadline across the rate-limited behavior reads, and caches at most the 16 enum combinations from successful completion. Each admitted load constructs exactly eight allowlisted, unauthenticated `GET https://api.bitget.com/api/v2/mix/market/*` requests for one of four fixed symbols and four fixed periods, then rejects malformed, stale, partial or timestamp-misaligned data. It never falls back to a fixture that looks live. The browser advances the same component/period freshness gate with a live clock and clears/disables the draft as soon as the snapshot is no longer live. It runs the chronological price/volume walk-forward test and cost-inclusive manual draft locally; the draft has text/copy controls only and no exchange submission path.
 
 ## KICE past-paper data
 

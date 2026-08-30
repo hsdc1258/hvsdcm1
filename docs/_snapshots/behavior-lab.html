@@ -2,20 +2,11 @@
 <html lang="ko" data-snapshot="1">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#000000">
-  <meta name="description" content="hvsdcm의 개인 웹사이트.">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="hvsdcm">
-  <meta property="og:description" content="hvsdcm의 개인 웹사이트.">
-  <meta property="og:url" content="https://hvsdcm1.xyz/">
-  <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="hvsdcm">
-  <meta name="twitter:description" content="hvsdcm의 개인 웹사이트.">
-  <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <title>hvsdcm</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="인증 없는 공개 시장 데이터로 쏠림과 추세를 관찰하는 한국어 Behavior Lab.">
+  <meta name="robots" content="index, follow">
+  <title>Behavior Lab — hvsdcm</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
    system.css — hvsdcm 디자인 시스템 단일 원본 (DESIGN.md v2 / plan.md §2)
@@ -1486,236 +1477,910 @@ label.list-row {
   }
 }
 </style>
-<style>/* assets/css/home.css (inlined) */
-/* ==========================================================================
-   home.css — 랜딩 전용 레이아웃.
-   레퍼런스: apple.com 다크 제품 페이지 (DESIGN.md §1).
-   짧은 헤드라인 → 한 줄 보조문 → 절제된 강조. 섹션 하나에 주장 하나.
-   토큰은 system.css만 소비한다(:root 정의 금지). 프리미티브를 다시 만들지 않는다 —
-   그룹 리스트·카드·뱃지·버튼은 system.css의 것을 그대로 쓴다.
-   ========================================================================== */
-/* ---- 상단바: 랜딩 전용 요소 ---- */
-.menu-button {
-  width: 36px;
-  height: 36px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  gap: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  transition: background var(--dur-fast) var(--ease-out);
+<style>/* behavior-lab/assets/css/app.css (inlined) */
+* {
+  box-sizing: border-box;
 }
-.menu-button:hover {
-  background: var(--line-faint);
+html {
+  background: var(--bg);
 }
-.menu-button span {
-  grid-area: 1 / 1;
-  width: 17px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: var(--text);
-  transition: transform var(--dur-med) var(--ease-swift);
-}
-.menu-button span:first-child {
-  transform: translateY(-3.5px);
-}
-.menu-button span:last-child {
-  transform: translateY(3.5px);
-}
-.menu-button.open span:first-child {
-  transform: rotate(45deg);
-}
-.menu-button.open span:last-child {
-  transform: rotate(-45deg);
-}
-body.logged .topbar-login {
-  display: none;
-}
-/* ---- 드로어 ---- */
-.shade {
-  position: fixed;
-  inset: 0;
-  z-index: 110;
-  /* blur 없는 순수 스크림 (DESIGN.md §3). */
-  background: rgba(0,0,0,.7);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
-}
-.shade.open {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity var(--dur-med) var(--ease-out);
-}
-.drawer {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 120;
-  width: min(304px, 86vw);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5) var(--space-4);
-  /* 그림자 없음. DESIGN.md §4가 --shadow-*를 허용한 대상은 시트·토스트·세그먼티드
-     인디케이터뿐이고, 드로어는 거기 없다. 분리는 스크림(.shade) 위 --surface 명도 단차와
-     1px 헤어라인으로 만든다 (R4-M-8). */
-  background: var(--surface);
-  border-right: 1px solid var(--line);
-  transform: translateX(-102%);
-  visibility: hidden;
-  transition: transform var(--dur-med) var(--ease-swift), visibility 0s linear var(--dur-med);
-}
-.drawer.open {
-  transform: none;
-  visibility: visible;
-  transition: transform var(--dur-med) var(--ease-swift);
-}
-.drawer-head {
-  padding: var(--space-1) var(--space-2) 0;
-}
-.drawer-head .brand {
-  font-size: 1.1875rem;
-}
-/* 드로어의 로그인-후 그룹. 노드 자체가 로그인 시에만 주입되므로(home.js) 이 규칙은
-   이중 안전장치다 — .drawer-owner는 소유자에게만 주입된다 (review WP1 M-5). */
-.drawer-study, .drawer-owner {
-  display: none;
-}
-.drawer.logged .drawer-study, .drawer.logged .drawer-owner {
-  display: grid;
-  gap: var(--space-2);
-}
-/* 드로어 안의 그룹은 --surface 위에 놓이므로 한 단 올려 경계를 만든다. */
-.drawer-public .list-group, .drawer-study .list-group, .drawer-owner .list-group {
-  background: var(--surface-2);
-  border-color: transparent;
-}
-.drawer-bottom {
-  margin-top: auto;
-  display: grid;
-  gap: var(--space-1);
-  border-top: 1px solid var(--line-faint);
-  padding-top: var(--space-3);
-}
-.drawer-social {
-  display: flex;
-  gap: var(--space-1);
-}
-.drawer-logout {
-  display: none;
-  color: var(--red);
-}
-.drawer-logout:hover {
-  color: var(--red);
-  background: var(--red-soft);
-}
-.drawer.logged .drawer-logout {
-  display: flex;
-}
-/* ---- 히어로 ---- */
-.hero {
-  padding: calc(var(--topbar-h) + clamp(56px, 3rem + 6vw, 120px)) 0 var(--section-gap);
-}
-.hero-inner {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: var(--space-3);
-}
-/* 그라디언트 텍스트는 장식이다 — DESIGN.md §3이 금지한다. 단색으로 칠한다. */
-.hero-title {
-  max-width: 14ch;
+.behavior-page {
+  min-width: 0;
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
 }
-/* 로그인 후: 사용자명이 길면 데이터 훅으로 크기를 낮춘다 */
-/* 로그인 후에는 "Welcome," + 사용자명 두 줄이 된다 — 행간을 한 단 더 연다. */
-.hero-title[data-user] {
-  font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem);
-  line-height: 1.2;
-  max-width: 18ch;
+.behavior-page button, .behavior-page input, .behavior-page textarea {
+  font: inherit;
 }
-.hero-title .welcome-user {
-  display: block;
+.behavior-page button {
+  color: inherit;
+  cursor: pointer;
 }
-.hero-title a.welcome-user {
+.behavior-page [hidden] {
+  display: none !important;
+}
+.lab-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--line-faint);
+  background: rgba(0, 0, 0, .9);
+}
+.lab-topbar-inner {
+  width: min(1180px, calc(100% - 40px));
+  min-height: 56px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.lab-home {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-weight: 650;
+  text-decoration: none;
+}
+.lab-home:hover {
   color: var(--accent);
 }
-.hero-title a.welcome-user:hover {
-  text-decoration: underline;
+.read-only-mark, .section-index, .control-label, .signal-core > div > p, .pulse-stat > span, .pulse-split span {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--ls-caps);
 }
-.hero-actions {
-  margin-top: var(--space-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+.read-only-mark {
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  color: var(--green);
 }
-/* 로그인하면 히어로의 로그인 버튼이 빠지고 "프로필 보기"만 남는다.
-   학습 진입은 본문이 아니라 좌상단 드로어가 전담한다 (plan.md §1-1). */
-.account.logged #loginBtn {
-  display: none;
+.lab-main, .lab-footer {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
 }
-/* ---- 섹션 리듬 ---- */
-.section {
-  /* #contact 앵커 스크롤 시 고정 상단바에 헤더가 가리지 않게 */
-  scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
-  padding-bottom: var(--section-gap);
+.lab-main {
+  padding-bottom: var(--space-10);
 }
-.section-last {
-  padding-bottom: var(--space-9);
-}
-/* 연락 섹션은 목록이 본체라 헤더를 왼쪽으로 붙인다. */
-.section-head {
+.lab-hero {
+  min-height: 520px;
+  padding: clamp(88px, 11vw, 148px) 0 var(--space-9);
   display: grid;
+  align-content: center;
   justify-items: start;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
 }
-.section-head h2 {
-  max-width: 16em;
+.eyebrow {
+  margin: 0 0 var(--space-4);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--ls-caps);
 }
-/* ---- 연락 리스트: 브랜드 마크를 이모지 슬롯에 담는다 ---- */
-.emoji-box svg {
-  width: 17px;
-  height: 17px;
+.lab-hero h1 {
+  max-width: 12ch;
+  margin: 0;
+  font-size: var(--fs-display-xl);
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
+}
+.hero-copy {
+  max-width: 660px;
+  margin: var(--space-5) 0 0;
   color: var(--text-2);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body);
 }
-.list-row:hover .emoji-box svg {
+.boundary-strip {
+  margin-top: var(--space-7);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.boundary-strip span {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.control-deck, .panel, .ticker-section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+.control-deck, .panel {
+  padding: clamp(20px, 2.4vw, 32px);
+}
+.ticker-section {
+  padding: clamp(20px, 2.4vw, 32px);
+}
+.section-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.section-heading-row.compact {
+  align-items: center;
+}
+.section-index {
+  margin: 0 0 6px;
+}
+.section-heading-row h2, .panel h2, .ticker-section h2 {
+  margin: 0;
+  font-size: var(--fs-title-1);
+  line-height: var(--lh-title);
+}
+.section-heading-row h2 small {
+  color: var(--text-3);
+  font-size: var(--fs-title-3);
+}
+.section-copy {
+  max-width: 680px;
+  margin: var(--space-2) 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+}
+.live-status {
+  min-height: 32px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+.live-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.live-status.is-live {
+  color: var(--green);
+  border-color: rgba(48, 209, 88, .32);
+  background: var(--green-soft);
+}
+.live-status.is-live i {
+  background: var(--green);
+}
+.live-status.is-error {
+  color: var(--red-bright);
+  border-color: rgba(255, 69, 58, .32);
+  background: var(--red-soft);
+}
+.live-status.is-error i {
+  background: var(--red-bright);
+}
+.control-groups {
+  margin-top: var(--space-6);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+.control-group {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.choice-row {
+  min-width: 0;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
+.choice {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 650;
+}
+.choice:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.choice.is-active {
+  background: var(--surface-4);
   color: var(--text);
 }
-/* ---- 푸터 ---- */
-.footer {
-  border-top: 1px solid var(--line-faint);
-  padding: var(--space-5) 0;
-}
-.footer-inner {
+.error-panel {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
-  flex-wrap: wrap;
+  border: 1px solid rgba(255, 69, 58, .32);
+  border-radius: var(--radius-m);
+  background: var(--red-soft);
+  color: var(--red-bright);
 }
-.footer-brand {
-  font-size: var(--fs-caption);
+.error-panel p {
+  margin: 0;
+  line-height: var(--lh-body);
 }
-.footer-copy {
-  margin-left: auto;
-  font-size: var(--fs-caption);
+.text-button {
+  min-height: 40px;
+  padding: 8px 12px;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: var(--radius-s);
+  background: transparent;
 }
-/* ---- 로그인 시트 ---- */
-.login-sheet {
+.dashboard {
+  margin-top: var(--space-5);
   display: grid;
+  gap: var(--space-5);
+}
+.dashboard[aria-busy="true"] {
+  opacity: .55;
+  pointer-events: none;
+}
+.micro-status {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.ticker-grid {
+  margin-top: var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.ticker-card {
+  min-width: 0;
+  min-height: 116px;
+  padding: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  text-align: left;
+}
+.ticker-card:hover {
+  background: var(--surface-3);
+}
+.ticker-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.ticker-name {
+  display: grid;
+  gap: 3px;
+  font-weight: 700;
+}
+.ticker-name small, .ticker-card strong small {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+.ticker-card strong {
+  grid-column: 1 / -1;
+  font-size: var(--fs-title-3);
+}
+.ticker-card > .is-positive, .ticker-card > .is-negative {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.is-positive {
+  color: var(--green);
+}
+.is-negative {
+  color: var(--red-bright);
+}
+.market-grid, .signal-grid, .risk-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(300px, .88fr);
+  gap: var(--space-5);
+}
+.chart-panel, .pulse-panel, .signal-panel, .evidence-panel, .risk-panel, .draft-panel {
+  display: grid;
+  align-content: start;
+}
+.price-block {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+.price-block strong {
+  font-family: var(--font-mono);
+  font-size: var(--fs-title-1);
+}
+.price-block span {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.chart-wrap {
+  min-width: 0;
+  margin-top: var(--space-5);
+}
+.chart-wrap svg {
+  width: 100%;
+  height: auto;
+  min-height: 220px;
+  display: block;
+}
+.chart-wrap line {
+  stroke: var(--line-faint);
+  stroke-width: 1;
+}
+.chart-wrap polyline {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.range-row {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.range-row b {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+.pulse-panel {
+  gap: var(--space-5);
+}
+.pulse-stat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 4px var(--space-3);
+}
+.pulse-stat > span {
+  grid-column: 1 / -1;
+}
+.pulse-stat strong {
+  font-family: var(--font-mono);
+  font-size: var(--fs-title-2);
+}
+.pulse-stat small {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.ratio-track {
+  position: relative;
+  height: 8px;
+  margin-top: calc(var(--space-3) * -1);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+}
+.ratio-track i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.ratio-track em {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background: var(--text-2);
+}
+.ratio-track.is-amber i {
+  background: var(--orange);
+}
+.pulse-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.pulse-split div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: 6px;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+}
+.pulse-split b {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+.fine-print, .signal-disclaimer, .blocked-copy {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-body);
+}
+.signal-panel {
+  gap: var(--space-5);
+  border-top: 3px solid var(--text-3);
+}
+.signal-panel.is-long {
+  border-top-color: var(--green);
+}
+.signal-panel.is-short {
+  border-top-color: var(--red-bright);
+}
+.confidence, .score-pill {
+  padding: 7px 10px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+.signal-core {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-5);
+}
+.signal-arrow {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-title-1);
+}
+.is-long .signal-arrow {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.is-short .signal-arrow {
+  color: var(--red-bright);
+  background: var(--red-soft);
+}
+.signal-core p, .signal-core h3 {
+  margin: 0;
+}
+.signal-core h3 {
+  margin: 4px 0;
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+}
+.signal-core > div > span {
+  color: var(--text-2);
+  font-size: var(--fs-body-sm);
+}
+.scenario-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.scenario-row div {
+  min-width: 0;
+  padding-top: var(--space-3);
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+}
+.scenario-row span {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.scenario-row b {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+.evidence-panel {
+  gap: var(--space-5);
+}
+.evidence-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.evidence-columns h3 {
+  margin: 0 0 var(--space-3);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.evidence-list {
+  display: grid;
+  gap: var(--space-2);
+}
+.evidence-row {
+  min-width: 0;
+  padding: var(--space-3) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+.evidence-row div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.evidence-row b {
+  font-size: var(--fs-body-sm);
+}
+.evidence-row span, .evidence-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.evidence-row em {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-style: normal;
+}
+.backtest-panel {
+  display: grid;
+  gap: var(--space-6);
+}
+.primary-action, .copy-action {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-s);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.primary-action {
+  flex: none;
+  background: var(--accent-strong);
+  color: #fff !important;
+}
+.primary-action:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+.primary-action.full {
+  width: 100%;
+}
+.empty-state {
+  min-height: 150px;
+  padding: var(--space-5);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-m);
+  color: var(--text-3);
+  text-align: center;
+}
+.empty-state strong {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  letter-spacing: var(--ls-caps);
+}
+.empty-state p {
+  max-width: 580px;
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.provenance {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
-.login-sheet .sheet-sub {
-  margin: calc(var(--space-2) * -1) 0 var(--space-1);
+.metrics-block {
+  min-width: 0;
 }
-.login-submit {
-  margin-top: var(--space-1);
+.metrics-block h3 {
+  margin: 0 0 var(--space-3);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.metric-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--line);
+}
+.metric-list > div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: 4px;
+  background: var(--surface-2);
+}
+.metric-list span {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.metric-list b {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+.window-list {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--line-faint);
+}
+.window-list > div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  background: var(--surface-2);
+  font-size: var(--fs-micro);
+}
+.window-list span {
+  min-width: 0;
+  color: var(--text-2);
+}
+.window-list em {
+  color: var(--text-3);
+  font-style: normal;
+}
+.assumption-row {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.assumption-row span {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.risk-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.risk-panel, .draft-panel {
+  gap: var(--space-5);
+}
+.risk-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.risk-fields label {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.risk-fields label > span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.risk-fields small {
+  color: var(--text-3);
+}
+.risk-fields input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  outline: none;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.risk-fields input:focus {
+  border-color: var(--accent);
+}
+.risk-fields input::placeholder {
+  color: var(--text-4);
+}
+.draft-errors {
+  padding: var(--space-4);
+  border-radius: var(--radius-m);
+  background: var(--red-soft);
+  color: var(--red-bright);
+}
+.draft-errors p {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-caption);
+}
+.draft-panel textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: var(--space-4);
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  outline: none;
+  background: var(--bg-alt);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.65;
+}
+.copy-action {
+  width: 100%;
+  margin-top: var(--space-2);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.copy-action:hover {
+  background: var(--surface-4);
+}
+.hard-boundary {
+  padding: var(--space-4);
+  border-left: 3px solid var(--orange);
+  background: var(--orange-soft);
+}
+.hard-boundary b {
+  color: var(--orange);
+}
+.hard-boundary p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.lab-footer {
+  padding: var(--space-7) 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+  border-top: 1px solid var(--line-faint);
+  color: var(--text-3);
+}
+.lab-footer b {
+  color: var(--text);
+}
+.lab-footer p {
+  margin: 4px 0 0;
+  font-size: var(--fs-caption);
+}
+.lab-footer a {
+  color: var(--text-2);
+  text-decoration: none;
+}
+@media (max-width: 900px) {
+  .market-grid, .signal-grid {
+    grid-template-columns: 1fr;
+  }
+  .ticker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .window-list > div {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .window-list em {
+    grid-column: 2;
+  }
+}
+@media (max-width: 700px) {
+  .lab-topbar-inner, .lab-main, .lab-footer {
+    width: min(100% - 28px, 1180px);
+  }
+  .lab-hero {
+    min-height: 460px;
+    padding-top: 72px;
+  }
+  .control-groups, .risk-grid, .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  .section-heading-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .section-heading-row.compact {
+    align-items: flex-start;
+  }
+  .live-status, .primary-action {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .error-panel, .lab-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .text-button {
+    align-self: flex-start;
+  }
+  .evidence-columns {
+    grid-template-columns: 1fr;
+  }
+  .scenario-row {
+    grid-template-columns: 1fr;
+  }
+  .metric-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chart-wrap svg {
+    min-height: 180px;
+  }
+}
+@media (max-width: 430px) {
+  .read-only-mark {
+    font-size: 10px;
+  }
+  .ticker-grid, .risk-fields {
+    grid-template-columns: 1fr;
+  }
+  .ticker-card {
+    min-height: 96px;
+  }
+  .choice {
+    padding: 7px 4px;
+    font-size: var(--fs-micro);
+  }
+  .signal-core {
+    grid-template-columns: 1fr;
+  }
+  .signal-arrow {
+    width: 52px;
+    height: 52px;
+  }
+  .signal-core h3 {
+    font-size: var(--fs-title-1);
+  }
+  .range-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .metric-list {
+    grid-template-columns: 1fr;
+  }
+  .window-list > div {
+    grid-template-columns: 1fr;
+  }
+  .window-list em {
+    grid-column: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
 }
 </style>
 <style>
@@ -1724,169 +2389,144 @@ body.logged .topbar-login {
 .snap-note code { color: var(--text); }
 </style>
 </head>
-<body class="logged">
-  <div class="snap-note"><strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: 드로어 안 <code>&lt;template data-study&gt;</code> 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>소유자 계정으로 로그인한 화면</strong>이다(사용량 항목은 소유자에게만 주입된다).
-  <br><strong>여기서 확인할 것</strong> — 로그인 상태인데도 본문에 학습 요소가 하나도 없어야 한다(plan.md §1-1). 학습·사용량 진입은 드로어에만 있고, 드로어는 닫힌 상태(화면 밖)라 이 사본에서는 보이지 않는다.
-  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.
+<body class="behavior-page">
+  <div class="snap-note"><strong>무엇인가</strong> — 공용 Behavior Lab의 정적 화면 셸을 얼린 스냅샷이다. CSS는 인라인하고 실행 스크립트는 걷어냈다.
+  <br><strong>정적으로 반영한 상태</strong> — Worker 응답 전의 fail-closed 초기 상태다. 심볼·주기 컨트롤, 가격·행동·신호, 백테스트, 위험 한도, 텍스트 초안 영역의 전체 조판을 담는다.
+  <br><strong>주의</strong> — live dashboard와 버튼 상호작용은 API 응답이 필요하므로 이 사본에서는 비어 있다. 실제 desktop/mobile 상호작용은 별도 로컬 HTTP 브라우저 증거로 확인한다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
-
-  <header class="topbar">
-    <nav class="topbar-inner container-wide" aria-label="전역 내비게이션">
-      <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
-        <span aria-hidden="true"></span><span aria-hidden="true"></span>
-      </button>
-      <a class="brand" href="/" aria-label="hvsdcm 홈"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</a>
-      <div class="topbar-nav">
-        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
-      </div>
-    </nav>
+  <header class="lab-topbar">
+    <div class="lab-topbar-inner">
+      <a class="lab-home" href="/" aria-label="hvsdcm 홈으로"><span aria-hidden="true">←</span> hvsdcm</a>
+      <span class="read-only-mark">PUBLIC READ-ONLY</span>
+    </div>
   </header>
 
-  <div id="shade" class="shade" aria-hidden="true"></div>
-
-  <aside id="drawer" class="drawer logged" aria-label="주 메뉴">
-    <div class="drawer-head">
-      <span class="brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
-    </div>
-    <div class="drawer-public">
-      <p class="list-group-head">공용 도구</p>
-      <nav class="list-group" aria-label="공용 도구">
-        <a class="list-row list-row-nav" href="/behavior-lab/">
-          <span class="list-row-lead"><span class="emoji-box" data-emoji="behaviorLab" aria-hidden="true">🧭</span></span>
-          <span class="list-row-body">
-            <span class="list-row-title">Behavior Lab</span>
-            <span class="list-row-sub">공개 시장 행동 관찰 · 읽기 전용</span>
-          </span>
-        </a>
-      </nav>
-    </div>
-
-      <div class="drawer-study">
-        <p class="list-group-head">학습</p>
-        <nav class="list-group" aria-label="학습 도구">
-          <a class="list-row list-row-nav" href="/WordMaster/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="WordMaster" aria-hidden="true">📗</span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">WordMaster</span>
-              <span class="list-row-sub">DAY 1–50 · 2,000단어</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="/smstudy/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="smstudy" aria-hidden="true">📘</span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">사회·문화</span>
-              <span class="list-row-sub">13중단원 · 기출 78문항</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="/gichul/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="gichul" aria-hidden="true">📙</span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">기출</span>
-              <span class="list-row-sub">평가원 6월 · 9월 · 수능 문제지</span>
-            </span>
-          </a>
-        </nav>
-      </div>
-
-    <!-- 소유자 전용 그룹. 사용량은 개인 운영 데이터라 다른 계정에는 항목 자체를 만들지
-         않는다 (review WP1 M-5). 서버도 같은 규칙을 강제한다 — 비소유자의
-         GET /api/usage는 404다(worker/src/router.js). -->
-
-      <div class="drawer-owner">
-        <p class="list-group-head">계정</p>
-        <nav class="list-group" aria-label="계정 도구">
-          <a class="list-row list-row-nav" href="/usage/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="usage" aria-hidden="true">📶</span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">사용량</span>
-              <span class="list-row-sub">Codex · AI 하네스</span>
-            </span>
-          </a>
-        </nav>
-      </div>
-
-    <div class="drawer-bottom">
-      <div class="drawer-social">
-        <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-        </a>
-        <a class="icon-link" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
-        </a>
-      </div>
-      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button">로그아웃</button>
-    </div>
-  </aside>
-
-  <main id="main" tabindex="-1">
-    <section class="hero" aria-labelledby="welcomeTitle">
-      <div class="container hero-inner">
-        <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
-        <div id="account" class="account hero-actions logged">
-          <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
-          <a class="link-arrow" href="#contact"><span>프로필 보기</span></a>
-        </div>
+  <main id="main" class="lab-main" tabindex="-1">
+    <section class="lab-hero" aria-labelledby="labTitle">
+      <p class="eyebrow">BEHAVIOR LAB / PUBLIC MARKET OBSERVATION</p>
+      <h1 id="labTitle">행동을 읽되,<br>실행하지 않습니다.</h1>
+      <p class="hero-copy">Bitget의 인증 없는 공개 선물 시장 데이터만 검증해 추세·군중 쏠림·적극 체결을 하나의 설명 가능한 후보로 정리합니다.</p>
+      <div class="boundary-strip" aria-label="불변 경계">
+        <span>API 키 없음</span><span>계정 연결 없음</span><span>주문 제출 없음</span>
       </div>
     </section>
 
-    <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
-      <div class="container-text">
-        <header class="section-head">
-          <h2 id="contactTitle" class="title-1">연락</h2>
-        </header>
-        <div class="list-group">
-          <a class="list-row list-row-nav" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
-            <span class="list-row-lead">
-              <span class="emoji-box" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-              </span>
-            </span>
-            <span class="list-row-body">
-              <span class="list-row-title">Discord</span>
-              <span class="list-row-sub">hvsdcm</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
-            <span class="list-row-lead">
-              <span class="emoji-box" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
-              </span>
-            </span>
-            <span class="list-row-body">
-              <span class="list-row-title">Instagram</span>
-              <span class="list-row-sub">hvsdcm.exe</span>
-            </span>
-          </a>
+    <section class="control-deck" aria-labelledby="marketControlsTitle">
+      <div class="section-heading-row">
+        <div><p class="section-index">01 / INPUT</p><h2 id="marketControlsTitle">관찰 범위</h2></div>
+        <div id="liveStatus" class="live-status is-loading" role="status" aria-live="polite"><i></i><span>공개 데이터 확인 중</span></div>
+      </div>
+      <div class="control-groups">
+        <div class="control-group" aria-label="심볼 선택">
+          <span class="control-label">심볼</span>
+          <div class="choice-row" id="symbolChoices">
+            <button type="button" class="choice is-active" data-symbol="BTCUSDT">BTC</button>
+            <button type="button" class="choice" data-symbol="ETHUSDT">ETH</button>
+            <button type="button" class="choice" data-symbol="SOLUSDT">SOL</button>
+            <button type="button" class="choice" data-symbol="XRPUSDT">XRP</button>
+          </div>
+        </div>
+        <div class="control-group" aria-label="주기 선택">
+          <span class="control-label">주기</span>
+          <div class="choice-row" id="periodChoices">
+            <button type="button" class="choice is-active" data-period="5m">5분</button>
+            <button type="button" class="choice" data-period="15m">15분</button>
+            <button type="button" class="choice" data-period="1h">1시간</button>
+            <button type="button" class="choice" data-period="4h">4시간</button>
+          </div>
         </div>
       </div>
+      <div id="dashboardError" class="error-panel" role="alert" hidden>
+        <p id="dashboardErrorText">공개 데이터를 불러오지 못했습니다.</p>
+        <button id="retryDashboard" class="text-button" type="button">다시 시도</button>
+      </div>
     </section>
+
+    <div id="dashboard" class="dashboard" aria-busy="true">
+      <section class="ticker-section" aria-labelledby="tickerTitle">
+        <div class="section-heading-row compact"><div><p class="section-index">02 / SCREENER</p><h2 id="tickerTitle">시장 스크리너</h2></div><p id="freshnessText" class="micro-status">—</p></div>
+        <div id="tickerGrid" class="ticker-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="market-grid" aria-label="가격 구조와 군중 압력">
+        <article class="panel chart-panel">
+          <div class="section-heading-row compact">
+            <div><p class="section-index">03 / PRICE STRUCTURE</p><h2><span id="marketSymbol">BTC</span> <small>/ USDT</small></h2></div>
+            <div class="price-block"><strong id="marketPrice">—</strong><span id="marketChange">—</span></div>
+          </div>
+          <div class="chart-wrap">
+            <svg id="priceChart" viewBox="0 0 900 300" role="img" aria-label="선택 심볼 최근 가격 차트">
+              <line x1="20" x2="880" y1="75" y2="75"></line>
+              <line x1="20" x2="880" y1="150" y2="150"></line>
+              <line x1="20" x2="880" y1="225" y2="225"></line>
+              <polyline id="priceLine" points=""></polyline>
+            </svg>
+          </div>
+          <div class="range-row"><span>저가 <b id="marketLow">—</b></span><span>24H RANGE</span><span>고가 <b id="marketHigh">—</b></span></div>
+        </article>
+
+        <article class="panel pulse-panel">
+          <div><p class="section-index">04 / CROWD PULSE</p><h2>행동 압력</h2></div>
+          <div class="pulse-stat"><span>LONG / SHORT</span><strong id="longShortValue">—</strong><small id="crowdLabel">—</small></div>
+          <div class="ratio-track"><i id="longRatioBar"></i><em></em></div>
+          <div class="pulse-stat"><span>TAKER FLOW</span><strong id="takerValue">—</strong><small id="takerLabel">—</small></div>
+          <div class="ratio-track is-amber"><i id="takerRatioBar"></i><em></em></div>
+          <div class="pulse-split"><div><span>FUNDING</span><b id="fundingValue">—</b></div><div><span>OPEN INTEREST</span><b id="interestValue">—</b></div></div>
+          <p class="fine-print">실시간 행동 overlay는 아래 가격·거래량 backtest proxy와 분리됩니다.</p>
+        </article>
+      </section>
+
+      <section class="signal-grid" aria-label="행동 신호와 근거">
+        <article id="signalPanel" class="panel signal-panel is-aside">
+          <div class="section-heading-row compact"><div><p class="section-index">05 / CANDIDATE</p><h2>행동 신호</h2></div><span id="confidenceValue" class="confidence">—</span></div>
+          <div class="signal-core"><span id="signalArrow" class="signal-arrow">—</span><div><p>CURRENT BIAS</p><h3 id="signalDirection">—</h3><span id="signalContext">—</span></div></div>
+          <div class="scenario-row"><div><span>기준가</span><b id="signalEntry">—</b></div><div><span>무효화</span><b id="signalInvalidation">—</b></div><div><span>시나리오 목표</span><b id="signalTarget">—</b></div></div>
+          <p class="signal-disclaimer">confidence는 규칙 일치 점수이며 수익 확률이 아닙니다.</p>
+        </article>
+        <article class="panel evidence-panel">
+          <div class="section-heading-row compact"><div><p class="section-index">06 / EXPLANATION</p><h2>근거와 반대 신호</h2></div><span id="scoreValue" class="score-pill">SCORE —</span></div>
+          <div class="evidence-columns"><div><h3 id="supportTitle">지지 근거</h3><div id="supportList" class="evidence-list"></div></div><div><h3 id="counterTitle">반대 신호</h3><div id="counterList" class="evidence-list"></div></div></div>
+        </article>
+      </section>
+
+      <section class="panel backtest-panel" aria-labelledby="backtestTitle">
+        <div class="section-heading-row">
+          <div><p class="section-index">07 / CHRONOLOGICAL TEST</p><h2 id="backtestTitle">워크포워드 백테스트</h2><p class="section-copy">60/40 시간순 분할 · 4개 검증 창 · 다음 봉 진입 · 왕복 수수료와 슬리피지 포함</p></div>
+          <button id="runBacktest" class="primary-action" type="button">백테스트 실행</button>
+        </div>
+        <div id="backtestEmpty" class="empty-state"><strong>PAST ONLY → NEXT BAR</strong><p>현재 캔들의 가격·거래량만으로 만든 proxy를 미래 구간에 순서대로 검증합니다.</p></div>
+        <div id="backtestResult" hidden>
+          <p id="backtestChronology" class="provenance"></p>
+          <div class="metrics-grid"><div class="metrics-block"><h3>IN-SAMPLE / 모델 선택</h3><div id="inSampleMetrics" class="metric-list"></div></div><div class="metrics-block"><h3>OUT-OF-SAMPLE / 4개 창</h3><div id="outSampleMetrics" class="metric-list"></div></div></div>
+          <div id="windowList" class="window-list"></div>
+          <div class="assumption-row"><span>수수료 왕복 12bps</span><span>슬리피지 왕복 8bps</span><span>초기자본 10,000</span><span>보수적 OHLC 낙폭</span></div>
+        </div>
+      </section>
+
+      <section class="risk-grid" aria-label="위험 한도와 수동 초안">
+        <article class="panel risk-panel">
+          <div><p class="section-index">08 / YOUR LIMITS</p><h2>위험 한도</h2><p class="section-copy">기본값 없이 네 값을 직접 입력합니다.</p></div>
+          <div class="risk-fields">
+            <label><span>운용 기준 자금 <small>USDT</small></span><input id="riskSeed" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 5000"></label>
+            <label><span>1회 최대 손실 <small>%</small></span><input id="riskLoss" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 10 이하"></label>
+            <label><span>레버리지 상한 <small id="marketLeverage">시장 확인 중</small></span><input id="riskLeverage" type="text" inputmode="decimal" autocomplete="off" placeholder="1 이상 · 20 이하"></label>
+            <label><span>손절 거리 <small>%</small></span><input id="riskStop" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 25 이하"></label>
+          </div>
+          <button id="createDraft" class="primary-action full" type="button" disabled>수동 초안 계산</button>
+          <p id="draftBlocked" class="blocked-copy">모든 한도와 검증된 방향이 준비될 때까지 차단됩니다.</p>
+        </article>
+        <article class="panel draft-panel">
+          <div><p class="section-index">09 / INERT TEXT ONLY</p><h2>수동 주문 참고 초안</h2></div>
+          <div id="draftPlaceholder" class="empty-state"><strong>NO DRAFT YET</strong><p>계산 결과는 읽기·복사 가능한 일반 텍스트일 뿐입니다.</p></div>
+          <div id="draftErrors" class="draft-errors" role="alert" hidden></div>
+          <div id="draftResult" hidden><textarea id="draftText" readonly aria-label="수동 주문 참고 초안"></textarea><button id="copyDraft" class="copy-action" type="button">텍스트 복사</button></div>
+          <div class="hard-boundary"><b>제출 기능은 존재하지 않습니다.</b><p>거래소 로그인, 주문 API, 자동 클릭, 프로그램 전달을 지원하지 않습니다.</p></div>
+        </article>
+      </section>
+    </div>
   </main>
 
-  <footer class="footer">
-    <div class="container footer-inner">
-      <span class="brand footer-brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
-      <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
-    </div>
-  </footer>
-
-  <div id="loginModal" class="sheet-backdrop" aria-hidden="true">
-    <form id="loginForm" class="sheet login-sheet" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-      <h2 id="loginTitle" class="sheet-title">로그인</h2>
-      <p class="sheet-sub">계정으로 계속합니다.</p>
-      <div class="field">
-        <label class="field-label" for="username">아이디</label>
-        <input class="field-input" id="username" autocomplete="username" placeholder="아이디" required>
-      </div>
-      <div class="field">
-        <label class="field-label" for="password">비밀번호</label>
-        <input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
-      </div>
-      <div id="loginError" class="field-error" role="alert"></div>
-      <button class="btn btn-primary btn-lg login-submit" type="submit">계속</button>
-      <button class="btn btn-ghost" type="button" id="closeLogin">닫기</button>
-    </form>
-  </div>
+  <footer class="lab-footer"><div><b>Behavior Lab</b><p>교육·연구용 관찰 도구. 미래 성과나 수익을 보장하지 않습니다.</p></div><a href="/">hvsdcm</a></footer>
 </body>
 </html>

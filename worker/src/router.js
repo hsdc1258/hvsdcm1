@@ -14,6 +14,7 @@ import {
   sha256,
 } from './lib.js';
 import { getCompetitions, reportCompetitions } from './competitions.js';
+import { BehaviorLabRequestError, getBehaviorLabDashboard } from './behavior-lab.js';
 
 const MAX_PROGRESS_BYTES = 800_000;
 // 사용량 스냅샷은 rate_limits 몇 개짜리 객체다. 상한이 없으면 ingest 토큰이 새거나
@@ -2576,6 +2577,15 @@ export async function route(request, env) {
 
   if (method === 'POST' && path === '/api/login') return login(request, env);
   if (method === 'POST' && path === '/api/admin/login') return adminLogin(request, env);
+
+  if (method === 'GET' && path === '/api/behavior-lab/dashboard') {
+    try {
+      return json(await getBehaviorLabDashboard(request.url), 200, { 'cache-control': 'public, max-age=10' });
+    } catch (error) {
+      if (error instanceof BehaviorLabRequestError) return json({ error: error.message }, error.status);
+      throw error;
+    }
+  }
 
   if (method === 'GET' && path === '/api/me') {
     const session = await authenticate(request, env);
