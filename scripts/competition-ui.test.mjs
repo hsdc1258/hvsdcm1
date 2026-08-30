@@ -495,13 +495,13 @@ test('candidate search, status, eligibility, deadline and deadline sorting are d
   );
 });
 
-test('a candidate that expires after the report fails closed at render and filter time', () => {
+test('a candidate that expires after the report fails closed everywhere, including summary counts', () => {
   const { ui } = competitionContext();
   const reportedAt = Date.parse('2026-08-31T03:00:00+09:00');
   const deadline = new Date(reportedAt + 30_000).toISOString();
   const viewedAt = reportedAt + 60_000;
-  const normalized = ui.normalizePayload({
-    summary: { latest_scan_at: new Date(reportedAt).toISOString(), today: {} },
+  const payload = {
+    summary: { latest_scan_at: new Date(reportedAt).toISOString(), today: { ready: 1 } },
     runs: [{ id: 'deadline-run', finished_at: new Date(reportedAt).toISOString(), status: 'complete' }],
     sources: [],
     candidates: [{
@@ -514,13 +514,23 @@ test('a candidate that expires after the report fails closed at render and filte
       contest_id: 'deadline-contest', category: 'idea', state: 'PREPARED',
       blocker: 'none', next_action: 'stage_form', updated_at: new Date(reportedAt).toISOString(),
     }],
-  });
+  };
+  const normalized = ui.normalizePayload(payload);
 
   const markup = ui.renderDashboard(normalized, {}, viewedAt);
   assert.match(markup, /종료/u);
   assert.match(markup, /마감 지남/u);
   assert.match(markup, /추가 진행 금지/u);
   assert.doesNotMatch(markup, /지원 준비/u);
+  assert.match(markup, /오늘 지원준비<\/dt><dd>0<small>진행 중<\/small>/u);
+  const fallback = ui.normalizePayload({
+    ...payload,
+    summary: { latest_scan_at: new Date(reportedAt).toISOString(), today: {} },
+  });
+  assert.match(
+    ui.renderDashboard(fallback, {}, viewedAt),
+    /오늘 지원준비<\/dt><dd>0<small>진행 중<\/small>/u,
+  );
   assert.equal(ui.filterCandidates(normalized.candidates, { status: 'preparing' }, viewedAt).length, 0);
   assert.deepEqual(
     Array.from(ui.filterCandidates(normalized.candidates, { status: 'closed' }, viewedAt), (item) => item.id),

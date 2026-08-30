@@ -491,6 +491,13 @@
     };
   }
 
+  function currentStatusCount(reported, rawItems, currentItems, status) {
+    const current = currentItems.filter((item) => item.status === status).length;
+    if (reported === null || reported === undefined) return current;
+    const raw = rawItems.filter((item) => item.status === status).length;
+    return Math.max(0, reported - Math.max(0, raw - current));
+  }
+
   function filterCandidates(candidates, filters = {}, now = Date.now()) {
     const query = text(filters.search).toLocaleLowerCase('ko-KR');
     const status = text(filters.status) || 'all';
@@ -537,11 +544,22 @@
       counts[key] += 1;
       return counts;
     }, { success: 0, failed: 0, partial: 0, unknown: 0 });
+    const currentCandidates = data.candidates.map((candidate) => candidateAtDeadline(candidate, now));
+    const candidatesByKey = new Map(data.candidates.map((candidate) => [
+      applicationKey({ contest_id: candidate.id, category: candidate.category }), candidate,
+    ]));
+    const currentApplications = data.applications.map((application) => {
+      const candidate = candidatesByKey.get(applicationKey(application))
+        || data.candidates.find((entry) => entry.id === application.id);
+      return applicationAtDeadline(application, candidate?.deadline, now);
+    });
     const today = {
       discovered: data.today.discovered ?? data.candidates.length,
       verified: data.today.verified ?? data.candidates.filter((candidate) => !['unknown', 'review'].includes(candidate.eligibilityStatus)).length,
-      preparing: data.today.preparing ?? data.applications.filter((application) => application.status === 'preparing').length,
-      awaitingApproval: data.today.awaitingApproval ?? data.applications.filter((application) => application.status === 'awaiting-approval').length,
+      preparing: currentStatusCount(data.today.preparing, data.candidates, currentCandidates, 'preparing'),
+      awaitingApproval: currentStatusCount(
+        data.today.awaitingApproval, data.applications, currentApplications, 'awaiting-approval',
+      ),
       deadlineSoon: data.today.deadlineSoon ?? data.candidates.filter((candidate) => deadlineBucket(candidate, now) === '7d').length,
     };
     return `<section class="cp-overview" aria-labelledby="cpOverviewTitle">
