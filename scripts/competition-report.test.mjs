@@ -67,6 +67,9 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?email=person@example.test'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules/person%2540example.test'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?access-token=privatevalue123'; },
+    (report) => { report.sources[0].reference_url = 'https://list.example/01012345678/contests'; },
+    (report) => { report.candidates[0].discovery_url = 'https://list.example/contests?client.secret=privatevalue123'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?refresh_token=privatevalue123'; },
     (report) => { report.applications[0].profile_id = 'sha256:guessable'; },
     (report) => { report.sources[0].failure_code = 'timeout'; },
     (report) => { report.candidates[0].submission_risk = 'blocked'; },
@@ -111,6 +114,19 @@ test('run date is KST-bound and observation time allows no more than five minute
   future.run.finished_at = finished.toISOString();
   future.run.date = new Date(started.getTime() + 9 * 60 * 60 * 1_000).toISOString().slice(0, 10);
   assert.throws(() => validateCompetitionReport(future), CompetitionReportError);
+});
+
+test('source, candidate, verification, and application evidence cannot follow the report observation', () => {
+  for (const mutate of [
+    (report) => { report.sources[0].checked_at = '2100-01-01T00:00:00Z'; },
+    (report) => { report.candidates[0].discovered_at = '2100-01-01T00:00:00Z'; },
+    (report) => { report.candidates[0].official_verified_at = '2100-01-01T00:00:00Z'; },
+    (report) => { report.applications[0].updated_at = '2100-01-01T00:00:00Z'; },
+  ]) {
+    const report = validReport();
+    mutate(report);
+    assert.throws(() => validateCompetitionReport(report), CompetitionReportError);
+  }
 });
 
 test('reporter sends the exact body idempotency key with only the dedicated bearer token', async () => {

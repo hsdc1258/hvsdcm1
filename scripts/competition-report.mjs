@@ -14,9 +14,11 @@ const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE = /(?:^|\s)\+?\d[\d ().-]{7,}\d(?:\s|$)/u;
-const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:token|access[_-]?token|auth|session|api[_-]?key|secret|credential)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
+const DIGIT_PHONE = /(?:^|\D)(?:010\d{8}|01[16789]\d{7,8}|8210\d{8})(?!\d)/u;
+const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:token|access[\s._-]*token|refresh[\s._-]*token|client[\s._-]*secret|authorization|auth|session|api[\s._-]*key|secret|credential|signature)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
 const SENSITIVE_QUERY_KEYS = new Set([
-  'token', 'access_token', 'auth', 'session', 'api_key', 'secret', 'credential',
+  'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
+  'session', 'api_key', 'secret', 'credential', 'signature',
 ]);
 
 const FORBIDDEN_KEYS = /(?:^|_)(?:pii|applicant_name|legal_name|full_name|first_name|last_name|email|e_mail|phone|mobile|contact|address|birth|birthday|dob|password|account_token|cookie|signature|consent|legal_consent|terms_acceptance|payment|card|bank|receipt|application_answer|application_answers|application_prose|essay|final_submission|submission_payload|legal_acceptance|identity_document|government_id|tax_id)(?:$|_)/iu;
@@ -150,13 +152,19 @@ function kstDate(instant) {
 }
 
 function normalizedSensitiveKey(value) {
-  return String(value).normalize('NFKC').trim().toLowerCase().replace(/[\s-]+/gu, '_');
+  return String(value)
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '_')
+    .replace(/^_+|_+$/gu, '');
 }
 
 function scanPrivateUrlComponent(value, label) {
   let decoded = String(value).normalize('NFKC');
   for (let pass = 0; pass < 8; pass += 1) {
-    if (EMAIL.test(decoded) || PHONE.test(decoded) || PRIVATE_TOKEN.test(decoded)) {
+    if (EMAIL.test(decoded) || PHONE.test(decoded) || DIGIT_PHONE.test(decoded)
+      || PRIVATE_TOKEN.test(decoded)) {
       fail(`${label} contains private data`);
     }
     let next;
@@ -370,6 +378,12 @@ export function validateCompetitionReport(report) {
   const candidateCountBySource = new Map(sources.map((source) => [source.id, 0]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const observationAt = report.run.finished_at || report.run.started_at;
+  const observationTime = Date.parse(observationAt);
+  sources.forEach((source, index) => {
+    if (Date.parse(source.checked_at) > observationTime) {
+      fail(`report.sources[${index}].checked_at follows the report observation`);
+    }
+  });
   boundedArray(report.candidates, 'report.candidates', 200).forEach((candidate, index) => {
     validateCandidate(candidate, index, sourceIds);
     const key = `${candidate.contest_id}|${candidate.category}`;
@@ -377,7 +391,11 @@ export function validateCompetitionReport(report) {
     candidates.set(key, candidate);
     candidateCountBySource.set(candidate.source_id, candidateCountBySource.get(candidate.source_id) + 1);
     const source = sourceById.get(candidate.source_id);
-    if (candidate.status === 'active' && Date.parse(candidate.deadline_at) <= Date.parse(observationAt)) {
+    if (Date.parse(candidate.discovered_at) > observationTime
+      || (candidate.official_verified_at && Date.parse(candidate.official_verified_at) > observationTime)) {
+      fail(`report.candidates[${index}] contains evidence after the report observation`);
+    }
+    if (candidate.status === 'active' && Date.parse(candidate.deadline_at) <= observationTime) {
       fail(`report.candidates[${index}] cannot remain active after its deadline`);
     }
     if (['timeout', 'http_403'].includes(source.failure_code) && candidate.acceptance === 'closed') {
@@ -398,7 +416,10 @@ export function validateCompetitionReport(report) {
     if (applicationKeys.has(key)) fail(`report.applications[${index}] is duplicated`);
     applicationKeys.add(key);
     const candidate = candidates.get(key);
-    if (Date.parse(candidate.deadline_at) <= Date.parse(observationAt)) {
+    if (Date.parse(application.updated_at) > observationTime) {
+      fail(`report.applications[${index}].updated_at follows the report observation`);
+    }
+    if (Date.parse(candidate.deadline_at) <= observationTime) {
       fail(`report.applications[${index}] references a candidate whose deadline has passed`);
     }
   });
