@@ -17,6 +17,8 @@ bucket_name = "hvsdcm-gichul"
 #   npx wrangler secret put MODERATOR_DAEMON_TOKEN
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"
-# GET /api/usage를 볼 수 있는 유일한 계정. 이 값이 소유자 판정의 단일 원본이며,
+# GET /api/usage를 볼 수 있는 계정 목록(쉼표 구분). 이 값이 소유자 판정의 단일 원본이며,
 # 비어 있으면 아무도 통과하지 못한다(fail-closed).
-OWNER_USERNAME = "hvsdcm"
+# claude-test는 에이전트 전용 테스트 계정이다. 회수하려면 이 목록에서 이름을 지우고
+# 배포한 뒤, D1에서 그 사용자와 세션을 지운다.
+OWNER_USERNAME = "hvsdcm,claude-test"

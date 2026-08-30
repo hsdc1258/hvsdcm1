@@ -1091,13 +1091,21 @@ async function reportHarness(request, env) {
   return json(response);
 }
 
-// 사용량은 소유자 한 사람의 운영 데이터다. 소유자 이름은 wrangler.toml의
-// vars.OWNER_USERNAME 하나가 원본이고 코드에 적지 않는다 — 값이 없으면 아무도 통과하지
-// 못한다(fail-closed). 세션의 username은 users 테이블에서 조인된 값이다(lib.js).
+// 사용량은 소유자의 운영 데이터다. 소유자 이름은 wrangler.toml의 vars.OWNER_USERNAME
+// 하나가 원본이고 코드에 적지 않는다 — 값이 없으면 아무도 통과하지 못한다(fail-closed).
+// 값은 쉼표로 구분한 목록이며, 사람 소유자 외에 에이전트 테스트 계정을 한시적으로 얹기
+// 위한 것이다. 이름을 지우면 그 계정은 즉시 404로 돌아간다.
+// 세션의 username은 users 테이블에서 조인된 값이다(lib.js).
+function ownerUsernames(env) {
+  return String(env.OWNER_USERNAME || '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => name.length > 0);
+}
+
 function isOwnerSession(session, env) {
-  const owner = String(env.OWNER_USERNAME || '').trim().toLowerCase();
   const username = String(session?.username || '').trim().toLowerCase();
-  return owner.length > 0 && username === owner;
+  return username.length > 0 && ownerUsernames(env).includes(username);
 }
 
 function completedTaskLimit(request) {

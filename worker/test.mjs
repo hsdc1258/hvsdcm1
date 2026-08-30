@@ -2525,6 +2525,27 @@ test('usage lookup hides itself from every account that is not the owner', async
   // OWNER_USERNAME 미설정 — 소유자 이름을 알 수 없으면 소유자도 막힌다(fail-closed).
   const unset = await get({ ALLOWED_ORIGIN: 'https://example.test', DB: dbFor('hvsdcm') });
   assert.equal(unset.status, 404);
+
+  // 값은 쉼표 목록이다(에이전트 테스트 계정을 한시적으로 얹기 위한 것). 목록에 없는
+  // 이름은 여전히 404이고, 빈 칸이나 공백만으로는 아무도 통과하지 못한다.
+  const listed = await get({
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm, claude-test',
+    DB: dbFor('claude-test'),
+  });
+  assert.notEqual(listed.status, 404);
+  const unlisted = await get({
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: 'hvsdcm, claude-test',
+    DB: dbFor('student1'),
+  });
+  assert.equal(unlisted.status, 404);
+  const blanks = await get({
+    ALLOWED_ORIGIN: 'https://example.test',
+    OWNER_USERNAME: ' , , ',
+    DB: dbFor(''),
+  });
+  assert.equal(blanks.status, 404);
 });
 
 test('usage lookup requires a session and returns parsed snapshots', async () => {

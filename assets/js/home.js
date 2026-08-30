@@ -7,8 +7,10 @@
   // 소유자 계정. 관리자 링크와 소유자 전용 드로어 항목이 **같은 판정**을 쓴다 —
   // 이름을 두 곳에 적지 않는다. 이 값은 화면 분기용일 뿐이고, 실제 접근 차단은
   // Worker가 한다(비소유자의 GET /api/usage는 404 — worker/wrangler.toml OWNER_USERNAME).
-  const OWNER_USERNAME = 'hvsdcm';
-  const isOwner = (username) => String(username || '').trim().toLowerCase() === OWNER_USERNAME;
+  // 목록인 이유: 사람 소유자 외에 에이전트 테스트 계정을 한시적으로 얹기 때문이다.
+  // 여기서 이름을 지워도 Worker 쪽 vars를 같이 지워야 실제 접근이 막힌다.
+  const OWNER_USERNAMES = ['hvsdcm', 'claude-test'];
+  const isOwner = (username) => OWNER_USERNAMES.includes(String(username || '').trim().toLowerCase());
 
   // 드로어의 로그인-후 템플릿. ownerOnly 항목은 소유자에게만 **노드를 만든다** —
   // CSS 숨김이 아니라 렌더 시점 분기다 (LESSONS 승격 규칙 "권한별 은닉").
