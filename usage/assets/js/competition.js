@@ -330,7 +330,7 @@
     const rawEligibility = text(source.eligibility);
     const eligibilityDescription = text(first(
       eligibility.summary, eligibility.text, eligibility.requirements,
-      source.eligibility_summary, source.eligibility_text, source.eligibility_description, source.acceptance,
+      source.eligibility_summary, source.eligibility_text, source.eligibility_description,
     )) || (rawEligibility && eligibilityStatus === 'unknown' && rawEligibility.toLowerCase() !== 'unknown'
       ? rawEligibility
       : '');

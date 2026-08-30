@@ -125,7 +125,7 @@ test('top-level canonical fields render human labels, safe source action, and bo
       source_id: 'source-a', discovery_url: 'https://discover.example/contest',
       official_url: 'https://organizer.example/rules', official_verification: 'unverified',
       official_verified_at: '2026-08-30T14:00:00Z',
-      eligibility: 'eligible', deadline_at: '2026-09-05', status: 'active', recency: 'new',
+      eligibility: 'eligible', acceptance: 'open', deadline_at: '2026-09-05', status: 'active', recency: 'new',
       fit_score: 87, effort_score: 4,
     }],
     applications: [],
@@ -149,6 +149,7 @@ test('top-level canonical fields render human labels, safe source action, and bo
   assert.doesNotMatch(card, />주최기관 공식 공고<\/a>/u);
   assert.match(card, /공식 공고 검증<\/dt><dd><span[^>]*>미검증<\/span> · 확인 기록/u);
   assert.doesNotMatch(card, /unverified/u);
+  assert.doesNotMatch(card, /\bopen\b/u);
   assert.doesNotMatch(markup, />listing</u);
   assert.doesNotMatch(markup, />new</u);
   assert.match(markup, /공고 목록/u);
