@@ -15,7 +15,7 @@ const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE = /(?:^|\s)\+?\d[\d ().-]{7,}\d(?:\s|$)/u;
 const DIGIT_PHONE = /(?:^|\D)(?:010\d{8}|01[16789]\d{7,8}|8210\d{8})(?!\d)/u;
-const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:token|access[\s._-]*token|refresh[\s._-]*token|client[\s._-]*secret|authorization|auth|session|api[\s._-]*key|secret|credential|signature)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
+const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:(?:[A-Z0-9\s._-]*(?:token|secret|signature|credential))|(?:auth(?:entication|orization)?|oauth|session|api[\s._-]*key)(?:[\s._-]*(?:code|header|id|key|token))?)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
   'session', 'api_key', 'secret', 'credential', 'signature',
@@ -89,7 +89,11 @@ function string(value, label, { max = 240, maxBytes = null, pattern, privatePatt
     fail(`${label} must be a non-empty bounded string`);
   }
   if (pattern && !pattern.test(value)) fail(`${label} has an invalid format`);
-  if (privatePatterns && (EMAIL.test(value) || PHONE.test(value))) fail(`${label} contains private data`);
+  const normalized = value.normalize('NFKC');
+  if (privatePatterns && (EMAIL.test(normalized) || PHONE.test(normalized)
+    || DIGIT_PHONE.test(normalized) || PRIVATE_TOKEN.test(normalized))) {
+    fail(`${label} contains private data`);
+  }
   return value;
 }
 
@@ -155,9 +159,24 @@ function normalizedSensitiveKey(value) {
   return String(value)
     .normalize('NFKC')
     .trim()
+    .replace(/([a-z0-9])([A-Z])/gu, '$1_$2')
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, '_')
     .replace(/^_+|_+$/gu, '');
+}
+
+function isSensitiveQueryKey(value) {
+  const normalized = normalizedSensitiveKey(value);
+  const canonical = normalized.replaceAll('_', '');
+  return SENSITIVE_QUERY_KEYS.has(normalized)
+    || /(?:token|secret|signature|credential)/u.test(canonical)
+    || canonical === 'auth'
+    || canonical.startsWith('authentication')
+    || canonical.startsWith('authorization')
+    || canonical.startsWith('oauth')
+    || canonical.startsWith('session')
+    || canonical.includes('apikey')
+    || canonical.includes('accesskey');
 }
 
 function scanPrivateUrlComponent(value, label) {
@@ -209,7 +228,7 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
     const decodedKey = scanPrivateUrlComponent(key, `${label} query`);
     scanPrivateUrlComponent(queryValue, `${label} query`);
     const normalizedKey = decodedKey.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replaceAll('-', '_').toLowerCase();
-    if (FORBIDDEN_KEYS.test(normalizedKey) || SENSITIVE_QUERY_KEYS.has(normalizedSensitiveKey(decodedKey))) {
+    if (FORBIDDEN_KEYS.test(normalizedKey) || isSensitiveQueryKey(decodedKey)) {
       fail(`${label} query contains private data`);
     }
   }
@@ -418,6 +437,9 @@ export function validateCompetitionReport(report) {
     const candidate = candidates.get(key);
     if (Date.parse(application.updated_at) > observationTime) {
       fail(`report.applications[${index}].updated_at follows the report observation`);
+    }
+    if (Date.parse(application.updated_at) < Date.parse(candidate.discovered_at)) {
+      fail(`report.applications[${index}].updated_at precedes candidate discovery`);
     }
     if (Date.parse(candidate.deadline_at) <= observationTime) {
       fail(`report.applications[${index}] references a candidate whose deadline has passed`);

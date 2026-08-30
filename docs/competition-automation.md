@@ -77,8 +77,8 @@ exact report is an acknowledged replay, not another logical write; reusing a key
 is rejected by the API.
 
 The report schema rejects raw identity, contact details, application prose, signatures, cookies,
-consents, payments, receipts, final-submission payloads, and private data or tokens embedded in URL
-paths or queries. The run date is bound to the start time's KST calendar day and future observations
+consents, payments, receipts, final-submission payloads, and private data or tokens embedded in
+metadata text, URL paths, or URL queries. The run date is bound to the start time's KST calendar day and future observations
 have only a five-minute clock-skew allowance; source checks, discovery, official verification, and
 application updates cannot claim evidence later than that run's observation. Source counts must equal their reported candidates;
 timeouts and HTTP 403 responses require manual follow-up and never prove closure. Active work remains

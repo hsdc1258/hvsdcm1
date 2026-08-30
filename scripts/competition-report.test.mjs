@@ -70,6 +70,11 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.sources[0].reference_url = 'https://list.example/01012345678/contests'; },
     (report) => { report.candidates[0].discovery_url = 'https://list.example/contests?client.secret=privatevalue123'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?refresh_token=privatevalue123'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?x-amz-signature=privatevalue123'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?oauthCode=privatevalue123'; },
+    (report) => { report.sources[0].name = '담당자 01012345678'; },
+    (report) => { report.candidates[0].title = 'authorization=privatevalue123'; },
+    (report) => { report.candidates[0].organizer = '기관 01012345678'; },
     (report) => { report.applications[0].profile_id = 'sha256:guessable'; },
     (report) => { report.sources[0].failure_code = 'timeout'; },
     (report) => { report.candidates[0].submission_risk = 'blocked'; },
@@ -127,6 +132,10 @@ test('source, candidate, verification, and application evidence cannot follow th
     mutate(report);
     assert.throws(() => validateCompetitionReport(report), CompetitionReportError);
   }
+
+  const beforeDiscovery = validReport();
+  beforeDiscovery.applications[0].updated_at = '2026-08-31T01:10:30+09:00';
+  assert.throws(() => validateCompetitionReport(beforeDiscovery), CompetitionReportError);
 });
 
 test('reporter sends the exact body idempotency key with only the dedicated bearer token', async () => {
