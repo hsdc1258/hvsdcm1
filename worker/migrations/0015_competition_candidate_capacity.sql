@@ -361,4 +361,3 @@ ON competition_applications(idempotency_key, state, updated_at, contest_id, cate
 -- rows for different redacted profiles.
 CREATE UNIQUE INDEX idx_competition_applications_candidate
 ON competition_applications(idempotency_key, contest_id, category);
-
