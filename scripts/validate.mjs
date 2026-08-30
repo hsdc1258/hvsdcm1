@@ -97,7 +97,7 @@ const GATE_MARKERS = [
   { name: 'login redirect', test: (js) => /location\.replace\(/u.test(js) && js.includes('login=1') },
   { name: 'admin token', test: (js) => js.includes('hvsdcm.admin') },
   { name: 'owner bearer gate', test: (js) => js.includes("localStorage.getItem('hvsdcm.token')")
-    && js.includes('authorization: `Bearer ${token}`') && js.includes('ownerVerified') },
+    && js.includes('authorization: `Bearer ${ownerToken()}`') && js.includes('ownerVerified') },
 ];
 function loginGateOf(htmlFile, source) {
   for (const reference of scriptReferences(source)) {
@@ -2595,7 +2595,7 @@ function validateBehaviorLab() {
   check(pageHtml.includes('content="noindex, nofollow, noarchive"')
     && /id="labShell"[^>]*\bhidden\b/u.test(pageHtml)
     && appSource.includes("localStorage.getItem('hvsdcm.token')")
-    && appSource.includes('authorization: `Bearer ${token}`')
+    && appSource.includes('authorization: `Bearer ${ownerToken()}`')
     && appSource.includes('/api/behavior-lab/paper'),
   'behavior-lab: owner gate, bearer reads, noindex, and paper tab contract are incomplete');
   check(/id="paperAdaptive"[^>]*\bhidden\b/u.test(pageHtml)

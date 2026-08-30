@@ -83,6 +83,13 @@ function paperReport(overrides = {}) {
   };
 }
 
+function paperStateJson(report) {
+  const copy = structuredClone(report);
+  delete copy.generated_at;
+  delete copy.adaptive;
+  return JSON.stringify(copy);
+}
+
 function memoryDb({ username = 'hvsdcm' } = {}) {
   const reports = [];
   return {
@@ -112,9 +119,16 @@ function memoryDb({ username = 'hvsdcm' } = {}) {
             const latest = reports[0] ? JSON.parse(reports[0].payload) : null;
             const auditSequence = parsed.adaptive?.audit?.sequence ?? -1;
             const latestAuditSequence = latest?.adaptive?.audit?.sequence ?? -1;
-            const newerPaper = !latest || (parsed.sequence > latest.sequence && (!latest.adaptive || parsed.adaptive));
-            const newerAudit = latest && parsed.sequence === latest.sequence && auditSequence > latestAuditSequence;
-            if (!newerPaper && !newerAudit) return { success: true, meta: { changes: 0 } };
+            const paperAdvanced = !latest || parsed.sequence > latest.sequence;
+            const auditAdvanced = latest && parsed.adaptive && auditSequence > latestAuditSequence;
+            const paperMonotonic = !latest || parsed.sequence >= latest.sequence;
+            const adaptivePreserved = !latest || !latest.adaptive || parsed.adaptive;
+            const auditMonotonic = !latest || !latest.adaptive || (parsed.adaptive && auditSequence >= latestAuditSequence
+              && (auditSequence > latestAuditSequence || parsed.adaptive.audit.hash === latest.adaptive.audit.hash));
+            const samePaperImmutable = !latest || parsed.sequence > latest.sequence
+              || paperStateJson(parsed) === paperStateJson(latest);
+            if (!paperMonotonic || !adaptivePreserved || !auditMonotonic || (!paperAdvanced && !auditAdvanced)
+              || !samePaperImmutable) return { success: true, meta: { changes: 0 } };
             reports[0] = { source, sequence: parsed.sequence, auditSequence, payload, captured_at: capturedAt };
             return { success: true, meta: { changes: 1 } };
           }
@@ -211,6 +225,7 @@ test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy re
     { ...valid, promotion: { ...valid.promotion, reasons: Array.from({ length: 13 }, () => 'reason') } },
     { ...valid, audit: { ...valid.audit, recent: Array.from({ length: 21 }, () => valid.audit.recent[0]) } },
     { ...valid, audit: { ...valid.audit, recent: [{ ...valid.audit.recent[0], sequence: 11 }] } },
+    { ...valid, audit: { ...valid.audit, hash: HASH_B } },
     { ...valid, stream: { ...valid.stream, last_packet_at: '2026-08-30T19:00:01.000Z' } },
   ]) {
     assert.equal(normalizeBehaviorPaperReport(paperReport({ adaptive })), null, JSON.stringify(adaptive));
@@ -264,19 +279,71 @@ test('paper and adaptive audit upsert is atomic and monotonic in real SQLite', a
   t.after(() => database.close());
   database.exec(readFileSync(new URL('./migrations/0005_usage_snapshots.sql', import.meta.url), 'utf8'));
   const env = envFor(sqliteD1(database));
+  const stored = () => JSON.parse(database.prepare('SELECT payload FROM usage_snapshots').get().payload);
 
   assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(20) }), env)).status, 200);
   assert.equal((await post(paperReport({ sequence: 1, adaptive: adaptiveReport(99) }), env)).status, 409);
+  assert.deepEqual([stored().sequence, stored().adaptive.audit.sequence], [2, 20]);
   assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(20) }), env)).status, 409);
-  assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(21) }), env)).status, 200);
+  assert.equal((await post(paperReport({ sequence: 3, adaptive: adaptiveReport(19) }), env)).status, 409);
+  assert.deepEqual([stored().sequence, stored().adaptive.audit.sequence], [2, 20]);
+  assert.equal((await post(paperReport({ sequence: 2, equity: 999, adaptive: adaptiveReport(21) }), env)).status, 409);
+  assert.equal(stored().equity, 101.25);
+  assert.equal((await post(paperReport({ sequence: 2, generated_at: '2026-08-30T19:00:01.000Z',
+    adaptive: adaptiveReport(21) }), env)).status, 200);
   assert.equal((await post(paperReport({ sequence: 3 }), env)).status, 409);
+  assert.equal((await post(paperReport({
+    sequence: 3, equity: 103, net_pnl: 3, return_pct: 3, adaptive: adaptiveReport(21),
+  }), env)).status, 200);
   assert.equal((await post(paperReport({
     sequence: 3, equity: 103, net_pnl: 3, return_pct: 3, adaptive: adaptiveReport(22),
   }), env)).status, 200);
+  assert.equal((await post(paperReport({
+    sequence: 3, equity: 104, net_pnl: 4, return_pct: 4, adaptive: adaptiveReport(23),
+  }), env)).status, 409);
+  const rewrittenAudit = adaptiveReport(22);
+  rewrittenAudit.audit.hash = HASH_B;
+  rewrittenAudit.audit.recent[0].hash = HASH_B;
+  assert.equal((await post(paperReport({
+    sequence: 4, equity: 104, net_pnl: 4, return_pct: 4, adaptive: rewrittenAudit,
+  }), env)).status, 409);
+  assert.deepEqual([stored().sequence, stored().adaptive.audit.sequence, stored().adaptive.audit.hash], [3, 22, HASH_C]);
   const row = database.prepare('SELECT source, payload FROM usage_snapshots').get();
   assert.equal(row.source, BEHAVIOR_PAPER_SNAPSHOT_SOURCE);
   assert.equal(JSON.parse(row.payload).sequence, 3);
   assert.equal(JSON.parse(row.payload).adaptive.audit.sequence, 22);
+  assert.equal(Object.hasOwn(JSON.parse(row.payload), '_paper_state_hash'), false);
+});
+
+test('credential, environment, account, order, and private-route sentinels never reach stored or owner response bytes', async () => {
+  const sentinels = [
+    'Bearer exchange-private-sentinel', 'Basic ZXhjaGFuZ2UtcHJpdmF0ZQ==',
+    'api_key=exchange-private-sentinel', 'passphrase: exchange-private-sentinel',
+    'BITGET_API_SECRET=exchange-private-sentinel', 'account_id=exchange-private-sentinel',
+    'order_id=exchange-private-sentinel', '/api/v2/mix/order/place-order', 'private-route',
+    'wss://ws.bitget.com/v2/ws/private',
+  ];
+  for (const sentinel of sentinels) {
+    const db = memoryDb();
+    const env = envFor(db);
+    const adaptive = adaptiveReport(10);
+    adaptive.audit.recent[0].message = sentinel;
+    const response = await post(paperReport({ adaptive }), env);
+    assert.equal(response.status, 200, sentinel);
+    const responseBytes = await response.text();
+    const ownerBytes = await (await get(env)).text();
+    assert.equal(db.reports.length, 1, sentinel);
+    assert.equal(JSON.stringify(db.reports).includes(sentinel), false, sentinel);
+    assert.equal(responseBytes.includes(sentinel), false, sentinel);
+    assert.equal(ownerBytes.includes(sentinel), false, sentinel);
+    assert.equal(JSON.parse(db.reports[0].payload).adaptive.audit.recent[0].message, 'report-attempt', sentinel);
+
+    const reasonDb = memoryDb();
+    const reasonAdaptive = adaptiveReport(10);
+    reasonAdaptive.promotion.reasons = [sentinel];
+    assert.equal((await post(paperReport({ adaptive: reasonAdaptive }), envFor(reasonDb))).status, 400, sentinel);
+    assert.equal(reasonDb.reports.length, 0, sentinel);
+  }
 });
 
 test('paper read is exact behavior-owner only, fail-closed, no-store, and returns the latest validated snapshot', async () => {
@@ -305,6 +372,22 @@ test('paper read is exact behavior-owner only, fail-closed, no-store, and return
   assert.equal(payload.report.sequence, 2);
   assert.equal(payload.report.equity, 102);
   assert.ok(payload.received_at);
+
+  db.reports[0].payload = '{"invalid":true}';
+  const corrupt = await get(env);
+  assert.equal(corrupt.status, 500);
+  assert.equal(corrupt.headers.get('cache-control'), 'private, no-store');
+
+  const throwingDb = memoryDb();
+  const originalPrepare = throwingDb.prepare.bind(throwingDb);
+  throwingDb.prepare = (sql) => {
+    const statement = originalPrepare(sql);
+    if (sql.includes('FROM usage_snapshots')) statement.first = async () => { throw new Error('synthetic database failure'); };
+    return statement;
+  };
+  const failed = await get(envFor(throwingDb));
+  assert.equal(failed.status, 500);
+  assert.equal(failed.headers.get('cache-control'), 'private, no-store');
 });
 
 test('dashboard read authenticates the separate human owner before validating or starting upstream work', async () => {

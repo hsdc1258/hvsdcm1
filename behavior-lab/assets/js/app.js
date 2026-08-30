@@ -6,11 +6,11 @@
   const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'];
   const PERIODS = ['5m', '15m', '1h', '4h'];
   const PAPER_REFRESH_MS = 5_000;
+  const PAPER_REQUEST_TIMEOUT_MS = 4_000;
   const core = window.BehaviorLabCore;
-  const token = localStorage.getItem('hvsdcm.token') || '';
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, paper: null, paperLoading: false, activeTab: 'market',
+    ownerVerified: false, paper: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
   };
 
   const elements = {
@@ -127,6 +127,8 @@
   function finite(value) {
     return typeof value === 'number' && Number.isFinite(value);
   }
+
+  function ownerToken() { return localStorage.getItem('hvsdcm.token') || ''; }
 
   function validPayload(payload, symbol, period, now = Date.now()) {
     if (!payload || payload.source !== 'live' || payload.quality !== 'live') return false;
@@ -344,7 +346,7 @@
         method: 'GET',
         credentials: 'omit',
         cache: 'no-store',
-        headers: { accept: 'application/json', authorization: `Bearer ${token}` },
+        headers: { accept: 'application/json', authorization: `Bearer ${ownerToken()}` },
         signal: state.controller.signal,
       });
       const payload = await response.json().catch(() => ({}));
@@ -472,7 +474,19 @@
   }
 
   function showOwnerGate(status = 0) {
+    state.paperRequestId += 1;
+    state.paperController?.abort();
+    state.paperController = null;
+    state.paperLoading = false;
     state.ownerVerified = false;
+    state.paper = null;
+    elements.paperReport.hidden = true;
+    elements.paperReport.dataset.freshness = 'stale';
+    elements.paperReport.setAttribute('aria-busy', 'false');
+    elements.paperAdaptive.hidden = true;
+    elements.paperEmpty.hidden = true;
+    elements.paperError.hidden = true;
+    elements.refreshPaper.disabled = false;
     elements.labShell.hidden = true;
     elements.ownerGate.hidden = false;
     elements.retryOwnerGate.hidden = status === 401 || status === 404;
@@ -518,6 +532,7 @@
       halted: 'HALTED · 위험 한도 정지',
       complete: 'COMPLETE · 세션 종료',
       error: 'ERROR · 실행 오류',
+      stale: 'STALE · 이전 보고',
     };
     elements.paperStatus.className = `live-status ${status === 'active' || status === 'complete' ? 'is-live' : status === 'starting' ? 'is-loading' : 'is-error'}`;
     elements.paperStatus.querySelector('span').textContent = labels[status] || '상태 미확인';
@@ -701,6 +716,8 @@
 
   function renderPaper(report) {
     state.paper = report;
+    elements.paperReport.dataset.freshness = 'fresh';
+    elements.paperError.hidden = true;
     paperStatus(report.status);
     elements.paperDeadline.textContent = formatKoreanTime(report.deadline_at);
     elements.paperLastCycle.textContent = formatKoreanTime(report.last_cycle_at);
@@ -726,17 +743,44 @@
     elements.paperReport.setAttribute('aria-busy', 'false');
   }
 
-  async function loadPaper({ verifyOwner = false } = {}) {
-    if (state.paperLoading) return;
+  function markPaperRefreshError(error, timedOut = false) {
+    const fallback = timedOut ? '모의투자 보고 요청 시간이 초과되었습니다.' : '모의투자 보고를 불러오지 못했습니다.';
+    const message = timedOut ? fallback : error?.message || fallback;
+    const retained = Boolean(state.paper && !elements.paperReport.hidden);
+    elements.paperErrorText.textContent = retained
+      ? `${message} 업데이트하지 못했습니다. 이전 보고를 표시합니다.`
+      : message;
+    elements.paperError.hidden = false;
+    if (retained) {
+      elements.paperReport.dataset.freshness = 'stale';
+      paperStatus('stale');
+    }
+  }
+
+  async function loadPaper({ verifyOwner = false, force = false } = {}) {
+    if (state.paperLoading && !force) return;
+    if (force) state.paperController?.abort();
+    const requestId = ++state.paperRequestId;
+    const controller = new AbortController();
+    state.paperController = controller;
     state.paperLoading = true;
-    elements.paperError.hidden = true;
     elements.paperReport.setAttribute('aria-busy', 'true');
+    let timedOut = false;
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(new Error('모의투자 보고 요청 시간이 초과되었습니다.'));
+      }, PAPER_REQUEST_TIMEOUT_MS);
+    });
     try {
-      const response = await fetch(`${API_URL}/api/behavior-lab/paper`, {
+      const response = await Promise.race([fetch(`${API_URL}/api/behavior-lab/paper`, {
         method: 'GET', credentials: 'omit', cache: 'no-store',
-        headers: { accept: 'application/json', authorization: `Bearer ${token}` },
-      });
-      const payload = await response.json().catch(() => ({}));
+        headers: { accept: 'application/json', authorization: `Bearer ${ownerToken()}` }, signal: controller.signal,
+      }), timeout]);
+      const payload = await Promise.race([response.json().catch(() => ({})), timeout]);
+      if (requestId !== state.paperRequestId) return;
       if (response.status === 401 || response.status === 404) throw new OwnerAccessError(response.status);
       if (!response.ok) throw new Error(payload.error || '모의투자 보고를 불러오지 못했습니다.');
       if (verifyOwner) unlockOwnerShell();
@@ -744,23 +788,35 @@
         state.paper = null;
         paperStatus('starting');
         elements.paperReport.hidden = true;
+        elements.paperAdaptive.hidden = true;
         elements.paperEmpty.hidden = false;
+        elements.paperError.hidden = true;
         return;
       }
       if (!validPaperReport(payload.report)) throw new Error('검증되지 않은 모의투자 보고는 표시하지 않았습니다.');
       renderPaper(payload.report);
     } catch (error) {
-      if (error instanceof OwnerAccessError || verifyOwner) throw error;
-      elements.paperErrorText.textContent = error.message || '모의투자 보고를 불러오지 못했습니다.';
-      elements.paperError.hidden = false;
-      elements.paperReport.setAttribute('aria-busy', 'false');
+      if (requestId !== state.paperRequestId) return;
+      if (error instanceof OwnerAccessError) {
+        if (verifyOwner) throw error;
+        showOwnerGate(error.status);
+        return;
+      }
+      if (verifyOwner) throw error;
+      markPaperRefreshError(error, timedOut);
     } finally {
-      state.paperLoading = false;
+      window.clearTimeout(timeoutId);
+      if (requestId === state.paperRequestId) {
+        state.paperLoading = false;
+        state.paperController = null;
+        elements.paperReport.setAttribute('aria-busy', 'false');
+        elements.refreshPaper.disabled = false;
+      }
     }
   }
 
   async function bootstrap() {
-    if (!token) {
+    if (!ownerToken()) {
       showOwnerGate(401);
       return;
     }
@@ -769,7 +825,7 @@
     elements.ownerGateTitle.textContent = '접근 권한 확인 중';
     elements.ownerGateMessage.textContent = '소유자 전용 보고 API로 세션을 확인하고 있습니다.';
     try {
-      await loadPaper({ verifyOwner: true });
+      await loadPaper({ verifyOwner: true, force: true });
       switchTab(location.hash === '#paper' ? 'paper' : 'market');
       void loadDashboard();
     } catch (error) {
@@ -801,7 +857,7 @@
   elements.copyDraft.addEventListener('click', () => void copyDraft());
   elements.marketTab.addEventListener('click', () => switchTab('market'));
   elements.paperTab.addEventListener('click', () => switchTab('paper'));
-  elements.refreshPaper.addEventListener('click', () => void loadPaper());
+  elements.refreshPaper.addEventListener('click', () => void loadPaper({ force: true }));
   elements.retryOwnerGate.addEventListener('click', () => void bootstrap());
   riskInputs.forEach((input) => input.addEventListener('input', () => {
     clearDraft();

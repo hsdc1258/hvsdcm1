@@ -34,6 +34,10 @@ export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_S
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
 const VALID_BEHAVIOR_ADAPTIVE_STREAM_STATUSES = new Set(['connecting', 'live', 'stale', 'stopped', 'error']);
 const VALID_BEHAVIOR_ADAPTIVE_PROMOTION_STATUSES = new Set(['collecting', 'held', 'promoted', 'rolled-back']);
+const VALID_BEHAVIOR_ADAPTIVE_PROMOTION_REASONS = new Set([
+  'minimum-evidence-not-yet-complete', 'minimum-age', 'minimum-trades', 'multi-window-stability',
+  'net-expectancy', 'drawdown', 'turnover-cost', 'all-bounded-gates-passed', 'post-promotion-drawdown-breach',
+]);
 const VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS = new Set([
   'engine-start', 'connection', 'reconnect', 'heartbeat', 'raw-packet', 'normalized-packet',
   'packet-rejected', 'stream-gap', 'stream-stale', 'feature', 'strategy-vote', 'no-trade',
@@ -1189,13 +1193,14 @@ function normalizePaperDetail(value, { maxKeys = 32, maxString = 240 } = {}) {
   const normalized = {};
   for (const [key, item] of entries) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,47}$/u.test(key)) return null;
+    if (/^(?:authorization|api[-_ ]?key|secret|token|passphrase|access[-_ ]?(?:key|secret|token)|private[-_ ]?key|account[-_ ]?id|order[-_ ]?id)$/iu.test(key)) return null;
     if (item === null || typeof item === 'boolean') {
       normalized[key] = item;
     } else if (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1_000_000_000_000) {
       normalized[key] = item;
     } else if (typeof item === 'string') {
       const text = boundedPaperText(item, maxString);
-      if (text === null) return null;
+      if (text === null || containsForbiddenPaperPrivateText(text)) return null;
       normalized[key] = text;
     } else {
       return null;
@@ -1210,7 +1215,7 @@ function normalizePaperLogs(value) {
   for (const entry of value) {
     if (typeof entry === 'string') {
       const message = boundedPaperText(entry, 500, true);
-      if (!message) return null;
+      if (!message || containsForbiddenPaperPrivateText(message)) return null;
       logs.push({ message });
       continue;
     }
@@ -1225,7 +1230,7 @@ function normalizePaperLimitations(value) {
   const entries = typeof value === 'string' ? [value] : value;
   if (!Array.isArray(entries) || entries.length < 1 || entries.length > 12) return null;
   const normalized = entries.map((entry) => boundedPaperText(entry, 400, true));
-  return normalized.some((entry) => entry === null) ? null : normalized;
+  return normalized.some((entry) => entry === null || containsForbiddenPaperPrivateText(entry)) ? null : normalized;
 }
 
 function normalizeAdaptiveStrategyId(value, nullable = false) {
@@ -1268,14 +1273,15 @@ function normalizeAdaptiveAudit(value) {
     const entrySequence = boundedPaperNumber(entry.sequence, 1, 100_000_000, true);
     const at = normalizePaperTimestamp(entry.at);
     const kind = boundedPaperText(entry.kind, 40, true);
-    const message = boundedPaperText(entry.message, 240, true);
+    const producerMessage = boundedPaperText(entry.message, 240, true);
     const entryHash = normalizeAdaptiveHash(entry.hash);
     if (entrySequence === null || entrySequence <= previousSequence || entrySequence > sequence
-      || !at || !kind || !VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS.has(kind) || !message || !entryHash) return null;
-    recent.push({ sequence: entrySequence, at, kind, message, hash: entryHash });
+      || !at || !kind || !VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS.has(kind) || !producerMessage || !entryHash) return null;
+    recent.push({ sequence: entrySequence, at, kind, message: kind, hash: entryHash });
     previousSequence = entrySequence;
   }
-  if ((sequence === 0 && recent.length !== 0) || (recent.length && recent.at(-1).sequence !== sequence)) return null;
+  if (sequence === 0 ? recent.length !== 0
+    : !recent.length || recent.at(-1).sequence !== sequence || recent.at(-1).hash !== hash) return null;
   return { sequence, hash, recent };
 }
 
@@ -1315,7 +1321,7 @@ function normalizeBehaviorPaperAdaptive(value) {
     || checkpointAt === undefined || from === undefined || to === undefined
     || !Array.isArray(promotion.reasons) || promotion.reasons.length < 1 || promotion.reasons.length > 12) return null;
   const reasons = promotion.reasons.map((reason) => boundedPaperText(reason, 160, true));
-  if (reasons.some((reason) => reason === null)) return null;
+  if (reasons.some((reason) => reason === null || !VALID_BEHAVIOR_ADAPTIVE_PROMOTION_REASONS.has(reason))) return null;
   if (promotionStatus === 'collecting' && (checkpointAt !== null || from !== null || to !== null)) return null;
   if (promotionStatus !== 'collecting' && checkpointAt === null) return null;
   if (['promoted', 'rolled-back'].includes(promotionStatus) && (!from || !to || from === to)) return null;
@@ -1417,6 +1423,15 @@ export function normalizeBehaviorPaperReport(input) {
   };
 }
 
+function containsForbiddenPaperPrivateText(value) {
+  return /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/iu.test(value)
+    || /\b(?:api[-_ ]?key|secret|token|passphrase|access[-_ ]?(?:key|secret|token)|private[-_ ]?key)\b\s*(?:=|:)\s*\S+/iu.test(value)
+    || /\b[A-Z][A-Z0-9_]{2,}(?:TOKEN|SECRET|KEY|PASSPHRASE)\s*=\s*\S+/u.test(value)
+    || /(?:^|[\s"'`])\/api\/[^\s"'`]*(?:account|orders?|positions?|private|trade)(?:\/|[\s"'`]|$)/iu.test(value)
+    || /\bwss?:\/\/[^\s"'`]+\/private(?:\/|\b)/iu.test(value)
+    || /\b(?:account[-_ ]?id|order[-_ ]?id|private[-_ ]?(?:route|field|data))\b(?:\s*(?:=|:)\s*\S+)?/iu.test(value);
+}
+
 async function readBehaviorPaperJson(request) {
   const declaredLength = Number(request.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BEHAVIOR_PAPER_BYTES) {
@@ -1460,19 +1475,40 @@ async function reportBehaviorPaper(request, env) {
     ON CONFLICT(source) DO UPDATE SET
       captured_at = excluded.captured_at,
       payload = excluded.payload
-    WHERE (
-      CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
-        > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER), -1)
+    WHERE CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+        >= CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
       AND (
         json_type(usage_snapshots.payload, '$.adaptive') IS NULL
         OR json_type(excluded.payload, '$.adaptive') = 'object'
       )
-    ) OR (
-      CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
-        = CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
-      AND CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
-        > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER), -1)
-    )
+      AND (
+        json_type(usage_snapshots.payload, '$.adaptive') IS NULL
+        OR (
+          CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
+            >= CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER)
+          AND (
+            CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
+              > CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER)
+            OR json_extract(excluded.payload, '$.adaptive.audit.hash')
+              = json_extract(usage_snapshots.payload, '$.adaptive.audit.hash')
+          )
+        )
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
+        OR (
+          json_type(excluded.payload, '$.adaptive') = 'object'
+          AND CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
+            > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER), -1)
+        )
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
+        OR json_remove(excluded.payload, '$.generated_at', '$.adaptive')
+          = json_remove(usage_snapshots.payload, '$.generated_at', '$.adaptive')
+      )
   `).bind(
     BEHAVIOR_PAPER_SNAPSHOT_SOURCE,
     receivedAt,

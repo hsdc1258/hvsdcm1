@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/format-css.mjs --check && node scripts/validate.mjs && node scripts/session-state-org-overview.e2e.mjs && node scripts/full-pipeline-org.e2e.mjs && node scripts/usage-api-render.e2e.mjs && node --test scripts/behavior-lab.test.mjs scripts/competition-report.test.mjs scripts/competition-secret.test.mjs scripts/competition-ui.test.mjs scripts/gichul/gichul.test.mjs scripts/learning/learning.test.mjs scripts/study-utils.test.mjs scripts/usage.test.mjs scripts/validate.test.mjs worker/behavior-lab.test.mjs worker/paper-report.test.mjs worker/test.mjs",
+    "test": "node scripts/format-css.mjs --check && node scripts/validate.mjs && node scripts/session-state-org-overview.e2e.mjs && node scripts/full-pipeline-org.e2e.mjs && node scripts/usage-api-render.e2e.mjs && node scripts/behavior-lab-ui.e2e.mjs && node --test scripts/behavior-lab.test.mjs scripts/competition-report.test.mjs scripts/competition-secret.test.mjs scripts/competition-ui.test.mjs scripts/gichul/gichul.test.mjs scripts/learning/learning.test.mjs scripts/study-utils.test.mjs scripts/usage.test.mjs scripts/validate.test.mjs worker/behavior-lab.test.mjs worker/paper-report.test.mjs worker/test.mjs",
     "validate": "node scripts/validate.mjs",
     "format:css": "node scripts/format-css.mjs",
     "format:css:check": "node scripts/format-css.mjs --check",
@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.100",
+    "@playwright/test": "^1.62.1",
     "pdfjs-dist": "^4.10.38"
   }
 }
