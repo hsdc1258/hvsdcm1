@@ -8,9 +8,9 @@
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v3">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v4">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260831-v3" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260831-v4" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
@@ -180,7 +180,7 @@
       </div>
 
       <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
-      <div id="paperEmpty" class="empty-state" hidden><strong>WAITING FOR FIRST CYCLE</strong><p>첫 검증된 5분 주기 보고가 도착하면 여기에 표시됩니다.</p></div>
+      <div id="paperEmpty" class="empty-state" hidden><strong>WAITING FOR FIRST REPORT</strong><p>첫 검증된 실시간 모의 보고가 도착하면 여기에 표시됩니다.</p></div>
       <div id="paperReport" class="paper-report" aria-busy="true" hidden>
         <div class="paper-meta">
           <span>마감 <b id="paperDeadline">—</b></span>
@@ -195,6 +195,42 @@
           <article><span>종료 거래</span><strong id="paperTrades">—</strong><small id="paperRecord">—</small></article>
           <article><span>현금 / 미실현</span><strong id="paperCash">—</strong><small id="paperUnrealized">—</small></article>
         </div>
+
+        <article id="paperAdaptive" class="panel adaptive-panel" hidden>
+          <div class="section-heading-row compact">
+            <div><p class="section-index">REALTIME ADAPTIVE PAPER V2</p><h2>실시간 엔진 · 재귀 개선 감사</h2></div>
+            <span id="adaptiveStream" class="adaptive-stream is-connecting" aria-live="polite">연결 확인 중</span>
+          </div>
+          <div class="adaptive-summary-grid">
+            <div><span>판단 주기</span><b id="adaptiveCadence">—</b></div>
+            <div><span>업그레이드</span><b id="adaptiveUpgraded">—</b></div>
+            <div><span>감사 원장</span><b id="adaptiveAuditRef">—</b></div>
+            <div><span>최근 패킷</span><b id="adaptiveLastPacket">—</b></div>
+          </div>
+          <div class="adaptive-state-grid">
+            <section aria-labelledby="adaptiveChampionTitle">
+              <p class="section-index">IMMUTABLE CHAMPION</p>
+              <h3 id="adaptiveChampionTitle">현재 챔피언</h3>
+              <div id="adaptiveChampion" class="paper-kv"></div>
+            </section>
+            <section aria-labelledby="adaptivePromotionTitle">
+              <p class="section-index">BOUNDED PROMOTION</p>
+              <h3 id="adaptivePromotionTitle">승격 상태</h3>
+              <div id="adaptivePromotion" class="paper-kv"></div>
+              <ul id="adaptivePromotionReasons" class="adaptive-reasons"></ul>
+            </section>
+          </div>
+          <div class="adaptive-detail-grid">
+            <section aria-labelledby="adaptiveChallengerTitle">
+              <div><p class="section-index">SHADOW CHALLENGERS</p><h3 id="adaptiveChallengerTitle">비용 차감 비교</h3></div>
+              <div class="paper-table-wrap"><table><thead><tr><th>전략</th><th>거래</th><th>기대값</th><th>낙폭</th><th>비용</th></tr></thead><tbody id="adaptiveChallengersBody"></tbody></table></div>
+            </section>
+            <section aria-labelledby="adaptiveAuditTitle">
+              <div><p class="section-index">CHAINED AUDIT</p><h3 id="adaptiveAuditTitle">최근 감사 로그</h3></div>
+              <ol id="adaptiveAudit" class="paper-logs adaptive-audit"></ol>
+            </section>
+          </div>
+        </article>
 
         <article class="panel paper-position-panel">
           <div class="section-heading-row compact"><div><p class="section-index">OPEN POSITION</p><h2>현재 포지션</h2></div></div>

@@ -10,6 +10,43 @@ import {
   normalizeBehaviorPaperReport,
 } from './src/router.js';
 
+const HASH_A = 'a'.repeat(64);
+const HASH_B = 'b'.repeat(64);
+const HASH_C = 'c'.repeat(64);
+
+function adaptiveReport(auditSequence = 10, overrides = {}) {
+  return {
+    engine_version: 'realtime-paper-v2',
+    strategy_schema: 1,
+    upgraded_at: '2026-08-30T18:30:00.000Z',
+    cadence: {
+      regime: '5m', candidate: 'completed-1m', risk: 'ticker-event', microstructure: '1s/3s-persistence',
+      weight_checkpoint: '15m', challenger_checkpoint: '24h-minimum',
+    },
+    stream: {
+      status: 'live', last_packet_at: '2026-08-30T18:59:59.000Z', reconnect_count: 1, credential_used: false,
+    },
+    champion: { id: 'adaptive-balanced-v1', version: 1, hash: HASH_A },
+    challengers: [{
+      id: 'adaptive-trend-v1', version: 1, hash: HASH_B, trade_count: 4,
+      expectancy: 0.12, max_drawdown_pct: 1.5, cost_bps: 20,
+    }],
+    promotion: {
+      status: 'collecting', last_checkpoint_at: null, from: null, to: null,
+      reasons: ['minimum-evidence-not-yet-complete'],
+    },
+    audit: {
+      sequence: auditSequence,
+      hash: HASH_C,
+      recent: [{
+        sequence: auditSequence, at: '2026-08-30T18:59:59.000Z', kind: 'report-attempt',
+        message: 'bounded-owner-summary', hash: HASH_C,
+      }],
+    },
+    ...overrides,
+  };
+}
+
 function paperReport(overrides = {}) {
   return {
     session_id: BEHAVIOR_PAPER_SESSION_ID,
@@ -68,12 +105,17 @@ function memoryDb({ username = 'hvsdcm' } = {}) {
           if (sql.includes('INSERT INTO usage_snapshots')) {
             assert.match(sql, /ON CONFLICT\(source\) DO UPDATE/u);
             assert.match(sql, /json_extract\(excluded\.payload, '\$\.sequence'\)/u);
+            assert.match(sql, /\$\.adaptive\.audit\.sequence/u);
             assert.match(sql, /> COALESCE/u);
             const [source, capturedAt, payload] = this.values;
-            const sequence = JSON.parse(payload).sequence;
-            const latest = reports[0]?.sequence || 0;
-            if (latest >= sequence) return { success: true, meta: { changes: 0 } };
-            reports[0] = { source, sequence, payload, captured_at: capturedAt };
+            const parsed = JSON.parse(payload);
+            const latest = reports[0] ? JSON.parse(reports[0].payload) : null;
+            const auditSequence = parsed.adaptive?.audit?.sequence ?? -1;
+            const latestAuditSequence = latest?.adaptive?.audit?.sequence ?? -1;
+            const newerPaper = !latest || (parsed.sequence > latest.sequence && (!latest.adaptive || parsed.adaptive));
+            const newerAudit = latest && parsed.sequence === latest.sequence && auditSequence > latestAuditSequence;
+            if (!newerPaper && !newerAudit) return { success: true, meta: { changes: 0 } };
+            reports[0] = { source, sequence: parsed.sequence, auditSequence, payload, captured_at: capturedAt };
             return { success: true, meta: { changes: 1 } };
           }
           throw new Error(`Unexpected run SQL: ${sql}`);
@@ -146,7 +188,36 @@ test('paper report schema fixes the simulation, $100 seed, session, deadline, fi
   }
 });
 
-test('paper ingest requires its dedicated bearer, rejects oversized input, and replaces only with a newer sequence', async () => {
+test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy reports readable', () => {
+  const legacy = normalizeBehaviorPaperReport(paperReport());
+  assert.equal(Object.hasOwn(legacy, 'adaptive'), false);
+  const normalized = normalizeBehaviorPaperReport(paperReport({ adaptive: adaptiveReport() }));
+  assert.equal(normalized.adaptive.engine_version, 'realtime-paper-v2');
+  assert.equal(normalized.adaptive.stream.credential_used, false);
+  assert.equal(normalized.adaptive.challengers.length, 1);
+  assert.equal(normalized.adaptive.audit.sequence, 10);
+
+  const valid = adaptiveReport();
+  for (const adaptive of [
+    { ...valid, engine_version: 'realtime-paper-v3' },
+    { ...valid, cadence: { ...valid.cadence, candidate: '5m' } },
+    { ...valid, stream: { ...valid.stream, credential_used: true } },
+    { ...valid, champion: { ...valid.champion, hash: 'short' } },
+    { ...valid, challengers: Array.from({ length: 9 }, (_, index) => ({
+      ...valid.challengers[0], id: `adaptive-shadow-${index}`,
+    })) },
+    { ...valid, challengers: [{ ...valid.challengers[0], id: valid.champion.id }] },
+    { ...valid, challengers: [{ ...valid.challengers[0], expectancy: Number.NaN }] },
+    { ...valid, promotion: { ...valid.promotion, reasons: Array.from({ length: 13 }, () => 'reason') } },
+    { ...valid, audit: { ...valid.audit, recent: Array.from({ length: 21 }, () => valid.audit.recent[0]) } },
+    { ...valid, audit: { ...valid.audit, recent: [{ ...valid.audit.recent[0], sequence: 11 }] } },
+    { ...valid, stream: { ...valid.stream, last_packet_at: '2026-08-30T19:00:01.000Z' } },
+  ]) {
+    assert.equal(normalizeBehaviorPaperReport(paperReport({ adaptive })), null, JSON.stringify(adaptive));
+  }
+});
+
+test('paper ingest requires its dedicated bearer and advances paper or same-session audit sequence without downgrade', async () => {
   const db = memoryDb();
   const env = envFor(db);
   const missing = await post(paperReport(), env, '');
@@ -171,14 +242,21 @@ test('paper ingest requires its dedicated bearer, rejects oversized input, and r
   const replay = await post(paperReport(), env);
   assert.equal(replay.status, 409);
   assert.equal(db.reports.length, 1);
-  const second = await post(paperReport({ sequence: 2, status: 'complete' }), env);
+
+  const upgraded = await post(paperReport({ adaptive: adaptiveReport(10) }), env);
+  assert.equal(upgraded.status, 200);
+  assert.equal((await post(paperReport({ adaptive: adaptiveReport(10) }), env)).status, 409);
+  assert.equal((await post(paperReport({ adaptive: adaptiveReport(11) }), env)).status, 200);
+  assert.equal((await post(paperReport({ sequence: 2 }), env)).status, 409);
+
+  const second = await post(paperReport({ sequence: 2, status: 'complete', adaptive: adaptiveReport(12) }), env);
   assert.equal(second.status, 200);
   assert.equal(db.reports.length, 1);
   assert.equal(db.reports[0].source, BEHAVIOR_PAPER_SNAPSHOT_SOURCE);
   assert.equal(JSON.parse(db.reports[0].payload).status, 'complete');
 });
 
-test('paper sequence upsert is atomic and strictly increasing in real SQLite', async (t) => {
+test('paper and adaptive audit upsert is atomic and monotonic in real SQLite', async (t) => {
   let DatabaseSync;
   try { ({ DatabaseSync } = await import('node:sqlite')); } catch { DatabaseSync = null; }
   if (!DatabaseSync) return t.skip('node:sqlite unavailable');
@@ -187,13 +265,18 @@ test('paper sequence upsert is atomic and strictly increasing in real SQLite', a
   database.exec(readFileSync(new URL('./migrations/0005_usage_snapshots.sql', import.meta.url), 'utf8'));
   const env = envFor(sqliteD1(database));
 
-  assert.equal((await post(paperReport({ sequence: 2 }), env)).status, 200);
-  assert.equal((await post(paperReport({ sequence: 1 }), env)).status, 409);
-  assert.equal((await post(paperReport({ sequence: 2 }), env)).status, 409);
-  assert.equal((await post(paperReport({ sequence: 3, equity: 103, net_pnl: 3, return_pct: 3 }), env)).status, 200);
+  assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(20) }), env)).status, 200);
+  assert.equal((await post(paperReport({ sequence: 1, adaptive: adaptiveReport(99) }), env)).status, 409);
+  assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(20) }), env)).status, 409);
+  assert.equal((await post(paperReport({ sequence: 2, adaptive: adaptiveReport(21) }), env)).status, 200);
+  assert.equal((await post(paperReport({ sequence: 3 }), env)).status, 409);
+  assert.equal((await post(paperReport({
+    sequence: 3, equity: 103, net_pnl: 3, return_pct: 3, adaptive: adaptiveReport(22),
+  }), env)).status, 200);
   const row = database.prepare('SELECT source, payload FROM usage_snapshots').get();
   assert.equal(row.source, BEHAVIOR_PAPER_SNAPSHOT_SOURCE);
   assert.equal(JSON.parse(row.payload).sequence, 3);
+  assert.equal(JSON.parse(row.payload).adaptive.audit.sequence, 22);
 });
 
 test('paper read is exact behavior-owner only, fail-closed, no-store, and returns the latest validated snapshot', async () => {

@@ -5,14 +5,25 @@
   const API_URL = /^(?:127\.0\.0\.1|localhost)$/u.test(location.hostname) ? location.origin : DEFAULT_API_URL;
   const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'];
   const PERIODS = ['5m', '15m', '1h', '4h'];
+  const PAPER_REFRESH_MS = 5_000;
   const core = window.BehaviorLabCore;
   const token = localStorage.getItem('hvsdcm.token') || '';
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, paper: null, activeTab: 'market',
+    ownerVerified: false, paper: null, paperLoading: false, activeTab: 'market',
   };
 
   const elements = {
+    adaptiveAudit: document.getElementById('adaptiveAudit'),
+    adaptiveAuditRef: document.getElementById('adaptiveAuditRef'),
+    adaptiveCadence: document.getElementById('adaptiveCadence'),
+    adaptiveChallengersBody: document.getElementById('adaptiveChallengersBody'),
+    adaptiveChampion: document.getElementById('adaptiveChampion'),
+    adaptiveLastPacket: document.getElementById('adaptiveLastPacket'),
+    adaptivePromotion: document.getElementById('adaptivePromotion'),
+    adaptivePromotionReasons: document.getElementById('adaptivePromotionReasons'),
+    adaptiveStream: document.getElementById('adaptiveStream'),
+    adaptiveUpgraded: document.getElementById('adaptiveUpgraded'),
     backtestChronology: document.getElementById('backtestChronology'),
     backtestEmpty: document.getElementById('backtestEmpty'),
     backtestResult: document.getElementById('backtestResult'),
@@ -65,6 +76,7 @@
     paperLimitations: document.getElementById('paperLimitations'),
     paperLogs: document.getElementById('paperLogs'),
     paperNetPnl: document.getElementById('paperNetPnl'),
+    paperAdaptive: document.getElementById('paperAdaptive'),
     paperPosition: document.getElementById('paperPosition'),
     paperRecord: document.getElementById('paperRecord'),
     paperReport: document.getElementById('paperReport'),
@@ -583,6 +595,99 @@
     elements.paperLogs.replaceChildren(...rows);
   }
 
+  function validAdaptiveReport(adaptive) {
+    const hash = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
+    const strategy = (value, metrics = false) => Boolean(value
+      && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(value.id) && Number.isInteger(value.version) && value.version > 0
+      && hash(value.hash) && (!metrics || (Number.isInteger(value.trade_count) && value.trade_count >= 0
+        && finite(value.expectancy) && finite(value.max_drawdown_pct) && finite(value.cost_bps))));
+    const exactCadence = adaptive?.cadence?.regime === '5m' && adaptive.cadence.candidate === 'completed-1m'
+      && adaptive.cadence.risk === 'ticker-event' && adaptive.cadence.microstructure === '1s/3s-persistence'
+      && adaptive.cadence.weight_checkpoint === '15m' && adaptive.cadence.challenger_checkpoint === '24h-minimum';
+    const recent = adaptive?.audit?.recent;
+    return Boolean(adaptive && adaptive.engine_version === 'realtime-paper-v2' && adaptive.strategy_schema === 1
+      && exactCadence && Number.isFinite(Date.parse(adaptive.upgraded_at))
+      && ['connecting', 'live', 'stale', 'stopped', 'error'].includes(adaptive.stream?.status)
+      && (adaptive.stream.last_packet_at === null || Number.isFinite(Date.parse(adaptive.stream.last_packet_at)))
+      && Number.isInteger(adaptive.stream.reconnect_count) && adaptive.stream.reconnect_count >= 0
+      && adaptive.stream.credential_used === false && strategy(adaptive.champion)
+      && Array.isArray(adaptive.challengers) && adaptive.challengers.length <= 8
+      && adaptive.challengers.every((entry) => strategy(entry, true))
+      && ['collecting', 'held', 'promoted', 'rolled-back'].includes(adaptive.promotion?.status)
+      && Array.isArray(adaptive.promotion.reasons) && adaptive.promotion.reasons.length <= 12
+      && Number.isInteger(adaptive.audit?.sequence) && adaptive.audit.sequence >= 0
+      && (adaptive.audit.sequence === 0 ? adaptive.audit.hash === 'GENESIS' : hash(adaptive.audit.hash))
+      && Array.isArray(recent) && recent.length <= 20
+      && recent.every((entry) => Number.isInteger(entry.sequence) && entry.sequence > 0
+        && Number.isFinite(Date.parse(entry.at)) && typeof entry.kind === 'string'
+        && typeof entry.message === 'string' && hash(entry.hash)));
+  }
+
+  function renderAdaptiveReport(adaptive) {
+    if (!adaptive) {
+      elements.paperAdaptive.hidden = true;
+      return;
+    }
+    const streamLabels = {
+      connecting: 'CONNECTING · 공개 스트림 연결 중', live: 'LIVE · ticker 위험 평가 중',
+      stale: 'STALE · 신규 진입 차단', stopped: 'STOPPED · 스트림 종료', error: 'ERROR · 스트림 오류',
+    };
+    elements.adaptiveStream.className = `adaptive-stream is-${adaptive.stream.status}`;
+    elements.adaptiveStream.textContent = streamLabels[adaptive.stream.status];
+    elements.adaptiveCadence.textContent = '5분 체제 · 완성 1분 후보 · ticker 위험 · 1초/3초 지속';
+    elements.adaptiveUpgraded.textContent = formatKoreanTime(adaptive.upgraded_at);
+    elements.adaptiveAuditRef.textContent = `#${adaptive.audit.sequence} · ${adaptive.audit.hash.slice(0, 12)}…`;
+    elements.adaptiveLastPacket.textContent = adaptive.stream.last_packet_at
+      ? `${formatKoreanTime(adaptive.stream.last_packet_at)} · 재연결 ${adaptive.stream.reconnect_count}회`
+      : `아직 없음 · 재연결 ${adaptive.stream.reconnect_count}회`;
+    elements.adaptiveChampion.replaceChildren(
+      detailCell('전략', adaptive.champion.id),
+      detailCell('버전', `v${adaptive.champion.version}`),
+      detailCell('정의 hash', `${adaptive.champion.hash.slice(0, 16)}…`),
+    );
+
+    const promotionLabels = { collecting: '증거 수집 중', held: '현 챔피언 유지', promoted: '도전자 승격', 'rolled-back': '승격 롤백' };
+    const route = adaptive.promotion.from && adaptive.promotion.to
+      ? `${adaptive.promotion.from} → ${adaptive.promotion.to}` : '변경 없음';
+    elements.adaptivePromotion.replaceChildren(
+      detailCell('결정', promotionLabels[adaptive.promotion.status]),
+      detailCell('최근 checkpoint', adaptive.promotion.last_checkpoint_at),
+      detailCell('전환', route),
+    );
+    elements.adaptivePromotionReasons.replaceChildren(...adaptive.promotion.reasons.map((reason) => createText('li', '', reason)));
+
+    const challengerRows = adaptive.challengers.length ? adaptive.challengers.map((challenger) => {
+      const row = document.createElement('tr');
+      row.replaceChildren(
+        createText('td', '', `${challenger.id} · v${challenger.version}`),
+        createText('td', '', `${challenger.trade_count}회`),
+        createText('td', '', formatUsdt(challenger.expectancy, true)),
+        createText('td', '', formatPercent(challenger.max_drawdown_pct)),
+        createText('td', '', `${paperValue(challenger.cost_bps)} bps`),
+      );
+      return row;
+    }) : [(() => {
+      const row = document.createElement('tr');
+      const cell = createText('td', '', '등록된 shadow challenger가 없습니다.');
+      cell.colSpan = 5;
+      row.append(cell);
+      return row;
+    })()];
+    elements.adaptiveChallengersBody.replaceChildren(...challengerRows);
+
+    const auditRows = adaptive.audit.recent.length ? adaptive.audit.recent.map((entry) => {
+      const row = document.createElement('li');
+      row.append(
+        createText('time', '', formatKoreanTime(entry.at)),
+        createText('span', '', entry.message),
+        createText('small', '', `#${entry.sequence} · ${entry.kind} · ${entry.hash.slice(0, 12)}…`),
+      );
+      return row;
+    }) : [createText('li', '', '아직 감사 로그가 없습니다.')];
+    elements.adaptiveAudit.replaceChildren(...auditRows);
+    elements.paperAdaptive.hidden = false;
+  }
+
   function validPaperReport(report) {
     return Boolean(report && report.session_id === 'paper-20260831-100usd'
       && report.simulation === true && report.deadline_at === '2026-08-30T23:00:00.000Z'
@@ -590,7 +695,8 @@
       && finite(report.equity) && finite(report.net_pnl) && finite(report.return_pct)
       && Array.isArray(report.recent_trades) && report.recent_trades.length <= 25
       && Array.isArray(report.recent_logs) && report.recent_logs.length <= 50
-      && Array.isArray(report.limitations));
+      && Array.isArray(report.limitations)
+      && (report.adaptive === undefined || validAdaptiveReport(report.adaptive)));
   }
 
   function renderPaper(report) {
@@ -613,6 +719,7 @@
     renderPaperPosition(report.open_position);
     renderPaperTrades(report.recent_trades);
     renderPaperLogs(report.recent_logs);
+    renderAdaptiveReport(report.adaptive);
     elements.paperLimitations.replaceChildren(...report.limitations.map((item) => createText('li', '', item)));
     elements.paperEmpty.hidden = true;
     elements.paperReport.hidden = false;
@@ -620,6 +727,8 @@
   }
 
   async function loadPaper({ verifyOwner = false } = {}) {
+    if (state.paperLoading) return;
+    state.paperLoading = true;
     elements.paperError.hidden = true;
     elements.paperReport.setAttribute('aria-busy', 'true');
     try {
@@ -645,6 +754,8 @@
       elements.paperErrorText.textContent = error.message || '모의투자 보고를 불러오지 못했습니다.';
       elements.paperError.hidden = false;
       elements.paperReport.setAttribute('aria-busy', 'false');
+    } finally {
+      state.paperLoading = false;
     }
   }
 
@@ -700,6 +811,6 @@
   window.setInterval(refreshLiveClock, 1_000);
   window.setInterval(() => {
     if (state.ownerVerified) void loadPaper();
-  }, 30_000);
+  }, PAPER_REFRESH_MS);
   void bootstrap();
 })();
