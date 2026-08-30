@@ -497,6 +497,30 @@ test('credential and private identifier aliases fail closed before real SQLite p
     ['text-mismatched-sub-uid-quote', (report, sentinel) => {
       report.recent_trades[0].note = `{"SUB-UID':"${sentinel}"}`;
     }],
+    ['text-split-nested-access-sign', (report, sentinel) => {
+      report.recent_logs = [{ message: JSON.stringify({ access: { sign: sentinel } }) }];
+    }],
+    ['text-split-nested-api-key', (report, sentinel) => {
+      report.recent_logs = [{ message: JSON.stringify({ api: { key: sentinel } }) }];
+    }],
+    ['text-split-nested-trade-id', (report, sentinel) => {
+      report.recent_logs = [{ message: JSON.stringify({ trade: { id: sentinel } }) }];
+    }],
+    ['text-split-nested-fill-id', (report, sentinel) => {
+      report.recent_logs = [{ message: JSON.stringify({ fill: { id: sentinel } }) }];
+    }],
+    ['text-split-nested-private-key', (report, sentinel) => {
+      report.recent_logs = [{ message: JSON.stringify({ private: { key: sentinel } }) }];
+    }],
+    ['text-split-colon-access-sign', (report, sentinel) => {
+      report.limitations = [`access:sign=${sentinel}`];
+    }],
+    ['text-split-equals-api-key', (report, sentinel) => {
+      report.limitations = [`api=key:${sentinel}`];
+    }],
+    ['text-split-double-colon-access-sign', (report, sentinel) => {
+      report.limitations = [`ACCESS::SIGN:${sentinel}`];
+    }],
     ['text-client-oid', (report, sentinel) => {
       report.recent_trades[0].note = `clientOid: ${sentinel}`;
     }],
@@ -525,6 +549,79 @@ test('credential and private identifier aliases fail closed before real SQLite p
       assert.equal(ownerBytes.includes(sentinel), false, label);
       assert.equal(database.prepare('SELECT COUNT(*) AS count FROM usage_snapshots').get().count, 1, label);
       assert.equal(JSON.parse(storedBytes).sequence, 1, label);
+    } finally {
+      database.close();
+    }
+  }
+
+  const allowedCases = [
+    ['plain-strategy', (report, marker) => {
+      report.recent_logs = [{ message: `Public market strategy output remains simulated ${marker}` }];
+    }],
+    ['json-flat-strategy', (report, marker) => {
+      report.limitations = [JSON.stringify({
+        strategy_id: 'adaptive-trend-v1', signal_strength: 0.8, signed_volume: -12,
+        trade_count: 4, filled_ratio: 0.5, access_mode: 'public', subperiod_id: 'one-minute', marker,
+      })];
+    }],
+    ['json-nested-strategy', (report, marker) => {
+      report.recent_logs = [{ message: JSON.stringify({
+        strategy: { signal: { direction: 'long', strength: 0.8 }, risk: { mode: 'paper' } }, marker,
+      }) }];
+    }],
+    ['assignment-strategy', (report, marker) => {
+      report.limitations = [`strategy_id=adaptive-trend-v1 signal_strength:0.8 marker=${marker}`];
+    }],
+    ['camel-strategy', (report, marker) => {
+      report.recent_logs = [{
+        message: `signalStrength=0.8 signedVolume=-12 tradeCount=4 filledRatio=0.5 marker=${marker}`,
+      }];
+    }],
+    ['safe-separators', (report, marker) => {
+      report.recent_logs = [{
+        message: `strategy.id=adaptive-trend-v1 orderflow/imbalance=0.42 marker=${marker}`,
+      }];
+    }],
+    ['normal-signed-fill-prose', (report, marker) => {
+      report.limitations = [`The designated strategy assigned signed volume to a simulated paper fill ${marker}`];
+    }],
+    ['single-quoted-safe-json', (report, marker) => {
+      report.recent_logs = [{
+        message: `{'strategy_id'='adaptive-trend-v1','signal'='long','marker'='${marker}'}`,
+      }];
+    }],
+    ['json-safe-modes', (report, marker) => {
+      report.recent_logs = [{ message: JSON.stringify({
+        access_mode: 'public', subperiod_id: 'one-minute', paper_accounting: true, marker,
+      }) }];
+    }],
+    ['json-trade-metrics', (report, marker) => {
+      report.limitations = [JSON.stringify({
+        trade_count: 4, filled_ratio: 0.5, orderflow_imbalance: 0.42, public_api: 'market', marker,
+      })];
+    }],
+  ];
+
+  for (const [index, [label, mutate]] of allowedCases.entries()) {
+    const marker = `safevalue${String(index).padStart(2, '0')}`;
+    const candidate = paperReport({ sequence: 1, adaptive: adaptiveReport(19) });
+    mutate(candidate, marker);
+    assert.ok(normalizeBehaviorPaperReport(candidate), label);
+
+    const database = new DatabaseSync(':memory:');
+    try {
+      initializeOwnerPaperSqlite(database);
+      const env = envFor(sqliteD1(database));
+      const response = await post(candidate, env);
+      assert.equal(response.status, 200, label);
+      const responseBytes = await response.text();
+      const storedBytes = database.prepare('SELECT payload FROM usage_snapshots').get().payload;
+      const ownerResponse = await get(env);
+      assert.equal(ownerResponse.status, 200, label);
+      const ownerBytes = await ownerResponse.text();
+      assert.equal(storedBytes.includes(marker), true, label);
+      assert.equal(responseBytes.includes(marker), false, label);
+      assert.equal(ownerBytes.includes(marker), true, label);
     } finally {
       database.close();
     }
