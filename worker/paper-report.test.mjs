@@ -271,7 +271,11 @@ test('adaptive paper v2 is strict, bounded, credential-free, and keeps legacy re
       access_mode: 'public', subperiod_id: 'one-minute',
       message: 'Public API orderflow strategy signal=long',
     }],
-    limitations: ['Public API market data only; no credentials are used.'],
+    limitations: [
+      'Public market data only; strategy output remains simulated.',
+      '{"strategy_id":"adaptive-trend-v1","signal_strength":0.8,"signed_volume":-12,'
+        + '"trade_count":4,"filled_ratio":0.5,"access_mode":"public","subperiod_id":"one-minute"}',
+    ],
   }));
   assert.ok(allowedVocabulary);
   assert.equal(allowedVocabulary.recent_logs[0].strategy_id, 'adaptive-trend-v1');
@@ -474,6 +478,24 @@ test('credential and private identifier aliases fail closed before real SQLite p
     }],
     ['text-bitget-sign', (report, sentinel) => {
       report.recent_logs = [{ message: `BITGET-SIGN=${sentinel}` }];
+    }],
+    ['text-json-access-sign', (report, sentinel) => {
+      report.recent_logs = [{ message: `{"ACCESS-SIGN":"${sentinel}"}` }];
+    }],
+    ['text-json-api-key', (report, sentinel) => {
+      report.limitations = [`{"apiKey":"${sentinel}"}`];
+    }],
+    ['text-json-sub-uid', (report, sentinel) => {
+      report.recent_trades[0].note = `{"subUid":"${sentinel}"}`;
+    }],
+    ['text-nested-access-dot-sign', (report, sentinel) => {
+      report.recent_logs = [{ message: `{"headers":{"Access.Sign":"${sentinel}"}}` }];
+    }],
+    ['text-single-quoted-api-key', (report, sentinel) => {
+      report.limitations = [`{'API_KEY'='${sentinel}'}`];
+    }],
+    ['text-mismatched-sub-uid-quote', (report, sentinel) => {
+      report.recent_trades[0].note = `{"SUB-UID':"${sentinel}"}`;
     }],
     ['text-client-oid', (report, sentinel) => {
       report.recent_trades[0].note = `clientOid: ${sentinel}`;
