@@ -1723,6 +1723,18 @@ label.list-row {
 .h-session-view-tabs::-webkit-scrollbar {
   display: none;
 }
+/* 목록에서 무엇이 빠졌는지 화면이 스스로 말한다. 상주 프로세스를 조용히 감추면
+   "모더가 죽었나"와 "목록에서 뺐나"를 화면만 보고 가를 수 없다. 강조가 아니라
+   각주이므로 --text-3에 micro다 — 상태색은 쓰지 않는다(DESIGN.md §3). */
+.h-session-resident {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.h-session-resident strong {
+  color: var(--text-2);
+  font-weight: 500;
+}
 .h-session-view-tab {
   display: inline-flex;
   align-items: center;
