@@ -18,6 +18,11 @@ import {
 } from './render-sandbox.mjs';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
+
+// 실행 현황 화면은 이제 사이드바의 모더 안읽음 배지도 채운다 — 즉 /api/usage 말고
+// /api/moderator 요청이 한 번 더 나간다. 대시보드가 몇 번 물었는지를 세는 검사는
+// 그 요청까지 세면 배지가 생겼다는 이유만으로 깨지므로, 세는 대상을 분명히 한다.
+const usageRequests = (sandbox) => sandbox.requests.filter((request) => request.url.includes('/api/usage'));
 const HOUR = 60 * 60 * 1000;
 const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString();
 
@@ -807,9 +812,9 @@ test('manual refresh bypasses cache, reports success, and preserves the selected
   }, tabs[1]);
 
   await sandbox.store.get('reload').listeners.click();
-  assert.equal(sandbox.requests.length, 2);
-  assert.match(sandbox.requests[1].url, /\/api\/usage\?_=[0-9]+/u);
-  assert.equal(sandbox.requests[1].options.cache, 'no-store');
+  assert.equal(usageRequests(sandbox).length, 2);
+  assert.match(usageRequests(sandbox)[1].url, /\/api\/usage\?_=[0-9]+/u);
+  assert.equal(usageRequests(sandbox)[1].options.cache, 'no-store');
   assert.equal(sandbox.store.get('reload').textContent, '업데이트됨');
   assert.equal(sandbox.store.get('usageRefreshStatus').textContent, '서버에서 방금 확인했습니다.');
   const markup = sandbox.store.get('usageBody').innerHTML;
@@ -949,20 +954,20 @@ test('a fetch that never settles times out and the automatic poll keeps running'
     [HANGING_RESPONSE, { snapshots: [], tasks: [harnessTask()] }],
     { clock },
   );
-  assert.equal(sandbox.requests.length, 1);
+  assert.equal(usageRequests(sandbox).length, 1);
 
   // 제한 시간 전에는 재요청하지 않는다 — 요청을 겹치지 않는 성질은 그대로다.
   await clock.advance(14_000);
-  assert.equal(sandbox.requests.length, 1);
+  assert.equal(usageRequests(sandbox).length, 1);
 
   // 15초에서 시간초과 → 오류를 말하고 사본 요청 없이 다음 주기를 예약한다.
   await clock.advance(2_000);
-  assert.equal(sandbox.requests.length, 1);
+  assert.equal(usageRequests(sandbox).length, 1);
   assert.match(sandbox.store.get('usageError').textContent, /응답이 없어/u);
 
   // 유휴 주기(60초) 뒤 다음 피드 요청이 실제로 나가고 화면이 채워진다.
   await clock.advance(60_000);
-  assert.equal(sandbox.requests.length, 2);
+  assert.equal(usageRequests(sandbox).length, 2);
   assert.match(sandbox.store.get('usageBody').innerHTML, /data-worktree/u);
   assert.equal(sandbox.store.get('usageError').textContent, '');
 });
@@ -1879,7 +1884,7 @@ test('a source that has never reported a success is a breach, not a blank', () =
 // ---- 피드 실패: 낡은 정적 사본을 만들지 않는다 -----------------------------
 test('a failed feed says why without fetching or replacing a static copy', async () => {
   const empty = await createUsageAppSandbox([new Error('network down')]);
-  assert.equal(empty.requests.length, 1);
+  assert.equal(usageRequests(empty).length, 1);
   assert.equal(empty.store.get('usageBody').innerHTML, '');
   assert.equal(empty.store.get('usageError').textContent, 'network down');
 });
@@ -1892,7 +1897,7 @@ test('a live dashboard is never replaced when a later feed request fails', async
   const before = live.store.get('usageBody').innerHTML;
   assert.match(before, /data-worktree/u);
   await live.store.get('reload').listeners.click();
-  assert.equal(live.requests.length, 2, '실패 뒤 정적 사본을 위한 추가 fetch가 없어야 합니다.');
+  assert.equal(usageRequests(live).length, 2, '실패 뒤 정적 사본을 위한 추가 fetch가 없어야 합니다.');
   assert.equal(live.store.get('usageBody').innerHTML, before);
   assert.equal(live.store.get('usageError').textContent, 'refresh down');
 });
@@ -2254,6 +2259,62 @@ test('a row read in this sitting is dimmed but keeps its place', () => {
   const css = fs.readFileSync('usage/assets/css/usage.css', 'utf8');
   const block = css.slice(css.indexOf('.md-item.is-read'));
   assert.doesNotMatch(block.slice(0, 400), /opacity/u);
+});
+
+test('the sidebar badge stays silent at zero and names itself for assistive tech', () => {
+  const renderers = createUsageRenderers();
+  // 배지의 목적은 "탭을 열지 않고도 확인할 것이 있는지 아는 것"이다. 0을 숫자로 적으면
+  // 배지가 늘 떠 있어 '있다'는 신호가 죽는다.
+  assert.deepEqual({ ...renderers.moderatorBadgeState(0) }, { hidden: true, text: '', label: '' });
+  // 아직 물어보지 못한 상태(null)는 0과 다르다 — 사실이 아니므로 아무것도 주장하지 않는다.
+  assert.equal(renderers.moderatorBadgeState(null).hidden, true);
+  assert.equal(renderers.moderatorBadgeState(undefined).hidden, true);
+  assert.equal(renderers.moderatorBadgeState(Number.NaN).hidden, true);
+
+  const three = renderers.moderatorBadgeState(3);
+  assert.equal(three.hidden, false);
+  assert.equal(three.text, '3');
+  // 숫자만 두면 보조기술에는 '3'으로만 읽혀 무엇의 3인지 알 수 없다.
+  assert.equal(three.label, '모더, 안읽음 3건');
+
+  // 세 자리가 넘으면 사이드바 항목의 라벨을 밀어낸다. 정확한 수는 라벨이 말한다.
+  const many = renderers.moderatorBadgeState(128);
+  assert.equal(many.text, '99+');
+  assert.equal(many.label, '모더, 안읽음 128건');
+  assert.equal(renderers.moderatorBadgeState(99).text, '99');
+});
+
+test('the badge and the moderator view never disagree about the unread count', async () => {
+  const renderers = createUsageRenderers();
+  // 두 표면이 서로 다른 수를 말하면 어느 쪽도 믿을 수 없게 된다. 둘 다 같은 집계에서 온다.
+  const feed = unreadFeed({ unread_counts: { important: 2, proposal: 1, review: 0, record: 4 } });
+  const counts = renderers.moderatorUnreadCounts(feed);
+  const total = ['important', 'proposal', 'review', 'record'].reduce((sum, key) => sum + counts[key], 0);
+  assert.equal(total, 7);
+  assert.equal(renderers.moderatorBadgeState(total).text, '7');
+  assert.match(renderers.renderModeratorUnread(feed, NOW), /안읽음 7건/u);
+  // 컨트롤의 안읽음 토글도 같은 수를 쓴다.
+  assert.match(renderers.renderModeratorControls(feed, 'unread', 'important'), /md-filter-count">7</u);
+});
+
+test('the badge request never drags the rest of the screen down with it', async () => {
+  const { readSource } = await import('./render-sandbox.mjs');
+  const source = readSource('usage/assets/js/usage.js');
+  // 배지는 부가 정보다. 모더 API가 답하지 않는다고 실행 현황을 보던 사람을 랜딩으로
+  // 내보내면 안 된다 — 그래서 이 경로만 quiet으로 부르고, 리다이렉트가 quiet에 막힌다.
+  assert.ok(source.includes("moderatorApi('/api/moderator?limit=1&unread=1', { quiet: true })"));
+  assert.ok(source.includes("if (quiet) throw new Error('unauthorized');"));
+  assert.ok(source.includes("if (!quiet) location.replace('/');"));
+});
+
+test('the moderator tab carries the badge slot, hidden until there is something to say', async () => {
+  const { readSource } = await import('./render-sandbox.mjs');
+  const html = readSource('usage/index.html');
+  const tab = html.split('id="tabModerator"')[1].split('</button>')[0];
+  assert.ok(tab.includes('id="modTabBadge"'));
+  // 정지 마크업에서는 비어 있어야 한다. 로그인 전 문서가 개수를 들고 있으면 소유자 전용
+  // 화면의 내용이 문서 한 장으로 새어 나간다.
+  assert.ok(tab.includes('class="sidebar-item-badge" hidden>'));
 });
 
 test('summaries and commands from the server are escaped, never injected as markup', () => {

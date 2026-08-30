@@ -2455,21 +2455,27 @@
   //
   // 0이면 배지를 세우지 않는다. 0을 숫자로 적는 것은 "없다"를 굳이 표시해 두는 것이고,
   // 그러면 배지가 늘 떠 있어 '있다'는 신호가 죽는다.
-  function renderModeratorBadge() {
+  // 배지가 무엇을 말할지는 순수 함수로 정하고 DOM 적용과 나눈다. 나머지 렌더러가 마크업
+  // 문자열을 돌려주는 것과 같은 결이며, 그래야 게이트가 이 판정을 실제로 실행해 볼 수 있다.
+  function moderatorBadgeState(total) {
+    if (!Number.isFinite(total) || total <= 0) return { hidden: true, text: '', label: '' };
+    return {
+      hidden: false,
+      // 세 자리가 넘으면 사이드바 항목의 라벨을 밀어낸다. 정확한 수는 탭 안에서 말한다.
+      text: total > 99 ? '99+' : String(total),
+      // 숫자만 두면 보조기술에는 '3'으로만 읽혀 무엇의 3인지 알 수 없다.
+      label: `모더, 안읽음 ${total}건`,
+    };
+  }
+
+  function renderModeratorBadge(total = moderatorUnreadBadge) {
     const badge = modElements.tabBadge;
     if (!badge) return;
-    const total = moderatorUnreadBadge;
-    if (total === null || total <= 0) {
-      badge.hidden = true;
-      badge.textContent = '';
-      modElements.tab?.removeAttribute?.('aria-label');
-      return;
-    }
-    badge.hidden = false;
-    // 세 자리가 넘으면 사이드바 항목의 라벨을 밀어낸다. 정확한 수는 탭 안에서 말한다.
-    badge.textContent = total > 99 ? '99+' : String(total);
-    // 숫자만 두면 보조기술에는 '3'으로만 읽혀 무엇의 3인지 알 수 없다.
-    modElements.tab?.setAttribute?.('aria-label', `모더, 안읽음 ${total}건`);
+    const state = moderatorBadgeState(total);
+    badge.hidden = state.hidden;
+    badge.textContent = state.text;
+    if (state.label) modElements.tab?.setAttribute?.('aria-label', state.label);
+    else modElements.tab?.removeAttribute?.('aria-label');
   }
 
   function scheduleModeratorBadgePoll() {
@@ -2868,6 +2874,6 @@
     renderModeratorControls, renderModeratorUnread, renderModeratorItem, renderModeratorCommand,
     moderatorUnreadRows, moderatorUnreadCounts,
     moderatorItemUnread, moderatorCommandUnread, moderatorNeedsAction,
-    renderModeratorBadge, loadModeratorBadge,
+    renderModeratorBadge, loadModeratorBadge, moderatorBadgeState,
   };
 })();
