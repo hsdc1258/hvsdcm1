@@ -4759,6 +4759,9 @@ test('competition cross-object trust probes fail closed without writing any repo
     ['rejected-with-application', (body) => {
       body.candidates[0].status = 'rejected';
     }],
+    ['verified-placeholder-organizer', (body) => {
+      body.candidates[0].organizer = '주최 기관 - 공식 확인 필요';
+    }],
   ];
   for (const [name, mutate] of probes) {
     const body = competitionFixture();
@@ -4805,6 +4808,44 @@ test('competition identifier slots reject private contact values without writes'
     const response = await competitionRequest(env, { body });
     assert.equal(response.status, 400, name);
   }
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition ingest rejects its exact active secret anywhere in the payload', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-active-secret-payload';
+  body.run.id = body.idempotency_key;
+  body.candidates[0].organizer = env.COMPETITION_INGEST_TOKEN;
+  const response = await competitionRequest(env, {
+    body,
+    token: env.COMPETITION_INGEST_TOKEN,
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'forbidden_data' });
+  assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
+});
+
+test('competition ingest rejects its fully percent-encoded active secret without writes', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  env.COMPETITION_INGEST_TOKEN = 'opaque-active-ingest-value-123456789';
+  const encodedToken = [...Buffer.from(env.COMPETITION_INGEST_TOKEN, 'utf8')]
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`)
+    .join('');
+  const body = competitionFixture();
+  body.idempotency_key = 'competition-encoded-active-secret';
+  body.run.id = body.idempotency_key;
+  body.candidates[0].official_url = `https://organizer.example/${encodedToken}/rules`;
+  const response = await competitionRequest(env, {
+    body,
+    token: env.COMPETITION_INGEST_TOKEN,
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'forbidden_data' });
   assert.equal(Number(database.prepare('SELECT COUNT(*) AS count FROM competition_reports').get().count), 0);
 });
 
@@ -4995,6 +5036,17 @@ test('competition URLs reject decoded PII, private-token aliases, and trailing-d
     'https://public.example/%252528authorization%252521%25253Dprivatevalue123%252529/rules',
     'https://localhost./rules',
     'https://foo.local./rules',
+    'https://[::ffff:127.0.0.1]/rules',
+    'https://[::ffff:7f00:1]/rules',
+    'https://[::ffff:a00:1]/rules',
+    'https://[::ffff:169.254.169.254]/meta',
+    'https://[64:ff9b::7f00:1]/rules',
+    'https://public.example/rules/ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules?ref=glpat-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules?ref=sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'https://public.example/rules/Bearer%20abcdefghijklmnopqrstuvwxyz123456',
+    'https://public.example/rules?ref=Bearer%20abcdefghijklmnopqrstuvwxyz123456',
+    'https://public.example/%3Cscript%3Ealert%281%29%3C%2Fscript%3E',
   ];
   const fields = [
     ['source.reference_url', (body, value) => { body.sources[0].reference_url = value; }],
@@ -5025,6 +5077,7 @@ test('competition URLs reject decoded PII, private-token aliases, and trailing-d
   const numericContest = competitionFixture();
   numericContest.idempotency_key = 'competition-public-numeric-path';
   numericContest.run.id = 'competition-public-numeric-path';
+  numericContest.sources[0].kind = 'official';
   numericContest.sources[0].reference_url = 'https://public.example/contests/20260831123';
   numericContest.candidates[0].discovery_url = 'https://public.example/entries/20260831123';
   numericContest.candidates[0].official_url = 'https://public.example/rules/20260831123';
@@ -5049,6 +5102,14 @@ test('competition free text rejects compact phones and secret assignments withou
     'Contact 010́1234́5678',
     'Contact 0212345678',
     'Feed(authorization=privatevalue123)',
+    '지원자 900101-1234567 아이디어 공모전',
+    '지원자: 홍길동 아이디어 공모전',
+    '신청자 성명=홍길동',
+    '지원자 홍길동의 지원 결과',
+    '주소 서울특별시 중구',
+    '홍길동 900101 5234567',
+    '<b>Example Contest</b>',
+    '<script>alert(1)</script>기관',
     'Notice,client_secret=privatevalue123',
     'Agency[refresh_token=privatevalue123]',
     'Secret private_key=privatevalue123',
@@ -5303,6 +5364,11 @@ test('competition schema rejects unknown, private, unsafe, inconsistent and over
   add((body) => { body.candidates[0].official_url = 'https://10.0.0.1/rules'; });
   add((body) => { body.candidates[0].official_url = 'https://user:secret@organizer.example/rules'; });
   add((body) => { body.candidates[0].official_url = 'https://organizer.example/rules#private'; });
+  add((body) => { body.candidates[0].official_url = 'https://list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www2.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://rules.list.example/official-looking-rules'; });
+  add((body) => { body.candidates[0].official_url = 'https://www.list.example../official-looking-rules'; });
   add((body) => {
     body.candidates[0].discovery_url = 'https://list.example/contests/123?email=person%40example.com';
   });
@@ -5335,7 +5401,7 @@ test('competition schema rejects unknown, private, unsafe, inconsistent and over
       authorization: 'Bearer competition-token',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ padding: 'x'.repeat(128_001) }),
+    body: JSON.stringify({ padding: 'x'.repeat(1_000_001) }),
   }), env);
   assert.equal(tooLarge.status, 413);
   assertCompetitionNoStore(tooLarge);

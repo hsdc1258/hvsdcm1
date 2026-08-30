@@ -64,6 +64,10 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.candidates[0].deadline_at = '2026-09-15T14:59:00'; },
     (report) => { report.candidates[0].official_url = 'http://127.0.0.1/rules'; },
     (report) => { report.candidates[0].official_url = 'https://localhost./rules'; },
+    (report) => { report.candidates[0].official_url = 'https://[::ffff:127.0.0.1]/rules'; },
+    (report) => { report.candidates[0].official_url = 'https://[::ffff:7f00:1]/rules'; },
+    (report) => { report.candidates[0].official_url = 'https://[::ffff:a00:1]/rules'; },
+    (report) => { report.candidates[0].official_url = 'https://[::ffff:169.254.169.254]/meta'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?email=person@example.test'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules/person%2540example.test'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?access-token=privatevalue123'; },
@@ -72,9 +76,25 @@ test('strict validation rejects private fields, extra fields, floating deadlines
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?refresh_token=privatevalue123'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?x-amz-signature=privatevalue123'; },
     (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?oauthCode=privatevalue123'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules/ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?ref=glpat-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?ref=sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules/Bearer%20abcdefghijklmnopqrstuvwxyz123456'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/rules?ref=Bearer%20abcdefghijklmnopqrstuvwxyz123456'; },
+    (report) => { report.candidates[0].official_url = 'https://organizer.example/%3Cscript%3Ealert%281%29%3C%2Fscript%3E'; },
+    (report) => { report.candidates[0].official_url = 'https://[64:ff9b::7f00:1]/rules'; },
     (report) => { report.sources[0].name = '담당자 01012345678'; },
     (report) => { report.candidates[0].title = 'authorization=privatevalue123'; },
     (report) => { report.candidates[0].organizer = '기관 01012345678'; },
+    (report) => { report.candidates[0].title = '지원자 900101-1234567 아이디어 공모전'; },
+    (report) => { report.candidates[0].title = '지원자: 홍길동 아이디어 공모전'; },
+    (report) => { report.candidates[0].organizer = '신청자 성명=홍길동'; },
+    (report) => { report.candidates[0].title = '지원자 홍길동의 지원 결과'; },
+    (report) => { report.candidates[0].organizer = '주소 서울특별시 중구'; },
+    (report) => { report.candidates[0].organizer = '주최 기관 - 공식 확인 필요'; },
+    (report) => { report.candidates[0].organizer = '홍길동 900101 5234567'; },
+    (report) => { report.candidates[0].title = '<b>Example Contest</b>'; },
+    (report) => { report.candidates[0].organizer = '<script>alert(1)</script>기관'; },
     (report) => { report.sources[0].name = '담당자 010·1234·5678'; },
     (report) => { report.sources[0].name = '담당자 0212345678'; },
     (report) => { report.candidates[0].title = 'Contest:+1-212-555-1212'; },
@@ -119,6 +139,11 @@ test('strict consistency rejects untrusted coverage, expired active work, and no
     (report) => { report.sources[0].status = 'no_results'; },
     (report) => { report.candidates[0].deadline_at = report.run.finished_at; },
     (report) => { report.candidates[0].status = 'deferred'; },
+    (report) => { report.candidates[0].official_url = 'https://list.example/official-looking-rules'; },
+    (report) => { report.candidates[0].official_url = 'https://www.list.example/official-looking-rules'; },
+    (report) => { report.candidates[0].official_url = 'https://www2.list.example/official-looking-rules'; },
+    (report) => { report.candidates[0].official_url = 'https://rules.list.example/official-looking-rules'; },
+    (report) => { report.candidates[0].official_url = 'https://www.list.example../official-looking-rules'; },
     (report) => {
       report.sources[0].status = 'partial';
       report.sources[0].failure_code = 'http_403';
@@ -132,6 +157,13 @@ test('strict consistency rejects untrusted coverage, expired active work, and no
     mutate(report);
     assert.throws(() => validateCompetitionReport(report), CompetitionReportError);
   }
+});
+
+test('an official source may verify a candidate on its own origin', () => {
+  const report = validReport();
+  report.sources[0].kind = 'official';
+  report.candidates[0].official_url = 'https://list.example/official/rules';
+  assert.equal(validateCompetitionReport(report), report);
 });
 
 test('run date is KST-bound and observation time allows no more than five minutes of future skew', () => {
@@ -173,7 +205,7 @@ test('reporter sends the exact body idempotency key with only the dedicated bear
     token: 'dedicated-secret',
     fetchImpl: async (url, options) => {
       request = { url: String(url), options };
-      return response(200, acknowledgement(report));
+      return response(201, acknowledgement(report));
     },
   });
   assert.equal(request.url, 'https://api.test/api/competitions/report');
@@ -182,6 +214,47 @@ test('reporter sends the exact body idempotency key with only the dedicated bear
   assert.deepEqual(JSON.parse(request.options.body), report);
   assert.equal(result.replayed, false);
   assert.doesNotMatch(JSON.stringify(result), /dedicated-secret/u);
+});
+
+test('reporter refuses to transmit a report containing the exact active ingest token', async () => {
+  const report = validReport();
+  const token = 'opaque-active-ingest-secret-123456789';
+  report.candidates[0].organizer = token;
+  let calls = 0;
+  await assert.rejects(
+    sendCompetitionReport(report, {
+      apiUrl: 'https://api.test',
+      token,
+      fetchImpl: async () => {
+        calls += 1;
+        return response(201, acknowledgement(report));
+      },
+    }),
+    (error) => error instanceof CompetitionReportError && error.code === 'forbidden_data',
+  );
+  assert.equal(calls, 0);
+});
+
+test('reporter refuses a fully percent-encoded active ingest token in any report string', async () => {
+  const report = validReport();
+  const token = 'opaque-active-ingest-value-123456789';
+  const encodedToken = [...Buffer.from(token, 'utf8')]
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`)
+    .join('');
+  report.candidates[0].official_url = `https://organizer.example/${encodedToken}/rules`;
+  let calls = 0;
+  await assert.rejects(
+    sendCompetitionReport(report, {
+      apiUrl: 'https://api.test',
+      token,
+      fetchImpl: async () => {
+        calls += 1;
+        return response(201, acknowledgement(report));
+      },
+    }),
+    (error) => error instanceof CompetitionReportError && error.code === 'forbidden_data',
+  );
+  assert.equal(calls, 0);
 });
 
 test('invalid secret is explicit while the secret never appears in the error', async () => {
@@ -214,7 +287,7 @@ test('an exact idempotency replay is acknowledged without a second logical write
     } else {
       assert.equal(stored.get(body.idempotency_key), options.body);
     }
-    return response(200, acknowledgement(body, replayed));
+    return response(replayed ? 200 : 201, acknowledgement(body, replayed));
   };
   const options = { apiUrl: 'https://api.test', token: 'secret', fetchImpl };
   const first = await sendCompetitionReport(report, options);
@@ -229,9 +302,56 @@ test('a success response must bind the same report and exact counts', async () =
   await assert.rejects(sendCompetitionReport(report, {
     apiUrl: 'https://api.test',
     token: 'secret',
-    fetchImpl: async () => response(200, {
+    fetchImpl: async () => response(201, {
       ...acknowledgement(report),
       idempotency_key: 'competition-daily-other-001',
     }),
   }), /invalid acknowledgement/u);
+});
+
+test('acknowledgement status is bound to exact new and replay semantics', async () => {
+  const report = validReport();
+  for (const [status, replayed] of [[200, false], [201, true], [202, false]]) {
+    await assert.rejects(
+      sendCompetitionReport(report, {
+        apiUrl: 'https://api.test',
+        token: 'secret',
+        fetchImpl: async () => response(status, acknowledgement(report, replayed)),
+      }),
+      (error) => error instanceof CompetitionReportError
+        && error.code === 'invalid_acknowledgement',
+    );
+  }
+});
+
+test('reporter timeout and byte cap cover the acknowledgement body', async () => {
+  const report = validReport();
+  const stalled = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{'));
+    },
+  }), { status: 201, headers: { 'content-type': 'application/json' } });
+  await assert.rejects(
+    sendCompetitionReport(report, {
+      apiUrl: 'https://api.test',
+      token: 'dedicated-secret',
+      timeoutMs: 1_000,
+      fetchImpl: async () => stalled,
+    }),
+    (error) => error instanceof CompetitionReportError && error.code === 'timeout',
+  );
+
+  const oversized = new Response('x'.repeat(65_537), {
+    status: 201,
+    headers: { 'content-type': 'application/json' },
+  });
+  await assert.rejects(
+    sendCompetitionReport(report, {
+      apiUrl: 'https://api.test',
+      token: 'dedicated-secret',
+      fetchImpl: async () => oversized,
+    }),
+    (error) => error instanceof CompetitionReportError
+      && error.code === 'invalid_acknowledgement',
+  );
 });

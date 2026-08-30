@@ -3,9 +3,9 @@ import { authenticate, isOwnerSession, json, sha256 } from './lib.js';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
-const MAX_REPORT_BYTES = 128_000;
+const MAX_REPORT_BYTES = 1_000_000;
 const MAX_SOURCES = 32;
-const MAX_CANDIDATES = 200;
+const MAX_CANDIDATES = 500;
 const MAX_APPLICATIONS = 3;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
@@ -16,6 +16,11 @@ const EXPLICIT_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE_PATTERN = /(?:^|[^\p{L}\p{N}])(?:\+?\d{1,3}[- .]?)?(?:\(?\d{2,4}\)?[- .])\d{3,4}[- .]\d{4}(?=$|[^\p{L}\p{N}])/u;
+const KOREAN_RESIDENT_ID_PATTERN = /(?:^|[^\d])\d{6}[- ]?[1-8]\d{6}(?!\d)/u;
+const LABELED_IDENTITY_PATTERN = /(?:applicant(?:[_. -]?name)?|지원자|신청자|성명)\s*[:=]\s*\S+/iu;
+const LABELED_IDENTITY_TEXT_PATTERN = /(?:(?:지원자|신청자)\s+(?!(?:누구나|모두|전원)(?:\s|$))[가-힣]{2,4}(?:의|님|씨)|(?:성명|주소|address)\s+(?!(?:미정|없음)(?:\s|$))\S+)/iu;
+const STANDALONE_CREDENTIAL_PATTERN = /(?:bearer\s+[A-Z0-9._~+/-]{8,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk_(?:live|test)_[A-Za-z0-9]{16,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|mfa\.[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/iu;
+const RAW_MARKUP_PATTERN = /(?:<\/?[A-Za-z][^>]*>|<!--|<!DOCTYPE)/iu;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
   'session', 'api_key', 'secret', 'credential', 'signature', 'private_key', 'signing_key',
@@ -188,6 +193,11 @@ function hasPrivateAssignment(value) {
 function hasPrivatePatternOnce(value) {
   return EMAIL_PATTERN.test(value)
     || PHONE_PATTERN.test(value)
+    || KOREAN_RESIDENT_ID_PATTERN.test(value)
+    || LABELED_IDENTITY_PATTERN.test(value)
+    || LABELED_IDENTITY_TEXT_PATTERN.test(value)
+    || STANDALONE_CREDENTIAL_PATTERN.test(value)
+    || RAW_MARKUP_PATTERN.test(value)
     || hasKoreanPhone(value)
     || hasPrivateAssignment(value);
 }
@@ -212,12 +222,58 @@ function scanPrivateText(value) {
   fail('forbidden_data');
 }
 
+function stringContainsSecretInDecodedForms(value, secret) {
+  const normalizedSecret = String(secret).normalize('NFKC');
+  const foldedSecret = privacyFold(normalizedSecret);
+  let decoded = String(value).normalize('NFKC');
+  for (let pass = 0; pass < 8; pass += 1) {
+    const folded = privacyFold(decoded);
+    if (decoded.includes(normalizedSecret) || folded.includes(foldedSecret)) return true;
+    if (!/%[0-9A-F]{2}/iu.test(decoded)) return false;
+    let next;
+    try { next = decodeURIComponent(decoded).normalize('NFKC'); } catch { return false; }
+    if (next === decoded) return false;
+    decoded = next;
+  }
+  return false;
+}
+
+function reportContainsSecret(value, secret) {
+  const pending = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current === 'string') {
+      if (stringContainsSecretInDecodedForms(current, secret)) return true;
+    } else if (Array.isArray(current)) {
+      pending.push(...current);
+    } else if (current && typeof current === 'object') {
+      pending.push(...Object.values(current));
+    }
+  }
+  return false;
+}
+
 function normalizedText(value, maxBytes, { privatePatterns = false } = {}) {
   if (typeof value !== 'string') fail();
   const normalized = value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
   if (!normalized || bytes(normalized) > maxBytes || /[\u0000-\u001f\u007f]/u.test(normalized)) fail();
-  if (privatePatterns) scanPrivateText(normalized);
+  if (privatePatterns) {
+    if (/(?:<\/?[A-Za-z][^>]*>|<!--|<!DOCTYPE)/iu.test(normalized)) fail('forbidden_data');
+    scanPrivateText(normalized);
+  }
   return normalized;
+}
+
+function isPlaceholderOrganizer(value) {
+  const normalized = String(value).normalize('NFKC').toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+  return new Set([
+    '주최기관공식확인필요',
+    '주최기관확인필요',
+    '공식확인필요',
+    'organizerverificationrequired',
+    'organizerunverified',
+  ]).has(normalized);
 }
 
 function normalizedId(value, pattern = ID_PATTERN) {
@@ -312,7 +368,8 @@ function isNonPublicIpv6(hostname) {
     || /^fe[89abcdef]/u.test(host)
     || host.startsWith('ff')
     || host.startsWith('2001:db8:')
-    || host.startsWith('::ffff:');
+    || host.startsWith('::ffff:')
+    || host.startsWith('64:ff9b:');
 }
 
 function normalizedSensitiveKey(value) {
@@ -478,6 +535,7 @@ function normalizeCandidate(input) {
     effort_score: integerInRange(input.effort_score, 0, 100),
   };
   const verified = candidate.official_verification === 'verified';
+  if (verified && isPlaceholderOrganizer(candidate.organizer)) fail();
   if (verified !== Boolean(candidate.official_url && candidate.official_verified_at)) fail();
   if (candidate.official_verified_at
     && Date.parse(candidate.official_verified_at) < Date.parse(candidate.discovered_at)) fail();
@@ -502,6 +560,16 @@ function normalizeApplication(input) {
     next_action: enumValue(input.next_action, APPLICATION_NEXT_ACTIONS),
     updated_at: normalizedInstant(input.updated_at),
   };
+}
+
+function canonicalPublicHost(value) {
+  return new URL(value).hostname.toLowerCase().replace(/\.+$/u, '').replace(/^www\d*\./u, '');
+}
+
+function matchesListingHost(host, listingHosts) {
+  return [...listingHosts].some((listingHost) => host === listingHost
+    || host.endsWith('.' + listingHost)
+    || listingHost.endsWith('.' + host));
 }
 
 function normalizeReport(input) {
@@ -536,6 +604,14 @@ function normalizeReport(input) {
   const candidateKeys = new Set();
   const candidates = new Map();
   const sources = new Map(report.sources.map((source) => [source.id, source]));
+  const listingHosts = new Set(report.sources
+    .filter((source) => source.kind === 'listing')
+    .map((source) => canonicalPublicHost(source.reference_url)));
+  for (const candidate of report.candidates) {
+    if (sources.get(candidate.source_id)?.kind === 'listing') {
+      listingHosts.add(canonicalPublicHost(candidate.discovery_url));
+    }
+  }
   const candidateCountBySource = new Map(report.sources.map((source) => [source.id, 0]));
   const observationAt = report.run.finished_at || report.run.started_at;
   const observationTime = Date.parse(observationAt);
@@ -557,6 +633,8 @@ function normalizeReport(input) {
       && Date.parse(candidate.deadline_at) <= observationTime) fail();
     if (['timeout', 'http_403'].includes(source.failure_code)
       && candidate.acceptance === 'closed') fail();
+    if (candidate.official_verification === 'verified'
+      && matchesListingHost(canonicalPublicHost(candidate.official_url), listingHosts)) fail();
   }
   for (const source of report.sources) {
     if (source.candidate_count !== candidateCountBySource.get(source.id)) fail();
@@ -673,6 +751,10 @@ async function reportCompetitionsInternal(request, env) {
   }
   const parsed = await readCompetitionJson(request);
   if (parsed.response) return parsed.response;
+  const activeSecret = String(env.COMPETITION_INGEST_TOKEN || '').trim();
+  if (activeSecret.length >= 16 && reportContainsSecret(parsed.value, activeSecret)) {
+    return competitionError('forbidden_data');
+  }
   let report;
   try {
     report = normalizeReport(parsed.value);

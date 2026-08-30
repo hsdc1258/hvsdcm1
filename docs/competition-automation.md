@@ -28,6 +28,70 @@ candidate can become active, the cycle must resolve an organizer-controlled HTTP
 exact submission destination, then verify live acceptance, precise deadline, eligibility, fee, rights,
 privacy terms, AI policy, deliverables, and receipt mechanism from that official source.
 
+## Crawler
+
+The local crawler performs the actual list parsing; a successful HTTP status alone is not counted as
+successful discovery. It follows an HTTPS host allowlist, keeps the timeout and byte cap active through
+the complete response body, uses three concurrent
+requests, and reports selector drift, TLS/network failures, timeouts, 403 responses, and ambiguous
+government listings as manual coverage. If one page succeeds and a later page fails, the discovered
+items are retained while the source is marked partial. CampusPick and EveryCareer are separate health
+checks for the same corpus, so their candidates are deduplicated before source counts are calculated.
+Wevity, Linkareer, ContestKorea, Bizinfo, and 국민생각함 traverse five bounded pages per run;
+Gongmobox traverses its home plus six contest categories. Allcon reads its rendered home plus the
+site's real JSON listing endpoint for six types, validates each response's requested/current page and
+pagination totals, and follows every advertised page up to 50 pages per type and 300 dynamically added
+URLs per source. Exceeding either bound is explicit partial coverage; the empty browser shell is never
+counted as coverage. Each source also has a 90-second total budget, and two consecutive timeout,
+network, rate-limit, or HTTP 403 outcomes stop its remaining pages as partial/manual coverage. Repeated non-empty page identity sets also force partial/manual coverage instead
+of allowing an ignored pagination parameter to look successful. Stampit traverses all 17 pages exposed by its current server-rendered
+paginator and becomes partial if that page count grows beyond the configured window. CampusPick and its
+EveryCareer alias currently return the same 24 detail rows in one response with no pagination, cursor,
+or load-more contract. Selector drift or a newly exposed
+pagination control makes the affected source partial instead of silently truncating it. Thinkgood and
+the robots-allowed K-Startup fragment do not expose a dependable pagination contract, so those rows
+are always marked `partial` / `manual_check:true` instead of being misreported as full coverage.
+Contest-scoped detail rows are retained even when their title does not
+match a narrow keyword; government feeds still require contest evidence and exclude context-specific
+grant, hiring, procurement, and event records.
+
+The crawler retains up to 2,500 distinct rows per source and 500 redacted candidates per report. A
+capacity overflow never discards the entire daily artifact or claims complete coverage: affected
+sources become `partial` with `manual_check:true`, while the external verification queue preserves the
+broader discovery work. The strict report transport accepts at most 1 MB.
+
+Create a strict report and an official-verification queue outside Git with:
+
+    node scripts/competition-crawl.mjs --report-out C:\path\outside-git\competition-report.json --verification-out C:\path\outside-git\competition-verification.json
+
+Install the lockfile before the first run in a fresh checkout (`npm ci --ignore-scripts`). Cheerio is a
+runtime dependency of the local crawler, not only a test dependency.
+
+The command prints only source status and counts. Raw HTML is never saved or logged. Candidate output is
+redacted and remains unverified / verifying; the crawler does not invent organizer verification,
+eligibility, deadlines, acceptance, or applications. The report is passed through the same strict
+validateCompetitionReport contract before it is written. It can then be dry-run and sent with the
+reporter below.
+
+After checking organizer-controlled rules and the live submission destination, record only the
+redacted verification fields in a version 1 evidence file and merge it into that same crawl:
+
+```powershell
+node scripts/competition-evidence.mjs `
+  --report C:\path\outside-git\competition-report.json `
+  --evidence C:\path\outside-git\competition-official-evidence.json `
+  --out C:\path\outside-git\competition-verified-report.json
+```
+
+The evidence merge is bound to the exact `contest_id + category` candidate key, exact-keyed, and
+chronological. It replaces the discovery
+site's organizer label with the organizer verified from the official source, and refuses stale evidence
+that predates the discovery or an existing verification, same-time conflicts, listing-origin URLs posed
+as official sources, evidence recorded after the report observation, unknown candidate IDs,
+and any `active` result that fails the reporter's official/open/eligible/deadline/risk invariants.
+Use the merged report for the dry-run and POST; never copy application answers or contact data into
+the evidence file.
+
 ## Reporter
 
 The checked-in fixture at `scripts/fixtures/competition-report.valid.json` is the minimal version 1
@@ -86,9 +150,28 @@ timeouts and HTTP 403 responses require manual follow-up and never prove closure
 capped at three and may refer only to an officially verified, eligible, currently open, unexpired
 `active` candidate with an offset-qualified deadline.
 
+## Results-only Discord delivery
+
+The Discord helper creates or reuses exactly one text channel named 공모전-지원-결과 under the 기본
+category. The channel is bound by the topic marker codex:competition-results:v1 and every send
+rechecks the guild, exact `기본` parent category, channel type, name, and topic. A same-name boundary
+conflict fails closed instead of creating a duplicate. Channel state is stored outside Git. Requests
+have a bounded timeout, mentions are
+disabled, and only discovery_complete, submission_complete, or approval_required messages are
+accepted:
+
+    node scripts/competition-discord.mjs ensure-channel --env C:\path\to\discord-bot\.env --config C:\path\outside-git\competition-discord.json
+    node scripts/competition-discord.mjs send-result --env C:\path\to\discord-bot\.env --config C:\path\outside-git\competition-discord.json --kind discovery_complete --message-file C:\path\outside-git\result.txt
+
+The bot process exits after each request. This helper does not start a resident bot, enable a
+scheduled bot task, or revive Moder/session-feedback reporting.
+
 ## Human approval boundary
 
 Automation may discover, verify, score, deduplicate, draft, render, and stage. It must stop for exact
 action-time approval before transmitting PII, accepting privacy/originality/publicity/rights terms,
 signing, paying, or making the final representational submission. A previous schedule or broad approval
 does not authorize a later contest's changed terms.
+
+Discord delivery, when enabled, is results-only: completed submissions or exact human-action gates may
+be reported, but crawl progress, raw logs, Moder traffic, and session feedback are not sent.
