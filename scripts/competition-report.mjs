@@ -14,14 +14,13 @@ const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const PHONE = /(?:^|\s)\+?\d[\d ().-]{7,}\d(?:\s|$)/u;
-const DIGIT_PHONE = /(?:^|\D)(?:010\d{8}|01[16789]\d{7,8}|8210\d{8})(?!\d)/u;
-const PRIVATE_TOKEN = /(?:^|[/?&#;])(?:(?:[A-Z0-9\s._-]*(?:token|secret|signature|credential))|(?:auth(?:entication|orization)?|oauth|session|api[\s._-]*key)(?:[\s._-]*(?:code|header|id|key|token))?)[=/:_-]+[A-Z0-9._~-]{8,}/iu;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'client_secret', 'authorization', 'auth',
-  'session', 'api_key', 'secret', 'credential', 'signature',
+  'session', 'api_key', 'secret', 'credential', 'signature', 'private_key', 'signing_key',
 ]);
 
-const FORBIDDEN_KEYS = /(?:^|_)(?:pii|applicant_name|legal_name|full_name|first_name|last_name|email|e_mail|phone|mobile|contact|address|birth|birthday|dob|password|account_token|cookie|signature|consent|legal_consent|terms_acceptance|payment|card|bank|receipt|application_answer|application_answers|application_prose|essay|final_submission|submission_payload|legal_acceptance|identity_document|government_id|tax_id)(?:$|_)/iu;
+const FORBIDDEN_KEYS = /(?:^|_)(?:pii|applicant_name|legal_name|full_name|first_name|last_name|email|e_mail|phone|mobile|contact|address|birth|birthday|dob|password|private_key|signing_key|account_token|cookie|signature|consent|legal_consent|terms_acceptance|payment|card|bank|receipt|application_answer|application_answers|application_prose|essay|final_submission|submission_payload|legal_acceptance|identity_document|government_id|tax_id)(?:$|_)/iu;
+const FORBIDDEN_ASSIGNMENT_SUFFIX = /(?:pii|applicantname|legalname|fullname|firstname|lastname|email|phone|mobile|contact|address|birth|birthday|dob|password|privatekey|signingkey|accounttoken|cookie|signature|consent|legalconsent|termsacceptance|payment|card|bank|receipt|applicationanswer|applicationanswers|applicationprose|essay|finalsubmission|submissionpayload|legalacceptance|identitydocument|governmentid|taxid)$/u;
 const RUN_STATUSES = new Set(['running', 'complete', 'partial', 'failed']);
 const SOURCE_KINDS = new Set(['listing', 'official', 'search']);
 const SOURCE_STATUSES = new Set(['pending', 'ok', 'no_results', 'partial', 'failed']);
@@ -90,10 +89,7 @@ function string(value, label, { max = 240, maxBytes = null, pattern, privatePatt
   }
   if (pattern && !pattern.test(value)) fail(`${label} has an invalid format`);
   const normalized = value.normalize('NFKC');
-  if (privatePatterns && (EMAIL.test(normalized) || PHONE.test(normalized)
-    || DIGIT_PHONE.test(normalized) || PRIVATE_TOKEN.test(normalized))) {
-    fail(`${label} contains private data`);
-  }
+  if (privatePatterns) scanPrivateText(normalized, label);
   return value;
 }
 
@@ -176,16 +172,73 @@ function isSensitiveQueryKey(value) {
     || canonical.startsWith('oauth')
     || canonical.startsWith('session')
     || canonical.includes('apikey')
-    || canonical.includes('accesskey');
+    || canonical.includes('accesskey')
+    || canonical.includes('privatekey')
+    || canonical.includes('signingkey');
+}
+
+function hasKoreanPhone(value) {
+  for (const match of String(value).matchAll(
+    /(?:^|[^\d])(\+?\d(?:[\p{P}\p{Z}\p{Cf}\p{S}\p{M}]*\d){8,12})(?!\d)/gu,
+  )) {
+    const digits = match[1].replace(/\D/gu, '');
+    if (/^(?:010\d{8}|01[16789]\d{7,8}|02\d{7,8}|0(?:3[1-3]|4[1-4]|5[1-5]|6[1-4])\d{7,8}|8210\d{8}|822\d{7,8}|82(?:3[1-3]|4[1-4]|5[1-5]|6[1-4])\d{7,8})$/u.test(digits)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function privacyFold(value) {
+  return String(value)
+    .normalize('NFKD')
+    .replace(/[\p{M}\p{Cf}]/gu, '')
+    .normalize('NFKC');
+}
+
+function hasPrivateAssignment(value) {
+  const text = privacyFold(value);
+  for (const operator of text.matchAll(/[=:/]/gu)) {
+    const before = text.slice(0, operator.index)
+      .replace(/[^\p{L}\p{N}]/gu, '')
+      .toLowerCase();
+    const after = text.slice(operator.index + operator[0].length);
+    if (!/^[^\p{L}\p{N}]*[\p{L}\p{N}]/u.test(after)) continue;
+    if (/(?:token|secret|signature|credential|private(?:key)?|signingkey|authorization(?:code)?|authentication|oauth(?:code)?|session(?:id|key|token)?|api[_-]?key|access[_-]?key|auth(?:code|header|key|token)?)$/u.test(before)
+      || FORBIDDEN_ASSIGNMENT_SUFFIX.test(before)) return true;
+  }
+  return false;
+}
+
+function hasPrivatePatternOnce(value) {
+  return EMAIL.test(value) || PHONE.test(value) || hasKoreanPhone(value) || hasPrivateAssignment(value);
+}
+
+function hasPrivatePattern(value) {
+  const normalized = String(value).normalize('NFKC');
+  const folded = privacyFold(normalized);
+  return hasPrivatePatternOnce(normalized)
+    || (folded !== normalized && hasPrivatePatternOnce(folded));
+}
+
+function scanPrivateText(value, label) {
+  let decoded = String(value).normalize('NFKC');
+  for (let pass = 0; pass < 8; pass += 1) {
+    if (hasPrivatePattern(decoded)) fail(`${label} contains private data`);
+    if (!/%[0-9A-F]{2}/iu.test(decoded)) return decoded;
+    let next;
+    try { next = decodeURIComponent(decoded).normalize('NFKC'); }
+    catch { fail(`${label} has invalid private-data encoding`); }
+    if (next === decoded) return decoded;
+    decoded = next;
+  }
+  fail(`${label} has excessive private-data encoding`);
 }
 
 function scanPrivateUrlComponent(value, label) {
   let decoded = String(value).normalize('NFKC');
   for (let pass = 0; pass < 8; pass += 1) {
-    if (EMAIL.test(decoded) || PHONE.test(decoded) || DIGIT_PHONE.test(decoded)
-      || PRIVATE_TOKEN.test(decoded)) {
-      fail(`${label} contains private data`);
-    }
+    if (hasPrivatePattern(decoded)) fail(`${label} contains private data`);
     let next;
     try { next = decodeURIComponent(decoded).normalize('NFKC'); }
     catch { fail(`${label} has invalid URL encoding`); }
