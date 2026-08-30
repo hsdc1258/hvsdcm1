@@ -36,6 +36,7 @@ export const SNAPSHOT_BY_SCREEN = {
   'admin/index.html': `${SNAPSHOT_DIR}/admin.html`,
   'usage/index.html': `${SNAPSHOT_DIR}/usage.html`,
   'gichul/index.html': `${SNAPSHOT_DIR}/gichul.html`,
+  'behavior-lab/index.html': `${SNAPSHOT_DIR}/behavior-lab.html`,
 };
 
 export const SNAPSHOT_FILES = {
@@ -480,6 +481,13 @@ export function buildSnapshots() {
           .replace('<div id="gichulBody" class="gi-body"></div>',
             `<div id="gichulBody" class="gi-body">${body}</div>`);
       },
+    }),
+    [SNAPSHOT_BY_SCREEN['behavior-lab/index.html']]: documentSnapshot('behavior-lab/index.html', {
+      note: '<strong>무엇인가</strong> — 공용 Behavior Lab의 정적 화면 셸을 얼린 스냅샷이다. CSS는 인라인하고 실행 스크립트는 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — Worker 응답 전의 fail-closed 초기 상태다. 심볼·주기 컨트롤, 가격·행동·신호, 백테스트, 위험 한도, 텍스트 초안 영역의 전체 조판을 담는다.'
+        + '\n  <br><strong>주의</strong> — live dashboard와 버튼 상호작용은 API 응답이 필요하므로 이 사본에서는 비어 있다. 실제 desktop/mobile 상호작용은 별도 로컬 HTTP 브라우저 증거로 확인한다.'
+        + `\n  ${GENERATED_NOTE}`,
+      mutate: (html) => html,
     }),
   };
 }
