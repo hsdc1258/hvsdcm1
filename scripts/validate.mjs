@@ -2161,7 +2161,7 @@ function validateGlobalsAndOrder() {
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
-    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260831-v3'],
+    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260831-v4'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2185,7 +2185,7 @@ function validateGlobalsAndOrder() {
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260831-competition-v3', '/usage/assets/css/usage.css?v=20260831-competition-v3'],
     'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260831-v3'],
+    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260831-v4'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2598,6 +2598,15 @@ function validateBehaviorLab() {
     && appSource.includes('authorization: `Bearer ${token}`')
     && appSource.includes('/api/behavior-lab/paper'),
   'behavior-lab: owner gate, bearer reads, noindex, and paper tab contract are incomplete');
+  check(/id="paperAdaptive"[^>]*\bhidden\b/u.test(pageHtml)
+    && pageHtml.includes('id="adaptiveChallengersBody"') && pageHtml.includes('id="adaptiveAudit"')
+    && appSource.includes('PAPER_REFRESH_MS = 5_000') && appSource.includes('validAdaptiveReport')
+    && routerSource.includes("value.engine_version !== 'realtime-paper-v2'")
+    && routerSource.includes('MAX_BEHAVIOR_ADAPTIVE_CHALLENGERS = 8')
+    && routerSource.includes('MAX_BEHAVIOR_ADAPTIVE_AUDIT_LOGS = 20')
+    && routerSource.includes("stream.credential_used !== false")
+    && routerSource.includes("'$.adaptive.audit.sequence'"),
+  'behavior-lab: bounded adaptive v2 Worker and owner UI contract are incomplete');
 
   const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   const architecture = readFileSync(path.join(ROOT, 'docs/ARCHITECTURE.md'), 'utf8');

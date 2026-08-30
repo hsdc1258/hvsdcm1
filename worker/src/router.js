@@ -26,10 +26,20 @@ const MAX_BEHAVIOR_PAPER_BYTES = 64_000;
 const MAX_BEHAVIOR_PAPER_SEQUENCE = 1_000_000;
 const MAX_BEHAVIOR_PAPER_TRADES = 25;
 const MAX_BEHAVIOR_PAPER_LOGS = 50;
+const MAX_BEHAVIOR_ADAPTIVE_CHALLENGERS = 8;
+const MAX_BEHAVIOR_ADAPTIVE_AUDIT_LOGS = 20;
 export const BEHAVIOR_PAPER_SESSION_ID = 'paper-20260831-100usd';
 export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
+const VALID_BEHAVIOR_ADAPTIVE_STREAM_STATUSES = new Set(['connecting', 'live', 'stale', 'stopped', 'error']);
+const VALID_BEHAVIOR_ADAPTIVE_PROMOTION_STATUSES = new Set(['collecting', 'held', 'promoted', 'rolled-back']);
+const VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS = new Set([
+  'engine-start', 'connection', 'reconnect', 'heartbeat', 'raw-packet', 'normalized-packet',
+  'packet-rejected', 'stream-gap', 'stream-stale', 'feature', 'strategy-vote', 'no-trade',
+  'shadow-fill', 'shadow-result', 'position-transition', 'checkpoint', 'promotion', 'rollback',
+  'report-attempt', 'report-error', 'engine-stop',
+]);
 export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
 const VALID_APPS = new Set(['wordmaster', 'smstudy']);
@@ -1218,6 +1228,116 @@ function normalizePaperLimitations(value) {
   return normalized.some((entry) => entry === null) ? null : normalized;
 }
 
+function normalizeAdaptiveStrategyId(value, nullable = false) {
+  if (nullable && value === null) return null;
+  const text = boundedPaperText(value, 64, true);
+  return typeof text === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(text) ? text : undefined;
+}
+
+function normalizeAdaptiveHash(value, allowGenesis = false) {
+  const text = boundedPaperText(value, 64, true);
+  if (allowGenesis && text === 'GENESIS') return text;
+  return text && /^[a-f0-9]{64}$/u.test(text) ? text : undefined;
+}
+
+function normalizeAdaptiveStrategy(value, metrics = false) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const id = normalizeAdaptiveStrategyId(value.id);
+  const version = boundedPaperNumber(value.version, 1, 1_000_000, true);
+  const hash = normalizeAdaptiveHash(value.hash);
+  if (!id || version === null || !hash) return null;
+  if (!metrics) return { id, version, hash };
+  const tradeCount = boundedPaperNumber(value.trade_count, 0, 1_000_000, true);
+  const expectancy = boundedPaperNumber(value.expectancy, -1_000_000, 1_000_000);
+  const maxDrawdownPct = boundedPaperNumber(value.max_drawdown_pct, 0, 100);
+  const costBps = boundedPaperNumber(value.cost_bps, 0, 1_000_000);
+  if ([tradeCount, expectancy, maxDrawdownPct, costBps].some((item) => item === null)) return null;
+  return { id, version, hash, trade_count: tradeCount, expectancy, max_drawdown_pct: maxDrawdownPct, cost_bps: costBps };
+}
+
+function normalizeAdaptiveAudit(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const sequence = boundedPaperNumber(value.sequence, 0, 100_000_000, true);
+  const hash = normalizeAdaptiveHash(value.hash, sequence === 0);
+  if (sequence === null || !hash || (sequence === 0 && hash !== 'GENESIS')) return null;
+  if (!Array.isArray(value.recent) || value.recent.length > MAX_BEHAVIOR_ADAPTIVE_AUDIT_LOGS) return null;
+  const recent = [];
+  let previousSequence = 0;
+  for (const entry of value.recent) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const entrySequence = boundedPaperNumber(entry.sequence, 1, 100_000_000, true);
+    const at = normalizePaperTimestamp(entry.at);
+    const kind = boundedPaperText(entry.kind, 40, true);
+    const message = boundedPaperText(entry.message, 240, true);
+    const entryHash = normalizeAdaptiveHash(entry.hash);
+    if (entrySequence === null || entrySequence <= previousSequence || entrySequence > sequence
+      || !at || !kind || !VALID_BEHAVIOR_ADAPTIVE_AUDIT_KINDS.has(kind) || !message || !entryHash) return null;
+    recent.push({ sequence: entrySequence, at, kind, message, hash: entryHash });
+    previousSequence = entrySequence;
+  }
+  if ((sequence === 0 && recent.length !== 0) || (recent.length && recent.at(-1).sequence !== sequence)) return null;
+  return { sequence, hash, recent };
+}
+
+function normalizeBehaviorPaperAdaptive(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || value.engine_version !== 'realtime-paper-v2' || value.strategy_schema !== 1) return null;
+  const upgradedAt = normalizePaperTimestamp(value.upgraded_at);
+  const cadence = value.cadence;
+  if (!upgradedAt || !cadence || typeof cadence !== 'object' || Array.isArray(cadence)
+    || cadence.regime !== '5m' || cadence.candidate !== 'completed-1m' || cadence.risk !== 'ticker-event'
+    || cadence.microstructure !== '1s/3s-persistence' || cadence.weight_checkpoint !== '15m'
+    || cadence.challenger_checkpoint !== '24h-minimum') return null;
+
+  const stream = value.stream;
+  if (!stream || typeof stream !== 'object' || Array.isArray(stream)) return null;
+  const streamStatus = boundedPaperText(stream.status, 16, true);
+  const lastPacketAt = normalizePaperTimestamp(stream.last_packet_at, true);
+  const reconnectCount = boundedPaperNumber(stream.reconnect_count, 0, 1_000_000, true);
+  if (!streamStatus || !VALID_BEHAVIOR_ADAPTIVE_STREAM_STATUSES.has(streamStatus)
+    || lastPacketAt === undefined || reconnectCount === null || stream.credential_used !== false) return null;
+
+  const champion = normalizeAdaptiveStrategy(value.champion);
+  if (!champion || !Array.isArray(value.challengers)
+    || value.challengers.length > MAX_BEHAVIOR_ADAPTIVE_CHALLENGERS) return null;
+  const challengers = value.challengers.map((entry) => normalizeAdaptiveStrategy(entry, true));
+  if (challengers.some((entry) => entry === null)) return null;
+  const strategyIds = [champion.id, ...challengers.map((entry) => entry.id)];
+  if (new Set(strategyIds).size !== strategyIds.length) return null;
+
+  const promotion = value.promotion;
+  if (!promotion || typeof promotion !== 'object' || Array.isArray(promotion)) return null;
+  const promotionStatus = boundedPaperText(promotion.status, 16, true);
+  const checkpointAt = normalizePaperTimestamp(promotion.last_checkpoint_at, true);
+  const from = normalizeAdaptiveStrategyId(promotion.from, true);
+  const to = normalizeAdaptiveStrategyId(promotion.to, true);
+  if (!promotionStatus || !VALID_BEHAVIOR_ADAPTIVE_PROMOTION_STATUSES.has(promotionStatus)
+    || checkpointAt === undefined || from === undefined || to === undefined
+    || !Array.isArray(promotion.reasons) || promotion.reasons.length < 1 || promotion.reasons.length > 12) return null;
+  const reasons = promotion.reasons.map((reason) => boundedPaperText(reason, 160, true));
+  if (reasons.some((reason) => reason === null)) return null;
+  if (promotionStatus === 'collecting' && (checkpointAt !== null || from !== null || to !== null)) return null;
+  if (promotionStatus !== 'collecting' && checkpointAt === null) return null;
+  if (['promoted', 'rolled-back'].includes(promotionStatus) && (!from || !to || from === to)) return null;
+
+  const audit = normalizeAdaptiveAudit(value.audit);
+  if (!audit) return null;
+  return {
+    engine_version: 'realtime-paper-v2',
+    strategy_schema: 1,
+    upgraded_at: upgradedAt,
+    cadence: {
+      regime: '5m', candidate: 'completed-1m', risk: 'ticker-event', microstructure: '1s/3s-persistence',
+      weight_checkpoint: '15m', challenger_checkpoint: '24h-minimum',
+    },
+    stream: { status: streamStatus, last_packet_at: lastPacketAt, reconnect_count: reconnectCount, credential_used: false },
+    champion,
+    challengers,
+    promotion: { status: promotionStatus, last_checkpoint_at: checkpointAt, from, to, reasons },
+    audit,
+  };
+}
+
 export function normalizeBehaviorPaperReport(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   if (input.session_id !== BEHAVIOR_PAPER_SESSION_ID || input.simulation !== true) return null;
@@ -1261,6 +1381,12 @@ export function normalizeBehaviorPaperReport(input) {
   const recentLogs = normalizePaperLogs(input.recent_logs);
   const limitations = normalizePaperLimitations(input.limitations);
   if (!recentLogs || !limitations) return null;
+  let adaptive;
+  if (Object.prototype.hasOwnProperty.call(input, 'adaptive')) {
+    adaptive = normalizeBehaviorPaperAdaptive(input.adaptive);
+    if (!adaptive || Date.parse(adaptive.upgraded_at) > Date.parse(generatedAt)
+      || (adaptive.stream.last_packet_at && Date.parse(adaptive.stream.last_packet_at) > Date.parse(generatedAt))) return null;
+  }
 
   return {
     session_id: BEHAVIOR_PAPER_SESSION_ID,
@@ -1287,6 +1413,7 @@ export function normalizeBehaviorPaperReport(input) {
     recent_logs: recentLogs,
     last_cycle_at: lastCycleAt,
     limitations,
+    ...(adaptive ? { adaptive } : {}),
   };
 }
 
@@ -1333,8 +1460,19 @@ async function reportBehaviorPaper(request, env) {
     ON CONFLICT(source) DO UPDATE SET
       captured_at = excluded.captured_at,
       payload = excluded.payload
-    WHERE CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
-      > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER), -1)
+    WHERE (
+      CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+        > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER), -1)
+      AND (
+        json_type(usage_snapshots.payload, '$.adaptive') IS NULL
+        OR json_type(excluded.payload, '$.adaptive') = 'object'
+      )
+    ) OR (
+      CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+        = CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
+      AND CAST(json_extract(excluded.payload, '$.adaptive.audit.sequence') AS INTEGER)
+        > COALESCE(CAST(json_extract(usage_snapshots.payload, '$.adaptive.audit.sequence') AS INTEGER), -1)
+    )
   `).bind(
     BEHAVIOR_PAPER_SNAPSHOT_SOURCE,
     receivedAt,

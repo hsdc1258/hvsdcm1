@@ -113,3 +113,16 @@ test('published app bearer-gates dashboard and paper reads while retaining no ex
   assert.match(appSource, /setInterval\(refreshLiveClock, 1_000\)/u);
   assert.match(appSource, /function createDraft\(\)[\s\S]*createFreshManualDraft/u);
 });
+
+test('owner paper UI renders only a bounded adaptive v2 summary on a five-second refresh', () => {
+  assert.match(htmlSource, /id="paperAdaptive"[^>]*\bhidden\b/u);
+  assert.match(htmlSource, /id="adaptiveChallengersBody"/u);
+  assert.match(htmlSource, /id="adaptiveAudit"/u);
+  assert.match(appSource, /PAPER_REFRESH_MS = 5_000/u);
+  assert.match(appSource, /function validAdaptiveReport\(adaptive\)/u);
+  assert.match(appSource, /engine_version === 'realtime-paper-v2'/u);
+  assert.match(appSource, /credential_used === false/u);
+  assert.match(appSource, /adaptive\.challengers\.length <= 8/u);
+  assert.match(appSource, /recent\.length <= 20/u);
+  assert.match(appSource, /renderAdaptiveReport\(report\.adaptive\)/u);
+});
