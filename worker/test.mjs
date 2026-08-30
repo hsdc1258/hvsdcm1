@@ -2458,6 +2458,7 @@ test('usage lookup survives a corrupted snapshot row', async () => {
                       { source: 'claude', captured_at: '2026-08-27T01:02:03.000Z', payload: '{"models":{}}' },
                       { source: 'codex', captured_at: '2026-08-27T01:02:03.000Z', payload: '{ broken' },
                       { source: 'gemini', captured_at: '2026-08-27T01:02:03.000Z', payload: '{}' },
+                      { source: 'behavior-paper:paper-20260831-100usd', captured_at: '2026-08-30T19:00:00.000Z', payload: '{"sequence":1}' },
                     ],
                   };
                 },
@@ -2481,7 +2482,7 @@ test('usage lookup survives a corrupted snapshot row', async () => {
   }), env);
   assert.equal(response.status, 200);
   const { snapshots } = await response.json();
-  // 허용 목록 밖의 source(gemini)는 걸러지고, 손상된 codex 행만 payload가 null로 낮아진다.
+  // 허용 목록 밖의 source(gemini와 Behavior paper)는 걸러지고, 손상된 codex 행만 payload가 null로 낮아진다.
   assert.deepEqual(snapshots.map((snapshot) => snapshot.source), ['claude', 'codex']);
   assert.deepEqual(snapshots[0].payload, { models: {} });
   assert.equal(snapshots[1].payload, null);
