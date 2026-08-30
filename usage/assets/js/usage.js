@@ -1815,30 +1815,52 @@
   const USAGE_VIEW_KEY = 'hvsdcm.usage.view';
   const USAGE_VIEW_KEYS = new Set(['ops', 'moderator']);
 
+  // 분류는 **넷**이다 (2026-08-30 사용자 지시).
+  //   중요 — 사용자가 반드시 알아야 할 내역
+  //   제안 — 모더가 스스로 판단해 "이건 어때?" 하고 올린 것. 승인 전에는 실행되지 않는다
+  //   검토 — 모더가 스스로 돌린 점검의 기록
+  //   기록 — 그 셋을 뺀, 모더가 실제로 행한 모든 것
+  //
+  // 앞의 셋은 서버의 `moderator_items.kind`와 1:1이다. **'기록'만 다르다** — 그것은
+  // 항목이 아니라 `moderator_commands`(직접 명령·승인된 제안·자율 검토가 실제로 돌린
+  // 실행 이력)다. 그래서 kind에 네 번째 값을 만들지 않았다: D1의 CHECK 제약이라 라이브
+  // 테이블을 재작성해야 하는데, 그 데이터는 이미 같은 응답에 실려 오고 화면 아래에
+  // 별도 블록으로 붙어 있었을 뿐이다. 블록을 분류로 올린다.
+  const MODERATOR_RECORD_KIND = 'record';
   const MODERATOR_KINDS = [
     {
       key: 'important', label: '중요', openLabel: '확인 필요',
-      lead: '사람이 판단해야 하는 항목입니다. 모더는 여기에 손대지 않습니다.',
+      lead: '사용자가 반드시 알아야 할 내역입니다. 판단은 사람이 하고 모더는 여기에 손대지 않습니다.',
       empty: '지금 확인해야 할 중요 항목이 없습니다.',
     },
     {
       key: 'proposal', label: '제안', openLabel: '승인 대기',
-      lead: '승인하기 전까지 아무 명령도 실행되지 않습니다. 승인한 순간에만 대기열에 들어갑니다.',
+      lead: '모더가 스스로 판단해 올린 제안입니다. 승인하기 전까지 아무 명령도 실행되지 않습니다.',
       empty: '승인을 기다리는 제안이 없습니다.',
     },
     {
       key: 'review', label: '검토', openLabel: '진행 중',
-      lead: '아무 세션도 돌지 않는 동안 모더가 스스로 돌린 점검입니다.',
+      lead: '아무 세션도 돌지 않는 동안 모더가 스스로 돌린 점검의 기록입니다.',
       empty: '기록된 자율 검토가 없습니다.',
+    },
+    {
+      key: MODERATOR_RECORD_KIND, label: '기록', openLabel: '최근',
+      lead: '위 셋을 뺀, 모더가 실제로 실행한 모든 기록입니다. 실행 모델은 실행자가 확인해 준 값이며, '
+        + `확인되지 않으면 요청 모델로 대신 적지 않고 ${MODERATOR_UNKNOWN}으로 둡니다.`,
+      empty: '아직 실행된 명령이 없습니다.',
     },
   ];
   const MODERATOR_KIND_KEYS = new Set(MODERATOR_KINDS.map((kind) => kind.key));
   // 분류마다 "아직 끝나지 않은" 상태가 다르다. 개수 줄이 이 집합에서 도출되므로
   // 상태를 늘릴 때 여기만 고치면 필터·머리글·기본 선택이 함께 따라온다.
+  //
+  // 기록에는 **열린 상태가 없다.** 손이 필요한 목록이 아니라 지나간 일의 기록이므로,
+  // 기본 선택(손이 필요한 쪽을 먼저 연다)이 기록으로 떨어지지 않게 빈 집합으로 둔다.
   const MODERATOR_OPEN_STATUSES = {
     important: new Set(['open']),
     proposal: new Set(['pending']),
     review: new Set(['queued', 'running']),
+    [MODERATOR_RECORD_KIND]: new Set(),
   };
   const MODERATOR_STATUS_LABELS = {
     open: '확인 필요', acknowledged: '확인함', resolved: '해결됨',
@@ -1884,7 +1906,6 @@
     brain: document.getElementById('modBrain'),
     filter: document.getElementById('modFilter'),
     items: document.getElementById('modItems'),
-    commands: document.getElementById('modCommands'),
     error: document.getElementById('modError'),
     refreshStatus: document.getElementById('modRefreshStatus'),
     freshness: document.getElementById('modFreshness'),
@@ -2000,6 +2021,13 @@
     const counts = data?.counts && typeof data.counts === 'object' ? data.counts : {};
     const result = {};
     for (const kind of MODERATOR_KINDS) {
+      // 기록의 개수는 서버의 `counts`가 아니라 **실제로 받은 명령 목록**에서 센다.
+      // counts는 moderator_items만 집계하므로 기록에는 칸 자체가 없다.
+      if (kind.key === MODERATOR_RECORD_KIND) {
+        const commands = Array.isArray(data?.commands) ? data.commands : [];
+        result[kind.key] = { total: commands.length, open: 0 };
+        continue;
+      }
       const bucket = counts[kind.key] && typeof counts[kind.key] === 'object' ? counts[kind.key] : {};
       let total = 0;
       let open = 0;
@@ -2017,8 +2045,12 @@
   // 분류를 열고, 그것도 없으면 중요를 연다. 사람이 한 번 고르면 그 선택이 이긴다.
   function moderatorDefaultKind(data) {
     const counts = moderatorCounts(data);
-    for (const kind of MODERATOR_KINDS) if (counts[kind.key].open > 0) return kind.key;
-    for (const kind of MODERATOR_KINDS) if (counts[kind.key].total > 0) return kind.key;
+    // 기록은 기본 선택 후보가 아니다. 손이 필요한 곳을 먼저 여는 것이 이 함수의 목적인데,
+    // 기록에는 손이 필요한 상태가 없다. 후보에서 빼지 않으면 항목이 하나도 없고 명령
+    // 이력만 있을 때 기록이 열려, 확인해야 할 것이 없다는 사실이 화면에서 사라진다.
+    const candidates = MODERATOR_KINDS.filter((kind) => kind.key !== MODERATOR_RECORD_KIND);
+    for (const kind of candidates) if (counts[kind.key].open > 0) return kind.key;
+    for (const kind of candidates) if (counts[kind.key].total > 0) return kind.key;
     return 'important';
   }
 
@@ -2099,13 +2131,23 @@
   function renderModeratorItems(data, selected, now) {
     const kind = MODERATOR_KINDS.find((entry) => entry.key === selected) || MODERATOR_KINDS[0];
     const counts = moderatorCounts(data)[kind.key];
-    const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => item?.kind === kind.key);
-    const rows = items.length === 0
-      ? `<p class="us-empty">${kind.empty}</p>`
-      : `<div class="md-list">${items.map((item) => renderModeratorItem(item, now)).join('')}</div>`;
+    // 기록은 항목이 아니라 실행 이력이므로 본문을 다른 렌더러가 만든다. 머리·리드·개수
+    // 조판은 네 분류가 똑같이 쓴다 — 한 분류만 다른 모양이면 필터가 분류가 아니라
+    // 서로 다른 화면 넷을 여는 것이 된다.
+    const rows = kind.key === MODERATOR_RECORD_KIND
+      ? renderModeratorCommands(data, now)
+      : (() => {
+        const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => item?.kind === kind.key);
+        return items.length === 0
+          ? `<p class="us-empty">${kind.empty}</p>`
+          : `<div class="md-list">${items.map((item) => renderModeratorItem(item, now)).join('')}</div>`;
+      })();
+    const countLine = kind.key === MODERATOR_RECORD_KIND
+      ? `${kind.openLabel} ${counts.total}건`
+      : `${kind.openLabel} ${counts.open}건`;
     return `<div class="md-group-head">
         <h2 class="list-group-head">${kind.label}</h2>
-        <p class="md-group-count">${kind.openLabel} ${counts.open}건</p>
+        <p class="md-group-count">${countLine}</p>
       </div>
       <p class="md-lead">${kind.lead}</p>
       ${rows}`;
@@ -2151,17 +2193,13 @@
       </details>`;
   }
 
+  // '기록' 분류의 **본문만** 만든다. 머리·리드·개수는 renderModeratorItems가 네 분류에
+  // 똑같이 붙인다 — 예전에는 이 함수가 자기 머리를 따로 그려 목록 아래 상시 블록으로
+  // 섰고, 그래서 화면에 "분류 셋 + 그 아래 항상 보이는 명령 기록"이라는 축이 둘이었다.
   function renderModeratorCommands(data, now) {
     const commands = Array.isArray(data?.commands) ? data.commands : [];
-    const body = commands.length === 0
-      ? '<p class="us-empty">아직 보낸 명령이 없습니다.</p>'
-      : `<div class="md-list">${commands.map((command) => renderModeratorCommand(command, now)).join('')}</div>`;
-    return `<div class="md-group-head">
-        <h2 class="list-group-head">명령 기록</h2>
-        <p class="md-group-count">${commands.length}건</p>
-      </div>
-      <p class="md-lead">실행 모델은 실행자가 확인해 준 값입니다. 확인되지 않으면 요청 모델로 대신 적지 않고 ${MODERATOR_UNKNOWN}으로 둡니다.</p>
-      ${body}`;
+    if (commands.length === 0) return '<p class="us-empty">아직 실행된 명령이 없습니다.</p>';
+    return `<div class="md-list">${commands.map((command) => renderModeratorCommand(command, now)).join('')}</div>`;
   }
 
   // ---- 모더 배선 -----------------------------------------------------------
@@ -2177,7 +2215,6 @@
     setModeratorHtml(modElements.brain, renderModeratorBrain(data, now));
     setModeratorHtml(modElements.filter, renderModeratorFilter(data, kind));
     setModeratorHtml(modElements.items, renderModeratorItems(data, kind, now));
-    setModeratorHtml(modElements.commands, renderModeratorCommands(data, now));
   }
 
   function renderModeratorFreshness() {

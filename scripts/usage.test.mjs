@@ -2018,7 +2018,42 @@ test('an empty classification says so instead of rendering an empty box', () => 
   const feed = moderatorFeed({ items: [], counts: { important: {}, proposal: {}, review: {} } });
   assert.match(renderers.renderModeratorItems(feed, 'review', NOW), /기록된 자율 검토가 없습니다/u);
   assert.doesNotMatch(renderers.renderModeratorItems(feed, 'review', NOW), /class="md-list"/u);
-  assert.match(renderers.renderModeratorCommands({ commands: [] }, NOW), /아직 보낸 명령이 없습니다/u);
+  // '기록'은 사용자가 보낸 명령만이 아니라 승인된 제안·자율 검토가 실제로 돌린 것까지
+  // 포함하므로 "보낸"이 아니라 "실행된"이다.
+  assert.match(renderers.renderModeratorCommands({ commands: [] }, NOW), /아직 실행된 명령이 없습니다/u);
+  assert.match(renderers.renderModeratorItems({ ...feed, commands: [] }, 'record', NOW), /아직 실행된 명령이 없습니다/u);
+});
+
+test('the moderator tab has exactly four classifications and only one is shown at a time', () => {
+  // 2026-08-30 사용자 지시: 중요 / 제안 / 검토 / 기록.
+  const renderers = createUsageRenderers();
+  const feed = moderatorFeed({
+    items: [],
+    counts: { important: {}, proposal: {}, review: {} },
+    commands: [{ command_id: 'cmd_1', source: 'direct', status: 'succeeded', command_text: '점검해라', issue_summary: '문제', action_summary: '조치' }],
+  });
+  const filter = renderers.renderModeratorFilter(feed, 'important');
+  const keys = [...filter.matchAll(/data-mod-kind="([^"]+)"/gu)].map((match) => match[1]);
+  assert.deepEqual(keys, ['important', 'proposal', 'review', 'record']);
+  for (const label of ['중요', '제안', '검토', '기록']) assert.ok(filter.includes(label), label);
+  // 기록 개수는 서버 counts가 아니라 실제 명령 목록에서 나온다.
+  assert.match(filter, /data-mod-kind="record"[\s\S]*?md-filter-count">1</u);
+  // 한 번에 한 분류만 난다: 중요를 고르면 명령 기록이 함께 서지 않는다.
+  const importantView = renderers.renderModeratorItems(feed, 'important', NOW);
+  assert.doesNotMatch(importantView, /점검해라/u);
+  // 기록을 고르면 그 명령이 난다.
+  assert.match(renderers.renderModeratorItems(feed, 'record', NOW), /점검해라/u);
+});
+
+test('the record classification never becomes the default, because nothing there needs a hand', () => {
+  const renderers = createUsageRenderers();
+  // 손이 필요한 항목이 하나도 없고 기록만 있을 때에도 기본 선택은 기록이 아니다.
+  const feed = moderatorFeed({
+    items: [],
+    counts: { important: {}, proposal: {}, review: {} },
+    commands: [{ command_id: 'cmd_1', source: 'direct', status: 'succeeded', command_text: 'x' }],
+  });
+  assert.notEqual(renderers.moderatorDefaultKind(feed), 'record');
 });
 
 test('summaries and commands from the server are escaped, never injected as markup', () => {
@@ -2057,7 +2092,7 @@ test('the command composer lives outside every polled container', async () => {
   const html = readSource('usage/index.html');
   const source = readSource('usage/assets/js/usage.js');
   // 폴링이 갈아 끼우는 컨테이너들. 입력 상자가 이 중 하나 안에 있으면 5초마다 글이 사라진다.
-  for (const id of ['modBrain', 'modFilter', 'modItems', 'modCommands']) {
+  for (const id of ['modBrain', 'modFilter', 'modItems']) {
     assert.match(html, new RegExp(`id="${id}"[^>]*></div>`, 'u'), `#${id}는 렌더러가 채우는 빈 컨테이너여야 한다`);
   }
   assert.match(html, /<form id="modCommandForm"[\s\S]*?<textarea id="modCommandText"/u);
