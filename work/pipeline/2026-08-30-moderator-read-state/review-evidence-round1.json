@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "kind": "pipeline-review-evidence",
+  "candidate_fingerprint": "sha256:77518eb6f88036f5d513787d568de8cf454effff0177857ce11e5fefb9a7bba8",
+  "reviewer_receipt": {
+    "actor": "codex-reviewer",
+    "model": "gpt-5.6-sol",
+    "run_id": "/root/moderator_read_reviewer",
+    "context_id": "/root/moderator_read_reviewer"
+  },
+  "verdict": "repair",
+  "review": "work/pipeline/2026-08-30-moderator-read-state/review.md"
+}
