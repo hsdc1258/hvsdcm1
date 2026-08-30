@@ -1148,9 +1148,11 @@ function isBehaviorOwnerSession(session, env) {
 
 async function behaviorOwner(request, env) {
   const session = await authenticate(request, env);
-  if (!session) return { response: json({ error: '로그인이 필요합니다.' }, 401) };
+  if (!session) {
+    return { response: json({ error: '로그인이 필요합니다.' }, 401, { 'cache-control': 'private, no-store' }) };
+  }
   if (!isBehaviorOwnerSession(session, env)) {
-    return { response: json({ error: 'Not found' }, 404) };
+    return { response: json({ error: 'Not found' }, 404, { 'cache-control': 'private, no-store' }) };
   }
   return { session, response: null };
 }
