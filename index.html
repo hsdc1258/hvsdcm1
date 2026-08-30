@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="/assets/css/home.css">
   <script src="/assets/js/site-emoji.js" defer></script>
-  <script src="/assets/js/home.js" defer></script>
+  <script src="/assets/js/home.js?v=20260831-behavior-entry-v1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -110,6 +110,29 @@
         </div>
       </div>
     </section>
+
+    <!-- 사람 소유자(hvsdcm)에게만 home.js가 복제하는 랜딩 진입점이다. 비로그인·다른
+         계정에는 섹션 노드 자체가 생기지 않으며, 실제 데이터 접근은 Worker가 다시 막는다. -->
+    <template data-behavior-owner>
+      <section id="behaviorLabEntry" class="section reveal" aria-labelledby="behaviorLabEntryTitle">
+        <div class="container-text">
+          <header class="section-head">
+            <p class="eyebrow">PRIVATE</p>
+            <h2 id="behaviorLabEntryTitle" class="title-1">내 도구</h2>
+          </header>
+          <div class="list-group">
+            <a class="list-row list-row-nav" href="/behavior-lab/#paper">
+              <span class="list-row-lead"><span class="emoji-box" data-emoji="behaviorLab" aria-hidden="true"></span></span>
+              <span class="list-row-body">
+                <span class="list-row-title">Behavior Lab</span>
+                <span class="list-row-sub">$100 모의투자 · 실시간 로그와 수익률</span>
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </template>
+    <div id="behaviorOwnerMount"></div>
 
     <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
       <div class="container-text">

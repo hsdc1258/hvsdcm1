@@ -1726,8 +1726,8 @@ body.logged .topbar-login {
 </head>
 <body class="logged">
   <div class="snap-note"><strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: 드로어 안 <code>&lt;template data-study&gt;</code> 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>소유자 계정으로 로그인한 화면</strong>이다(사용량 항목은 소유자에게만 주입된다).
-  <br><strong>여기서 확인할 것</strong> — 로그인 상태인데도 본문에 학습 요소가 하나도 없어야 한다(plan.md §1-1). 학습·사용량 진입은 드로어에만 있고, 드로어는 닫힌 상태(화면 밖)라 이 사본에서는 보이지 않는다.
+  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.
+  <br><strong>여기서 확인할 것</strong> — 본문에는 학습 콘텐츠가 노출되지 않고, 사람 소유자 전용 Behavior Lab 카드만 연락 섹션 앞에 나타나는지. 일반 학습·사용량 진입은 드로어에 있고, 드로어는 닫힌 상태(화면 밖)다.
   <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -1818,6 +1818,29 @@ body.logged .topbar-login {
         </div>
       </div>
     </section>
+
+    <!-- 사람 소유자(hvsdcm)에게만 home.js가 복제하는 랜딩 진입점이다. 비로그인·다른
+         계정에는 섹션 노드 자체가 생기지 않으며, 실제 데이터 접근은 Worker가 다시 막는다. -->
+
+      <section id="behaviorLabEntry" class="section reveal" aria-labelledby="behaviorLabEntryTitle">
+        <div class="container-text">
+          <header class="section-head">
+            <p class="eyebrow">PRIVATE</p>
+            <h2 id="behaviorLabEntryTitle" class="title-1">내 도구</h2>
+          </header>
+          <div class="list-group">
+            <a class="list-row list-row-nav" href="/behavior-lab/#paper">
+              <span class="list-row-lead"><span class="emoji-box" data-emoji="behaviorLab" aria-hidden="true">🧭</span></span>
+              <span class="list-row-body">
+                <span class="list-row-title">Behavior Lab</span>
+                <span class="list-row-sub">$100 모의투자 · 실시간 로그와 수익률</span>
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+    <div id="behaviorOwnerMount"></div>
 
     <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
       <div class="container-text">

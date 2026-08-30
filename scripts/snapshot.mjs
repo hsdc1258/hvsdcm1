@@ -407,16 +407,16 @@ export function buildSnapshots() {
     ),
     [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
-        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일 세 가지: 드로어 안 <code>&lt;template data-study&gt;</code> 주입,'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입,'
         + ' <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기.'
-        + ' 즉 <strong>소유자 계정으로 로그인한 화면</strong>이다(사용량 항목은 소유자에게만 주입된다).'
-        + '\n  <br><strong>여기서 확인할 것</strong> — 로그인 상태인데도 본문에 학습 요소가 하나도 없어야 한다(plan.md §1-1).'
-        + ' 학습·사용량 진입은 드로어에만 있고, 드로어는 닫힌 상태(화면 밖)라 이 사본에서는 보이지 않는다.'
+        + ' 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 본문에는 학습 콘텐츠가 노출되지 않고, 사람 소유자 전용 Behavior Lab 카드만 연락 섹션 앞에 나타나는지.'
+        + ' 일반 학습·사용량 진입은 드로어에 있고, 드로어는 닫힌 상태(화면 밖)다.'
         + '\n  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => paintEmoji(html
         // 소유자로 로그인한 상태를 얼린다 — data-owner 그룹(사용량)까지 주입된다.
-        .replace(/<template data-(?:study|owner)>([^]*?)<\/template>/gu, '$1')
+        .replace(/<template data-(?:study|owner|behavior-owner)>([^]*?)<\/template>/gu, '$1')
         .replace('<body>', '<body class="logged">')
         .replace('<aside id="drawer" class="drawer"', '<aside id="drawer" class="drawer logged"')
         .replace('<div id="account" class="account hero-actions">', '<div id="account" class="account hero-actions logged">')),

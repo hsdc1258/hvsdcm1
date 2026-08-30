@@ -96,6 +96,8 @@ function publishedScripts() {
 const GATE_MARKERS = [
   { name: 'login redirect', test: (js) => /location\.replace\(/u.test(js) && js.includes('login=1') },
   { name: 'admin token', test: (js) => js.includes('hvsdcm.admin') },
+  { name: 'owner bearer gate', test: (js) => js.includes("localStorage.getItem('hvsdcm.token')")
+    && js.includes('authorization: `Bearer ${token}`') && js.includes('ownerVerified') },
 ];
 function loginGateOf(htmlFile, source) {
   for (const reference of scriptReferences(source)) {
@@ -2151,7 +2153,7 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js'],
+    'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js?v=20260831-behavior-entry-v1'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
@@ -2202,7 +2204,8 @@ function validateGlobalsAndOrder() {
   }
 
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  check(/<script\b[^>]*src="\/assets\/js\/home\.js"[^>]*\bdefer\b/u.test(homeHtml), 'index.html: home.js must load with defer');
+  check(/<script\b[^>]*src="\/assets\/js\/home\.js(?:\?[^"']*)?"[^>]*\bdefer\b/u.test(homeHtml),
+    'index.html: home.js must load with defer');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-app="wordmaster"'), 'WordMaster: account.js must declare data-app="wordmaster"');
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-app="smstudy"'), 'smstudy: account.js must declare data-app="smstudy"');
   // 기출은 계정에 저장할 진도가 없다 — account.js를 게이트 전용 모드(data-key 없음)로 싣는다.
@@ -2450,17 +2453,17 @@ function validateLandingGating() {
   // 규칙을 강제하는지. 정적으로 볼 수 있는 것은 문서에 무엇이 적혀 있는가까지다.
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
-  const templatePattern = /<template data-(?:study|owner)>[^]*?<\/template>/gu;
-  const studyTemplates = homeHtml.match(templatePattern) || [];
+  const templatePattern = /<template data-(?:study|owner|behavior-owner)>[^]*?<\/template>/gu;
+  const gatedTemplates = homeHtml.match(templatePattern) || [];
   const staticMarkup = homeHtml.replace(templatePattern, '');
-  const templateMarkup = studyTemplates.join('\n');
+  const templateMarkup = gatedTemplates.join('\n');
 
   // 로그인-후 진입 경로 목록을 손으로 적지 않는다 — 템플릿 자신에서 도출한다.
   // 드로어에 항목을 추가하면 그 경로가 자동으로 "정적 마크업 금지" 대상이 된다.
   // '/admin/'만 예외로 더한다: 템플릿에는 없지만(진입은 로그인 후 타이틀 링크가 만든다)
   // 미로그인 문서에 노출돼선 안 되는 경로다.
   const templateTargets = [...new Set(
-    [...templateMarkup.matchAll(/href="(\/[\w./-]*\/)"/gu)].map(([, href]) => href),
+    [...templateMarkup.matchAll(/href="(\/[\w./-]*\/)(?:[?#][^"]*)?"/gu)].map(([, href]) => href),
   )];
   check(templateTargets.length >= 3,
     `index.html: only ${templateTargets.length} gated entry paths were derived from <template data-study> — this check is inert`);
@@ -2476,16 +2479,27 @@ function validateLandingGating() {
       `index.html: logged-out static markup must not contain study keyword "${keyword}"`);
   }
   // 3) 복원 계약 — 로그인 시 주입될 템플릿 안에 두 학습 앱과 사용량 링크가 있어야 한다.
-  check(studyTemplates.length > 0, 'index.html: <template data-study> blocks are missing');
+  check(gatedTemplates.some((block) => block.startsWith('<template data-study>')),
+    'index.html: <template data-study> blocks are missing');
   check(templateMarkup.includes('href="/WordMaster/"'), 'index.html: study templates must restore the /WordMaster/ link on login');
   check(templateMarkup.includes('href="/smstudy/"'), 'index.html: study templates must restore the /smstudy/ link on login');
   // 사용량은 소유자 개인 데이터다 — 항목은 소유자 전용 템플릿에만 있어야 한다 (review WP1 M-5).
   const ownerTemplate = /<template data-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
-  const studyOnlyMarkup = studyTemplates.filter((block) => block.startsWith('<template data-study>')).join('\n');
+  const studyOnlyMarkup = gatedTemplates.filter((block) => block.startsWith('<template data-study>')).join('\n');
   check(ownerTemplate.includes('href="/usage/"'),
     'index.html: the usage entry must live inside <template data-owner> — it is owner-only data (review WP1 M-5)');
   check(!studyOnlyMarkup.includes('href="/usage/"'),
     'index.html: the usage entry must not sit in <template data-study> — that template mounts for every logged-in account');
+  const behaviorOwnerTemplate = /<template data-behavior-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
+  check(behaviorOwnerTemplate.includes('href="/behavior-lab/#paper"'),
+    'index.html: the owner landing template must link directly to the Behavior Lab paper tab');
+  check(!ownerTemplate.includes('href="/behavior-lab/'),
+    'index.html: Behavior Lab must not enter the broader owner template that also mounts for claude-test');
+  check(homeJs.includes("const BEHAVIOR_OWNER_USERNAME = 'hvsdcm';")
+    && homeJs.includes("normalize('NFKC').trim().toLowerCase() === BEHAVIOR_OWNER_USERNAME")
+    && /if \(!isBehaviorOwner\(username\)[^]*?return;/u.test(homeJs)
+    && homeJs.includes('mountBehaviorOwnerEntry(savedUsername)'),
+  'home.js: the Behavior Lab landing entry must mount only for the exact human owner');
   // 4) 주입 루틴 존재 — 템플릿만 있고 주입 코드가 사라지면 로그인 화면이 빈다.
   check(homeJs.includes('mountDrawerTemplates'), 'home.js: mountDrawerTemplates is missing — drawer templates would never render');
 
@@ -2576,8 +2590,8 @@ function validateBehaviorLab() {
     && coreSource.includes('createFreshManualDraft') && appSource.includes('setInterval(refreshLiveClock, 1_000)')
     && /function createDraft\(\)[\s\S]*createFreshManualDraft/u.test(appSource),
   'behavior-lab app: component/period live-clock freshness and action-time draft gating must stay fail-closed');
-  check(!homeHtml.includes('href="/behavior-lab/"'),
-    'index.html: private Behavior Lab must not be advertised on the static home drawer');
+  check(/<template data-behavior-owner>[^]*?href="\/behavior-lab\/#paper"[^]*?<\/template>/u.test(homeHtml),
+    'index.html: private Behavior Lab must have an exact-owner landing entry to the paper tab');
   check(pageHtml.includes('content="noindex, nofollow, noarchive"')
     && /id="labShell"[^>]*\bhidden\b/u.test(pageHtml)
     && appSource.includes("localStorage.getItem('hvsdcm.token')")
