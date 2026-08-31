@@ -1483,18 +1483,18 @@ label.list-row {
 }
 html {
   min-width: 320px;
-  background: #f3f1ea;
-  color-scheme: light;
+  background: var(--bg);
+  color-scheme: dark;
 }
 .behavior-page {
   min-width: 320px;
   margin: 0;
   overflow-x: hidden;
-  background: #f7f5ef;
-  color: #11182b;
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 .behavior-page button, .behavior-page input, .behavior-page textarea {
@@ -1513,1010 +1513,832 @@ html {
   left: 8px;
   z-index: 100;
   padding: 10px 14px;
-  background: #11182b;
-  color: white;
-  transform: translateY(-160%);
+  border-radius: 8px;
+  background: var(--accent-strong);
+  color: #fff;
+  transform: translateY(-150%);
 }
 .skip-link:focus {
   transform: translateY(0);
 }
 .eyebrow, .section-index, .control-label {
   margin: 0;
-  color: #3156d8;
-  font-family: var(--font-mono);
+  color: var(--text-3);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .13em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+.is-positive {
+  color: var(--green) !important;
+}
+.is-negative {
+  color: var(--red) !important;
 }
 /* Owner gate */
 .owner-gate {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(260px, .8fr) minmax(420px, 1.2fr);
-  background: #f7f5ef;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
 }
 .gate-brand {
-  padding: clamp(32px, 6vw, 88px);
+  position: absolute;
+  top: 28px;
+  left: 32px;
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  background: #11182b;
-  color: white;
+  align-items: center;
+  gap: 12px;
 }
 .gate-brand span, .lab-mark {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: #3156d8;
-  color: white;
-  font-family: var(--font-mono);
-  font-weight: 900;
+  border-radius: 12px;
+  background: var(--accent-strong);
+  color: #fff;
+  font-weight: 800;
 }
 .gate-brand b {
-  font-size: 20px;
+  font-size: 14px;
   line-height: 1.05;
 }
 .owner-gate-card {
-  width: min(640px, 100%);
-  padding: clamp(40px, 9vw, 120px);
-  align-self: center;
+  width: min(440px, 100%);
+  padding: 36px;
+  border: 1px solid var(--line-faint);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
 }
 .owner-gate-card h1 {
-  margin: 24px 0 0;
-  font-size: clamp(40px, 5.5vw, 76px);
-  line-height: 1.04;
-  letter-spacing: -.055em;
+  margin: 14px 0 0;
+  font-size: clamp(30px, 6vw, 42px);
+  line-height: 1.15;
+  letter-spacing: -.04em;
 }
 .owner-gate-card > p:not(.eyebrow) {
-  margin: 24px 0 0;
-  color: #30374a;
+  margin: 14px 0 0;
+  color: var(--text-2);
 }
 .owner-gate-actions {
-  margin-top: 32px;
+  margin-top: 28px;
   display: flex;
   gap: 10px;
 }
-/* Header */
+/* App shell */
 .lab-topbar {
   position: sticky;
   top: 0;
   z-index: 30;
-  border-bottom: 1px solid #d8d5cc;
-  background: rgba(247, 245, 239, .94);
-  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line-faint);
+  background: rgba(8, 9, 13, .88);
+  backdrop-filter: blur(20px);
 }
 .lab-topbar-inner, .lab-main, .lab-footer {
-  width: min(1240px, calc(100% - 64px));
+  width: min(1440px, calc(100% - 56px));
   margin-inline: auto;
 }
 .lab-topbar-inner {
-  min-height: 72px;
+  min-height: 68px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 24px;
 }
 .lab-brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: #11182b;
+  gap: 11px;
+  color: var(--text);
   text-decoration: none;
   justify-self: start;
 }
 .lab-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
 }
 .lab-brand > span:last-child {
   display: grid;
-  gap: 1px;
 }
 .lab-brand b {
   font-size: 15px;
   line-height: 1.2;
 }
 .lab-brand small {
-  color: #6d7180;
-  font-family: var(--font-mono);
+  color: var(--text-3);
   font-size: 9px;
-  letter-spacing: .08em;
+  letter-spacing: .06em;
 }
 .lab-tabs {
+  padding: 4px;
   display: flex;
-  align-items: stretch;
-  gap: 4px;
-  justify-self: center;
+  gap: 2px;
+  border-radius: 12px;
+  background: var(--surface);
 }
 .lab-tab {
-  min-height: 42px;
-  padding: 0 16px;
+  min-width: 88px;
+  min-height: 38px;
+  padding: 0 18px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
-  color: #6d7180;
+  color: var(--text-3);
   font-size: 14px;
-  font-weight: 750;
-}
-.lab-tab span {
-  margin-right: 7px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-weight: 700;
+  transition: background .16s ease, color .16s ease;
 }
 .lab-tab:hover {
-  background: #eeece4;
-  color: #11182b;
+  color: var(--text);
 }
 .lab-tab.is-active {
-  background: #11182b;
-  color: white;
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-faint);
 }
-.read-only-mark {
-  justify-self: end;
+.read-only-mark, .live-status {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .08em;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.read-only-mark {
+  justify-self: end;
+  color: var(--text-3);
 }
 .read-only-mark i, .live-status i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #087f5b;
-  box-shadow: 0 0 0 4px rgba(8, 127, 91, .1);
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(32, 201, 151, .12);
 }
-/* Hero */
+.live-status {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(32, 201, 151, .1);
+  color: #7ce8c4;
+}
+.live-status.is-loading i, .adaptive-stream.is-connecting::before {
+  background: var(--orange);
+  box-shadow: 0 0 0 4px rgba(255, 184, 77, .12);
+}
+.live-status.is-error {
+  background: rgba(240, 68, 82, .1);
+  color: #ff8a94;
+}
+.live-status.is-error i {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(240, 68, 82, .12);
+}
 .lab-main {
-  padding-bottom: 120px;
+  padding: 38px 0 96px;
 }
-.lab-hero {
-  min-height: 630px;
-  padding: 92px 0 88px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
-  align-items: center;
-  gap: clamp(48px, 7vw, 100px);
-  border-bottom: 1px solid #d8d5cc;
-}
-.hero-statement h1 {
-  max-width: 780px;
-  margin: 24px 0 0;
-  font-size: clamp(54px, 6.4vw, 88px);
-  font-weight: 830;
-  line-height: .98;
-  letter-spacing: -.07em;
-}
-.hero-statement h1 em, .paper-title-block h2 em {
-  color: #3156d8;
-  font-style: normal;
-}
-.hero-copy {
-  max-width: 650px;
-  margin: 28px 0 0;
-  color: #30374a;
-  font-size: 18px;
-  line-height: 1.75;
-  word-break: keep-all;
-}
-.hero-instrument {
-  min-height: 420px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  border-radius: 24px;
-  background: #11182b;
-  color: white;
-  box-shadow: 0 28px 70px rgba(17, 24, 43, .18);
-}
-.instrument-head {
-  padding-bottom: 18px;
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, .15);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .09em;
-}
-.instrument-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.instrument-grid > div {
-  min-width: 0;
-  padding: 24px 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border-bottom: 1px solid rgba(255, 255, 255, .12);
-}
-.instrument-grid > div:nth-child(odd) {
-  border-right: 1px solid rgba(255, 255, 255, .12);
-}
-.instrument-grid span, .hero-instrument > p {
-  color: rgba(255, 255, 255, .48);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .08em;
-}
-.instrument-grid b {
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  font-size: clamp(18px, 2vw, 25px);
-}
-.instrument-grid small {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, .62);
-  font-size: 12px;
-}
-.hero-instrument > p {
-  margin: 18px 0 0;
-  color: rgba(255, 255, 255, .75);
-}
-/* Shared page structures */
 .tab-panel {
-  padding-top: 88px;
+  display: grid;
+  gap: 24px;
 }
+/* Headings and controls */
 .view-masthead, .paper-heading, .section-heading-row, .paper-overview-heading, .paper-subheading, .paper-strategy-heading {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 32px;
-}
-.view-masthead {
   align-items: flex-end;
-  margin-bottom: 40px;
+  justify-content: space-between;
+  gap: 24px;
 }
-.view-masthead h2, .paper-strategy-heading h2 {
-  margin: 10px 0 0;
-  font-size: clamp(36px, 4vw, 58px);
-  line-height: 1.05;
-  letter-spacing: -.055em;
-}
-.view-masthead p:last-child, .paper-subheading > p, .paper-strategy-heading > p {
-  margin: 12px 0 0;
-  color: #6d7180;
-}
-.live-status, .adaptive-stream {
-  min-height: 34px;
-  padding: 7px 12px;
-  display: inline-flex;
+.view-masthead, .paper-heading {
+  min-height: 88px;
   align-items: center;
-  gap: 9px;
-  border: 1px solid #d8d5cc;
-  border-radius: 999px;
-  background: #fffefa;
-  color: #30374a;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .04em;
-  white-space: nowrap;
 }
-.live-status.is-live, .adaptive-stream.is-live {
-  border-color: rgba(8, 127, 91, .26);
-  background: #edf8f3;
-  color: #087f5b;
+.view-masthead h1, .paper-title-block h1 {
+  margin: 4px 0 0;
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.2;
+  letter-spacing: -.04em;
 }
-.live-status.is-error, .adaptive-stream.is-connecting {
-  border-color: rgba(196, 63, 63, .24);
-  background: #fff1ef;
-  color: #c43f3f;
+.view-masthead p:last-child, .paper-title-block .section-copy, .paper-subheading > p, .paper-strategy-heading > p {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 14px;
 }
-.live-status.is-loading i {
-  background: #c87919;
-  box-shadow: 0 0 0 4px rgba(200, 121, 25, .1);
+.control-deck {
+  min-height: 64px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: auto 1px auto 1fr;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+  background: var(--surface);
 }
-.panel, .ticker-section, .control-deck {
-  min-width: 0;
-  border: 1px solid #d8d5cc;
-  background: #fffefa;
+.control-group, .choice-row {
+  display: flex;
+  align-items: center;
+}
+.control-group {
+  gap: 10px;
+}
+.choice-row {
+  gap: 4px;
+}
+.choice {
+  min-width: 52px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+.choice:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.choice.is-active {
+  background: var(--accent-strong);
+  color: #fff;
+}
+.control-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line-faint);
+}
+.micro-status {
+  margin: 0;
+  justify-self: end;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* Shared surfaces */
+.panel, .ticker-section, .abc-overview, .paper-ranking-section {
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
 }
 .panel, .ticker-section {
-  padding: 28px;
+  padding: 24px;
 }
-.panel h2, .ticker-section h2 {
-  margin: 7px 0 0;
-  font-size: 27px;
-  line-height: 1.15;
-  letter-spacing: -.035em;
+.section-heading-row h2, .panel h2, .paper-subheading h2, .paper-strategy-heading h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -.03em;
 }
 .section-heading-row.compact {
   align-items: center;
 }
 .section-copy {
-  max-width: 700px;
-  margin: 12px 0 0;
-  color: #6d7180;
-  line-height: 1.7;
-  word-break: keep-all;
+  margin: 7px 0 0;
+  color: var(--text-3);
 }
 .primary-action, .copy-action, .text-button {
-  min-height: 46px;
-  padding: 0 18px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  text-decoration: none;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
   font-size: 14px;
-  font-weight: 800;
-  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+  font-weight: 700;
 }
 .primary-action {
-  background: #3156d8;
-  color: white;
+  border: 0;
+  background: var(--accent-strong);
+  color: #fff;
 }
 .primary-action:hover {
-  background: #2444bb;
-  transform: translateY(-1px);
+  background: #4593ff;
 }
 .primary-action:disabled {
-  background: #d4d2cc;
-  color: #85837e;
+  background: var(--surface-3);
+  color: var(--text-3);
   cursor: not-allowed;
-  transform: none;
 }
 .primary-action.full {
   width: 100%;
 }
-.copy-action, .text-button {
-  border-color: #b8b5ad;
-  background: transparent;
-  color: #11182b;
+.text-button, .copy-action {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-3);
+  color: var(--text-2);
 }
-.copy-action:hover, .text-button:hover {
-  border-color: #11182b;
-  background: #11182b;
-  color: white;
+.text-button:hover, .copy-action:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, .24);
 }
 .text-button.is-danger {
-  border-color: rgba(196, 63, 63, .45);
-  color: #c43f3f;
+  border-color: rgba(240, 68, 82, .24);
+  background: rgba(240, 68, 82, .1);
+  color: #ff8a94;
 }
-.text-button.is-danger:hover {
-  background: #c43f3f;
-  color: white;
+.error-panel, .empty-state {
+  padding: 20px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+  background: var(--surface);
 }
 .error-panel {
-  margin: 18px 0;
-  padding: 16px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border: 1px solid rgba(196, 63, 63, .25);
-  background: #fff1ef;
-  color: #8e2c2c;
+  border-color: rgba(240, 68, 82, .28);
 }
-.error-panel p {
+.error-panel p, .empty-state p {
   margin: 0;
-}
-.empty-state {
-  min-height: 170px;
-  padding: 28px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  border: 1px dashed #b8b5ad;
-  background: #f7f5ef;
-  text-align: center;
+  color: var(--text-2);
 }
 .empty-state strong {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: .08em;
+  display: block;
+  margin-bottom: 6px;
 }
-.empty-state p {
-  max-width: 560px;
-  margin: 8px 0 0;
-  color: #6d7180;
-}
-/* Market controls and panels */
-.control-deck {
-  min-height: 92px;
-  padding: 18px 22px;
-  display: grid;
-  grid-template-columns: auto 1px auto 1fr;
-  align-items: center;
-  gap: 24px;
-  border-left: 5px solid #3156d8;
-}
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-.control-divider {
-  width: 1px;
-  height: 38px;
-  background: #d8d5cc;
-}
-.choice-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.choice {
-  min-width: 50px;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #6d7180;
-  font-size: 13px;
-  font-weight: 800;
-}
-.choice:hover {
-  background: #eeece4;
-  color: #11182b;
-}
-.choice.is-active {
-  background: #11182b;
-  color: white;
-}
-.micro-status {
-  margin: 0;
-  justify-self: end;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
+/* Market */
 .dashboard {
-  margin-top: 28px;
   display: grid;
   gap: 24px;
 }
 .ticker-grid {
-  margin-top: 22px;
+  margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid #d8d5cc;
-  border-left: 1px solid #d8d5cc;
+  gap: 10px;
 }
 .ticker-card {
   min-width: 0;
-  min-height: 128px;
-  padding: 18px;
+  min-height: 108px;
+  padding: 16px;
   display: grid;
+  grid-template-columns: 1fr auto;
   align-content: space-between;
   gap: 12px;
-  border: 0;
-  border-right: 1px solid #d8d5cc;
-  border-bottom: 1px solid #d8d5cc;
-  background: #fffefa;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--surface-2);
   text-align: left;
 }
 .ticker-card:hover {
-  background: #f7f5ef;
+  background: var(--surface-3);
 }
 .ticker-card.is-selected {
-  box-shadow: inset 0 -4px 0 #3156d8;
+  border-color: rgba(49, 130, 246, .5);
+  background: var(--accent-soft);
 }
 .ticker-name {
-  display: flex;
-  justify-content: space-between;
-  color: #11182b;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 800;
+  color: var(--text-2);
+  font-weight: 700;
 }
 .ticker-name small, .ticker-card strong small {
-  color: #6d7180;
-  font-size: 9px;
+  display: block;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 500;
 }
 .ticker-card strong {
-  display: grid;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 22px;
+  grid-column: 1 / -1;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-card > span:last-child {
+  position: absolute;
 }
 .market-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, .7fr);
   gap: 24px;
-}
-.chart-panel {
-  min-height: 500px;
 }
 .price-block {
   display: grid;
   justify-items: end;
 }
 .price-block strong {
-  font-family: var(--font-mono);
-  font-size: 28px;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
 }
 .price-block span {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 800;
-}
-.is-positive {
-  color: #087f5b !important;
-}
-.is-negative {
-  color: #c43f3f !important;
+  font-size: 13px;
+  font-weight: 700;
 }
 .chart-wrap {
-  margin-top: 34px;
-  overflow: hidden;
+  margin-top: 20px;
+  padding: 12px 0 2px;
 }
-#priceChart {
+.chart-wrap svg {
   width: 100%;
-  height: auto;
+  height: 270px;
   display: block;
 }
-#priceChart line {
-  stroke: #d8d5cc;
+.chart-wrap line, .abc-equity-chart line {
+  stroke: rgba(255, 255, 255, .07);
   stroke-width: 1;
 }
-#priceLine {
+.chart-wrap polyline {
   fill: none;
-  stroke: #3156d8;
+  stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 4;
+  stroke-width: 3;
 }
 .range-row {
-  padding-top: 16px;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  border-top: 1px solid #d8d5cc;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .range-row b {
-  color: #11182b;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
 .pulse-panel {
-  background: #11182b;
-  color: white;
-}
-.pulse-panel .section-index, .pulse-panel .fine-print {
-  color: rgba(255, 255, 255, .48);
+  background: linear-gradient(150deg, #171b24, #101217);
 }
 .pulse-stat {
-  margin-top: 32px;
+  margin-top: 26px;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
 }
 .pulse-stat > span, .pulse-split span {
-  color: rgba(255, 255, 255, .48);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .08em;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .pulse-stat strong {
   grid-row: span 2;
-  font-family: var(--font-mono);
-  font-size: 26px;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
 }
 .pulse-stat small {
   margin-top: 3px;
-  color: rgba(255, 255, 255, .68);
+  color: var(--text-2);
 }
 .ratio-track {
   position: relative;
   height: 6px;
   margin-top: 12px;
   overflow: hidden;
-  background: rgba(255, 255, 255, .15);
+  border-radius: 999px;
+  background: var(--surface-3);
 }
 .ratio-track i {
   position: absolute;
   inset: 0 auto 0 0;
   width: 50%;
-  background: #6683f0;
+  border-radius: inherit;
+  background: var(--accent-strong);
 }
 .ratio-track em {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
+  top: -2px;
+  bottom: -2px;
   left: 50%;
   width: 1px;
-  background: white;
+  background: rgba(255, 255, 255, .6);
 }
 .ratio-track.is-amber i {
-  background: #e49b3d;
+  background: var(--orange);
 }
 .pulse-split {
-  margin-top: 34px;
+  margin-top: 28px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border: 1px solid rgba(255, 255, 255, .15);
+  gap: 10px;
 }
 .pulse-split div {
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 6px;
-}
-.pulse-split div + div {
-  border-left: 1px solid rgba(255, 255, 255, .15);
-}
-.pulse-split b {
-  font-family: var(--font-mono);
-  font-size: 14px;
+  gap: 5px;
+  border-radius: 12px;
+  background: var(--surface-3);
 }
 .fine-print, .signal-disclaimer, .blocked-copy {
-  margin: 18px 0 0;
-  color: #6d7180;
+  margin: 16px 0 0;
+  color: var(--text-3);
   font-size: 12px;
-  line-height: 1.6;
 }
 .signal-grid, .risk-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
 }
 .confidence, .score-pill {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 800;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
 }
 .signal-core {
-  min-height: 180px;
-  margin-top: 24px;
+  min-height: 150px;
+  margin-top: 18px;
   display: flex;
   align-items: center;
-  gap: 24px;
-  border-top: 1px solid #d8d5cc;
-  border-bottom: 1px solid #d8d5cc;
+  gap: 20px;
+  border-top: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--line-faint);
 }
 .signal-arrow {
-  width: 74px;
-  height: 74px;
+  width: 60px;
+  height: 60px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #eeece4;
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 900;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: #66a6ff;
+  font-size: 28px;
+  font-weight: 800;
 }
 .signal-core p {
   margin: 0;
-  color: #6d7180;
-  font-family: var(--font-mono);
+  color: var(--text-3);
   font-size: 10px;
 }
 .signal-core h3 {
-  margin: 5px 0;
-  font-size: 34px;
+  margin: 3px 0;
+  font-size: 30px;
   letter-spacing: -.04em;
 }
 .scenario-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  border-bottom: 1px solid #d8d5cc;
 }
 .scenario-row > div {
-  padding: 16px 12px;
+  padding: 15px 10px 0;
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 .scenario-row > div + div {
-  border-left: 1px solid #d8d5cc;
+  border-left: 1px solid var(--line-faint);
 }
-.scenario-row span {
-  color: #6d7180;
+.scenario-row span, .evidence-row span, .evidence-empty {
+  color: var(--text-3);
   font-size: 11px;
 }
-.scenario-row b {
-  font-family: var(--font-mono);
+.scenario-row b, .evidence-row b {
   font-size: 13px;
 }
 .evidence-columns {
-  margin-top: 24px;
+  margin-top: 18px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 20px;
 }
 .evidence-columns h3 {
-  margin: 0 0 12px;
-  font-size: 14px;
-}
-.evidence-list {
-  display: grid;
-  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
 }
 .evidence-row {
-  padding: 13px 0;
+  padding: 12px 0;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
-  border-top: 1px solid #d8d5cc;
+  border-top: 1px solid var(--line-faint);
 }
 .evidence-row > div {
   display: grid;
   gap: 3px;
 }
-.evidence-row b {
-  font-size: 13px;
-}
-.evidence-row span, .evidence-empty {
-  color: #6d7180;
-  font-size: 12px;
-}
 .evidence-row em {
-  color: #3156d8;
-  font-family: var(--font-mono);
+  color: #66a6ff;
   font-size: 12px;
   font-style: normal;
-  font-weight: 800;
-}
-.backtest-panel {
-  margin-top: 4px;
+  font-weight: 700;
 }
 .backtest-panel .empty-state, #backtestResult {
-  margin-top: 24px;
+  margin-top: 20px;
 }
 .provenance, .assumption-row {
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .metrics-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 14px;
 }
 .metrics-block {
-  padding: 20px;
-  background: #f7f5ef;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface-2);
 }
 .metrics-block h3 {
   margin: 0 0 12px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
 }
-.metric-list {
+.metric-list, .window-list {
   display: grid;
   gap: 8px;
 }
 .metric-list > div, .window-list > div {
+  padding-bottom: 7px;
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid #d8d5cc;
-  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line-faint);
 }
 .window-list {
-  margin-top: 24px;
-  display: grid;
-  gap: 10px;
+  margin-top: 20px;
 }
 .assumption-row {
-  margin-top: 20px;
+  margin-top: 18px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
 }
 .risk-fields {
-  margin: 24px 0;
+  margin: 20px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
 }
 .risk-fields label {
   display: grid;
   gap: 7px;
 }
 .risk-fields label > span {
-  color: #30374a;
+  color: var(--text-2);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
 }
 .risk-fields small {
-  color: #6d7180;
+  color: var(--text-3);
 }
 .risk-fields input, #draftText {
   width: 100%;
-  border: 1px solid #b8b5ad;
-  border-radius: 6px;
-  background: #f7f5ef;
-  color: #11182b;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
   outline: none;
 }
 .risk-fields input {
-  min-height: 48px;
+  min-height: 46px;
   padding: 0 13px;
 }
 .risk-fields input:focus, #draftText:focus {
-  border-color: #3156d8;
-  box-shadow: 0 0 0 3px rgba(49, 86, 216, .11);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, .16);
 }
 #draftText {
-  min-height: 230px;
-  padding: 15px;
+  min-height: 220px;
+  padding: 14px;
   resize: vertical;
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 1.65;
 }
 #draftResult .copy-action {
   width: 100%;
   margin-top: 10px;
 }
 .draft-errors {
-  margin: 18px 0;
-  padding: 16px;
-  background: #fff1ef;
-  color: #c43f3f;
+  margin: 16px 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(240, 68, 82, .1);
+  color: #ff8a94;
 }
 .draft-errors p {
   margin: 5px 0 0;
 }
 .hard-boundary {
-  margin-top: 22px;
-  padding: 16px;
-  border-left: 4px solid #11182b;
-  background: #f7f5ef;
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 .hard-boundary p {
   margin: 4px 0 0;
-  color: #6d7180;
+  color: var(--text-3);
   font-size: 12px;
 }
-/* Paper experiment */
+/* Model dashboard */
 .paper-heading {
-  min-height: 350px;
-  padding-bottom: 72px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(340px, .6fr);
-  align-items: end;
-  border-bottom: 1px solid #d8d5cc;
-}
-.paper-title-block h2 {
-  margin: 18px 0 0;
-  font-size: clamp(60px, 8vw, 106px);
-  line-height: .9;
-  letter-spacing: -.075em;
-}
-.paper-title-block .section-copy {
-  max-width: 670px;
-  margin-top: 28px;
-  font-size: 17px;
+  padding-bottom: 4px;
 }
 .paper-command {
-  align-self: stretch;
-  padding-left: 32px;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 18px;
-  border-left: 1px solid #d8d5cc;
-}
-.paper-command > div:first-child {
-  display: grid;
+  align-items: center;
   gap: 10px;
-}
-.paper-command > div:first-child > span:first-child {
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .08em;
 }
 .paper-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 .paper-empty {
-  margin-top: 40px;
+  margin-top: 12px;
 }
 .abc-experiment {
-  margin-top: 56px;
+  display: grid;
+  gap: 24px;
 }
 .abc-experiment[data-freshness="stale"] {
-  opacity: .78;
+  opacity: .76;
 }
 .abc-overview {
   min-width: 0;
   display: grid;
-  grid-template-columns: 1.08fr .92fr;
-  border: 1px solid #11182b;
-  background: #fffefa;
+  grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr);
+  overflow: hidden;
+}
+.overview-ink, .overview-paper {
+  min-width: 0;
+  padding: 26px;
 }
 .overview-ink {
-  min-width: 0;
-  padding: clamp(28px, 4vw, 50px);
-  background: #11182b;
-  color: white;
+  border-right: 1px solid var(--line-faint);
+  background: linear-gradient(145deg, #171b24, #101217);
 }
-.overview-ink .section-index, .overview-ink .section-copy {
-  color: rgba(255, 255, 255, .5);
+.paper-overview-heading {
+  align-items: flex-start;
 }
 .paper-overview-heading h2 {
-  margin: 8px 0 0;
-  font-size: clamp(30px, 3vw, 44px);
-  line-height: 1.05;
-  letter-spacing: -.05em;
+  margin: 4px 0 0;
+  font-size: 21px;
+}
+.adaptive-stream {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #7ce8c4;
+  font-size: 11px;
+  font-weight: 700;
+}
+.adaptive-stream::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
 }
 .paper-leader-card {
-  margin-top: 54px;
+  margin-top: 26px;
   display: grid;
 }
 .paper-leader-card > span {
-  color: rgba(255, 255, 255, .45);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .paper-leader-card h3 {
-  margin: 12px 0 0;
-  font-size: clamp(23px, 3vw, 38px);
-  line-height: 1.2;
+  margin: 8px 0 0;
+  font-size: 21px;
 }
 .paper-leader-card strong {
-  margin-top: 10px;
-  font-family: var(--font-mono);
-  font-size: clamp(58px, 7vw, 92px);
+  margin-top: 5px;
+  font-size: clamp(42px, 5vw, 64px);
   line-height: 1;
-  letter-spacing: -.08em;
+  letter-spacing: -.05em;
+  font-variant-numeric: tabular-nums;
 }
 .paper-leader-card small {
-  margin-top: 12px;
-  color: rgba(255, 255, 255, .58);
-  font-family: var(--font-mono);
+  margin-top: 8px;
+  color: var(--text-2);
 }
 .overview-paper {
-  min-width: 0;
-  padding: clamp(28px, 4vw, 50px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 .paper-glance-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-top: 1px solid #d8d5cc;
-  border-left: 1px solid #d8d5cc;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
 }
 .paper-glance-grid > div {
-  min-height: 124px;
-  padding: 20px;
+  min-height: 92px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border-right: 1px solid #d8d5cc;
-  border-bottom: 1px solid #d8d5cc;
+  border-radius: 12px;
+  background: var(--surface-2);
 }
 .paper-glance-grid span, .adaptive-summary-grid span, .paper-kv span {
-  color: #6d7180;
+  color: var(--text-3);
   font-size: 11px;
 }
 .paper-glance-grid b {
-  font-family: var(--font-mono);
-  font-size: clamp(19px, 2vw, 25px);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
 }
 .paper-method {
-  margin-top: 22px;
-  border-top: 1px solid #d8d5cc;
+  margin-top: 14px;
+  border-top: 1px solid var(--line-faint);
 }
 .paper-method summary, .abc-arm-details summary {
-  min-height: 52px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #11182b;
+  color: var(--text-2);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
   list-style: none;
 }
@@ -2525,305 +2347,251 @@ html {
 }
 .paper-method summary::after, .abc-arm-details summary::after {
   content: "+";
-  font-family: var(--font-mono);
+  color: var(--text-3);
   font-size: 18px;
 }
 .paper-method[open] summary::after, .abc-arm-details[open] summary::after {
   content: "−";
 }
 .adaptive-summary-grid {
-  padding: 16px 0 4px;
+  padding: 12px 0 2px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 .adaptive-summary-grid > div, .paper-kv > div {
   display: grid;
   gap: 4px;
 }
 .adaptive-summary-grid b, .paper-kv b {
-  font-family: var(--font-mono);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
-.paper-ranking-section, .paper-strategy-section {
-  padding-top: 88px;
+.paper-ranking-section {
+  padding: 22px 24px 8px;
 }
 .paper-subheading, .paper-strategy-heading {
-  margin-bottom: 28px;
-  align-items: end;
-}
-.paper-subheading h3, .paper-strategy-heading h2 {
-  margin: 8px 0 0;
-}
-.paper-subheading h3 {
-  font-size: 36px;
-  letter-spacing: -.045em;
-}
-.paper-subheading > p, .paper-strategy-heading > p {
-  max-width: 430px;
-  text-align: right;
+  margin-bottom: 18px;
 }
 .paper-ranking {
   margin: 0;
   padding: 0;
   display: grid;
-  border-top: 2px solid #11182b;
   list-style: none;
 }
 .paper-ranking-item {
   min-width: 0;
-  min-height: 78px;
+  min-height: 62px;
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
-  border-bottom: 1px solid #d8d5cc;
+  gap: 12px;
+  border-top: 1px solid var(--line-faint);
 }
-.paper-ranking-item:nth-child(1) {
-  background: #eef1ff;
+.paper-ranking-item:first-child {
+  margin-top: 2px;
+  border-radius: 10px;
+  border-top-color: transparent;
+  background: var(--accent-soft);
 }
 .paper-rank-number {
-  align-self: stretch;
-  display: grid;
-  place-items: center;
-  border-right: 1px solid #d8d5cc;
-  color: #3156d8;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 900;
+  color: #66a6ff;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 .paper-ranking-item > div:nth-child(2) {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 .paper-ranking-item > div:nth-child(2) b {
-  font-size: 15px;
+  font-size: 14px;
 }
 .paper-ranking-item > div:nth-child(2) span {
-  color: #6d7180;
-  font-size: 12px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .paper-ranking-item > div:last-child {
-  padding-right: 20px;
+  padding-right: 12px;
   display: grid;
   justify-items: end;
 }
 .paper-ranking-item > div:last-child strong {
-  font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
 }
 .paper-ranking-item > div:last-child small {
-  color: #6d7180;
-  font-family: var(--font-mono);
+  color: var(--text-3);
   font-size: 10px;
+}
+.paper-strategy-section {
+  padding-top: 10px;
 }
 .abc-arm-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 .abc-arm-card {
-  position: relative;
+  min-width: 0;
   padding: 0;
   overflow: hidden;
-  border-color: #b8b5ad;
-  box-shadow: 0 14px 40px rgba(17, 24, 43, .06);
-}
-.abc-arm-card::before {
-  content: "";
-  height: 7px;
-  display: block;
-  background: #3156d8;
-}
-.abc-arm-card:nth-child(2)::before {
-  background: #6b4fd6;
-}
-.abc-arm-card:nth-child(3)::before {
-  background: #0b8a77;
-}
-.abc-arm-card:nth-child(4)::before {
-  background: #d27625;
-}
-.abc-arm-card:nth-child(5)::before {
-  background: #b64483;
-}
-.abc-arm-card:nth-child(6)::before {
-  background: #54606f;
+  box-shadow: none;
 }
 .abc-arm-heading {
-  padding: 24px 24px 0;
+  padding: 20px 20px 0;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: start;
-  gap: 14px;
+  gap: 11px;
 }
 .abc-arm-id {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid #11182b;
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 900;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: #66a6ff;
+  font-size: 15px;
+  font-weight: 800;
 }
 .abc-arm-heading h3 {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
-  letter-spacing: -.035em;
+  font-size: 17px;
+  line-height: 1.25;
 }
 .abc-strategy-description {
-  margin: 5px 0 0;
-  color: #6d7180;
-  font-size: 13px;
+  margin: 3px 0 0;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .abc-strategy-id {
-  margin-top: 8px;
+  margin-top: 5px;
   display: block;
-  color: #6d7180;
+  color: #596270;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 8px;
   overflow-wrap: anywhere;
 }
-.abc-arm-heading > span:last-child {
+.abc-position-state {
   padding: 5px 8px;
-  border: 1px solid #d8d5cc;
   border-radius: 999px;
-  color: #6d7180;
-  font-size: 10px;
-  font-weight: 800;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 700;
   white-space: nowrap;
 }
+.abc-position-state.is-open {
+  background: rgba(32, 201, 151, .12);
+  color: #7ce8c4;
+}
 .abc-arm-result {
-  margin: 28px 24px 0;
-  padding: 20px 0;
+  margin: 18px 20px 0;
+  padding: 15px 0;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
-  gap: 4px 18px;
-  border-top: 1px solid #d8d5cc;
+  gap: 3px 12px;
+  border-top: 1px solid var(--line-faint);
 }
 .abc-arm-result > span {
-  color: #6d7180;
-  font-size: 11px;
+  color: var(--text-3);
+  font-size: 10px;
 }
 .abc-arm-result > strong {
   grid-row: span 2;
-  font-family: var(--font-mono);
-  font-size: clamp(34px, 4vw, 50px);
+  font-size: 32px;
   line-height: 1;
-  letter-spacing: -.07em;
+  letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
 }
 .abc-arm-result > small {
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  color: var(--text-3);
+  font-size: 9px;
 }
 .abc-equity-chart {
-  margin: 0 24px;
-  padding: 18px 0;
-  border-top: 1px solid #d8d5cc;
-  border-bottom: 1px solid #d8d5cc;
+  margin: 0 20px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--line-faint);
 }
 .abc-equity-chart figcaption {
-  margin-bottom: 8px;
-  color: #6d7180;
-  font-family: var(--font-mono);
+  margin-bottom: 6px;
+  color: var(--text-3);
   font-size: 9px;
-  letter-spacing: .07em;
 }
 .abc-equity-chart svg {
   width: 100%;
-  height: 108px;
+  height: 78px;
   display: block;
-}
-.abc-equity-chart line {
-  stroke: #d8d5cc;
-  stroke-width: 1;
 }
 .abc-equity-chart polyline {
   fill: none;
-  stroke: #3156d8;
+  stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3;
 }
-.abc-arm-card:nth-child(2) .abc-equity-chart polyline {
-  stroke: #6b4fd6;
-}
-.abc-arm-card:nth-child(3) .abc-equity-chart polyline {
-  stroke: #0b8a77;
-}
-.abc-arm-card:nth-child(4) .abc-equity-chart polyline {
-  stroke: #d27625;
-}
-.abc-arm-card:nth-child(5) .abc-equity-chart polyline {
-  stroke: #b64483;
-}
-.abc-arm-card:nth-child(6) .abc-equity-chart polyline {
-  stroke: #54606f;
-}
 .abc-chart-range {
-  margin: 6px 0 0;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 9px;
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 8px;
 }
 .abc-arm-metrics {
-  margin: 0 24px;
+  margin: 0 20px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-left: 1px solid #d8d5cc;
+  gap: 1px;
+  background: var(--line-faint);
 }
 .abc-arm-metrics > div {
-  min-height: 74px;
-  padding: 13px;
+  min-height: 58px;
+  padding: 10px;
   display: grid;
   align-content: space-between;
-  border-right: 1px solid #d8d5cc;
-  border-bottom: 1px solid #d8d5cc;
+  background: var(--surface);
 }
 .abc-arm-metrics span {
-  color: #6d7180;
-  font-size: 10px;
+  color: var(--text-3);
+  font-size: 9px;
 }
 .abc-arm-metrics b {
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
 }
 .abc-arm-details {
-  margin-top: 24px;
-  border-top: 1px solid #b8b5ad;
+  margin-top: 18px;
+  border-top: 1px solid var(--line-faint);
 }
 .abc-arm-details > summary {
-  padding: 0 24px;
-  background: #f7f5ef;
+  padding: 0 20px;
+  background: var(--surface-2);
 }
 .abc-arm-details[open] > summary {
-  border-bottom: 1px solid #d8d5cc;
+  border-bottom: 1px solid var(--line-faint);
 }
 .abc-arm-details-body {
-  padding: 0 24px 24px;
+  padding: 0 20px 20px;
 }
 .abc-arm-section {
-  padding: 24px 0;
-  border-bottom: 1px solid #d8d5cc;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line-faint);
 }
 .abc-arm-section h4 {
-  margin: 0 0 14px;
-  font-size: 14px;
+  margin: 0 0 11px;
+  font-size: 13px;
 }
 .paper-kv {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 8px;
 }
 .paper-kv > div {
-  padding: 11px;
-  background: #f7f5ef;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
 }
 .paper-logs, .abc-list {
   margin: 0;
@@ -2833,62 +2601,53 @@ html {
 }
 .abc-list li {
   min-width: 0;
-  padding: 13px 0;
+  padding: 11px 0;
   display: grid;
-  grid-template-columns: minmax(110px, .55fr) minmax(0, 1fr);
-  gap: 4px 14px;
-  border-top: 1px solid #d8d5cc;
+  grid-template-columns: minmax(88px, .4fr) minmax(0, 1fr);
+  gap: 3px 10px;
+  border-top: 1px solid var(--line-faint);
 }
 .abc-list time {
   grid-row: span 2;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 9px;
+  color: var(--text-3);
+  font-size: 8px;
 }
 .abc-list span {
   min-width: 0;
-  font-size: 12px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
-.abc-list small {
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 9px;
+.abc-list small, .abc-chain {
+  color: var(--text-3);
+  font-size: 8px;
   overflow-wrap: anywhere;
 }
 .abc-chain {
-  margin: 20px 0 0;
-  color: #6d7180;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  overflow-wrap: anywhere;
+  margin: 16px 0 0;
 }
-/* Footer */
+/* Footer and interaction */
 .lab-footer {
-  min-height: 160px;
-  padding: 42px 0;
+  min-height: 100px;
+  padding: 30px 0;
   display: flex;
   justify-content: space-between;
   gap: 24px;
-  border-top: 1px solid #d8d5cc;
+  border-top: 1px solid var(--line-faint);
 }
 .lab-footer b {
-  font-size: 14px;
+  font-size: 13px;
 }
 .lab-footer p {
-  margin: 4px 0 0;
-  color: #6d7180;
-  font-size: 12px;
+  margin: 3px 0 0;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .lab-footer a {
-  color: #11182b;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 800;
+  color: var(--text-2);
+  font-size: 12px;
 }
-/* Focus and motion */
 .behavior-page button:focus-visible, .behavior-page a:focus-visible, .behavior-page summary:focus-visible, .behavior-page input:focus-visible, .behavior-page textarea:focus-visible {
-  outline: 3px solid rgba(49, 86, 216, .28);
+  outline: 3px solid rgba(49, 130, 246, .4);
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2897,34 +2656,23 @@ html {
     transition-duration: .01ms !important;
   }
 }
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
+  .abc-arm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .paper-glance-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 900px) {
   .lab-topbar-inner, .lab-main, .lab-footer {
-    width: min(100% - 40px, 1240px);
+    width: min(100% - 36px, 1440px);
   }
   .lab-topbar-inner {
     grid-template-columns: 1fr auto;
   }
   .read-only-mark {
     display: none;
-  }
-  .lab-hero {
-    grid-template-columns: 1fr;
-    gap: 52px;
-  }
-  .hero-instrument {
-    min-height: 350px;
-  }
-  .paper-heading {
-    grid-template-columns: 1fr;
-  }
-  .paper-command {
-    min-height: 130px;
-    padding: 24px 0 0;
-    border-top: 1px solid #d8d5cc;
-    border-left: 0;
-  }
-  .abc-overview, .market-grid, .signal-grid, .risk-grid {
-    grid-template-columns: 1fr;
   }
   .control-deck {
     grid-template-columns: 1fr;
@@ -2936,34 +2684,32 @@ html {
   .micro-status {
     justify-self: start;
   }
-  .ticker-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .abc-arm-grid {
+  .ticker-grid, .market-grid, .signal-grid, .risk-grid, .abc-overview {
     grid-template-columns: 1fr;
+  }
+  .overview-ink {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-faint);
   }
 }
 @media (max-width: 640px) {
   .lab-topbar-inner, .lab-main, .lab-footer {
-    width: min(100% - 28px, 1240px);
-  }
-  .owner-gate {
-    grid-template-columns: 1fr;
+    width: min(100% - 28px, 1440px);
   }
   .gate-brand {
-    min-height: 110px;
-    padding: 24px;
+    top: 20px;
+    left: 20px;
   }
   .owner-gate-card {
-    padding: 40px 24px 70px;
+    padding: 26px;
   }
   .lab-topbar {
     position: relative;
   }
   .lab-topbar-inner {
-    padding: 14px 0;
+    padding: 12px 0;
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 10px;
   }
   .lab-tabs {
     width: 100%;
@@ -2971,47 +2717,28 @@ html {
     grid-template-columns: 1fr 1fr;
   }
   .lab-tab {
-    padding-inline: 10px;
+    width: 100%;
   }
-  .lab-hero {
-    min-height: auto;
-    padding: 68px 0;
+  .lab-main {
+    padding-top: 22px;
   }
-  .hero-statement h1 {
-    font-size: clamp(48px, 15vw, 66px);
-  }
-  .hero-copy {
-    font-size: 16px;
-  }
-  .hero-instrument {
-    min-height: 0;
-    padding: 18px;
-    border-radius: 18px;
-  }
-  .instrument-grid {
-    grid-template-columns: 1fr;
-  }
-  .instrument-grid > div:nth-child(odd) {
-    border-right: 0;
-  }
-  .tab-panel {
-    padding-top: 64px;
-  }
-  .view-masthead, .section-heading-row, .paper-overview-heading, .paper-subheading, .paper-strategy-heading {
-    flex-direction: column;
+  .view-masthead, .paper-heading, .section-heading-row, .paper-overview-heading, .paper-subheading, .paper-strategy-heading {
     align-items: flex-start;
-    gap: 16px;
+    flex-direction: column;
+    gap: 12px;
   }
-  .paper-subheading > p, .paper-strategy-heading > p {
-    text-align: left;
+  .view-masthead, .paper-heading {
+    min-height: 0;
   }
-  .paper-title-block h2 {
-    font-size: clamp(60px, 19vw, 82px);
+  .paper-command {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
   }
-  .panel, .ticker-section {
-    padding: 20px;
+  .paper-actions, .paper-actions button {
+    width: 100%;
   }
-  .control-deck {
+  .control-deck, .panel, .ticker-section, .paper-ranking-section {
     padding: 18px;
   }
   .control-group {
@@ -3025,56 +2752,47 @@ html {
   }
   .choice {
     min-width: 0;
-    padding-inline: 6px;
+    padding-inline: 4px;
+  }
+  .ticker-grid, .abc-arm-grid, .scenario-row, .metrics-grid, .risk-fields, .evidence-columns {
+    grid-template-columns: 1fr;
   }
   .ticker-grid {
-    grid-template-columns: 1fr;
+    gap: 8px;
   }
-  .scenario-row, .metrics-grid, .risk-fields, .evidence-columns {
-    grid-template-columns: 1fr;
+  .ticker-card {
+    min-height: 90px;
+  }
+  .chart-wrap svg {
+    height: 210px;
+  }
+  .scenario-row > div {
+    padding: 12px 0;
   }
   .scenario-row > div + div {
+    border-top: 1px solid var(--line-faint);
     border-left: 0;
-    border-top: 1px solid #d8d5cc;
-  }
-  .abc-overview {
-    border-inline: 0;
-  }
-  .overview-ink, .overview-paper {
-    padding: 24px 20px;
   }
   .paper-glance-grid, .adaptive-summary-grid, .paper-kv {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
-  .paper-glance-grid > div {
-    min-height: 92px;
+  .overview-ink, .overview-paper {
+    padding: 20px;
   }
   .paper-ranking-item {
-    grid-template-columns: 46px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: 34px minmax(0, 1fr);
   }
   .paper-ranking-item > div:last-child {
     grid-column: 2;
-    padding: 0 12px 14px 0;
+    padding: 0 10px 12px 0;
     justify-items: start;
   }
   .abc-arm-heading {
-    grid-template-columns: 42px minmax(0, 1fr);
-    padding-inline: 18px;
+    grid-template-columns: 38px minmax(0, 1fr);
   }
-  .abc-arm-heading > span:last-child {
+  .abc-position-state {
     grid-column: 2;
     justify-self: start;
-  }
-  .abc-arm-id {
-    width: 42px;
-    height: 42px;
-  }
-  .abc-arm-result, .abc-equity-chart, .abc-arm-metrics {
-    margin-inline: 18px;
-  }
-  .abc-arm-details > summary, .abc-arm-details-body {
-    padding-inline: 18px;
   }
   .abc-list li {
     grid-template-columns: 1fr;
@@ -3101,8 +2819,8 @@ html {
   <section id="ownerGate" class="owner-gate" aria-live="polite">
     <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior<br>Lab</b></div>
     <div class="owner-gate-card">
-      <p class="eyebrow">Private research workspace</p>
-      <h1 id="ownerGateTitle">작업실을 확인하고<br>있습니다.</h1>
+      <p class="eyebrow">OWNER DASHBOARD</p>
+      <h1 id="ownerGateTitle">대시보드를<br>불러오고 있어요.</h1>
       <p id="ownerGateMessage">저장된 소유자 세션을 확인하고 있습니다.</p>
       <div class="owner-gate-actions">
         <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
@@ -3117,81 +2835,63 @@ html {
       <div class="lab-topbar-inner">
         <a class="lab-brand" href="/" aria-label="hvsdcm 홈으로">
           <span class="lab-mark" aria-hidden="true">B</span>
-          <span><b>Behavior Lab</b><small>PUBLIC DATA / PAPER ONLY</small></span>
+          <span><b>Behavior Lab</b><small>PAPER TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
-          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><span>01</span> 시장 관찰</button>
-          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><span>02</span> 모델 실험</button>
+          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel">시장</button>
+          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel">모델</button>
         </nav>
-        <span class="read-only-mark"><i></i> OWNER VIEW</span>
+        <span class="read-only-mark"><i></i> PAPER ONLY</span>
       </div>
     </header>
 
     <main id="main" class="lab-main" tabindex="-1">
-      <section class="lab-hero" aria-labelledby="labTitle">
-        <div class="hero-statement">
-          <p class="eyebrow">Behavior before outcome</p>
-          <h1 id="labTitle">결과보다 먼저,<br><em>판단의 과정</em>을 봅니다.</h1>
-          <p class="hero-copy">인증 없는 공개 시장 데이터에서 여섯 가설이 무엇을 보고, 왜 기다리고, 언제 움직이는지 기록하는 개인 연구 작업실입니다.</p>
-        </div>
-        <aside class="hero-instrument" aria-label="연구 경계">
-          <div class="instrument-head"><span>LAB / 01</span><span>LIVE OBSERVATION</span></div>
-          <div class="instrument-grid">
-            <div><span>DATA</span><b>PUBLIC</b><small>Bitget public market</small></div>
-            <div><span>CAPITAL</span><b>SIMULATED</b><small>100 USDT per model</small></div>
-            <div><span>ACCOUNT</span><b>NONE</b><small>No exchange login</small></div>
-            <div><span>EXECUTION</span><b>DISABLED</b><small>No order route</small></div>
-          </div>
-          <p>시장 → 판단 → 기록</p>
-        </aside>
-      </section>
-
       <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab">
         <section class="view-masthead" aria-labelledby="marketControlsTitle">
-          <div><p class="section-index">01 / MARKET OBSERVATORY</p><h2 id="marketControlsTitle">시장 흐름을 한 장에.</h2><p>가격보다 행동의 압력과 반대 신호를 먼저 읽습니다.</p></div>
+          <div><p class="section-index">MARKET</p><h1 id="marketControlsTitle">시장 대시보드</h1><p>가격과 행동 신호를 실시간으로 확인해요.</p></div>
           <div id="liveStatus" class="live-status is-loading" role="status" aria-live="polite"><i></i><span>공개 데이터 확인 중</span></div>
         </section>
 
         <section class="control-deck" aria-label="관찰 범위">
-          <div class="control-group" aria-label="심볼 선택"><span class="control-label">ASSET</span><div class="choice-row" id="symbolChoices"><button type="button" class="choice is-active" data-symbol="BTCUSDT">BTC</button><button type="button" class="choice" data-symbol="ETHUSDT">ETH</button><button type="button" class="choice" data-symbol="SOLUSDT">SOL</button><button type="button" class="choice" data-symbol="XRPUSDT">XRP</button></div></div>
+          <div class="control-group" aria-label="심볼 선택"><span class="control-label">자산</span><div class="choice-row" id="symbolChoices"><button type="button" class="choice is-active" data-symbol="BTCUSDT">BTC</button><button type="button" class="choice" data-symbol="ETHUSDT">ETH</button><button type="button" class="choice" data-symbol="SOLUSDT">SOL</button><button type="button" class="choice" data-symbol="XRPUSDT">XRP</button></div></div>
           <div class="control-divider" aria-hidden="true"></div>
-          <div class="control-group" aria-label="주기 선택"><span class="control-label">INTERVAL</span><div class="choice-row" id="periodChoices"><button type="button" class="choice is-active" data-period="5m">5분</button><button type="button" class="choice" data-period="15m">15분</button><button type="button" class="choice" data-period="1h">1시간</button><button type="button" class="choice" data-period="4h">4시간</button></div></div>
+          <div class="control-group" aria-label="주기 선택"><span class="control-label">주기</span><div class="choice-row" id="periodChoices"><button type="button" class="choice is-active" data-period="5m">5분</button><button type="button" class="choice" data-period="15m">15분</button><button type="button" class="choice" data-period="1h">1시간</button><button type="button" class="choice" data-period="4h">4시간</button></div></div>
           <p id="freshnessText" class="micro-status">—</p>
         </section>
         <div id="dashboardError" class="error-panel" role="alert" hidden><p id="dashboardErrorText">공개 데이터를 불러오지 못했습니다.</p><button id="retryDashboard" class="text-button" type="button">다시 시도</button></div>
 
         <div id="dashboard" class="dashboard" aria-busy="true">
-          <section class="ticker-section" aria-labelledby="tickerTitle"><div class="section-heading-row compact"><div><p class="section-index">LIVE BOARD</p><h2 id="tickerTitle">지금 시장</h2></div></div><div id="tickerGrid" class="ticker-grid" aria-live="polite"></div></section>
+          <section class="ticker-section" aria-labelledby="tickerTitle"><div class="section-heading-row compact"><div><p class="section-index">OVERVIEW</p><h2 id="tickerTitle">시장 요약</h2></div></div><div id="tickerGrid" class="ticker-grid" aria-live="polite"></div></section>
           <section class="market-grid" aria-label="가격 구조와 군중 압력">
             <article class="panel chart-panel"><div class="section-heading-row compact"><div><p class="section-index">PRICE STRUCTURE</p><h2><span id="marketSymbol">BTC</span><small> / USDT</small></h2></div><div class="price-block"><strong id="marketPrice">—</strong><span id="marketChange">—</span></div></div><div class="chart-wrap"><svg id="priceChart" viewBox="0 0 900 300" role="img" aria-label="선택 심볼 최근 가격 차트"><line x1="20" x2="880" y1="75" y2="75"></line><line x1="20" x2="880" y1="150" y2="150"></line><line x1="20" x2="880" y1="225" y2="225"></line><polyline id="priceLine" points=""></polyline></svg></div><div class="range-row"><span>LOW <b id="marketLow">—</b></span><span>24H RANGE</span><span>HIGH <b id="marketHigh">—</b></span></div></article>
             <article class="panel pulse-panel"><div><p class="section-index">CROWD PRESSURE</p><h2>시장 온도</h2></div><div class="pulse-stat"><span>LONG / SHORT</span><strong id="longShortValue">—</strong><small id="crowdLabel">—</small></div><div class="ratio-track"><i id="longRatioBar"></i><em></em></div><div class="pulse-stat"><span>TAKER FLOW</span><strong id="takerValue">—</strong><small id="takerLabel">—</small></div><div class="ratio-track is-amber"><i id="takerRatioBar"></i><em></em></div><div class="pulse-split"><div><span>FUNDING</span><b id="fundingValue">—</b></div><div><span>OPEN INTEREST</span><b id="interestValue">—</b></div></div><p class="fine-print">실시간 행동 압력과 가격·거래량 백테스트는 서로 분리해 해석합니다.</p></article>
           </section>
           <section class="signal-grid" aria-label="행동 신호와 근거">
-            <article id="signalPanel" class="panel signal-panel is-aside"><div class="section-heading-row compact"><div><p class="section-index">CURRENT HYPOTHESIS</p><h2>지금의 판단</h2></div><span id="confidenceValue" class="confidence">—</span></div><div class="signal-core"><span id="signalArrow" class="signal-arrow">—</span><div><p>CURRENT BIAS</p><h3 id="signalDirection">—</h3><span id="signalContext">—</span></div></div><div class="scenario-row"><div><span>기준가</span><b id="signalEntry">—</b></div><div><span>무효화</span><b id="signalInvalidation">—</b></div><div><span>시나리오 목표</span><b id="signalTarget">—</b></div></div><p class="signal-disclaimer">confidence는 규칙 일치 점수이며 수익 확률이 아닙니다.</p></article>
-            <article class="panel evidence-panel"><div class="section-heading-row compact"><div><p class="section-index">WHY / WHY NOT</p><h2>근거와 반대 신호</h2></div><span id="scoreValue" class="score-pill">SCORE —</span></div><div class="evidence-columns"><div><h3 id="supportTitle">지지 근거</h3><div id="supportList" class="evidence-list"></div></div><div><h3 id="counterTitle">반대 신호</h3><div id="counterList" class="evidence-list"></div></div></div></article>
+            <article id="signalPanel" class="panel signal-panel is-aside"><div class="section-heading-row compact"><div><p class="section-index">SIGNAL</p><h2>모델 판단</h2></div><span id="confidenceValue" class="confidence">—</span></div><div class="signal-core"><span id="signalArrow" class="signal-arrow">—</span><div><p>현재 방향</p><h3 id="signalDirection">—</h3><span id="signalContext">—</span></div></div><div class="scenario-row"><div><span>기준가</span><b id="signalEntry">—</b></div><div><span>무효화</span><b id="signalInvalidation">—</b></div><div><span>시나리오 목표</span><b id="signalTarget">—</b></div></div><p class="signal-disclaimer">일치 점수이며 수익 확률이 아닙니다.</p></article>
+            <article class="panel evidence-panel"><div class="section-heading-row compact"><div><p class="section-index">EVIDENCE</p><h2>판단 근거</h2></div><span id="scoreValue" class="score-pill">SCORE —</span></div><div class="evidence-columns"><div><h3 id="supportTitle">지지 근거</h3><div id="supportList" class="evidence-list"></div></div><div><h3 id="counterTitle">반대 신호</h3><div id="counterList" class="evidence-list"></div></div></div></article>
           </section>
-          <section class="panel backtest-panel" aria-labelledby="backtestTitle"><div class="section-heading-row"><div><p class="section-index">CHRONOLOGICAL TEST</p><h2 id="backtestTitle">과거에 먼저 물어봅니다.</h2><p class="section-copy">60/40 시간순 분할 · 4개 검증 창 · 다음 봉 진입 · 왕복 수수료와 슬리피지 포함</p></div><button id="runBacktest" class="primary-action" type="button">백테스트 실행</button></div><div id="backtestEmpty" class="empty-state"><strong>PAST ONLY → NEXT BAR</strong><p>현재 캔들의 가격·거래량만으로 만든 대리 신호를 미래 구간에 순서대로 검증합니다.</p></div><div id="backtestResult" hidden><p id="backtestChronology" class="provenance"></p><div class="metrics-grid"><div class="metrics-block"><h3>IN-SAMPLE / 모델 선택</h3><div id="inSampleMetrics" class="metric-list"></div></div><div class="metrics-block"><h3>OUT-OF-SAMPLE / 4개 창</h3><div id="outSampleMetrics" class="metric-list"></div></div></div><div id="windowList" class="window-list"></div><div class="assumption-row"><span>수수료 왕복 12bps</span><span>슬리피지 왕복 8bps</span><span>초기자본 10,000</span><span>보수적 OHLC 낙폭</span></div></div></section>
+          <section class="panel backtest-panel" aria-labelledby="backtestTitle"><div class="section-heading-row"><div><p class="section-index">BACKTEST</p><h2 id="backtestTitle">백테스트</h2><p class="section-copy">60/40 시간순 분할 · 4개 검증 창 · 다음 봉 진입 · 왕복 수수료와 슬리피지 포함</p></div><button id="runBacktest" class="primary-action" type="button">백테스트 실행</button></div><div id="backtestEmpty" class="empty-state"><strong>실행 전</strong><p>현재 캔들의 가격·거래량 신호를 미래 구간에 순서대로 검증해요.</p></div><div id="backtestResult" hidden><p id="backtestChronology" class="provenance"></p><div class="metrics-grid"><div class="metrics-block"><h3>IN-SAMPLE / 모델 선택</h3><div id="inSampleMetrics" class="metric-list"></div></div><div class="metrics-block"><h3>OUT-OF-SAMPLE / 4개 창</h3><div id="outSampleMetrics" class="metric-list"></div></div></div><div id="windowList" class="window-list"></div><div class="assumption-row"><span>수수료 왕복 12bps</span><span>슬리피지 왕복 8bps</span><span>초기자본 10,000</span><span>보수적 OHLC 낙폭</span></div></div></section>
           <section class="risk-grid" aria-label="위험 한도와 수동 초안">
-            <article class="panel risk-panel"><div><p class="section-index">YOUR LIMITS</p><h2>내 한도부터 정합니다.</h2><p class="section-copy">기본값 없이 네 값을 직접 입력합니다.</p></div><div class="risk-fields"><label><span>운용 기준 자금 <small>USDT</small></span><input id="riskSeed" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 5000"></label><label><span>1회 최대 손실 <small>%</small></span><input id="riskLoss" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 10 이하"></label><label><span>레버리지 상한 <small id="marketLeverage">시장 확인 중</small></span><input id="riskLeverage" type="text" inputmode="decimal" autocomplete="off" placeholder="1 이상 · 20 이하"></label><label><span>손절 거리 <small>%</small></span><input id="riskStop" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 25 이하"></label></div><button id="createDraft" class="primary-action full" type="button" disabled>수동 초안 계산</button><p id="draftBlocked" class="blocked-copy">모든 한도와 검증된 방향이 준비될 때까지 차단됩니다.</p></article>
-            <article class="panel draft-panel"><div><p class="section-index">INERT TEXT ONLY</p><h2>복사 가능한 참고 메모.</h2></div><div id="draftPlaceholder" class="empty-state"><strong>NO DRAFT YET</strong><p>계산 결과는 읽기·복사 가능한 일반 텍스트일 뿐입니다.</p></div><div id="draftErrors" class="draft-errors" role="alert" hidden></div><div id="draftResult" hidden><textarea id="draftText" readonly aria-label="수동 주문 참고 초안"></textarea><button id="copyDraft" class="copy-action" type="button">텍스트 복사</button></div><div class="hard-boundary"><b>제출 기능은 존재하지 않습니다.</b><p>거래소 로그인, 주문 API, 자동 클릭, 프로그램 전달을 지원하지 않습니다.</p></div></article>
+            <article class="panel risk-panel"><div><p class="section-index">RISK</p><h2>위험 한도</h2><p class="section-copy">기준 자금과 손실 한도를 입력해요.</p></div><div class="risk-fields"><label><span>운용 기준 자금 <small>USDT</small></span><input id="riskSeed" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 5000"></label><label><span>1회 최대 손실 <small>%</small></span><input id="riskLoss" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 10 이하"></label><label><span>레버리지 상한 <small id="marketLeverage">시장 확인 중</small></span><input id="riskLeverage" type="text" inputmode="decimal" autocomplete="off" placeholder="1 이상 · 20 이하"></label><label><span>손절 거리 <small>%</small></span><input id="riskStop" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 25 이하"></label></div><button id="createDraft" class="primary-action full" type="button" disabled>초안 계산</button><p id="draftBlocked" class="blocked-copy">모든 한도와 검증된 방향이 준비되면 계산할 수 있어요.</p></article>
+            <article class="panel draft-panel"><div><p class="section-index">MEMO</p><h2>주문 참고 메모</h2></div><div id="draftPlaceholder" class="empty-state"><strong>계산 전</strong><p>계산 결과는 복사 가능한 일반 텍스트로 표시돼요.</p></div><div id="draftErrors" class="draft-errors" role="alert" hidden></div><div id="draftResult" hidden><textarea id="draftText" readonly aria-label="수동 주문 참고 초안"></textarea><button id="copyDraft" class="copy-action" type="button">텍스트 복사</button></div><div class="hard-boundary"><b>제출 기능은 존재하지 않습니다.</b><p>거래소 로그인, 주문 API, 자동 클릭을 지원하지 않아요.</p></div></article>
           </section>
         </div>
       </section>
 
       <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
         <header class="paper-heading">
-          <div class="paper-title-block"><p class="section-index">02 / SIX INDEPENDENT HYPOTHESES</p><h2>6개의 가설,<br><em>하나의 시장.</em></h2><p class="section-copy">6개 전략을 한눈에 비교해요. 각 모델은 100 USDT의 독립된 장부로 같은 공개 시장을 보고, 판단과 기록은 항상 최신순으로 쌓입니다.</p></div>
-          <div class="paper-command"><div><span>EXPERIMENT STATE</span><span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span></div><div class="paper-actions"><button id="refreshPaper" class="text-button" type="button">최신 기록 받기</button><button id="stopPaper" class="text-button is-danger" type="button" hidden>6개 실험 중단</button></div></div>
+          <div class="paper-title-block"><p class="section-index">MODELS</p><h1>모델 대시보드</h1><p class="section-copy">6개 모의매매 모델의 성과와 최신 판단을 비교해요.</p></div>
+          <div class="paper-command"><span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span><div class="paper-actions"><button id="refreshPaper" class="text-button" type="button">새로고침</button><button id="stopPaper" class="text-button is-danger" type="button" hidden>모델 중단</button></div></div>
         </header>
         <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
         <div id="paperEmpty" class="empty-state paper-empty" hidden><strong>NO ACTIVE EXPERIMENT</strong><p>현재 시작 중이거나 진행 중인 모의실험이 없습니다. 종료된 실험은 이 화면에 표시하지 않습니다.</p></div>
         <section id="paperExperiment" class="abc-experiment" aria-busy="true" hidden>
           <article class="abc-overview">
-            <div class="overview-ink"><div class="paper-overview-heading"><div><p class="section-index">LIVE NOTE / 01</p><h2>지금 가장 앞선 가설</h2></div><span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span></div><p class="section-copy" data-experiment-copy>같은 공개 시장 데이터와 비용 기준으로 여섯 전략을 공정하게 비교합니다.</p><div class="paper-leader-card"><span>LEADING MODEL</span><h3 id="experimentLeaderName">—</h3><strong id="experimentLeaderReturn">—</strong><small id="experimentLeaderPnl">순손익 —</small></div></div>
+            <div class="overview-ink"><div class="paper-overview-heading"><div><p class="section-index">TOP MODEL</p><h2>현재 1위</h2></div><span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span></div><p class="section-copy" data-experiment-copy>같은 조건으로 실행 중인 모델을 비교해요.</p><div class="paper-leader-card"><span>수익률 기준</span><h3 id="experimentLeaderName">—</h3><strong id="experimentLeaderReturn">—</strong><small id="experimentLeaderPnl">순손익 —</small></div></div>
             <div class="overview-paper"><div class="paper-glance-grid" aria-label="모의실험 핵심 요약"><div><span>평균 수익률</span><b id="experimentAverageReturn">—</b></div><div><span>열린 포지션</span><b id="experimentOpenPositions">—</b></div><div><span>누적 거래</span><b id="experimentTotalTrades">—</b></div><div><span>마지막 판단</span><b id="experimentLastPacket">—</b></div></div><details class="paper-method"><summary>실험 조건과 데이터 상태 보기</summary><div class="adaptive-summary-grid abc-summary-grid"><div><span>시작</span><b id="experimentStarted">—</b></div><div><span>종료 방식</span><b id="experimentDeadline">—</b></div><div><span>공유 데이터 원장</span><b id="experimentFeed">—</b></div><div><span>전략 변경</span><b>실행 중 고정</b></div></div></details></div>
           </article>
-          <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">LIVE NOTE / 02</p><h3 id="paperRankingTitle">현재 순서</h3></div><p>수익률, 자산, 낙폭을 같은 줄에서 비교합니다.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
-          <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">LIVE NOTE / 03</p><h2 id="paperStrategyTitle">각 모델의 연구 노트.</h2></div><p>펼치면 진입 정책, 포지션, 거래, 판단과 로그를 최신순으로 읽을 수 있습니다.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
+          <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">RANKING</p><h2 id="paperRankingTitle">모델 순위</h2></div><p>수익률, 자산, 낙폭을 비교해요.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
+          <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">DETAILS</p><h2 id="paperStrategyTitle">모델별 현황</h2></div><p>카드를 열면 판단과 로그를 최신순으로 확인할 수 있어요.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
         </section>
       </section>
     </main>

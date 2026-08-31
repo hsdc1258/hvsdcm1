@@ -124,9 +124,10 @@ test('owner paper UI removes the completed legacy session surface and keeps boun
   assert.match(appSource, /\['starting', 'active'\]\.includes\(payload\.experiment\.status\)/u);
 });
 
-test('owner paper UI renders a scan-first six-strategy summary with accessible detailed curves and hides finished experiments', () => {
+test('owner paper UI renders a task-first six-model dashboard with accessible detailed curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
-  assert.match(htmlSource, /6개 전략을 한눈에 비교해요/u);
+  assert.match(htmlSource, /6개 모의매매 모델의 성과와 최신 판단을 비교해요/u);
+  assert.doesNotMatch(htmlSource, /결과보다 먼저|lab-hero/u);
   assert.doesNotMatch(htmlSource, /SIMULTANEOUS 24H · SIX INDEPENDENT ARMS/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);

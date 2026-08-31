@@ -252,6 +252,9 @@ try {
     ];
     const { page, pageErrors } = await openFixture(browser, url, responses);
     await page.waitForSelector('#paperExperiment:not([hidden])');
+    assert.equal(await page.locator('.lab-hero').count(), 0);
+    assert.equal(await page.getByText('결과보다 먼저', { exact: false }).count(), 0);
+    assert.equal(await page.locator('body').evaluate((body) => getComputedStyle(body).backgroundColor), 'rgb(0, 0, 0)');
     assert.match(await page.locator('#paperStatus').textContent(), /ACTIVE/u);
     assert.equal(await page.locator('#paperReport').count(), 0);
     assert.equal(await page.getByText('실시간 엔진 · 재귀 개선 감사').count(), 0);
@@ -277,7 +280,7 @@ try {
     await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
-    await assertGeometry(page, 2);
+    await assertGeometry(page, 3);
     assert.equal(await page.locator('.abc-arm-details[open]').count(), 0);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
@@ -318,7 +321,7 @@ try {
     assert.match(await page.locator('#stopPaper').textContent(), /중단 요청됨/u);
     await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = false; });
     await page.setViewportSize({ width: 768, height: 900 });
-    await assertGeometry(page, 1);
+    await assertGeometry(page, 2);
     if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-tablet.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGeometry(page, 1);
@@ -358,7 +361,7 @@ try {
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
-  console.log('BEHAVIOR LAB UI E2E PASS · editorial workbench · 2-column research notes · open-state/refresh retention · finished hidden · responsive bounds');
+  console.log('BEHAVIOR LAB UI E2E PASS · black dashboard · 3-column model grid · open-state/refresh retention · finished hidden · responsive bounds');
 } finally {
   await browser.close();
   await new Promise((resolveClose) => server.close(resolveClose));

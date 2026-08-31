@@ -2185,7 +2185,7 @@ function validateGlobalsAndOrder() {
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
     'usage/index.html': ['/assets/css/system.css?v=20260901-competition-v6', '/usage/assets/css/usage.css?v=20260901-competition-v6'],
     'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260901-v9'],
+    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260901-v10'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);

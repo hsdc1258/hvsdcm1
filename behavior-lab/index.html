@@ -8,7 +8,7 @@
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260901-v9">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260901-v10">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
   <script src="/behavior-lab/assets/js/app.js?v=20260901-v11" defer></script>
 </head>
@@ -16,8 +16,8 @@
   <section id="ownerGate" class="owner-gate" aria-live="polite">
     <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior<br>Lab</b></div>
     <div class="owner-gate-card">
-      <p class="eyebrow">Private research workspace</p>
-      <h1 id="ownerGateTitle">작업실을 확인하고<br>있습니다.</h1>
+      <p class="eyebrow">OWNER DASHBOARD</p>
+      <h1 id="ownerGateTitle">대시보드를<br>불러오고 있어요.</h1>
       <p id="ownerGateMessage">저장된 소유자 세션을 확인하고 있습니다.</p>
       <div class="owner-gate-actions">
         <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
@@ -32,81 +32,63 @@
       <div class="lab-topbar-inner">
         <a class="lab-brand" href="/" aria-label="hvsdcm 홈으로">
           <span class="lab-mark" aria-hidden="true">B</span>
-          <span><b>Behavior Lab</b><small>PUBLIC DATA / PAPER ONLY</small></span>
+          <span><b>Behavior Lab</b><small>PAPER TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
-          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><span>01</span> 시장 관찰</button>
-          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><span>02</span> 모델 실험</button>
+          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel">시장</button>
+          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel">모델</button>
         </nav>
-        <span class="read-only-mark"><i></i> OWNER VIEW</span>
+        <span class="read-only-mark"><i></i> PAPER ONLY</span>
       </div>
     </header>
 
     <main id="main" class="lab-main" tabindex="-1">
-      <section class="lab-hero" aria-labelledby="labTitle">
-        <div class="hero-statement">
-          <p class="eyebrow">Behavior before outcome</p>
-          <h1 id="labTitle">결과보다 먼저,<br><em>판단의 과정</em>을 봅니다.</h1>
-          <p class="hero-copy">인증 없는 공개 시장 데이터에서 여섯 가설이 무엇을 보고, 왜 기다리고, 언제 움직이는지 기록하는 개인 연구 작업실입니다.</p>
-        </div>
-        <aside class="hero-instrument" aria-label="연구 경계">
-          <div class="instrument-head"><span>LAB / 01</span><span>LIVE OBSERVATION</span></div>
-          <div class="instrument-grid">
-            <div><span>DATA</span><b>PUBLIC</b><small>Bitget public market</small></div>
-            <div><span>CAPITAL</span><b>SIMULATED</b><small>100 USDT per model</small></div>
-            <div><span>ACCOUNT</span><b>NONE</b><small>No exchange login</small></div>
-            <div><span>EXECUTION</span><b>DISABLED</b><small>No order route</small></div>
-          </div>
-          <p>시장 → 판단 → 기록</p>
-        </aside>
-      </section>
-
       <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab">
         <section class="view-masthead" aria-labelledby="marketControlsTitle">
-          <div><p class="section-index">01 / MARKET OBSERVATORY</p><h2 id="marketControlsTitle">시장 흐름을 한 장에.</h2><p>가격보다 행동의 압력과 반대 신호를 먼저 읽습니다.</p></div>
+          <div><p class="section-index">MARKET</p><h1 id="marketControlsTitle">시장 대시보드</h1><p>가격과 행동 신호를 실시간으로 확인해요.</p></div>
           <div id="liveStatus" class="live-status is-loading" role="status" aria-live="polite"><i></i><span>공개 데이터 확인 중</span></div>
         </section>
 
         <section class="control-deck" aria-label="관찰 범위">
-          <div class="control-group" aria-label="심볼 선택"><span class="control-label">ASSET</span><div class="choice-row" id="symbolChoices"><button type="button" class="choice is-active" data-symbol="BTCUSDT">BTC</button><button type="button" class="choice" data-symbol="ETHUSDT">ETH</button><button type="button" class="choice" data-symbol="SOLUSDT">SOL</button><button type="button" class="choice" data-symbol="XRPUSDT">XRP</button></div></div>
+          <div class="control-group" aria-label="심볼 선택"><span class="control-label">자산</span><div class="choice-row" id="symbolChoices"><button type="button" class="choice is-active" data-symbol="BTCUSDT">BTC</button><button type="button" class="choice" data-symbol="ETHUSDT">ETH</button><button type="button" class="choice" data-symbol="SOLUSDT">SOL</button><button type="button" class="choice" data-symbol="XRPUSDT">XRP</button></div></div>
           <div class="control-divider" aria-hidden="true"></div>
-          <div class="control-group" aria-label="주기 선택"><span class="control-label">INTERVAL</span><div class="choice-row" id="periodChoices"><button type="button" class="choice is-active" data-period="5m">5분</button><button type="button" class="choice" data-period="15m">15분</button><button type="button" class="choice" data-period="1h">1시간</button><button type="button" class="choice" data-period="4h">4시간</button></div></div>
+          <div class="control-group" aria-label="주기 선택"><span class="control-label">주기</span><div class="choice-row" id="periodChoices"><button type="button" class="choice is-active" data-period="5m">5분</button><button type="button" class="choice" data-period="15m">15분</button><button type="button" class="choice" data-period="1h">1시간</button><button type="button" class="choice" data-period="4h">4시간</button></div></div>
           <p id="freshnessText" class="micro-status">—</p>
         </section>
         <div id="dashboardError" class="error-panel" role="alert" hidden><p id="dashboardErrorText">공개 데이터를 불러오지 못했습니다.</p><button id="retryDashboard" class="text-button" type="button">다시 시도</button></div>
 
         <div id="dashboard" class="dashboard" aria-busy="true">
-          <section class="ticker-section" aria-labelledby="tickerTitle"><div class="section-heading-row compact"><div><p class="section-index">LIVE BOARD</p><h2 id="tickerTitle">지금 시장</h2></div></div><div id="tickerGrid" class="ticker-grid" aria-live="polite"></div></section>
+          <section class="ticker-section" aria-labelledby="tickerTitle"><div class="section-heading-row compact"><div><p class="section-index">OVERVIEW</p><h2 id="tickerTitle">시장 요약</h2></div></div><div id="tickerGrid" class="ticker-grid" aria-live="polite"></div></section>
           <section class="market-grid" aria-label="가격 구조와 군중 압력">
             <article class="panel chart-panel"><div class="section-heading-row compact"><div><p class="section-index">PRICE STRUCTURE</p><h2><span id="marketSymbol">BTC</span><small> / USDT</small></h2></div><div class="price-block"><strong id="marketPrice">—</strong><span id="marketChange">—</span></div></div><div class="chart-wrap"><svg id="priceChart" viewBox="0 0 900 300" role="img" aria-label="선택 심볼 최근 가격 차트"><line x1="20" x2="880" y1="75" y2="75"></line><line x1="20" x2="880" y1="150" y2="150"></line><line x1="20" x2="880" y1="225" y2="225"></line><polyline id="priceLine" points=""></polyline></svg></div><div class="range-row"><span>LOW <b id="marketLow">—</b></span><span>24H RANGE</span><span>HIGH <b id="marketHigh">—</b></span></div></article>
             <article class="panel pulse-panel"><div><p class="section-index">CROWD PRESSURE</p><h2>시장 온도</h2></div><div class="pulse-stat"><span>LONG / SHORT</span><strong id="longShortValue">—</strong><small id="crowdLabel">—</small></div><div class="ratio-track"><i id="longRatioBar"></i><em></em></div><div class="pulse-stat"><span>TAKER FLOW</span><strong id="takerValue">—</strong><small id="takerLabel">—</small></div><div class="ratio-track is-amber"><i id="takerRatioBar"></i><em></em></div><div class="pulse-split"><div><span>FUNDING</span><b id="fundingValue">—</b></div><div><span>OPEN INTEREST</span><b id="interestValue">—</b></div></div><p class="fine-print">실시간 행동 압력과 가격·거래량 백테스트는 서로 분리해 해석합니다.</p></article>
           </section>
           <section class="signal-grid" aria-label="행동 신호와 근거">
-            <article id="signalPanel" class="panel signal-panel is-aside"><div class="section-heading-row compact"><div><p class="section-index">CURRENT HYPOTHESIS</p><h2>지금의 판단</h2></div><span id="confidenceValue" class="confidence">—</span></div><div class="signal-core"><span id="signalArrow" class="signal-arrow">—</span><div><p>CURRENT BIAS</p><h3 id="signalDirection">—</h3><span id="signalContext">—</span></div></div><div class="scenario-row"><div><span>기준가</span><b id="signalEntry">—</b></div><div><span>무효화</span><b id="signalInvalidation">—</b></div><div><span>시나리오 목표</span><b id="signalTarget">—</b></div></div><p class="signal-disclaimer">confidence는 규칙 일치 점수이며 수익 확률이 아닙니다.</p></article>
-            <article class="panel evidence-panel"><div class="section-heading-row compact"><div><p class="section-index">WHY / WHY NOT</p><h2>근거와 반대 신호</h2></div><span id="scoreValue" class="score-pill">SCORE —</span></div><div class="evidence-columns"><div><h3 id="supportTitle">지지 근거</h3><div id="supportList" class="evidence-list"></div></div><div><h3 id="counterTitle">반대 신호</h3><div id="counterList" class="evidence-list"></div></div></div></article>
+            <article id="signalPanel" class="panel signal-panel is-aside"><div class="section-heading-row compact"><div><p class="section-index">SIGNAL</p><h2>모델 판단</h2></div><span id="confidenceValue" class="confidence">—</span></div><div class="signal-core"><span id="signalArrow" class="signal-arrow">—</span><div><p>현재 방향</p><h3 id="signalDirection">—</h3><span id="signalContext">—</span></div></div><div class="scenario-row"><div><span>기준가</span><b id="signalEntry">—</b></div><div><span>무효화</span><b id="signalInvalidation">—</b></div><div><span>시나리오 목표</span><b id="signalTarget">—</b></div></div><p class="signal-disclaimer">일치 점수이며 수익 확률이 아닙니다.</p></article>
+            <article class="panel evidence-panel"><div class="section-heading-row compact"><div><p class="section-index">EVIDENCE</p><h2>판단 근거</h2></div><span id="scoreValue" class="score-pill">SCORE —</span></div><div class="evidence-columns"><div><h3 id="supportTitle">지지 근거</h3><div id="supportList" class="evidence-list"></div></div><div><h3 id="counterTitle">반대 신호</h3><div id="counterList" class="evidence-list"></div></div></div></article>
           </section>
-          <section class="panel backtest-panel" aria-labelledby="backtestTitle"><div class="section-heading-row"><div><p class="section-index">CHRONOLOGICAL TEST</p><h2 id="backtestTitle">과거에 먼저 물어봅니다.</h2><p class="section-copy">60/40 시간순 분할 · 4개 검증 창 · 다음 봉 진입 · 왕복 수수료와 슬리피지 포함</p></div><button id="runBacktest" class="primary-action" type="button">백테스트 실행</button></div><div id="backtestEmpty" class="empty-state"><strong>PAST ONLY → NEXT BAR</strong><p>현재 캔들의 가격·거래량만으로 만든 대리 신호를 미래 구간에 순서대로 검증합니다.</p></div><div id="backtestResult" hidden><p id="backtestChronology" class="provenance"></p><div class="metrics-grid"><div class="metrics-block"><h3>IN-SAMPLE / 모델 선택</h3><div id="inSampleMetrics" class="metric-list"></div></div><div class="metrics-block"><h3>OUT-OF-SAMPLE / 4개 창</h3><div id="outSampleMetrics" class="metric-list"></div></div></div><div id="windowList" class="window-list"></div><div class="assumption-row"><span>수수료 왕복 12bps</span><span>슬리피지 왕복 8bps</span><span>초기자본 10,000</span><span>보수적 OHLC 낙폭</span></div></div></section>
+          <section class="panel backtest-panel" aria-labelledby="backtestTitle"><div class="section-heading-row"><div><p class="section-index">BACKTEST</p><h2 id="backtestTitle">백테스트</h2><p class="section-copy">60/40 시간순 분할 · 4개 검증 창 · 다음 봉 진입 · 왕복 수수료와 슬리피지 포함</p></div><button id="runBacktest" class="primary-action" type="button">백테스트 실행</button></div><div id="backtestEmpty" class="empty-state"><strong>실행 전</strong><p>현재 캔들의 가격·거래량 신호를 미래 구간에 순서대로 검증해요.</p></div><div id="backtestResult" hidden><p id="backtestChronology" class="provenance"></p><div class="metrics-grid"><div class="metrics-block"><h3>IN-SAMPLE / 모델 선택</h3><div id="inSampleMetrics" class="metric-list"></div></div><div class="metrics-block"><h3>OUT-OF-SAMPLE / 4개 창</h3><div id="outSampleMetrics" class="metric-list"></div></div></div><div id="windowList" class="window-list"></div><div class="assumption-row"><span>수수료 왕복 12bps</span><span>슬리피지 왕복 8bps</span><span>초기자본 10,000</span><span>보수적 OHLC 낙폭</span></div></div></section>
           <section class="risk-grid" aria-label="위험 한도와 수동 초안">
-            <article class="panel risk-panel"><div><p class="section-index">YOUR LIMITS</p><h2>내 한도부터 정합니다.</h2><p class="section-copy">기본값 없이 네 값을 직접 입력합니다.</p></div><div class="risk-fields"><label><span>운용 기준 자금 <small>USDT</small></span><input id="riskSeed" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 5000"></label><label><span>1회 최대 손실 <small>%</small></span><input id="riskLoss" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 10 이하"></label><label><span>레버리지 상한 <small id="marketLeverage">시장 확인 중</small></span><input id="riskLeverage" type="text" inputmode="decimal" autocomplete="off" placeholder="1 이상 · 20 이하"></label><label><span>손절 거리 <small>%</small></span><input id="riskStop" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 25 이하"></label></div><button id="createDraft" class="primary-action full" type="button" disabled>수동 초안 계산</button><p id="draftBlocked" class="blocked-copy">모든 한도와 검증된 방향이 준비될 때까지 차단됩니다.</p></article>
-            <article class="panel draft-panel"><div><p class="section-index">INERT TEXT ONLY</p><h2>복사 가능한 참고 메모.</h2></div><div id="draftPlaceholder" class="empty-state"><strong>NO DRAFT YET</strong><p>계산 결과는 읽기·복사 가능한 일반 텍스트일 뿐입니다.</p></div><div id="draftErrors" class="draft-errors" role="alert" hidden></div><div id="draftResult" hidden><textarea id="draftText" readonly aria-label="수동 주문 참고 초안"></textarea><button id="copyDraft" class="copy-action" type="button">텍스트 복사</button></div><div class="hard-boundary"><b>제출 기능은 존재하지 않습니다.</b><p>거래소 로그인, 주문 API, 자동 클릭, 프로그램 전달을 지원하지 않습니다.</p></div></article>
+            <article class="panel risk-panel"><div><p class="section-index">RISK</p><h2>위험 한도</h2><p class="section-copy">기준 자금과 손실 한도를 입력해요.</p></div><div class="risk-fields"><label><span>운용 기준 자금 <small>USDT</small></span><input id="riskSeed" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 5000"></label><label><span>1회 최대 손실 <small>%</small></span><input id="riskLoss" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 10 이하"></label><label><span>레버리지 상한 <small id="marketLeverage">시장 확인 중</small></span><input id="riskLeverage" type="text" inputmode="decimal" autocomplete="off" placeholder="1 이상 · 20 이하"></label><label><span>손절 거리 <small>%</small></span><input id="riskStop" type="text" inputmode="decimal" autocomplete="off" placeholder="0 초과 · 25 이하"></label></div><button id="createDraft" class="primary-action full" type="button" disabled>초안 계산</button><p id="draftBlocked" class="blocked-copy">모든 한도와 검증된 방향이 준비되면 계산할 수 있어요.</p></article>
+            <article class="panel draft-panel"><div><p class="section-index">MEMO</p><h2>주문 참고 메모</h2></div><div id="draftPlaceholder" class="empty-state"><strong>계산 전</strong><p>계산 결과는 복사 가능한 일반 텍스트로 표시돼요.</p></div><div id="draftErrors" class="draft-errors" role="alert" hidden></div><div id="draftResult" hidden><textarea id="draftText" readonly aria-label="수동 주문 참고 초안"></textarea><button id="copyDraft" class="copy-action" type="button">텍스트 복사</button></div><div class="hard-boundary"><b>제출 기능은 존재하지 않습니다.</b><p>거래소 로그인, 주문 API, 자동 클릭을 지원하지 않아요.</p></div></article>
           </section>
         </div>
       </section>
 
       <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
         <header class="paper-heading">
-          <div class="paper-title-block"><p class="section-index">02 / SIX INDEPENDENT HYPOTHESES</p><h2>6개의 가설,<br><em>하나의 시장.</em></h2><p class="section-copy">6개 전략을 한눈에 비교해요. 각 모델은 100 USDT의 독립된 장부로 같은 공개 시장을 보고, 판단과 기록은 항상 최신순으로 쌓입니다.</p></div>
-          <div class="paper-command"><div><span>EXPERIMENT STATE</span><span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span></div><div class="paper-actions"><button id="refreshPaper" class="text-button" type="button">최신 기록 받기</button><button id="stopPaper" class="text-button is-danger" type="button" hidden>6개 실험 중단</button></div></div>
+          <div class="paper-title-block"><p class="section-index">MODELS</p><h1>모델 대시보드</h1><p class="section-copy">6개 모의매매 모델의 성과와 최신 판단을 비교해요.</p></div>
+          <div class="paper-command"><span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span><div class="paper-actions"><button id="refreshPaper" class="text-button" type="button">새로고침</button><button id="stopPaper" class="text-button is-danger" type="button" hidden>모델 중단</button></div></div>
         </header>
         <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
         <div id="paperEmpty" class="empty-state paper-empty" hidden><strong>NO ACTIVE EXPERIMENT</strong><p>현재 시작 중이거나 진행 중인 모의실험이 없습니다. 종료된 실험은 이 화면에 표시하지 않습니다.</p></div>
         <section id="paperExperiment" class="abc-experiment" aria-busy="true" hidden>
           <article class="abc-overview">
-            <div class="overview-ink"><div class="paper-overview-heading"><div><p class="section-index">LIVE NOTE / 01</p><h2>지금 가장 앞선 가설</h2></div><span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span></div><p class="section-copy" data-experiment-copy>같은 공개 시장 데이터와 비용 기준으로 여섯 전략을 공정하게 비교합니다.</p><div class="paper-leader-card"><span>LEADING MODEL</span><h3 id="experimentLeaderName">—</h3><strong id="experimentLeaderReturn">—</strong><small id="experimentLeaderPnl">순손익 —</small></div></div>
+            <div class="overview-ink"><div class="paper-overview-heading"><div><p class="section-index">TOP MODEL</p><h2>현재 1위</h2></div><span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span></div><p class="section-copy" data-experiment-copy>같은 조건으로 실행 중인 모델을 비교해요.</p><div class="paper-leader-card"><span>수익률 기준</span><h3 id="experimentLeaderName">—</h3><strong id="experimentLeaderReturn">—</strong><small id="experimentLeaderPnl">순손익 —</small></div></div>
             <div class="overview-paper"><div class="paper-glance-grid" aria-label="모의실험 핵심 요약"><div><span>평균 수익률</span><b id="experimentAverageReturn">—</b></div><div><span>열린 포지션</span><b id="experimentOpenPositions">—</b></div><div><span>누적 거래</span><b id="experimentTotalTrades">—</b></div><div><span>마지막 판단</span><b id="experimentLastPacket">—</b></div></div><details class="paper-method"><summary>실험 조건과 데이터 상태 보기</summary><div class="adaptive-summary-grid abc-summary-grid"><div><span>시작</span><b id="experimentStarted">—</b></div><div><span>종료 방식</span><b id="experimentDeadline">—</b></div><div><span>공유 데이터 원장</span><b id="experimentFeed">—</b></div><div><span>전략 변경</span><b>실행 중 고정</b></div></div></details></div>
           </article>
-          <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">LIVE NOTE / 02</p><h3 id="paperRankingTitle">현재 순서</h3></div><p>수익률, 자산, 낙폭을 같은 줄에서 비교합니다.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
-          <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">LIVE NOTE / 03</p><h2 id="paperStrategyTitle">각 모델의 연구 노트.</h2></div><p>펼치면 진입 정책, 포지션, 거래, 판단과 로그를 최신순으로 읽을 수 있습니다.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
+          <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">RANKING</p><h2 id="paperRankingTitle">모델 순위</h2></div><p>수익률, 자산, 낙폭을 비교해요.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
+          <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">DETAILS</p><h2 id="paperStrategyTitle">모델별 현황</h2></div><p>카드를 열면 판단과 로그를 최신순으로 확인할 수 있어요.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
         </section>
       </section>
     </main>
