@@ -374,6 +374,40 @@ test('approval controller posts the exact action once and updates the visible de
   assert.equal(controller.state().pendingDecision, null);
 });
 
+test('approval controller rejects a mismatched acknowledgement without changing visible state', async () => {
+  const shell = competitionContext();
+  const controller = shell.ui.createDashboard({
+    request: async (_path, options) => options
+      ? {
+        ok: true,
+        request_id: 'competition-preparation-contest-1',
+        action_sha256: 'b'.repeat(64),
+        decision: 'approved',
+      }
+      : approvalFixture(),
+    now: () => NOW,
+  });
+  controller.activate();
+  await flush();
+  const button = {
+    dataset: {
+      requestId: 'competition-preparation-contest-1',
+      actionSha256: 'a'.repeat(64),
+      competitionApprovalDecision: 'approved',
+    },
+    disabled: false,
+    isConnected: true,
+  };
+  shell.store.get('competitionApprovalInbox').listeners.click({
+    target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
+  });
+  await flush();
+  assert.equal(controller.state().data.applications[0].approval.status, 'pending');
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /data-competition-approval-decision="approved"/u);
+  assert.match(shell.store.get('competitionError').textContent, /응답이 요청 내용과 일치하지 않습니다/u);
+  assert.equal(shell.store.get('competitionRefreshStatus').textContent, '승인 결정을 저장하지 못했습니다.');
+});
+
 test('sensitive web approvals explain their exact action-time boundary and unknown kinds have no action', () => {
   const { ui } = competitionContext();
   const expected = new Map([
@@ -600,13 +634,14 @@ test('missing latest scan time is unknown rather than stale', () => {
   assert.doesNotMatch(markup, /30시간 초과 · 오래됨/u);
 });
 
-test('candidate search, status, eligibility, deadline and deadline sorting are deterministic', () => {
+test('candidate search, status, eligibility, official verification, deadline and sorting are deterministic', () => {
   const { ui } = competitionContext();
+  assert.match(HTML, /id="competitionOfficialVerification"/u);
   const normalized = ui.normalizePayload(fixture({
     candidates: [
-      { id: 'late', title: '후순위', organizer_name: '가', deadline: '2026-09-20', status: 'watching', eligibility_status: 'review', fee_status: 'paid', participation_mode: 'offline_required', fit_score: 99, effort_score: 1 },
-      { id: 'soon', title: '청소년 우선', organizer_name: '나', deadline: '2026-09-02', status: 'ready', eligibility_status: 'eligible', fee_status: 'free', participation_mode: 'online_only', fit_score: 90, effort_score: 20 },
-      { id: 'none', title: '마감 미정', organizer_name: '다', status: 'ready', eligibility_status: 'eligible', fee_status: 'free', participation_mode: 'none', fit_score: 70, effort_score: 40 },
+      { id: 'late', title: '후순위', organizer_name: '가', deadline: '2026-09-20', status: 'watching', eligibility_status: 'review', official_verification: 'failed', fee_status: 'paid', participation_mode: 'offline_required', fit_score: 99, effort_score: 1 },
+      { id: 'soon', title: '청소년 우선', organizer_name: '나', deadline: '2026-09-02', status: 'ready', eligibility_status: 'eligible', official_verification: 'verified', fee_status: 'free', participation_mode: 'online_only', fit_score: 90, effort_score: 20 },
+      { id: 'none', title: '마감 미정', organizer_name: '다', status: 'ready', eligibility_status: 'eligible', official_verification: 'unverified', fee_status: 'free', participation_mode: 'none', fit_score: 70, effort_score: 40 },
     ],
     applications: [],
     sources: [],
@@ -628,6 +663,14 @@ test('candidate search, status, eligibility, deadline and deadline sorting are d
       fee: 'free', participation: 'online_only', sort: 'priority',
     }, NOW), (item) => item.id),
     ['soon'],
+  );
+  assert.deepEqual(
+    Array.from(ui.filterCandidates(normalized.candidates, { official: 'verified' }, NOW), (item) => item.id),
+    ['soon'],
+  );
+  assert.deepEqual(
+    Array.from(ui.filterCandidates(normalized.candidates, { official: 'needs-review' }, NOW), (item) => item.id),
+    ['none', 'late'],
   );
 });
 

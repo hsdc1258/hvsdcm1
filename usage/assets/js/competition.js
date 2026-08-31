@@ -572,6 +572,7 @@
     const query = text(filters.search).toLocaleLowerCase('ko-KR');
     const status = text(filters.status) || 'all';
     const eligibility = text(filters.eligibility) || 'all';
+    const official = text(filters.official) || 'all';
     const fee = text(filters.fee) || 'all';
     const participation = text(filters.participation) || 'all';
     const deadline = text(filters.deadline) || 'all';
@@ -581,6 +582,9 @@
       return (!query || haystack.includes(query))
         && (status === 'all' || candidate.status === status)
         && (eligibility === 'all' || candidate.eligibilityStatus === eligibility)
+        && (official === 'all'
+          || candidate.officialVerification === official
+          || (official === 'needs-review' && candidate.officialVerification !== 'verified'))
         && (fee === 'all' || candidate.feeStatus === fee)
         && (participation === 'all' || candidate.participationMode === participation)
         && (deadline === 'all' || deadlineBucket(candidate, now) === deadline);
@@ -874,6 +878,7 @@
       search: document.getElementById('competitionSearch'),
       status: document.getElementById('competitionStatus'),
       eligibility: document.getElementById('competitionEligibility'),
+      official: document.getElementById('competitionOfficialVerification'),
       fee: document.getElementById('competitionFee'),
       participation: document.getElementById('competitionParticipation'),
       deadline: document.getElementById('competitionDeadline'),
@@ -892,6 +897,7 @@
         search: elements.search?.value,
         status: elements.status?.value,
         eligibility: elements.eligibility?.value,
+        official: elements.official?.value,
         fee: elements.fee?.value,
         participation: elements.participation?.value,
         deadline: elements.deadline?.value,
@@ -988,6 +994,11 @@
             body: JSON.stringify({ decision, action_sha256: actionSha256 }),
           },
         );
+        if (result?.ok !== true || result?.request_id !== requestId
+          || text(result?.action_sha256).toLowerCase() !== actionSha256
+          || result?.decision !== decision) {
+          throw new Error('승인 응답이 요청 내용과 일치하지 않습니다. 화면을 새로고침해 다시 확인해 주세요.');
+        }
         for (const application of data?.applications || []) {
           if (application.approval?.requestId !== requestId) continue;
           application.approval.status = decision;
@@ -1013,6 +1024,7 @@
       if (elements.search) elements.search.value = '';
       if (elements.status) elements.status.value = 'all';
       if (elements.eligibility) elements.eligibility.value = 'all';
+      if (elements.official) elements.official.value = 'all';
       if (elements.fee) elements.fee.value = 'all';
       if (elements.participation) elements.participation.value = 'all';
       if (elements.deadline) elements.deadline.value = 'all';

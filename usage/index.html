@@ -12,10 +12,10 @@
        받은 뒤에만 usage.js가 제목을 올린다. -->
   <title>hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
-  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260901-dark-workspace-v3">
-  <script src="/usage/assets/js/competition.js?v=20260901-dark-workspace-v3" defer></script>
-  <script src="/usage/assets/js/usage.js?v=20260901-dark-workspace-v3" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-competition-review-v1">
+  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260901-competition-review-v1">
+  <script src="/usage/assets/js/competition.js?v=20260901-competition-review-v1" defer></script>
+  <script src="/usage/assets/js/usage.js?v=20260901-competition-review-v1" defer></script>
 </head>
 <body class="workspace-app usage-page">
   <a class="skip-link" href="#usageMain">본문으로 건너뛰기</a>
@@ -179,6 +179,14 @@
                 <option value="review">확인 필요</option>
                 <option value="ineligible">지원 불가</option>
                 <option value="unknown">미확인</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="competitionOfficialVerification">공식 공고</label>
+              <select id="competitionOfficialVerification" class="field-input field-input-sm">
+                <option value="all">전체</option>
+                <option value="verified">검증 완료</option>
+                <option value="needs-review">확인 필요</option>
               </select>
             </div>
             <div class="field">
