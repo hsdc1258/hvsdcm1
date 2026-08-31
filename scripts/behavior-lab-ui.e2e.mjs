@@ -8,6 +8,9 @@ const ROOT = resolve(new URL('..', import.meta.url).pathname.replace(/^\/(?:[A-Z
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 const HASH_C = 'c'.repeat(64);
+const HASH_D = 'd'.repeat(64);
+const HASH_E = 'e'.repeat(64);
+const HASH_F = 'f'.repeat(64);
 const ARTIFACT_DIR = process.env.BEHAVIOR_LAB_E2E_ARTIFACT_DIR || '';
 
 function adaptiveReport(sequence = 20) {
@@ -42,12 +45,20 @@ function paperReport(sequence, equity, adaptive = adaptiveReport()) {
   };
 }
 
-function abcExperiment(sequence = 10, status = 'active') {
-  const ids = ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'];
-  const labels = ['Trend / momentum', 'Breakout / volatility', 'Mean reversion / crowd fade'];
-  const hashes = [HASH_A, HASH_B, HASH_C];
-  const arms = ['A', 'B', 'C'].map((armId, index) => ({
-    arm_id: armId, strategy: { id: ids[index], label: labels[index], definition_hash: hashes[index] },
+function multiExperiment(sequence = 10, status = 'active') {
+  const ids = ['multi-trend-persistence-v2', 'multi-breakout-confirmation-v2', 'multi-range-reversion-v2',
+    'multi-ofi-continuation-v2', 'multi-overreaction-fade-v2', 'multi-consensus-conservative-v2'];
+  const labels = ['Trend persistence', 'Breakout confirmation', 'Range reversion',
+    'Order-flow continuation', 'Range overreaction fade', 'Conservative consensus'];
+  const hashes = [HASH_A, HASH_B, HASH_C, HASH_D, HASH_E, HASH_F];
+  const arms = ['A', 'B', 'C', 'D', 'E', 'F'].map((armId, index) => ({
+    arm_id: armId, strategy: { id: ids[index], label: labels[index], definition_hash: hashes[index],
+      policy: { style: ['trend-continuation', 'breakout-confirmation', 'range-reversion', 'order-flow-continuation',
+        'overreaction-fade', 'multi-factor-consensus'][index], allowed_regimes: ['range'], required_features: ['orderFlow'],
+        minimum_feature_agreement: 2, min_persistence_seconds: 4, entry_threshold: .4, max_spread_bps: 3,
+        min_target_bps: 36, min_net_reward_risk: 1.35, cooldown_minutes: 10, opposite_confirmations: 2 } },
+    risk: { risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10, max_hold_minutes: 45,
+      minimum_hold_before_opposite_minutes: 5 },
     chain: { sequence, hash: hashes[index] }, status: index === 2 ? 'halted' : status, seed_equity: 100,
     equity: 103 - index, cash: 103 - index, realized_pnl: 3 - index, unrealized_pnl: 0,
     net_pnl: 3 - index, return_pct: 3 - index, max_drawdown_pct: index + .5, fees: .1, slippage_cost: .1,
@@ -64,19 +75,23 @@ function abcExperiment(sequence = 10, status = 'active') {
       entry_price: 100, exit_price: 101, quantity: 1, notional: 100, net_pnl: 1,
       return_pct: 1, fees: .1, slippage_cost: .1, reason: 'target' }],
     recent_decisions: [{ symbol: 'BTCUSDT', signal_bar_at: '2026-08-31T00:00:00.000Z',
-      observed_at: '2026-08-31T00:01:00.000Z', direction: index === 2 ? 'stand-aside' : 'long', score: .3,
-      confidence: 42, reason: index === 2 ? 'score-below-threshold' : null, feed_sequence: sequence, feed_hash: HASH_A }],
+      observed_at: '2026-08-31T00:01:00.000Z', regime: 'range',
+      direction: index === 2 ? 'stand-aside' : 'long', score: .5, confidence: 72, spread_bps: 1,
+      feature_agreement: 3, target_distance_bps: 80, net_reward_risk: 1.6,
+      gate_reasons: index === 2 ? ['regime-mismatch'] : [], feed_sequence: sequence, feed_hash: HASH_A }],
     recent_logs: [{ sequence: 1, at: '2026-08-31T00:00:00.000Z', type: 'arm-started',
       message: index === 0 ? '<img id="unsafe-abc" src=x onerror=alert(1)>' : 'Paper arm started.' }],
     last_cycle_at: '2026-08-31T00:01:00.000Z',
   }));
-  return { schema: 'abc-paper-experiment-v1', experiment_id: 'abc-paper-20260831', simulation: true,
+  return { schema: 'multi-paper-experiment-v2', experiment_id: 'multi-paper-20260831-v2', simulation: true,
     public_data_only: true, generated_at: '2026-08-31T00:01:01.000Z', started_at: '2026-08-31T00:00:00.000Z',
-    deadline_at: '2026-09-01T00:00:00.000Z', status, shared_feed: { sequence, hash: HASH_A,
+    deadline_at: '2026-09-01T00:00:00.000Z', status, strategy_set_hash: HASH_A,
+    shared_feed: { sequence, hash: HASH_A,
       last_packet_at: '2026-08-31T00:01:00.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
-    assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4, risk_pct: 5,
-      leverage_cap: 10, drawdown_halt_pct: 20, entry_cutoff_at: '2026-08-31T23:45:00.000Z',
+    assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
+      modeled_round_trip_cost_bps: 20, risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
+      entry_cutoff_at: '2026-08-31T23:45:00.000Z',
       terminal_close: 'deadline', max_positions_per_arm: 1, strategy_mutation: false },
     leaderboard: arms.map((arm, index) => ({ rank: index + 1, arm_id: arm.arm_id, equity: arm.equity,
       net_pnl: arm.net_pnl, return_pct: arm.return_pct, max_drawdown_pct: arm.max_drawdown_pct })),
@@ -151,7 +166,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v4',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v7',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -201,7 +216,7 @@ async function assertGeometry(page, expectedColumns) {
   assert.ok(geometry.pageWidth <= geometry.clientWidth + 1, JSON.stringify(geometry));
   assert.ok(geometry.panelLeft >= -1 && geometry.panelRight <= geometry.viewport + 1, JSON.stringify(geometry));
   assert.equal(geometry.abc, expectedColumns);
-  assert.equal(geometry.charts.length, 3);
+  assert.equal(geometry.charts.length, 6);
   assert.ok(geometry.charts.every((chart) => chart.left >= -1 && chart.right <= geometry.viewport + 1 && chart.width > 0), JSON.stringify(geometry));
 }
 
@@ -210,10 +225,10 @@ const browser = await chromium.launch({ headless: true });
 try {
   {
     const responses = [
-      { status: 200, report: paperReport(9, 101), experiment: abcExperiment(10) },
+      { status: 200, report: paperReport(9, 101), experiment: multiExperiment(10) },
       { status: 500, error: 'temporary failure' },
-      { status: 200, report: paperReport(11, 103), experiment: abcExperiment(12) },
-      { status: 200, report: paperReport(12, 104), experiment: abcExperiment(13, 'complete') },
+      { status: 200, report: paperReport(11, 103), experiment: multiExperiment(12) },
+      { status: 200, report: paperReport(12, 104), experiment: multiExperiment(13, 'complete') },
     ];
     const { page, pageErrors } = await openFixture(browser, url, responses);
     await page.waitForSelector('#paperExperiment:not([hidden])');
@@ -221,14 +236,15 @@ try {
     assert.equal(await page.locator('#paperReport').count(), 0);
     assert.equal(await page.getByText('실시간 엔진 · 재귀 개선 감사').count(), 0);
     assert.equal(await page.locator('#unsafe-abc').count(), 0);
-    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
-    assert.equal(await page.locator('#experimentLeaderboard tr').count(), 3);
-    assert.equal(await page.locator('.abc-equity-chart svg').count(), 3);
-    assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3]);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래' }).count(), 3);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 3);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단' }).count(), 3);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그' }).count(), 3);
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
+    assert.equal(await page.locator('#experimentLeaderboard tr').count(), 6);
+    assert.equal(await page.locator('.abc-equity-chart svg').count(), 6);
+    assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그' }).count(), 6);
     assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
@@ -244,12 +260,12 @@ try {
     assert.match(await page.locator('#paperStatus').textContent(), /STALE/u);
     assert.match(await page.locator('#paperErrorText').textContent(), /temporary failure.*이전 보고/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
-    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
     await page.locator('#refreshPaper').click();
     await page.waitForFunction(() => window.__paperFetchCount === 3 && document.getElementById('experimentFeed').textContent.includes('#12'));
     assert.match(await page.locator('#paperStatus').textContent(), /ACTIVE/u);
     assert.equal(await page.locator('#paperError').getAttribute('hidden'), '');
-    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGeometry(page, 1);
     if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });
@@ -263,7 +279,7 @@ try {
 
   for (const status of [401, 404]) {
     const { page, pageErrors } = await openFixture(browser, url, [
-      { status: 200, experiment: abcExperiment(10) }, { status, error: 'locked' },
+      { status: 200, experiment: multiExperiment(10) }, { status, error: 'locked' },
     ]);
     await advance(page, 5_000);
     await page.waitForFunction(() => !document.getElementById('ownerGate').hidden);
@@ -271,7 +287,7 @@ try {
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
-  console.log('BEHAVIOR LAB UI E2E PASS · active-only A/B/C · 3 curves/details · refresh retention · finished hidden · mobile bounds');
+  console.log('BEHAVIOR LAB UI E2E PASS · active-only six-arm v2 · 6 curves/policy details · refresh retention · finished hidden · mobile bounds');
 } finally {
   await browser.close();
   await new Promise((resolveClose) => server.close(resolveClose));

@@ -122,7 +122,7 @@ test('owner paper UI removes the completed legacy session surface and keeps boun
   assert.match(appSource, /\['starting', 'active'\]\.includes\(payload\.experiment\.status\)/u);
 });
 
-test('owner paper UI renders three detailed, accessible time-scaled A/B/C curves and hides finished experiments', () => {
+test('owner paper UI renders six detailed, accessible time-scaled cost-aware curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);
@@ -130,11 +130,15 @@ test('owner paper UI renders three detailed, accessible time-scaled A/B/C curves
   assert.match(appSource, /deadline - started === 24 \* 60 \* 60_000/u);
   assert.match(appSource, /experiment\.shared_feed\.credential_used === false/u);
   assert.match(appSource, /experiment\.assumptions\.strategy_mutation === false/u);
+  assert.match(appSource, /'multi-paper-experiment-v2'/u);
+  assert.match(appSource, /arm\.strategy\.policy/u);
+  assert.match(appSource, /arm\.risk\.risk_pct/u);
   assert.match(appSource, /function renderEquityChart\(arm\)/u);
   assert.match(appSource, /curve\.length <= 64/u);
   assert.match(appSource, /Date\.parse\(point\.at\) - firstAt/u);
   assert.match(appSource, /setAttribute\('role', 'img'\)/u);
   assert.match(appSource, /'최근 거래'/u);
+  assert.match(appSource, /'진입 정책 \/ 위험'/u);
   assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
   assert.match(appSource, /state\.experiment = experiment;\s+paperStatus\(experiment\.status\)/u);
   assert.match(appSource, /renderExperiment\(activeExperiment\)/u);

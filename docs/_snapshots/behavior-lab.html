@@ -3016,9 +3016,9 @@ html {
     <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
       <div class="paper-heading section-heading-row">
         <div>
-          <p class="section-index">ACTIVE A/B/C PAPER EXPERIMENT / 100 USDT EACH</p>
-          <h2>현재 진행 중인 24시간 A/B/C 모의실험</h2>
-          <p class="section-copy">종료된 세션은 표시하지 않습니다. 실제 자금·계정·주문 없이 공개 시장 데이터와 고정된 세 전략만 비교합니다.</p>
+          <p class="section-index">ACTIVE SIX-ARM PAPER EXPERIMENT / 100 USDT EACH</p>
+          <h2>현재 진행 중인 24시간 6-arm 모의실험</h2>
+          <p class="section-copy">종료된 세션은 표시하지 않습니다. 실제 자금·계정·주문 없이 공개 시장 데이터와 비용을 반영한 고정 전략 여섯 개를 비교합니다.</p>
         </div>
         <div class="paper-actions">
           <span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span>
@@ -3027,21 +3027,21 @@ html {
       </div>
 
       <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
-      <div id="paperEmpty" class="empty-state" hidden><strong>NO ACTIVE EXPERIMENT</strong><p>현재 시작 중이거나 진행 중인 A/B/C 모의실험이 없습니다. 종료된 실험은 이 화면에 표시하지 않습니다.</p></div>
+      <div id="paperEmpty" class="empty-state" hidden><strong>NO ACTIVE EXPERIMENT</strong><p>현재 시작 중이거나 진행 중인 모의실험이 없습니다. 종료된 실험은 이 화면에 표시하지 않습니다.</p></div>
       <section id="paperExperiment" class="abc-experiment" aria-busy="true" hidden>
         <article class="panel abc-overview">
           <div class="section-heading-row compact">
-            <div><p class="section-index">SIMULTANEOUS 24H A/B/C · 100 USDT EACH</p><h2>고정 전략 전진 모의실험</h2></div>
+            <div><p class="section-index">SIMULTANEOUS 24H · SIX INDEPENDENT ARMS</p><h2>비용 인식 고정 전략 전진 모의실험</h2></div>
             <span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span>
           </div>
-          <p class="section-copy">동일한 공개 Bitget feed·시각·체결 비용·위험 규칙을 세 독립 계정에 동시에 적용합니다. 실험 중 전략 변경이나 승격은 없습니다.</p>
+          <p class="section-copy" data-experiment-copy>동일한 공개 Bitget feed와 비용 모델을 여섯 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.</p>
           <div class="adaptive-summary-grid abc-summary-grid">
             <div><span>시작</span><b id="experimentStarted">—</b></div>
             <div><span>정확한 24h 마감</span><b id="experimentDeadline">—</b></div>
             <div><span>공유 feed 원장</span><b id="experimentFeed">—</b></div>
             <div><span>최근 공개 패킷</span><b id="experimentLastPacket">—</b></div>
           </div>
-          <div class="paper-table-wrap"><table aria-label="A/B/C 모의실험 순위"><thead><tr><th>순위</th><th>전략</th><th>자산</th><th>순손익 / 수익률</th><th>최대 낙폭</th></tr></thead><tbody id="experimentLeaderboard"></tbody></table></div>
+          <div class="paper-table-wrap"><table aria-label="모의실험 arm 순위"><thead><tr><th>순위</th><th>전략</th><th>자산</th><th>순손익 / 수익률</th><th>최대 낙폭</th></tr></thead><tbody id="experimentLeaderboard"></tbody></table></div>
         </article>
         <div id="experimentArms" class="abc-arm-grid"></div>
       </section>

@@ -27,6 +27,7 @@ const MAX_USAGE_BYTES = 64_000;
 const MAX_HARNESS_BYTES = 64_000;
 const MAX_HARNESS_INPUT_BYTES = 4_096;
 const MAX_BEHAVIOR_PAPER_BYTES = 96_000;
+export const MAX_MULTI_PAPER_BYTES = 282_000;
 const MAX_ABC_EQUITY_CURVE_POINTS = 64;
 const MAX_BEHAVIOR_PAPER_SEQUENCE = 1_000_000;
 const MAX_BEHAVIOR_PAPER_TRADES = 25;
@@ -38,6 +39,8 @@ export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
 export const BEHAVIOR_ABC_EXPERIMENT_ID = 'abc-paper-20260831';
 export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_ABC_EXPERIMENT_ID}`;
+export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260831-v2';
+export const BEHAVIOR_MULTI_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 const ABC_ARM_IDS = ['A', 'B', 'C'];
 const ABC_STRATEGY_IDS = {
   A: 'abc-trend-momentum-v1', B: 'abc-breakout-volatility-v1', C: 'abc-mean-reversion-crowd-fade-v1',
@@ -45,8 +48,52 @@ const ABC_STRATEGY_IDS = {
 const ABC_STRATEGY_LABELS = {
   A: 'Trend / momentum', B: 'Breakout / volatility', C: 'Mean reversion / crowd fade',
 };
+const MULTI_ARM_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const MULTI_STRATEGIES = {
+  A: { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
+    definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1', style: 'trend-continuation',
+    allowed_regimes: ['trend-up', 'trend-down'], required_features: ['trendMomentum', 'orderFlow'],
+    minimum_feature_agreement: 3, min_persistence_seconds: 4, entry_threshold: .34,
+    max_spread_bps: 4, min_target_bps: 32, min_net_reward_risk: 1.25, cooldown_minutes: 10,
+    opposite_confirmations: 2 },
+  B: { id: 'multi-breakout-confirmation-v2', label: 'Breakout confirmation',
+    definition_hash: 'f9007a599040a6ba220231e34b4c801e5189e3a7cc70bbe3d061e53e8c76e635', style: 'breakout-confirmation',
+    allowed_regimes: ['trend-up', 'trend-down'], required_features: ['breakout', 'orderFlow'],
+    minimum_feature_agreement: 3, min_persistence_seconds: 4, entry_threshold: .36,
+    max_spread_bps: 3.5, min_target_bps: 35, min_net_reward_risk: 1.3, cooldown_minutes: 10,
+    opposite_confirmations: 2 },
+  C: { id: 'multi-range-reversion-v2', label: 'Range reversion',
+    definition_hash: '638712041d66469b7ff7785f85e0b67e809c61a1ce582299ed373f425c51aacc', style: 'range-reversion',
+    allowed_regimes: ['range'], required_features: ['meanReversion'], minimum_feature_agreement: 2,
+    min_persistence_seconds: 4, entry_threshold: .34, max_spread_bps: 4, min_target_bps: 32,
+    min_net_reward_risk: 1.2, cooldown_minutes: 10, opposite_confirmations: 2 },
+  D: { id: 'multi-ofi-continuation-v2', label: 'Order-flow continuation',
+    definition_hash: '3cfd6c22d0982e411bcbb95aff9323e861a9056877e916f83fb07d7d3c6e99e4', style: 'order-flow-continuation',
+    allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: ['orderFlow'],
+    minimum_feature_agreement: 2, min_persistence_seconds: 5, entry_threshold: .4,
+    max_spread_bps: 3, min_target_bps: 36, min_net_reward_risk: 1.35, cooldown_minutes: 10,
+    opposite_confirmations: 2 },
+  E: { id: 'multi-overreaction-fade-v2', label: 'Range overreaction fade',
+    definition_hash: 'bbd73cbf1bf42f4bf9f35d5b60991e54c1c06276512202e25688b2507157ff3c', style: 'overreaction-fade',
+    allowed_regimes: ['range'], required_features: ['meanReversion'], minimum_feature_agreement: 2,
+    min_persistence_seconds: 4, entry_threshold: .42, max_spread_bps: 3.5, min_target_bps: 34,
+    min_net_reward_risk: 1.4, cooldown_minutes: 12, opposite_confirmations: 2 },
+  F: { id: 'multi-consensus-conservative-v2', label: 'Conservative consensus',
+    definition_hash: 'a8280bb5356c1c7b780b90668878f69750b214724d210b17d608eb0fa85dd5bd', style: 'multi-factor-consensus',
+    allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: [], minimum_feature_agreement: 3,
+    min_persistence_seconds: 5, entry_threshold: .44, max_spread_bps: 3, min_target_bps: 38,
+    min_net_reward_risk: 1.5, cooldown_minutes: 15, opposite_confirmations: 3 },
+};
+const MULTI_STRATEGY_SET_HASH = '26c95bb151fcca3cc3a869e4e6a3e8f47ad31eef5d2b75702fa1b698b9390941';
 const VALID_ABC_EVENT_TYPES = new Set([
   'arm-started', 'decision', 'position-opened', 'position-marked', 'position-closed', 'arm-terminal', 'arm-error',
+]);
+const VALID_MULTI_EVENT_TYPES = new Set([...VALID_ABC_EVENT_TYPES, 'entry-rejected']);
+const VALID_MULTI_GATE_REASONS = new Set([
+  'warmup-incomplete', 'regime-warmup-incomplete', 'invalid-quote', 'stress-regime', 'regime-mismatch',
+  'spread-too-wide', 'score-below-threshold', 'persistence-insufficient', 'feature-agreement-insufficient',
+  'required-feature-mismatch', 'trend-direction-mismatch', 'target-below-cost-floor',
+  'net-reward-risk-insufficient', 'post-exit-cooldown',
 ]);
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
 const VALID_BEHAVIOR_PAPER_LOG_TYPES = new Set([
@@ -1729,6 +1776,172 @@ export function normalizeBehaviorPaperExperimentReport(input) {
     leaderboard, arms, limitations };
 }
 
+function normalizeMultiPosition(value) {
+  if (value === null) return null;
+  const keys = ['id', 'symbol', 'direction', 'opened_at', 'entry_price', 'mark_price', 'quantity', 'notional',
+    'leverage', 'unrealized_pnl', 'stop_price', 'target_price'];
+  const result = normalizeExperimentDetail(value, keys);
+  if (!result || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(result.symbol)
+    || !['long', 'short'].includes(result.direction) || !normalizePaperTimestamp(result.opened_at)
+    || boundedPaperNumber(result.leverage, 0, 3) === null) return undefined;
+  return result;
+}
+
+function normalizeMultiDecisions(value, sharedSequence) {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const keys = ['symbol', 'signal_bar_at', 'observed_at', 'regime', 'direction', 'score', 'confidence',
+    'spread_bps', 'feature_agreement', 'target_distance_bps', 'net_reward_risk', 'gate_reasons',
+    'feed_sequence', 'feed_hash'];
+  const decisions = [];
+  for (const entry of value) {
+    if (!exactPaperKeys(entry, keys)) return null;
+    const signalBarAt = normalizePaperTimestamp(entry.signal_bar_at);
+    const observedAt = normalizePaperTimestamp(entry.observed_at);
+    const score = boundedPaperNumber(entry.score, -1, 1);
+    const confidence = boundedPaperNumber(entry.confidence, 0, 100, true);
+    const spreadBps = boundedPaperNumber(entry.spread_bps, 0, 100);
+    const featureAgreement = boundedPaperNumber(entry.feature_agreement, 0, 4, true);
+    const targetDistanceBps = boundedPaperNumber(entry.target_distance_bps, 0, 10_000);
+    const netRewardRisk = boundedPaperNumber(entry.net_reward_risk, 0, 100);
+    const feedSequence = boundedPaperNumber(entry.feed_sequence, 1, sharedSequence, true);
+    const feedHash = normalizedExperimentHash(entry.feed_hash);
+    if (!Array.isArray(entry.gate_reasons) || entry.gate_reasons.length > 8) return null;
+    const gateReasons = entry.gate_reasons.map((reason) => boundedPaperText(reason, 48, true));
+    if (gateReasons.some((reason) => !VALID_MULTI_GATE_REASONS.has(reason))
+      || new Set(gateReasons).size !== gateReasons.length) return null;
+    if (!['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(entry.symbol)
+      || !['trend-up', 'trend-down', 'range', 'stress'].includes(entry.regime)
+      || !['long', 'short', 'stand-aside'].includes(entry.direction) || !signalBarAt || !observedAt
+      || [score, confidence, spreadBps, featureAgreement, targetDistanceBps, netRewardRisk, feedSequence]
+        .some((item) => item === null) || !feedHash
+      || (entry.direction === 'stand-aside' ? gateReasons.length < 1 : gateReasons.length !== 0)) return null;
+    decisions.push({ symbol: entry.symbol, signal_bar_at: signalBarAt, observed_at: observedAt,
+      regime: entry.regime, direction: entry.direction, score, confidence, spread_bps: spreadBps,
+      feature_agreement: featureAgreement, target_distance_bps: targetDistanceBps,
+      net_reward_risk: netRewardRisk, gate_reasons: gateReasons, feed_sequence: feedSequence, feed_hash: feedHash });
+  }
+  return decisions;
+}
+
+function normalizeMultiLogs(value) {
+  if (!Array.isArray(value) || value.length > 30) return null;
+  const keys = ['sequence', 'at', 'type', 'message'];
+  const logs = value.map((entry) => normalizeExperimentDetail(entry, keys));
+  if (logs.some((entry) => !entry || boundedPaperNumber(entry.sequence, 1, 1_000_000, true) === null
+    || !normalizePaperTimestamp(entry.at) || !VALID_MULTI_EVENT_TYPES.has(entry.type)
+    || boundedPaperText(entry.message, 240, true) === null || containsForbiddenPaperPrivateText(entry.message))) return null;
+  return logs;
+}
+
+function normalizeMultiPolicy(value, armId) {
+  const expected = MULTI_STRATEGIES[armId];
+  const keys = ['style', 'allowed_regimes', 'required_features', 'minimum_feature_agreement',
+    'min_persistence_seconds', 'entry_threshold', 'max_spread_bps', 'min_target_bps',
+    'min_net_reward_risk', 'cooldown_minutes', 'opposite_confirmations'];
+  if (!exactPaperKeys(value, keys)) return null;
+  const facts = Object.fromEntries(keys.map((key) => [key, expected[key]]));
+  return JSON.stringify(value) === JSON.stringify(facts) ? facts : null;
+}
+
+function normalizeMultiArm(value, armId, sharedSequence) {
+  const keys = ['arm_id', 'strategy', 'risk', 'chain', 'status', 'seed_equity', 'equity', 'cash',
+    'realized_pnl', 'unrealized_pnl', 'net_pnl', 'return_pct', 'max_drawdown_pct', 'fees',
+    'slippage_cost', 'trade_count', 'win_count', 'loss_count', 'equity_curve', 'open_position',
+    'recent_trades', 'recent_decisions', 'recent_logs', 'last_cycle_at'];
+  const expected = MULTI_STRATEGIES[armId];
+  if (!exactPaperKeys(value, keys) || value.arm_id !== armId
+    || !exactPaperKeys(value.strategy, ['id', 'label', 'definition_hash', 'policy'])
+    || value.strategy.id !== expected.id || value.strategy.label !== expected.label
+    || value.strategy.definition_hash !== expected.definition_hash || !normalizeMultiPolicy(value.strategy.policy, armId)
+    || !exactPaperKeys(value.risk, ['risk_pct', 'leverage_cap', 'drawdown_halt_pct', 'max_hold_minutes',
+      'minimum_hold_before_opposite_minutes'])
+    || JSON.stringify(value.risk) !== JSON.stringify({ risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
+      max_hold_minutes: 45, minimum_hold_before_opposite_minutes: 5 })
+    || !exactPaperKeys(value.chain, ['sequence', 'hash'])) return null;
+  const chainSequence = boundedPaperNumber(value.chain.sequence, 1, 1_000_000, true);
+  const chainHash = normalizedExperimentHash(value.chain.hash);
+  const status = boundedPaperText(value.status, 16, true);
+  const numbers = {
+    seed_equity: boundedPaperNumber(value.seed_equity, 100, 100),
+    equity: boundedPaperNumber(value.equity, 0, 1_000_000), cash: boundedPaperNumber(value.cash, 0, 1_000_000),
+    realized_pnl: boundedPaperNumber(value.realized_pnl, -1_000_000, 1_000_000),
+    unrealized_pnl: boundedPaperNumber(value.unrealized_pnl, -1_000_000, 1_000_000),
+    net_pnl: boundedPaperNumber(value.net_pnl, -100, 999_900), return_pct: boundedPaperNumber(value.return_pct, -100, 999_900),
+    max_drawdown_pct: boundedPaperNumber(value.max_drawdown_pct, 0, 100), fees: boundedPaperNumber(value.fees, 0, 1_000_000),
+    slippage_cost: boundedPaperNumber(value.slippage_cost, 0, 1_000_000),
+    trade_count: boundedPaperNumber(value.trade_count, 0, 10_000, true),
+    win_count: boundedPaperNumber(value.win_count, 0, 10_000, true),
+    loss_count: boundedPaperNumber(value.loss_count, 0, 10_000, true),
+  };
+  if (chainSequence === null || chainSequence > sharedSequence || !chainHash
+    || !['starting', 'active', 'halted', 'complete', 'error'].includes(status)
+    || Object.values(numbers).some((entry) => entry === null)
+    || Math.abs(numbers.net_pnl - (numbers.equity - 100)) > 1e-6
+    || Math.abs(numbers.return_pct - numbers.net_pnl) > 1e-6
+    || numbers.win_count + numbers.loss_count > numbers.trade_count) return null;
+  const equityCurve = normalizeExperimentEquityCurve(value.equity_curve, chainSequence, numbers.equity);
+  const openPosition = normalizeMultiPosition(value.open_position);
+  const trades = normalizeExperimentTrades(value.recent_trades);
+  const decisions = normalizeMultiDecisions(value.recent_decisions, sharedSequence);
+  const logs = normalizeMultiLogs(value.recent_logs);
+  const lastCycleAt = normalizePaperTimestamp(value.last_cycle_at, true);
+  if (!equityCurve || openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined) return null;
+  return { arm_id: armId, strategy: { id: expected.id, label: expected.label,
+    definition_hash: expected.definition_hash, policy: normalizeMultiPolicy(value.strategy.policy, armId) },
+  risk: { ...value.risk }, chain: { sequence: chainSequence, hash: chainHash }, status,
+  ...numbers, equity_curve: equityCurve, open_position: openPosition, recent_trades: trades,
+  recent_decisions: decisions, recent_logs: logs, last_cycle_at: lastCycleAt };
+}
+
+export function normalizeBehaviorMultiPaperExperimentReport(input) {
+  const keys = ['schema', 'experiment_id', 'simulation', 'public_data_only', 'generated_at', 'started_at',
+    'deadline_at', 'status', 'strategy_set_hash', 'shared_feed', 'assumptions', 'leaderboard', 'arms', 'limitations'];
+  if (!exactPaperKeys(input, keys) || input.schema !== 'multi-paper-experiment-v2'
+    || input.experiment_id !== BEHAVIOR_MULTI_EXPERIMENT_ID || input.simulation !== true
+    || input.public_data_only !== true || input.strategy_set_hash !== MULTI_STRATEGY_SET_HASH) return null;
+  const generatedAt = normalizePaperTimestamp(input.generated_at);
+  const startedAt = normalizePaperTimestamp(input.started_at);
+  const deadlineAt = normalizePaperTimestamp(input.deadline_at);
+  const status = boundedPaperText(input.status, 16, true);
+  if (!generatedAt || !startedAt || !deadlineAt || Date.parse(deadlineAt) - Date.parse(startedAt) !== DAY_MS
+    || Date.parse(generatedAt) < Date.parse(startedAt) || Date.parse(generatedAt) > Date.parse(deadlineAt) + 60 * 60_000
+    || !['starting', 'active', 'complete', 'error'].includes(status)) return null;
+  const feedKeys = ['sequence', 'hash', 'last_packet_at', 'credential_used', 'symbols', 'channels'];
+  if (!exactPaperKeys(input.shared_feed, feedKeys)) return null;
+  const sharedSequence = boundedPaperNumber(input.shared_feed.sequence, 1, 100_000_000, true);
+  const sharedHash = normalizedExperimentHash(input.shared_feed.hash);
+  const lastPacketAt = normalizePaperTimestamp(input.shared_feed.last_packet_at, true);
+  if (sharedSequence === null || !sharedHash || lastPacketAt === undefined || input.shared_feed.credential_used !== false
+    || JSON.stringify(input.shared_feed.symbols) !== JSON.stringify(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'])
+    || JSON.stringify(input.shared_feed.channels) !== JSON.stringify(['ticker', 'books5', 'trade', 'candle1m'])
+    || (lastPacketAt && Date.parse(lastPacketAt) > Date.parse(generatedAt))) return null;
+  const assumptions = { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
+    modeled_round_trip_cost_bps: 20, risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
+    entry_cutoff_at: new Date(Date.parse(deadlineAt) - 15 * 60_000).toISOString(), terminal_close: 'deadline',
+    max_positions_per_arm: 1, strategy_mutation: false };
+  if (!exactPaperKeys(input.assumptions, Object.keys(assumptions))
+    || JSON.stringify(input.assumptions) !== JSON.stringify(assumptions)) return null;
+  if (!Array.isArray(input.arms) || input.arms.length !== 6) return null;
+  const arms = input.arms.map((arm, index) => normalizeMultiArm(arm, MULTI_ARM_IDS[index], sharedSequence));
+  if (arms.some((arm) => !arm) || new Set(arms.map((arm) => arm.chain.hash)).size !== 6) return null;
+  if (!Array.isArray(input.leaderboard) || input.leaderboard.length !== 6) return null;
+  const expectedLeaderboard = [...arms].sort((left, right) => right.equity - left.equity || left.arm_id.localeCompare(right.arm_id));
+  const leaderboard = input.leaderboard.map((row, index) => {
+    if (!exactPaperKeys(row, ['rank', 'arm_id', 'equity', 'net_pnl', 'return_pct', 'max_drawdown_pct'])) return null;
+    const arm = expectedLeaderboard[index];
+    return row.rank === index + 1 && row.arm_id === arm.arm_id && ['equity', 'net_pnl', 'return_pct', 'max_drawdown_pct']
+      .every((key) => row[key] === arm[key]) ? { ...row } : null;
+  });
+  const limitations = normalizePaperLimitations(input.limitations);
+  if (leaderboard.some((row) => !row) || !limitations) return null;
+  return { schema: 'multi-paper-experiment-v2', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
+    simulation: true, public_data_only: true, generated_at: generatedAt, started_at: startedAt,
+    deadline_at: deadlineAt, status, strategy_set_hash: MULTI_STRATEGY_SET_HASH,
+    shared_feed: { sequence: sharedSequence, hash: sharedHash, last_packet_at: lastPacketAt,
+      credential_used: false, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'],
+      channels: ['ticker', 'books5', 'trade', 'candle1m'] }, assumptions, leaderboard, arms, limitations };
+}
+
 function containsForbiddenPaperPrivateText(value) {
   return /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/iu.test(value)
     || containsForbiddenPaperPrivateIdentifier(value)
@@ -1740,7 +1953,7 @@ function containsForbiddenPaperPrivateText(value) {
 
 async function readBehaviorPaperJson(request) {
   const declaredLength = Number(request.headers.get('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BEHAVIOR_PAPER_BYTES) {
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_MULTI_PAPER_BYTES) {
     return { error: json({ error: '모의투자 보고가 너무 큽니다.' }, 413) };
   }
   const reader = request.body?.getReader();
@@ -1753,14 +1966,14 @@ async function readBehaviorPaperJson(request) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BEHAVIOR_PAPER_BYTES) {
+      if (size > MAX_MULTI_PAPER_BYTES) {
         await reader.cancel();
         return { error: json({ error: '모의투자 보고가 너무 큽니다.' }, 413) };
       }
       text += decoder.decode(value, { stream: true });
     }
     text += decoder.decode();
-    return { value: JSON.parse(text) };
+    return { value: JSON.parse(text), size };
   } catch {
     return { value: null };
   }
@@ -1772,7 +1985,12 @@ async function reportBehaviorPaper(request, env) {
   }
   const body = await readBehaviorPaperJson(request);
   if (body.error) return body.error;
-  if (body.value?.schema === 'abc-paper-experiment-v1') return reportBehaviorPaperExperiment(body.value, env);
+  if (body.value?.schema === 'multi-paper-experiment-v2') return reportBehaviorMultiPaperExperiment(body.value, body.size, env);
+  if (body.value?.schema === 'abc-paper-experiment-v1') {
+    if (body.size > MAX_BEHAVIOR_PAPER_BYTES) return json({ error: '모의투자 보고가 너무 큽니다.' }, 413);
+    return reportBehaviorPaperExperiment(body.value, env);
+  }
+  if (body.size > MAX_BEHAVIOR_PAPER_BYTES) return json({ error: '모의투자 보고가 너무 큽니다.' }, 413);
   const report = normalizeBehaviorPaperReport(body.value);
   if (!report) return json({ error: '잘못된 모의투자 보고입니다.' }, 400);
   const receivedAt = new Date().toISOString();
@@ -1886,6 +2104,43 @@ async function reportBehaviorPaperExperiment(value, env) {
     snapshot_fingerprint: await sha256(JSON.stringify(report)) });
 }
 
+async function reportBehaviorMultiPaperExperiment(value, bodySize, env) {
+  if (!Number.isSafeInteger(bodySize) || bodySize < 1 || bodySize > MAX_MULTI_PAPER_BYTES) {
+    return json({ error: '모의투자 보고가 너무 큽니다.' }, 413);
+  }
+  const report = normalizeBehaviorMultiPaperExperimentReport(value);
+  if (!report) return json({ error: '잘못된 6-arm v2 모의실험 보고입니다.' }, 400);
+  const receivedAt = new Date().toISOString();
+  const references = ['$.shared_feed', ...MULTI_ARM_IDS.map((_, index) => `$.arms[${index}].chain`)];
+  const monotonic = references.map((path) => `
+    CAST(json_extract(excluded.payload, '${path}.sequence') AS INTEGER)
+      >= CAST(json_extract(usage_snapshots.payload, '${path}.sequence') AS INTEGER)
+  `).join(' AND ');
+  const advanced = references.map((path) => `
+    CAST(json_extract(excluded.payload, '${path}.sequence') AS INTEGER)
+      > CAST(json_extract(usage_snapshots.payload, '${path}.sequence') AS INTEGER)
+  `).join(' OR ');
+  const stableAtSameSequence = references.map((path) => `(
+    CAST(json_extract(excluded.payload, '${path}.sequence') AS INTEGER)
+      > CAST(json_extract(usage_snapshots.payload, '${path}.sequence') AS INTEGER)
+    OR json_extract(excluded.payload, '${path}.hash') = json_extract(usage_snapshots.payload, '${path}.hash')
+  )`).join(' AND ');
+  const inserted = await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source) DO UPDATE SET
+      captured_at = excluded.captured_at,
+      payload = excluded.payload
+    WHERE ${monotonic}
+      AND (${advanced} OR excluded.payload = usage_snapshots.payload)
+      AND ${stableAtSameSequence}
+  `).bind(BEHAVIOR_MULTI_SNAPSHOT_SOURCE, receivedAt, JSON.stringify(report)).run();
+  if (inserted?.meta?.changes !== 1) return json({ error: '더 최신인 6-arm v2 보고가 이미 저장되어 있습니다.' }, 409);
+  return json({ ok: true, experiment_id: report.experiment_id,
+    shared_feed_sequence: report.shared_feed.sequence,
+    snapshot_fingerprint: await sha256(JSON.stringify(report)) });
+}
+
 async function getBehaviorPaper(request, env) {
   const owner = await behaviorOwner(request, env);
   if (owner.response) return owner.response;
@@ -1901,19 +2156,35 @@ async function getBehaviorPaper(request, env) {
     WHERE source = ?1
     LIMIT 1
   `).bind(BEHAVIOR_ABC_SNAPSHOT_SOURCE).first();
-  let experiment = null;
-  if (experimentRow?.source === BEHAVIOR_ABC_SNAPSHOT_SOURCE) {
-    try { experiment = normalizeBehaviorPaperExperimentReport(JSON.parse(experimentRow.payload)); } catch { experiment = null; }
-    if (!experiment) return json({ error: 'A/B/C 보고 데이터를 읽지 못했습니다.' }, 500,
+  const multiExperimentRow = await env.DB.prepare(`
+    SELECT source, captured_at, payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_MULTI_SNAPSHOT_SOURCE).first();
+  let v2Experiment = null;
+  if (multiExperimentRow?.source === BEHAVIOR_MULTI_SNAPSHOT_SOURCE) {
+    try { v2Experiment = normalizeBehaviorMultiPaperExperimentReport(JSON.parse(multiExperimentRow.payload)); }
+    catch { v2Experiment = null; }
+    if (!v2Experiment) return json({ error: '6-arm v2 보고 데이터를 읽지 못했습니다.' }, 500,
       { 'cache-control': 'private, no-store' });
   }
+  const v2Active = v2Experiment && ['starting', 'active'].includes(v2Experiment.status) ? v2Experiment : null;
+  let v1Experiment = null;
+  if (!v2Active && experimentRow?.source === BEHAVIOR_ABC_SNAPSHOT_SOURCE) {
+    try { v1Experiment = normalizeBehaviorPaperExperimentReport(JSON.parse(experimentRow.payload)); } catch { v1Experiment = null; }
+    if (!v1Experiment) return json({ error: 'A/B/C 보고 데이터를 읽지 못했습니다.' }, 500,
+      { 'cache-control': 'private, no-store' });
+  }
+  const experiment = v2Active || v1Experiment;
+  const experimentReceivedAt = v2Active ? multiExperimentRow.captured_at : experimentRow?.captured_at ?? null;
   if (!row) return json({ session_id: BEHAVIOR_PAPER_SESSION_ID, deadline_at: BEHAVIOR_PAPER_DEADLINE,
-    report: null, experiment, experiment_received_at: experimentRow?.captured_at ?? null }, 200,
+    report: null, experiment, experiment_received_at: experimentReceivedAt }, 200,
   { 'cache-control': 'private, no-store' });
   let report;
   try { report = normalizeBehaviorPaperReport(JSON.parse(row.payload)); } catch { report = null; }
   if (!report) return json({ error: '보고 데이터를 읽지 못했습니다.' }, 500);
-  return json({ report, received_at: row.captured_at, experiment, experiment_received_at: experimentRow?.captured_at ?? null }, 200,
+  return json({ report, received_at: row.captured_at, experiment, experiment_received_at: experimentReceivedAt }, 200,
     { 'cache-control': 'private, no-store' });
 }
 

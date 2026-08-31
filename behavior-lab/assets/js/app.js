@@ -538,12 +538,18 @@
         && (index === 0 || (point.sequence > curve[index - 1].sequence
           && Date.parse(point.at) > Date.parse(curve[index - 1].at))))
       && (!curve.length || (curve.at(-1).sequence === chainSequence && Math.abs(curve.at(-1).equity - equity) <= 1e-6));
-    const armIds = ['A', 'B', 'C'];
-    const strategyIds = ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'];
+    const profiles = {
+      'abc-paper-experiment-v1': { experimentId: 'abc-paper-20260831', armIds: ['A', 'B', 'C'],
+        strategyIds: ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'] },
+      'multi-paper-experiment-v2': { experimentId: 'multi-paper-20260831-v2', armIds: ['A', 'B', 'C', 'D', 'E', 'F'],
+        strategyIds: ['multi-trend-persistence-v2', 'multi-breakout-confirmation-v2', 'multi-range-reversion-v2',
+          'multi-ofi-continuation-v2', 'multi-overreaction-fade-v2', 'multi-consensus-conservative-v2'] },
+    };
+    const profile = profiles[experiment?.schema];
     const started = Date.parse(experiment?.started_at);
     const deadline = Date.parse(experiment?.deadline_at);
-    return Boolean(experiment && experiment.schema === 'abc-paper-experiment-v1'
-      && experiment.experiment_id === 'abc-paper-20260831' && experiment.simulation === true
+    const v2 = experiment?.schema === 'multi-paper-experiment-v2';
+    return Boolean(experiment && profile && experiment.experiment_id === profile.experimentId && experiment.simulation === true
       && experiment.public_data_only === true && Number.isFinite(started) && deadline - started === 24 * 60 * 60_000
       && ['starting', 'active', 'complete', 'error'].includes(experiment.status)
       && Number.isInteger(experiment.shared_feed?.sequence) && experiment.shared_feed.sequence > 0
@@ -552,14 +558,20 @@
       && JSON.stringify(experiment.shared_feed.channels) === JSON.stringify(['ticker', 'books5', 'trade', 'candle1m'])
       && experiment.assumptions?.seed_equity_per_arm === 100 && experiment.assumptions.max_positions_per_arm === 1
       && experiment.assumptions.strategy_mutation === false && Array.isArray(experiment.leaderboard)
-      && experiment.leaderboard.length === 3 && Array.isArray(experiment.arms) && experiment.arms.length === 3
-      && experiment.arms.every((arm, index) => arm.arm_id === armIds[index] && arm.strategy?.id === strategyIds[index]
+      && experiment.leaderboard.length === profile.armIds.length && Array.isArray(experiment.arms)
+      && experiment.arms.length === profile.armIds.length
+      && (!v2 || (hash(experiment.strategy_set_hash) && experiment.assumptions.modeled_round_trip_cost_bps === 20
+        && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3))
+      && experiment.arms.every((arm, index) => arm.arm_id === profile.armIds[index]
+        && arm.strategy?.id === profile.strategyIds[index]
         && hash(arm.strategy.definition_hash) && Number.isInteger(arm.chain?.sequence) && arm.chain.sequence > 0
         && hash(arm.chain.hash) && finite(arm.equity) && finite(arm.net_pnl) && finite(arm.return_pct)
         && finite(arm.max_drawdown_pct) && finite(arm.fees) && finite(arm.slippage_cost)
         && Number.isInteger(arm.trade_count) && Array.isArray(arm.recent_trades) && arm.recent_trades.length <= 25
         && Array.isArray(arm.recent_decisions) && arm.recent_decisions.length <= 20
         && Array.isArray(arm.recent_logs) && arm.recent_logs.length <= 30
+        && (!v2 || (arm.strategy.policy && arm.risk && arm.risk.risk_pct === 1.5 && arm.risk.leverage_cap === 3
+          && Array.isArray(arm.strategy.policy.allowed_regimes) && Array.isArray(arm.strategy.policy.required_features)))
         && validCurve(arm.equity_curve || [], arm.chain.sequence, arm.equity))
       && Array.isArray(experiment.limitations));
   }
@@ -646,6 +658,25 @@
       detailCell('거래', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
     );
     const chart = renderEquityChart(arm);
+    const policy = document.createElement('section');
+    policy.className = 'abc-arm-section';
+    policy.append(createText('h4', '', '진입 정책 / 위험'));
+    const policyGrid = document.createElement('div');
+    policyGrid.className = 'paper-kv';
+    if (!arm.strategy.policy || !arm.risk) policyGrid.append(detailCell('프로필', 'v1 고정 정책'));
+    else policyGrid.append(
+      detailCell('스타일', arm.strategy.policy.style),
+      detailCell('허용 체제', arm.strategy.policy.allowed_regimes.join(', ')),
+      detailCell('필수 feature', arm.strategy.policy.required_features.join(', ') || '합의 기반'),
+      detailCell('합의 / 지속', `${arm.strategy.policy.minimum_feature_agreement}개 / ${arm.strategy.policy.min_persistence_seconds}초`),
+      detailCell('진입 score', `≥ ${arm.strategy.policy.entry_threshold}`),
+      detailCell('최대 spread', `${arm.strategy.policy.max_spread_bps} bps`),
+      detailCell('목표 / net R:R', `≥ ${arm.strategy.policy.min_target_bps} bps / ${arm.strategy.policy.min_net_reward_risk}`),
+      detailCell('쿨다운 / 반대 확인', `${arm.strategy.policy.cooldown_minutes}분 / ${arm.strategy.policy.opposite_confirmations}회`),
+      detailCell('회당 위험 / 레버리지', `${arm.risk.risk_pct}% / ${arm.risk.leverage_cap}×`),
+      detailCell('낙폭 정지 / 최대 보유', `${arm.risk.drawdown_halt_pct}% / ${arm.risk.max_hold_minutes}분`),
+    );
+    policy.append(policyGrid);
     const position = document.createElement('section');
     position.className = 'abc-arm-section';
     position.append(createText('h4', '', '현재 포지션'));
@@ -670,8 +701,10 @@
     decisions.append(renderExperimentList(arm.recent_decisions, '아직 판단이 없습니다.', (decision) => {
       const row = document.createElement('li');
       row.append(createText('time', '', formatKoreanTime(decision.observed_at)),
-        createText('span', '', `${decision.symbol} · ${decision.direction} · score ${paperValue(decision.score)}`),
-        createText('small', '', `feed #${decision.feed_sequence} · ${String(decision.feed_hash).slice(0, 12)}… · ${decision.reason || 'entry candidate'}`));
+        createText('span', '', `${decision.symbol} · ${decision.direction} · score ${paperValue(decision.score)}${decision.regime ? ` · ${decision.regime}` : ''}`),
+        createText('small', '', decision.gate_reasons
+          ? `합의 ${decision.feature_agreement} · spread ${decision.spread_bps} bps · 목표 ${decision.target_distance_bps} bps · net R:R ${decision.net_reward_risk} · ${decision.gate_reasons.join(', ') || 'all gates passed'}`
+          : `feed #${decision.feed_sequence} · ${String(decision.feed_hash).slice(0, 12)}… · ${decision.reason || 'entry candidate'}`));
       return row;
     }));
     const logs = document.createElement('section');
@@ -684,7 +717,7 @@
       return row;
     }));
     const chain = createText('p', 'abc-chain', `arm chain #${arm.chain.sequence} · ${arm.chain.hash.slice(0, 16)}… · ${arm.strategy.definition_hash.slice(0, 12)}…`);
-    card.append(heading, chart, metrics, position, trades, decisions, logs, chain);
+    card.append(heading, chart, metrics, policy, position, trades, decisions, logs, chain);
     return card;
   }
 
@@ -698,6 +731,8 @@
     elements.experimentDeadline.textContent = formatKoreanTime(experiment.deadline_at);
     elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
     elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
+    const overviewCopy = elements.paperExperiment.querySelector('[data-experiment-copy]');
+    if (overviewCopy) overviewCopy.textContent = `동일한 공개 Bitget feed와 비용 모델을 ${experiment.arms.length}개 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.`;
     elements.experimentLeaderboard.replaceChildren(...experiment.leaderboard.map((entry) => {
       const arm = experiment.arms.find((item) => item.arm_id === entry.arm_id);
       const row = document.createElement('tr');
@@ -764,7 +799,7 @@
         elements.paperError.hidden = true;
         return;
       }
-      if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 A/B/C 모의실험 보고는 표시하지 않았습니다.');
+      if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 모의실험 보고는 표시하지 않았습니다.');
       renderExperiment(activeExperiment);
       elements.paperExperiment.dataset.freshness = 'fresh';
       elements.paperError.hidden = true;
