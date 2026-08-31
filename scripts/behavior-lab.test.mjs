@@ -138,7 +138,7 @@ test('owner paper UI renders a task-first six-model dashboard with accessible de
   assert.match(appSource, /experiment\.deadline_at === null/u);
   assert.match(appSource, /experiment\.shared_feed\.credential_used === false/u);
   assert.match(appSource, /experiment\.assumptions\.strategy_mutation === false/u);
-  assert.match(appSource, /'multi-paper-experiment-v2'/u);
+  assert.match(appSource, /'multi-paper-experiment-v3'/u);
   assert.match(appSource, /arm\.strategy\.policy/u);
   assert.match(appSource, /arm\.risk\.risk_pct/u);
   assert.match(appSource, /function renderEquityChart\(arm\)/u);

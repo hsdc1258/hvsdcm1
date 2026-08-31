@@ -564,15 +564,15 @@
     const profiles = {
       'abc-paper-experiment-v1': { experimentId: 'abc-paper-20260831', armIds: ['A', 'B', 'C'],
         strategyIds: ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'] },
-      'multi-paper-experiment-v2': { experimentId: 'multi-paper-20260831-v2', armIds: ['A', 'B', 'C', 'D', 'E', 'F'],
-        strategyIds: ['multi-trend-persistence-v2', 'multi-breakout-confirmation-v2', 'multi-range-reversion-v2',
-          'multi-ofi-continuation-v2', 'multi-overreaction-fade-v2', 'multi-consensus-conservative-v2'] },
+      'multi-paper-experiment-v3': { experimentId: 'multi-paper-20260901-v3', armIds: ['A', 'B', 'C', 'D', 'E', 'F'],
+        strategyIds: ['multi-trend-persistence-v3', 'multi-breakout-confirmation-v3', 'multi-range-reversion-v3',
+          'multi-ofi-continuation-v3', 'multi-overreaction-fade-v3', 'multi-consensus-conservative-v3'] },
     };
     const profile = profiles[experiment?.schema];
     const started = Date.parse(experiment?.started_at);
     const deadline = Date.parse(experiment?.deadline_at);
-    const v2 = experiment?.schema === 'multi-paper-experiment-v2';
-    const continuous = v2 && experiment?.run_mode === 'until-stopped';
+    const v3 = experiment?.schema === 'multi-paper-experiment-v3';
+    const continuous = v3 && experiment?.run_mode === 'until-stopped';
     const stopped = experiment?.stopped_at === null ? null : Date.parse(experiment?.stopped_at);
     const validTiming = continuous
       ? experiment.deadline_at === null && (stopped === null || Number.isFinite(stopped))
@@ -588,7 +588,7 @@
       && experiment.assumptions.strategy_mutation === false && Array.isArray(experiment.leaderboard)
       && experiment.leaderboard.length === profile.armIds.length && Array.isArray(experiment.arms)
       && experiment.arms.length === profile.armIds.length
-      && (!v2 || (hash(experiment.strategy_set_hash) && experiment.assumptions.modeled_round_trip_cost_bps === 20
+      && (!v3 || (hash(experiment.strategy_set_hash) && experiment.assumptions.modeled_round_trip_cost_bps === 20
         && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3
         && (!continuous || (experiment.assumptions.entry_cutoff_at === null
           && experiment.assumptions.terminal_close === 'owner-stop'))))
@@ -600,7 +600,7 @@
         && Number.isInteger(arm.trade_count) && Array.isArray(arm.recent_trades) && arm.recent_trades.length <= 25
         && Array.isArray(arm.recent_decisions) && arm.recent_decisions.length <= 20
         && Array.isArray(arm.recent_logs) && arm.recent_logs.length <= 30
-        && (!v2 || (arm.strategy.policy && arm.risk && arm.risk.risk_pct === 1.5 && arm.risk.leverage_cap === 3
+        && (!v3 || (arm.strategy.policy && arm.risk && arm.risk.risk_pct === 1.5 && arm.risk.leverage_cap === 3
           && Array.isArray(arm.strategy.policy.allowed_regimes) && Array.isArray(arm.strategy.policy.required_features)))
         && validCurve(arm.equity_curve || [], arm.chain.sequence, arm.equity))
       && Array.isArray(experiment.limitations));
@@ -671,12 +671,12 @@
 
   function strategyPresentation(strategyId, fallback) {
     const presentations = {
-      'multi-trend-persistence-v2': ['추세 지속', '힘이 이어지는 방향을 따라가요.'],
-      'multi-breakout-confirmation-v2': ['돌파 확인', '가격이 범위를 벗어난 뒤 확인하고 따라가요.'],
-      'multi-range-reversion-v2': ['구간 회귀', '과하게 움직인 가격이 범위로 돌아오는 흐름을 봐요.'],
-      'multi-ofi-continuation-v2': ['체결 흐름', '매수와 매도 체결의 쏠림이 이어지는지 봐요.'],
-      'multi-overreaction-fade-v2': ['과민 반응 역추세', '군중의 과한 반응이 되돌아오는 구간을 찾아요.'],
-      'multi-consensus-conservative-v2': ['보수적 합의', '여러 신호가 같은 방향일 때만 움직여요.'],
+      'multi-trend-persistence-v3': ['추세 지속', '힘이 이어지는 방향을 따라가요.'],
+      'multi-breakout-confirmation-v3': ['돌파 확인', '가격이 범위를 벗어난 뒤 확인하고 따라가요.'],
+      'multi-range-reversion-v3': ['구간 회귀', '과하게 움직인 가격이 범위로 돌아오는 흐름을 봐요.'],
+      'multi-ofi-continuation-v3': ['체결 흐름', '매수와 매도 체결의 쏠림이 이어지는지 봐요.'],
+      'multi-overreaction-fade-v3': ['과민 반응 역추세', '군중의 과한 반응이 되돌아오는 구간을 찾아요.'],
+      'multi-consensus-conservative-v3': ['보수적 합의', '여러 신호가 같은 방향일 때만 움직여요.'],
     };
     return presentations[strategyId] || [fallback || strategyId, '고정된 규칙으로 공개 시장 데이터를 관찰해요.'];
   }
@@ -839,7 +839,7 @@
   }
 
   function syncStopButton(experiment) {
-    const canStop = experiment?.schema === 'multi-paper-experiment-v2'
+    const canStop = experiment?.schema === 'multi-paper-experiment-v3'
       && experiment.run_mode === 'until-stopped' && ['starting', 'active'].includes(experiment.status);
     elements.stopPaper.hidden = !canStop;
     elements.stopPaper.disabled = !canStop || state.stopSubmitting || state.stopRequested;
@@ -991,7 +991,7 @@
 
   async function requestPaperStop() {
     const experiment = state.experiment;
-    if (state.stopSubmitting || state.stopRequested || experiment?.schema !== 'multi-paper-experiment-v2'
+    if (state.stopSubmitting || state.stopRequested || experiment?.schema !== 'multi-paper-experiment-v3'
       || experiment.run_mode !== 'until-stopped' || !['starting', 'active'].includes(experiment.status)) return;
     state.stopSubmitting = true;
     syncStopButton(experiment);

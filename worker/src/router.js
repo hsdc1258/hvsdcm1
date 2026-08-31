@@ -39,7 +39,7 @@ export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
 export const BEHAVIOR_ABC_EXPERIMENT_ID = 'abc-paper-20260831';
 export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_ABC_EXPERIMENT_ID}`;
-export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260831-v2';
+export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260901-v3';
 export const BEHAVIOR_MULTI_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 export const BEHAVIOR_MULTI_CONTROL_SOURCE = `behavior-paper-control:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 const ABC_ARM_IDS = ['A', 'B', 'C'];
@@ -53,41 +53,41 @@ const MULTI_ARM_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const MULTI_FEE_RATE = 6 / 10_000;
 const MULTI_ADVERSE_SLIPPAGE_RATE = 4 / 10_000;
 const MULTI_STRATEGIES = {
-  A: { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
-    definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1', style: 'trend-continuation',
-    allowed_regimes: ['trend-up', 'trend-down'], required_features: ['trendMomentum', 'orderFlow'],
-    minimum_feature_agreement: 3, min_persistence_seconds: 4, entry_threshold: .34,
+  A: { id: 'multi-trend-persistence-v3', label: 'Trend persistence',
+    definition_hash: '61b98082823a210087ace1472883fe18a8f6f8268dec9f53e76b3b3b72ad8ae4', style: 'trend-continuation',
+    allowed_regimes: ['trend-up', 'trend-down'], required_features: ['trendMomentum'],
+    minimum_feature_agreement: 2, min_persistence_seconds: 3, entry_threshold: .28,
     max_spread_bps: 4, min_target_bps: 32, min_net_reward_risk: 1.25, cooldown_minutes: 10,
     opposite_confirmations: 2 },
-  B: { id: 'multi-breakout-confirmation-v2', label: 'Breakout confirmation',
-    definition_hash: 'f9007a599040a6ba220231e34b4c801e5189e3a7cc70bbe3d061e53e8c76e635', style: 'breakout-confirmation',
-    allowed_regimes: ['trend-up', 'trend-down'], required_features: ['breakout', 'orderFlow'],
-    minimum_feature_agreement: 3, min_persistence_seconds: 4, entry_threshold: .36,
-    max_spread_bps: 3.5, min_target_bps: 35, min_net_reward_risk: 1.3, cooldown_minutes: 10,
+  B: { id: 'multi-breakout-confirmation-v3', label: 'Breakout confirmation',
+    definition_hash: '8873352d336b081916e70bae1ee83e22bbc3e369f8592d7063b0f5131b7aaee7', style: 'breakout-confirmation',
+    allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: ['breakout'],
+    minimum_feature_agreement: 2, min_persistence_seconds: 3, entry_threshold: .28,
+    max_spread_bps: 3.5, min_target_bps: 35, min_net_reward_risk: 1.25, cooldown_minutes: 10,
     opposite_confirmations: 2 },
-  C: { id: 'multi-range-reversion-v2', label: 'Range reversion',
-    definition_hash: '638712041d66469b7ff7785f85e0b67e809c61a1ce582299ed373f425c51aacc', style: 'range-reversion',
+  C: { id: 'multi-range-reversion-v3', label: 'Range reversion',
+    definition_hash: 'db16839b63dcd67f00bae7e134842530a83a4deed823cfbd8ae800d189f95edd', style: 'range-reversion',
     allowed_regimes: ['range'], required_features: ['meanReversion'], minimum_feature_agreement: 2,
     min_persistence_seconds: 4, entry_threshold: .34, max_spread_bps: 4, min_target_bps: 32,
     min_net_reward_risk: 1.2, cooldown_minutes: 10, opposite_confirmations: 2 },
-  D: { id: 'multi-ofi-continuation-v2', label: 'Order-flow continuation',
-    definition_hash: '3cfd6c22d0982e411bcbb95aff9323e861a9056877e916f83fb07d7d3c6e99e4', style: 'order-flow-continuation',
+  D: { id: 'multi-ofi-continuation-v3', label: 'Order-flow continuation',
+    definition_hash: '35df86229264db1e3ae426e80205384103af9fa1226e0c7a78c1af5244512e0e', style: 'order-flow-continuation',
     allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: ['orderFlow'],
     minimum_feature_agreement: 2, min_persistence_seconds: 5, entry_threshold: .4,
-    max_spread_bps: 3, min_target_bps: 36, min_net_reward_risk: 1.35, cooldown_minutes: 10,
+    max_spread_bps: 3, min_target_bps: 36, min_net_reward_risk: 1.25, cooldown_minutes: 10,
     opposite_confirmations: 2 },
-  E: { id: 'multi-overreaction-fade-v2', label: 'Range overreaction fade',
-    definition_hash: 'bbd73cbf1bf42f4bf9f35d5b60991e54c1c06276512202e25688b2507157ff3c', style: 'overreaction-fade',
+  E: { id: 'multi-overreaction-fade-v3', label: 'Range overreaction fade',
+    definition_hash: 'd1173d71fe7a07e8b95e5bc84e3bbc9cdeb2de63aa0f0529c773d5b0acd8b65e', style: 'overreaction-fade',
     allowed_regimes: ['range'], required_features: ['meanReversion'], minimum_feature_agreement: 2,
     min_persistence_seconds: 4, entry_threshold: .42, max_spread_bps: 3.5, min_target_bps: 34,
-    min_net_reward_risk: 1.4, cooldown_minutes: 12, opposite_confirmations: 2 },
-  F: { id: 'multi-consensus-conservative-v2', label: 'Conservative consensus',
-    definition_hash: 'a8280bb5356c1c7b780b90668878f69750b214724d210b17d608eb0fa85dd5bd', style: 'multi-factor-consensus',
-    allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: [], minimum_feature_agreement: 3,
-    min_persistence_seconds: 5, entry_threshold: .44, max_spread_bps: 3, min_target_bps: 38,
-    min_net_reward_risk: 1.5, cooldown_minutes: 15, opposite_confirmations: 3 },
+    min_net_reward_risk: 1.25, cooldown_minutes: 12, opposite_confirmations: 2 },
+  F: { id: 'multi-consensus-conservative-v3', label: 'Conservative consensus',
+    definition_hash: '9adcbd0ffed74e9d26bbc971b8c66a5f4cb3113bc1236b68a690e5856d9c109b', style: 'multi-factor-consensus',
+    allowed_regimes: ['trend-up', 'trend-down', 'range'], required_features: [], minimum_feature_agreement: 2,
+    min_persistence_seconds: 4, entry_threshold: .34, max_spread_bps: 3, min_target_bps: 38,
+    min_net_reward_risk: 1.3, cooldown_minutes: 15, opposite_confirmations: 3 },
 };
-const MULTI_STRATEGY_SET_HASH = '26c95bb151fcca3cc3a869e4e6a3e8f47ad31eef5d2b75702fa1b698b9390941';
+const MULTI_STRATEGY_SET_HASH = 'e8c8095f59bab11d6a6c1060c6278fa37af07a2101073391eaa2bec405c671ac';
 const VALID_ABC_EVENT_TYPES = new Set([
   'arm-started', 'decision', 'position-opened', 'position-marked', 'position-closed', 'arm-terminal', 'arm-error',
 ]);
@@ -2000,7 +2000,7 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
     'deadline_at', 'status', 'strategy_set_hash', 'shared_feed', 'assumptions', 'leaderboard', 'arms', 'limitations'];
   const continuousKeys = [...fixedKeys, 'run_mode', 'stopped_at'];
   const continuous = input?.run_mode === 'until-stopped';
-  if (!exactPaperKeys(input, continuous ? continuousKeys : fixedKeys) || input.schema !== 'multi-paper-experiment-v2'
+  if (!exactPaperKeys(input, continuous ? continuousKeys : fixedKeys) || input.schema !== 'multi-paper-experiment-v3'
     || input.experiment_id !== BEHAVIOR_MULTI_EXPERIMENT_ID || input.simulation !== true
     || input.public_data_only !== true || input.strategy_set_hash !== MULTI_STRATEGY_SET_HASH) return null;
   const generatedAt = normalizePaperTimestamp(input.generated_at);
@@ -2054,7 +2054,7 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
   });
   const limitations = normalizePaperLimitations(input.limitations);
   if (leaderboard.some((row) => !row) || !limitations) return null;
-  return { schema: 'multi-paper-experiment-v2', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
+  return { schema: 'multi-paper-experiment-v3', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
     simulation: true, public_data_only: true, generated_at: generatedAt, started_at: startedAt,
     ...(continuous ? { run_mode: 'until-stopped', deadline_at: null, stopped_at: stoppedAt }
       : { deadline_at: deadlineAt }), status, strategy_set_hash: MULTI_STRATEGY_SET_HASH,
@@ -2106,7 +2106,7 @@ async function reportBehaviorPaper(request, env) {
   }
   const body = await readBehaviorPaperJson(request);
   if (body.error) return body.error;
-  if (body.value?.schema === 'multi-paper-experiment-v2') return reportBehaviorMultiPaperExperiment(body.value, body.size, env);
+  if (body.value?.schema === 'multi-paper-experiment-v3') return reportBehaviorMultiPaperExperiment(body.value, body.size, env);
   if (body.value?.schema === 'abc-paper-experiment-v1') {
     if (body.size > MAX_BEHAVIOR_PAPER_BYTES) return json({ error: '모의투자 보고가 너무 큽니다.' }, 413);
     return reportBehaviorPaperExperiment(body.value, env);

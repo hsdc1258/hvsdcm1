@@ -12,29 +12,29 @@ import {
 } from './src/router.js';
 
 const HASHES = ['a', 'b', 'c', 'd', 'e', 'f', '9'].map((letter) => letter.repeat(64));
-const SET_HASH = '26c95bb151fcca3cc3a869e4e6a3e8f47ad31eef5d2b75702fa1b698b9390941';
+const SET_HASH = 'e8c8095f59bab11d6a6c1060c6278fa37af07a2101073391eaa2bec405c671ac';
 const FEE_RATE = 6 / 10_000;
 const ADVERSE_SLIPPAGE_RATE = 4 / 10_000;
 const OWNER_SESSION_HASH = createHash('sha256').update('owner-session').digest('hex');
 const STRATEGIES = [
-  { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
-    definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1',
-    policy: ['trend-continuation', ['trend-up', 'trend-down'], ['trendMomentum', 'orderFlow'], 3, 4, .34, 4, 32, 1.25, 10, 2] },
-  { id: 'multi-breakout-confirmation-v2', label: 'Breakout confirmation',
-    definition_hash: 'f9007a599040a6ba220231e34b4c801e5189e3a7cc70bbe3d061e53e8c76e635',
-    policy: ['breakout-confirmation', ['trend-up', 'trend-down'], ['breakout', 'orderFlow'], 3, 4, .36, 3.5, 35, 1.3, 10, 2] },
-  { id: 'multi-range-reversion-v2', label: 'Range reversion',
-    definition_hash: '638712041d66469b7ff7785f85e0b67e809c61a1ce582299ed373f425c51aacc',
+  { id: 'multi-trend-persistence-v3', label: 'Trend persistence',
+    definition_hash: '61b98082823a210087ace1472883fe18a8f6f8268dec9f53e76b3b3b72ad8ae4',
+    policy: ['trend-continuation', ['trend-up', 'trend-down'], ['trendMomentum'], 2, 3, .28, 4, 32, 1.25, 10, 2] },
+  { id: 'multi-breakout-confirmation-v3', label: 'Breakout confirmation',
+    definition_hash: '8873352d336b081916e70bae1ee83e22bbc3e369f8592d7063b0f5131b7aaee7',
+    policy: ['breakout-confirmation', ['trend-up', 'trend-down', 'range'], ['breakout'], 2, 3, .28, 3.5, 35, 1.25, 10, 2] },
+  { id: 'multi-range-reversion-v3', label: 'Range reversion',
+    definition_hash: 'db16839b63dcd67f00bae7e134842530a83a4deed823cfbd8ae800d189f95edd',
     policy: ['range-reversion', ['range'], ['meanReversion'], 2, 4, .34, 4, 32, 1.2, 10, 2] },
-  { id: 'multi-ofi-continuation-v2', label: 'Order-flow continuation',
-    definition_hash: '3cfd6c22d0982e411bcbb95aff9323e861a9056877e916f83fb07d7d3c6e99e4',
-    policy: ['order-flow-continuation', ['trend-up', 'trend-down', 'range'], ['orderFlow'], 2, 5, .4, 3, 36, 1.35, 10, 2] },
-  { id: 'multi-overreaction-fade-v2', label: 'Range overreaction fade',
-    definition_hash: 'bbd73cbf1bf42f4bf9f35d5b60991e54c1c06276512202e25688b2507157ff3c',
-    policy: ['overreaction-fade', ['range'], ['meanReversion'], 2, 4, .42, 3.5, 34, 1.4, 12, 2] },
-  { id: 'multi-consensus-conservative-v2', label: 'Conservative consensus',
-    definition_hash: 'a8280bb5356c1c7b780b90668878f69750b214724d210b17d608eb0fa85dd5bd',
-    policy: ['multi-factor-consensus', ['trend-up', 'trend-down', 'range'], [], 3, 5, .44, 3, 38, 1.5, 15, 3] },
+  { id: 'multi-ofi-continuation-v3', label: 'Order-flow continuation',
+    definition_hash: '35df86229264db1e3ae426e80205384103af9fa1226e0c7a78c1af5244512e0e',
+    policy: ['order-flow-continuation', ['trend-up', 'trend-down', 'range'], ['orderFlow'], 2, 5, .4, 3, 36, 1.25, 10, 2] },
+  { id: 'multi-overreaction-fade-v3', label: 'Range overreaction fade',
+    definition_hash: 'd1173d71fe7a07e8b95e5bc84e3bbc9cdeb2de63aa0f0529c773d5b0acd8b65e',
+    policy: ['overreaction-fade', ['range'], ['meanReversion'], 2, 4, .42, 3.5, 34, 1.25, 12, 2] },
+  { id: 'multi-consensus-conservative-v3', label: 'Conservative consensus',
+    definition_hash: '9adcbd0ffed74e9d26bbc971b8c66a5f4cb3113bc1236b68a690e5856d9c109b',
+    policy: ['multi-factor-consensus', ['trend-up', 'trend-down', 'range'], [], 2, 4, .34, 3, 38, 1.3, 15, 3] },
 ];
 
 const policyObject = ([style, allowed_regimes, required_features, minimum_feature_agreement,
@@ -81,7 +81,7 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
     const logs = Array.from({ length: maximal ? 30 : 2 }, (_, log) => ({ sequence: log + 1,
       at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + log * 1_000).toISOString(),
       type: log ? 'decision' : 'arm-started',
-      message: maximal ? safe240 : 'Fixed v2 event.' }));
+      message: maximal ? safe240 : 'Fixed v3 event.' }));
     return { arm_id: armId, strategy: { id: strategy.id, label: strategy.label,
       definition_hash: strategy.definition_hash, policy: policyObject(strategy.policy) },
     risk: { risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10, max_hold_minutes: 45,
@@ -99,7 +99,7 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
     last_cycle_at: '2026-08-31T00:01:20.000Z' };
   });
   const generatedAt = status === 'complete' ? '2026-08-31T00:02:00.000Z' : '2026-08-31T00:02:00.000Z';
-  return { schema: 'multi-paper-experiment-v2', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
+  return { schema: 'multi-paper-experiment-v3', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
     simulation: true, public_data_only: true, generated_at: '2026-08-31T00:02:00.000Z',
     started_at: '2026-08-31T00:00:00.000Z', run_mode: 'until-stopped', deadline_at: null,
     stopped_at: status === 'complete' ? generatedAt : null, status,

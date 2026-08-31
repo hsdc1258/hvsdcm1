@@ -46,8 +46,8 @@ function paperReport(sequence, equity, adaptive = adaptiveReport()) {
 }
 
 function multiExperiment(sequence = 10, status = 'active') {
-  const ids = ['multi-trend-persistence-v2', 'multi-breakout-confirmation-v2', 'multi-range-reversion-v2',
-    'multi-ofi-continuation-v2', 'multi-overreaction-fade-v2', 'multi-consensus-conservative-v2'];
+  const ids = ['multi-trend-persistence-v3', 'multi-breakout-confirmation-v3', 'multi-range-reversion-v3',
+    'multi-ofi-continuation-v3', 'multi-overreaction-fade-v3', 'multi-consensus-conservative-v3'];
   const labels = ['Trend persistence', 'Breakout confirmation', 'Range reversion',
     'Order-flow continuation', 'Range overreaction fade', 'Conservative consensus'];
   const hashes = [HASH_A, HASH_B, HASH_C, HASH_D, HASH_E, HASH_F];
@@ -94,7 +94,7 @@ function multiExperiment(sequence = 10, status = 'active') {
       message: 'Newest paper cycle.' }],
     last_cycle_at: '2026-08-31T00:01:00.000Z',
   }));
-  return { schema: 'multi-paper-experiment-v2', experiment_id: 'multi-paper-20260831-v2', simulation: true,
+  return { schema: 'multi-paper-experiment-v3', experiment_id: 'multi-paper-20260901-v3', simulation: true,
     public_data_only: true, generated_at: '2026-08-31T00:01:01.000Z', started_at: '2026-08-31T00:00:00.000Z',
     run_mode: 'until-stopped', deadline_at: null, stopped_at: null, status, strategy_set_hash: HASH_A,
     shared_feed: { sequence, hash: HASH_A,
@@ -123,7 +123,7 @@ function browserHarness(responses) {
     }
     if (String(url).endsWith('/api/behavior-lab/paper/stop') && options.method === 'POST') {
       window.__paperStopRequests.push(JSON.parse(options.body));
-      return new Response(JSON.stringify({ ok: true, experiment_id: 'multi-paper-20260831-v2',
+      return new Response(JSON.stringify({ ok: true, experiment_id: 'multi-paper-20260901-v3',
         stop_requested: true, stop_requested_at: '2026-08-31T00:03:00.000Z' }), {
         status: 202, headers: { 'content-type': 'application/json' },
       });
@@ -131,7 +131,7 @@ function browserHarness(responses) {
     window.__paperFetchCount += 1;
     const entry = window.__paperResponses.shift() || { status: 500, error: 'fixture exhausted' };
     const response = () => new Response(JSON.stringify(entry.status === 200 ? { report: entry.report,
-      experiment: entry.experiment, control: entry.control || { experiment_id: 'multi-paper-20260831-v2',
+      experiment: entry.experiment, control: entry.control || { experiment_id: 'multi-paper-20260901-v3',
         stop_requested: false, stop_requested_at: null } } : { error: entry.error || 'scripted error' }), {
       status: entry.status, headers: { 'content-type': 'application/json' },
     });
@@ -186,7 +186,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v11',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v12',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -316,7 +316,7 @@ try {
       && document.getElementById('stopPaper').disabled
       && document.getElementById('stopPaper').textContent.includes('중단 요청됨'));
     assert.deepEqual(await page.evaluate(() => window.__paperStopRequests), [
-      { experiment_id: 'multi-paper-20260831-v2' },
+      { experiment_id: 'multi-paper-20260901-v3' },
     ]);
     assert.match(await page.locator('#stopPaper').textContent(), /중단 요청됨/u);
     await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = false; });
