@@ -10,20 +10,10 @@
   const core = window.BehaviorLabCore;
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, paper: null, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
+    ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
   };
 
   const elements = {
-    adaptiveAudit: document.getElementById('adaptiveAudit'),
-    adaptiveAuditRef: document.getElementById('adaptiveAuditRef'),
-    adaptiveCadence: document.getElementById('adaptiveCadence'),
-    adaptiveChallengersBody: document.getElementById('adaptiveChallengersBody'),
-    adaptiveChampion: document.getElementById('adaptiveChampion'),
-    adaptiveLastPacket: document.getElementById('adaptiveLastPacket'),
-    adaptivePromotion: document.getElementById('adaptivePromotion'),
-    adaptivePromotionReasons: document.getElementById('adaptivePromotionReasons'),
-    adaptiveStream: document.getElementById('adaptiveStream'),
-    adaptiveUpgraded: document.getElementById('adaptiveUpgraded'),
     backtestChronology: document.getElementById('backtestChronology'),
     backtestEmpty: document.getElementById('backtestEmpty'),
     backtestResult: document.getElementById('backtestResult'),
@@ -70,32 +60,13 @@
     ownerGateMessage: document.getElementById('ownerGateMessage'),
     ownerGateTitle: document.getElementById('ownerGateTitle'),
     ownerLoginLink: document.getElementById('ownerLoginLink'),
-    paperCash: document.getElementById('paperCash'),
-    paperCostDetail: document.getElementById('paperCostDetail'),
-    paperCosts: document.getElementById('paperCosts'),
-    paperDeadline: document.getElementById('paperDeadline'),
-    paperDrawdown: document.getElementById('paperDrawdown'),
     paperEmpty: document.getElementById('paperEmpty'),
-    paperEquity: document.getElementById('paperEquity'),
     paperError: document.getElementById('paperError'),
     paperErrorText: document.getElementById('paperErrorText'),
     paperExperiment: document.getElementById('paperExperiment'),
-    paperLastCycle: document.getElementById('paperLastCycle'),
-    paperLimitations: document.getElementById('paperLimitations'),
-    paperLogs: document.getElementById('paperLogs'),
-    paperNetPnl: document.getElementById('paperNetPnl'),
-    paperAdaptive: document.getElementById('paperAdaptive'),
-    paperPosition: document.getElementById('paperPosition'),
-    paperRecord: document.getElementById('paperRecord'),
-    paperReport: document.getElementById('paperReport'),
-    paperReturn: document.getElementById('paperReturn'),
-    paperSequence: document.getElementById('paperSequence'),
     paperStatus: document.getElementById('paperStatus'),
     paperTab: document.getElementById('paperTab'),
     paperTabPanel: document.getElementById('paperTabPanel'),
-    paperTrades: document.getElementById('paperTrades'),
-    paperTradesBody: document.getElementById('paperTradesBody'),
-    paperUnrealized: document.getElementById('paperUnrealized'),
     priceLine: document.getElementById('priceLine'),
     refreshPaper: document.getElementById('refreshPaper'),
     retryDashboard: document.getElementById('retryDashboard'),
@@ -487,13 +458,10 @@
     state.paperController = null;
     state.paperLoading = false;
     state.ownerVerified = false;
-    state.paper = null;
     state.experiment = null;
-    elements.paperReport.hidden = true;
     elements.paperExperiment.hidden = true;
-    elements.paperReport.dataset.freshness = 'stale';
-    elements.paperReport.setAttribute('aria-busy', 'false');
-    elements.paperAdaptive.hidden = true;
+    elements.paperExperiment.dataset.freshness = 'stale';
+    elements.paperExperiment.setAttribute('aria-busy', 'false');
     elements.paperEmpty.hidden = true;
     elements.paperError.hidden = true;
     elements.refreshPaper.disabled = false;
@@ -561,67 +529,15 @@
     return row;
   }
 
-  function renderPaperPosition(position) {
-    if (!position) {
-      elements.paperPosition.replaceChildren(detailCell('상태', '열린 포지션 없음'));
-      return;
-    }
-    const labels = {
-      symbol: '심볼', direction: '방향', side: '방향', entry_price: '진입가', mark_price: '현재가',
-      current_price: '현재가', quantity: '수량', notional: '명목가치', leverage: '레버리지',
-      stop_price: '손절가', target_price: '목표가', opened_at: '진입 시각', bars_held: '보유 봉',
-      unrealized_pnl: '미실현 손익',
-    };
-    const rows = Object.entries(position).slice(0, 16).map(([key, value]) => detailCell(labels[key] || key, value));
-    elements.paperPosition.replaceChildren(...rows);
-  }
-
-  function tradeField(trade, ...keys) {
-    for (const key of keys) if (trade[key] !== undefined && trade[key] !== null) return trade[key];
-    return null;
-  }
-
-  function renderPaperTrades(trades) {
-    if (!trades.length) {
-      const cell = document.createElement('td');
-      cell.colSpan = 5;
-      cell.textContent = '아직 종료된 거래가 없습니다.';
-      const row = document.createElement('tr');
-      row.append(cell);
-      elements.paperTradesBody.replaceChildren(row);
-      return;
-    }
-    const rows = trades.map((trade) => {
-      const row = document.createElement('tr');
-      const entry = tradeField(trade, 'entry_price', 'entry');
-      const exit = tradeField(trade, 'exit_price', 'exit');
-      const values = [
-        tradeField(trade, 'symbol') || '—',
-        tradeField(trade, 'direction', 'side') || '—',
-        `${paperValue(entry)} → ${paperValue(exit)}`,
-        formatUsdt(tradeField(trade, 'net_pnl', 'pnl'), true),
-        tradeField(trade, 'exit_reason', 'reason') || '—',
-      ];
-      row.replaceChildren(...values.map((value) => createText('td', '', value)));
-      return row;
-    });
-    elements.paperTradesBody.replaceChildren(...rows);
-  }
-
-  function renderPaperLogs(logs) {
-    const rows = logs.length ? logs.map((log) => {
-      const row = document.createElement('li');
-      const at = log.at ?? log.timestamp ?? log.generated_at ?? '';
-      const message = log.message ?? log.event ?? log.type ?? JSON.stringify(log);
-      if (at) row.append(createText('time', '', formatKoreanTime(at)));
-      row.append(createText('span', '', String(message || '기록')));
-      return row;
-    }) : [createText('li', '', '아직 로그가 없습니다.')];
-    elements.paperLogs.replaceChildren(...rows);
-  }
-
   function validExperimentReport(experiment) {
     const hash = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
+    const validCurve = (curve, chainSequence, equity) => Array.isArray(curve) && curve.length <= 64
+      && curve.every((point, index) => Number.isInteger(point.sequence) && point.sequence > 0
+        && point.sequence <= chainSequence && Number.isFinite(Date.parse(point.at))
+        && finite(point.equity) && finite(point.net_pnl) && Math.abs(point.net_pnl - (point.equity - 100)) <= 1e-6
+        && (index === 0 || (point.sequence > curve[index - 1].sequence
+          && Date.parse(point.at) > Date.parse(curve[index - 1].at))))
+      && (!curve.length || (curve.at(-1).sequence === chainSequence && Math.abs(curve.at(-1).equity - equity) <= 1e-6));
     const armIds = ['A', 'B', 'C'];
     const strategyIds = ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'];
     const started = Date.parse(experiment?.started_at);
@@ -643,7 +559,8 @@
         && finite(arm.max_drawdown_pct) && finite(arm.fees) && finite(arm.slippage_cost)
         && Number.isInteger(arm.trade_count) && Array.isArray(arm.recent_trades) && arm.recent_trades.length <= 25
         && Array.isArray(arm.recent_decisions) && arm.recent_decisions.length <= 20
-        && Array.isArray(arm.recent_logs) && arm.recent_logs.length <= 30)
+        && Array.isArray(arm.recent_logs) && arm.recent_logs.length <= 30
+        && validCurve(arm.equity_curve || [], arm.chain.sequence, arm.equity))
       && Array.isArray(experiment.limitations));
   }
 
@@ -652,6 +569,62 @@
     list.className = 'paper-logs abc-list';
     list.replaceChildren(...(items.length ? items.map(renderer) : [createText('li', '', emptyText)]));
     return list;
+  }
+
+  function renderEquityChart(arm) {
+    const figure = document.createElement('figure');
+    figure.className = 'abc-equity-chart';
+    const curve = arm.equity_curve || [];
+    const titleId = `abc-chart-title-${arm.arm_id}`;
+    const descriptionId = `abc-chart-description-${arm.arm_id}`;
+    const title = createText('figcaption', '', `${arm.arm_id} 자산 곡선`);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 640 220');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-labelledby', `${titleId} ${descriptionId}`);
+    svg.dataset.pointCount = String(curve.length);
+    const svgTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    svgTitle.id = titleId;
+    svgTitle.textContent = `${arm.arm_id} 자산 곡선`;
+    const description = document.createElementNS('http://www.w3.org/2000/svg', 'desc');
+    description.id = descriptionId;
+    description.textContent = curve.length
+      ? `${curve.length}개 지점, 시작 ${formatUsdt(curve[0].equity)}, 현재 ${formatUsdt(curve.at(-1).equity)}`
+      : '새 엔진 보고가 도착하면 자산 곡선을 표시합니다.';
+    svg.append(svgTitle, description);
+    for (const y of [20, 110, 200]) {
+      const grid = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      grid.setAttribute('x1', '16'); grid.setAttribute('x2', '624'); grid.setAttribute('y1', String(y)); grid.setAttribute('y2', String(y));
+      grid.setAttribute('class', 'abc-chart-grid');
+      svg.append(grid);
+    }
+    const values = curve.map((point) => point.equity);
+    const low = Math.min(100, ...values);
+    const high = Math.max(100, ...values);
+    const span = Math.max(high - low, .01);
+    const firstAt = curve.length ? Date.parse(curve[0].at) : 0;
+    const duration = curve.length > 1 ? Date.parse(curve.at(-1).at) - firstAt : 0;
+    const pointText = curve.map((point) => {
+      const x = duration > 0 ? 16 + (Date.parse(point.at) - firstAt) / duration * 608 : 320;
+      const y = 200 - (point.equity - low) / span * 180;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+    if (pointText) {
+      const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const baselineY = 200 - (100 - low) / span * 180;
+      baseline.setAttribute('x1', '16'); baseline.setAttribute('x2', '624');
+      baseline.setAttribute('y1', String(baselineY)); baseline.setAttribute('y2', String(baselineY));
+      baseline.setAttribute('class', 'abc-chart-baseline');
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute('points', pointText);
+      polyline.setAttribute('class', arm.net_pnl < 0 ? 'is-negative' : 'is-positive');
+      svg.append(baseline, polyline);
+    }
+    const range = createText('p', 'abc-chart-range', curve.length
+      ? `${formatKoreanTime(curve[0].at)} → ${formatKoreanTime(curve.at(-1).at)} · 저점 ${formatUsdt(low)} · 고점 ${formatUsdt(high)}`
+      : '곡선 데이터 대기 중');
+    figure.append(title, svg, range);
+    return figure;
   }
 
   function renderExperimentArm(arm) {
@@ -672,6 +645,7 @@
       detailCell('비용', `${formatUsdt(arm.fees + arm.slippage_cost)} · 수수료 ${formatUsdt(arm.fees)}`),
       detailCell('거래', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
     );
+    const chart = renderEquityChart(arm);
     const position = document.createElement('section');
     position.className = 'abc-arm-section';
     position.append(createText('h4', '', '현재 포지션'));
@@ -680,6 +654,16 @@
     if (!arm.open_position) positionGrid.append(detailCell('상태', '열린 포지션 없음'));
     else positionGrid.append(...Object.entries(arm.open_position).slice(0, 12).map(([key, value]) => detailCell(key, value)));
     position.append(positionGrid);
+    const trades = document.createElement('section');
+    trades.className = 'abc-arm-section';
+    trades.append(createText('h4', '', '최근 거래'));
+    trades.append(renderExperimentList(arm.recent_trades, '아직 종료 거래가 없습니다.', (trade) => {
+      const row = document.createElement('li');
+      row.append(createText('time', '', `${formatKoreanTime(trade.opened_at)} → ${formatKoreanTime(trade.closed_at)}`),
+        createText('span', '', `${trade.symbol} · ${trade.direction} · ${formatUsdt(trade.net_pnl, true)}`),
+        createText('small', '', `${trade.reason} · 비용 ${formatUsdt(trade.fees + trade.slippage_cost)}`));
+      return row;
+    }));
     const decisions = document.createElement('section');
     decisions.className = 'abc-arm-section';
     decisions.append(createText('h4', '', '최근 판단'));
@@ -700,14 +684,14 @@
       return row;
     }));
     const chain = createText('p', 'abc-chain', `arm chain #${arm.chain.sequence} · ${arm.chain.hash.slice(0, 16)}… · ${arm.strategy.definition_hash.slice(0, 12)}…`);
-    card.append(heading, metrics, position, decisions, logs, chain);
+    card.append(heading, chart, metrics, position, trades, decisions, logs, chain);
     return card;
   }
 
   function renderExperiment(experiment) {
     state.experiment = experiment;
-    const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행', complete: 'COMPLETE · 24h 종료', error: 'ERROR · 확인 필요' };
-    elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' || experiment.status === 'complete' ? 'is-live' : experiment.status === 'starting' ? 'is-connecting' : 'is-error'}`;
+    const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행' };
+    elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' ? 'is-live' : 'is-connecting'}`;
     elements.experimentStatus.textContent = labels[experiment.status];
     elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
     elements.experimentDeadline.textContent = formatKoreanTime(experiment.deadline_at);
@@ -726,149 +710,16 @@
     elements.paperExperiment.setAttribute('aria-busy', 'false');
   }
 
-  function validAdaptiveReport(adaptive) {
-    const hash = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
-    const strategy = (value, metrics = false) => Boolean(value
-      && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(value.id) && Number.isInteger(value.version) && value.version > 0
-      && hash(value.hash) && (!metrics || (Number.isInteger(value.trade_count) && value.trade_count >= 0
-        && finite(value.expectancy) && finite(value.max_drawdown_pct) && finite(value.cost_bps))));
-    const exactCadence = adaptive?.cadence?.regime === '5m' && adaptive.cadence.candidate === 'completed-1m'
-      && adaptive.cadence.risk === 'ticker-event' && adaptive.cadence.microstructure === '1s/3s-persistence'
-      && adaptive.cadence.weight_checkpoint === '15m' && adaptive.cadence.challenger_checkpoint === '24h-minimum';
-    const recent = adaptive?.audit?.recent;
-    return Boolean(adaptive && adaptive.engine_version === 'realtime-paper-v2' && adaptive.strategy_schema === 1
-      && exactCadence && Number.isFinite(Date.parse(adaptive.upgraded_at))
-      && ['connecting', 'live', 'stale', 'stopped', 'error'].includes(adaptive.stream?.status)
-      && (adaptive.stream.last_packet_at === null || Number.isFinite(Date.parse(adaptive.stream.last_packet_at)))
-      && Number.isInteger(adaptive.stream.reconnect_count) && adaptive.stream.reconnect_count >= 0
-      && adaptive.stream.credential_used === false && strategy(adaptive.champion)
-      && Array.isArray(adaptive.challengers) && adaptive.challengers.length <= 8
-      && adaptive.challengers.every((entry) => strategy(entry, true))
-      && ['collecting', 'held', 'promoted', 'rolled-back'].includes(adaptive.promotion?.status)
-      && Array.isArray(adaptive.promotion.reasons) && adaptive.promotion.reasons.length <= 12
-      && Number.isInteger(adaptive.audit?.sequence) && adaptive.audit.sequence >= 0
-      && (adaptive.audit.sequence === 0 ? adaptive.audit.hash === 'GENESIS' : hash(adaptive.audit.hash))
-      && Array.isArray(recent) && recent.length <= 20
-      && recent.every((entry) => Number.isInteger(entry.sequence) && entry.sequence > 0
-        && Number.isFinite(Date.parse(entry.at)) && typeof entry.kind === 'string'
-        && typeof entry.message === 'string' && hash(entry.hash)));
-  }
-
-  function renderAdaptiveReport(adaptive) {
-    if (!adaptive) {
-      elements.paperAdaptive.hidden = true;
-      return;
-    }
-    const streamLabels = {
-      connecting: 'CONNECTING · 공개 스트림 연결 중', live: 'LIVE · ticker 위험 평가 중',
-      stale: 'STALE · 신규 진입 차단', stopped: 'STOPPED · 스트림 종료', error: 'ERROR · 스트림 오류',
-    };
-    elements.adaptiveStream.className = `adaptive-stream is-${adaptive.stream.status}`;
-    elements.adaptiveStream.textContent = streamLabels[adaptive.stream.status];
-    elements.adaptiveCadence.textContent = '5분 체제 · 완성 1분 후보 · ticker 위험 · 1초/3초 지속';
-    elements.adaptiveUpgraded.textContent = formatKoreanTime(adaptive.upgraded_at);
-    elements.adaptiveAuditRef.textContent = `#${adaptive.audit.sequence} · ${adaptive.audit.hash.slice(0, 12)}…`;
-    elements.adaptiveLastPacket.textContent = adaptive.stream.last_packet_at
-      ? `${formatKoreanTime(adaptive.stream.last_packet_at)} · 재연결 ${adaptive.stream.reconnect_count}회`
-      : `아직 없음 · 재연결 ${adaptive.stream.reconnect_count}회`;
-    elements.adaptiveChampion.replaceChildren(
-      detailCell('전략', adaptive.champion.id),
-      detailCell('버전', `v${adaptive.champion.version}`),
-      detailCell('정의 hash', `${adaptive.champion.hash.slice(0, 16)}…`),
-    );
-
-    const promotionLabels = { collecting: '증거 수집 중', held: '현 챔피언 유지', promoted: '도전자 승격', 'rolled-back': '승격 롤백' };
-    const route = adaptive.promotion.from && adaptive.promotion.to
-      ? `${adaptive.promotion.from} → ${adaptive.promotion.to}` : '변경 없음';
-    elements.adaptivePromotion.replaceChildren(
-      detailCell('결정', promotionLabels[adaptive.promotion.status]),
-      detailCell('최근 checkpoint', adaptive.promotion.last_checkpoint_at),
-      detailCell('전환', route),
-    );
-    elements.adaptivePromotionReasons.replaceChildren(...adaptive.promotion.reasons.map((reason) => createText('li', '', reason)));
-
-    const challengerRows = adaptive.challengers.length ? adaptive.challengers.map((challenger) => {
-      const row = document.createElement('tr');
-      row.replaceChildren(
-        createText('td', '', `${challenger.id} · v${challenger.version}`),
-        createText('td', '', `${challenger.trade_count}회`),
-        createText('td', '', formatUsdt(challenger.expectancy, true)),
-        createText('td', '', formatPercent(challenger.max_drawdown_pct)),
-        createText('td', '', `${paperValue(challenger.cost_bps)} bps`),
-      );
-      return row;
-    }) : [(() => {
-      const row = document.createElement('tr');
-      const cell = createText('td', '', '등록된 shadow challenger가 없습니다.');
-      cell.colSpan = 5;
-      row.append(cell);
-      return row;
-    })()];
-    elements.adaptiveChallengersBody.replaceChildren(...challengerRows);
-
-    const auditRows = adaptive.audit.recent.length ? adaptive.audit.recent.map((entry) => {
-      const row = document.createElement('li');
-      row.append(
-        createText('time', '', formatKoreanTime(entry.at)),
-        createText('span', '', entry.message),
-        createText('small', '', `#${entry.sequence} · ${entry.kind} · ${entry.hash.slice(0, 12)}…`),
-      );
-      return row;
-    }) : [createText('li', '', '아직 감사 로그가 없습니다.')];
-    elements.adaptiveAudit.replaceChildren(...auditRows);
-    elements.paperAdaptive.hidden = false;
-  }
-
-  function validPaperReport(report) {
-    return Boolean(report && report.session_id === 'paper-20260831-100usd'
-      && report.simulation === true && report.deadline_at === '2026-08-30T23:00:00.000Z'
-      && ['starting', 'active', 'halted', 'complete', 'error'].includes(report.status)
-      && finite(report.equity) && finite(report.net_pnl) && finite(report.return_pct)
-      && Array.isArray(report.recent_trades) && report.recent_trades.length <= 25
-      && Array.isArray(report.recent_logs) && report.recent_logs.length <= 50
-      && Array.isArray(report.limitations)
-      && (report.adaptive === undefined || validAdaptiveReport(report.adaptive)));
-  }
-
-  function renderPaper(report) {
-    state.paper = report;
-    elements.paperReport.dataset.freshness = 'fresh';
-    elements.paperError.hidden = true;
-    paperStatus(report.status);
-    elements.paperDeadline.textContent = formatKoreanTime(report.deadline_at);
-    elements.paperLastCycle.textContent = formatKoreanTime(report.last_cycle_at);
-    elements.paperSequence.textContent = String(report.sequence);
-    elements.paperEquity.textContent = formatUsdt(report.equity);
-    elements.paperNetPnl.textContent = formatUsdt(report.net_pnl, true);
-    elements.paperNetPnl.className = report.net_pnl > 0 ? 'is-positive' : report.net_pnl < 0 ? 'is-negative' : '';
-    elements.paperReturn.textContent = formatPercent(report.return_pct, true);
-    elements.paperDrawdown.textContent = formatPercent(report.max_drawdown_pct);
-    elements.paperCosts.textContent = formatUsdt(report.fees + report.slippage_cost);
-    elements.paperCostDetail.textContent = `수수료 ${formatUsdt(report.fees)} · 슬리피지 ${formatUsdt(report.slippage_cost)}`;
-    elements.paperTrades.textContent = `${report.trade_count}회`;
-    elements.paperRecord.textContent = `${report.win_count}승 · ${report.loss_count}패`;
-    elements.paperCash.textContent = formatUsdt(report.cash);
-    elements.paperUnrealized.textContent = `미실현 ${formatUsdt(report.unrealized_pnl, true)} · 실현 ${formatUsdt(report.realized_pnl, true)}`;
-    renderPaperPosition(report.open_position);
-    renderPaperTrades(report.recent_trades);
-    renderPaperLogs(report.recent_logs);
-    renderAdaptiveReport(report.adaptive);
-    elements.paperLimitations.replaceChildren(...report.limitations.map((item) => createText('li', '', item)));
-    elements.paperEmpty.hidden = true;
-    elements.paperReport.hidden = false;
-    elements.paperReport.setAttribute('aria-busy', 'false');
-  }
-
   function markPaperRefreshError(error, timedOut = false) {
     const fallback = timedOut ? '모의투자 보고 요청 시간이 초과되었습니다.' : '모의투자 보고를 불러오지 못했습니다.';
     const message = timedOut ? fallback : error?.message || fallback;
-    const retained = Boolean((state.paper && !elements.paperReport.hidden) || (state.experiment && !elements.paperExperiment.hidden));
+    const retained = Boolean(state.experiment && !elements.paperExperiment.hidden);
     elements.paperErrorText.textContent = retained
       ? `${message} 업데이트하지 못했습니다. 이전 보고를 표시합니다.`
       : message;
     elements.paperError.hidden = false;
     if (retained) {
-      elements.paperReport.dataset.freshness = 'stale';
+      elements.paperExperiment.dataset.freshness = 'stale';
       paperStatus('stale');
     }
   }
@@ -880,7 +731,6 @@
     const controller = new AbortController();
     state.paperController = controller;
     state.paperLoading = true;
-    elements.paperReport.setAttribute('aria-busy', 'true');
     elements.paperExperiment.setAttribute('aria-busy', 'true');
     let timedOut = false;
     let timeoutId;
@@ -901,24 +751,22 @@
       if (response.status === 401 || response.status === 404) throw new OwnerAccessError(response.status);
       if (!response.ok) throw new Error(payload.error || '모의투자 보고를 불러오지 못했습니다.');
       if (verifyOwner) unlockOwnerShell();
-      if (!payload.report && !payload.experiment) {
-        state.paper = null; state.experiment = null;
+      const activeExperiment = payload.experiment && ['starting', 'active'].includes(payload.experiment.status)
+        ? payload.experiment : null;
+      if (!activeExperiment) {
+        state.experiment = null;
         paperStatus('starting');
-        elements.paperReport.hidden = true;
         elements.paperExperiment.hidden = true;
-        elements.paperAdaptive.hidden = true;
+        elements.experimentArms.replaceChildren();
+        elements.experimentLeaderboard.replaceChildren();
         elements.paperEmpty.hidden = false;
         elements.paperError.hidden = true;
         return;
       }
-      if (payload.report) {
-        if (!validPaperReport(payload.report)) throw new Error('검증되지 않은 모의투자 보고는 표시하지 않았습니다.');
-        renderPaper(payload.report);
-      } else { state.paper = null; elements.paperReport.hidden = true; elements.paperAdaptive.hidden = true; }
-      if (payload.experiment) {
-        if (!validExperimentReport(payload.experiment)) throw new Error('검증되지 않은 A/B/C 모의실험 보고는 표시하지 않았습니다.');
-        renderExperiment(payload.experiment);
-      } else { state.experiment = null; elements.paperExperiment.hidden = true; }
+      if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 A/B/C 모의실험 보고는 표시하지 않았습니다.');
+      renderExperiment(activeExperiment);
+      elements.paperExperiment.dataset.freshness = 'fresh';
+      elements.paperError.hidden = true;
       elements.paperEmpty.hidden = true;
     } catch (error) {
       if (requestId !== state.paperRequestId) return;
@@ -934,7 +782,6 @@
       if (requestId === state.paperRequestId) {
         state.paperLoading = false;
         state.paperController = null;
-        elements.paperReport.setAttribute('aria-busy', 'false');
         elements.paperExperiment.setAttribute('aria-busy', 'false');
         elements.refreshPaper.disabled = false;
       }

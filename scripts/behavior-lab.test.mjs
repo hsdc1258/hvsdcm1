@@ -114,20 +114,15 @@ test('published app bearer-gates dashboard and paper reads while retaining no ex
   assert.match(appSource, /function createDraft\(\)[\s\S]*createFreshManualDraft/u);
 });
 
-test('owner paper UI renders only a bounded adaptive v2 summary on a five-second refresh', () => {
-  assert.match(htmlSource, /id="paperAdaptive"[^>]*\bhidden\b/u);
-  assert.match(htmlSource, /id="adaptiveChallengersBody"/u);
-  assert.match(htmlSource, /id="adaptiveAudit"/u);
+test('owner paper UI removes the completed legacy session surface and keeps bounded refresh', () => {
+  assert.doesNotMatch(htmlSource, /id="paperReport"|id="paperAdaptive"|paper-20260831-100usd/u);
+  assert.doesNotMatch(htmlSource, /실시간 엔진 · 재귀 개선 감사|현재 포지션<\/h2>/u);
   assert.match(appSource, /PAPER_REFRESH_MS = 5_000/u);
-  assert.match(appSource, /function validAdaptiveReport\(adaptive\)/u);
-  assert.match(appSource, /engine_version === 'realtime-paper-v2'/u);
-  assert.match(appSource, /credential_used === false/u);
-  assert.match(appSource, /adaptive\.challengers\.length <= 8/u);
-  assert.match(appSource, /recent\.length <= 20/u);
-  assert.match(appSource, /renderAdaptiveReport\(report\.adaptive\)/u);
+  assert.doesNotMatch(appSource, /function renderPaper\(|renderPaper\(payload\.report\)|validAdaptiveReport/u);
+  assert.match(appSource, /\['starting', 'active'\]\.includes\(payload\.experiment\.status\)/u);
 });
 
-test('owner paper UI renders the strict simultaneous A/B/C experiment without replacing the legacy session', () => {
+test('owner paper UI renders three detailed, accessible time-scaled A/B/C curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);
@@ -135,6 +130,11 @@ test('owner paper UI renders the strict simultaneous A/B/C experiment without re
   assert.match(appSource, /deadline - started === 24 \* 60 \* 60_000/u);
   assert.match(appSource, /experiment\.shared_feed\.credential_used === false/u);
   assert.match(appSource, /experiment\.assumptions\.strategy_mutation === false/u);
-  assert.match(appSource, /renderExperiment\(payload\.experiment\)/u);
-  assert.match(appSource, /renderPaper\(payload\.report\)/u);
+  assert.match(appSource, /function renderEquityChart\(arm\)/u);
+  assert.match(appSource, /curve\.length <= 64/u);
+  assert.match(appSource, /Date\.parse\(point\.at\) - firstAt/u);
+  assert.match(appSource, /setAttribute\('role', 'img'\)/u);
+  assert.match(appSource, /'최근 거래'/u);
+  assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
+  assert.match(appSource, /renderExperiment\(activeExperiment\)/u);
 });

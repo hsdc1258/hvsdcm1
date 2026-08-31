@@ -14,6 +14,10 @@ export function experimentReport(overrides = {}) {
     chain: { sequence: 2, hash: HASHES[index] }, status: 'active', seed_equity: 100,
     equity: 100, cash: 100, realized_pnl: 0, unrealized_pnl: 0, net_pnl: 0, return_pct: 0,
     max_drawdown_pct: 0, fees: 0, slippage_cost: 0, trade_count: 0, win_count: 0, loss_count: 0,
+    equity_curve: [
+      { sequence: 1, at: '2026-08-31T00:00:00.000Z', equity: 100, net_pnl: 0 },
+      { sequence: 2, at: '2026-08-31T00:01:00.000Z', equity: 100, net_pnl: 0 },
+    ],
     open_position: null, recent_trades: [], recent_decisions: [{ symbol: 'BTCUSDT',
       signal_bar_at: '2026-08-31T00:00:00.000Z', observed_at: '2026-08-31T00:01:00.000Z',
       direction: index === 2 ? 'stand-aside' : 'long', score: index === 2 ? 0 : .3, confidence: index === 2 ? 0 : 42,
@@ -85,8 +89,32 @@ test('A/B/C report fixes one shared feed, three isolated accounts, exact costs, 
   assert.deepEqual(normalized.arms.map((arm) => arm.arm_id), ['A', 'B', 'C']);
   assert.equal(new Set(normalized.arms.map((arm) => arm.chain.hash)).size, 3);
   assert.ok(normalized.arms.every((arm) => arm.seed_equity === 100
-    && arm.recent_decisions[0].feed_hash === normalized.shared_feed.hash));
+    && arm.recent_decisions[0].feed_hash === normalized.shared_feed.hash
+    && arm.equity_curve.length === 2));
   assert.equal(normalized.assumptions.strategy_mutation, false);
+});
+
+test('A/B/C equity curves are optional for the stored rollout snapshot and otherwise strict, chronological, and bounded', () => {
+  const legacy = experimentReport();
+  for (const arm of legacy.arms) delete arm.equity_curve;
+  const normalizedLegacy = normalizeBehaviorPaperExperimentReport(legacy);
+  assert.ok(normalizedLegacy);
+  assert.deepEqual(normalizedLegacy.arms.map((arm) => arm.equity_curve), [[], [], []]);
+
+  const mutations = [
+    (report) => { report.arms[0].equity_curve.push({ sequence: 2, at: '2026-08-31T00:01:01.000Z', equity: 100, net_pnl: 0 }); },
+    (report) => { report.arms[0].equity_curve[1].at = report.arms[0].equity_curve[0].at; },
+    (report) => { report.arms[0].equity_curve[1].equity = 101; },
+    (report) => { report.arms[0].equity_curve = Array.from({ length: 65 }, (_, index) => ({
+      sequence: index + 1, at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + index * 1_000).toISOString(),
+      equity: 100, net_pnl: 0,
+    })); report.arms[0].chain.sequence = 65; report.shared_feed.sequence = 65; },
+  ];
+  for (const mutate of mutations) {
+    const report = experimentReport();
+    mutate(report);
+    assert.equal(normalizeBehaviorPaperExperimentReport(report), null);
+  }
 });
 
 test('A/B/C normalization fails closed on unknown, secret, private-route, mutation, and shared-feed drift', () => {
@@ -118,4 +146,31 @@ test('owner ingest stores A/B/C separately and ACKs an exact idempotent retry wh
   assert.equal(body.report, null);
   assert.equal(body.experiment.experiment_id, BEHAVIOR_ABC_EXPERIMENT_ID);
   assert.equal(body.experiment.shared_feed.credential_used, false);
+});
+
+test('paper ingest keeps the expanded curve payload behind a finite 96 KB request ceiling', async () => {
+  const measuredActivePrecurveBytes = 61_451;
+  const withoutCurves = experimentReport();
+  for (const arm of withoutCurves.arms) delete arm.equity_curve;
+  const maximumCurves = experimentReport();
+  maximumCurves.shared_feed.sequence = 64;
+  for (const arm of maximumCurves.arms) {
+    arm.chain.sequence = 64;
+    arm.equity_curve = Array.from({ length: 64 }, (_, index) => {
+      const equity = index === 63 ? arm.equity : 100 + Math.sin(index) * 3.123456789;
+      return { sequence: index + 1,
+        at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + index * 900).toISOString(),
+        equity, net_pnl: equity - 100 };
+    });
+  }
+  assert.ok(normalizeBehaviorPaperExperimentReport(maximumCurves));
+  const curveBytes = Buffer.byteLength(JSON.stringify(maximumCurves)) - Buffer.byteLength(JSON.stringify(withoutCurves));
+  assert.ok(measuredActivePrecurveBytes + curveBytes < 96_000,
+    `measured baseline plus maximum curves must fit: ${measuredActivePrecurveBytes} + ${curveBytes}`);
+
+  const db = experimentDb(); const env = envFor(db);
+  const response = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/report', { method: 'POST',
+    headers: { authorization: 'Bearer paper-secret', 'content-type': 'application/json' },
+    body: JSON.stringify({ padding: 'x'.repeat(96_000) }) }), env);
+  assert.equal(response.status, 413);
 });

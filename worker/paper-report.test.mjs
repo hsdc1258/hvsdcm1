@@ -358,7 +358,7 @@ test('paper ingest requires its dedicated bearer and advances paper or same-sess
   const oversized = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/report', {
     method: 'POST',
     headers: { authorization: 'Bearer paper-secret', 'content-type': 'application/json' },
-    body: JSON.stringify({ padding: 'x'.repeat(70_000) }),
+    body: JSON.stringify({ padding: 'x'.repeat(100_000) }),
   }), env);
   assert.equal(oversized.status, 413);
   assert.equal(db.reports.length, 0);

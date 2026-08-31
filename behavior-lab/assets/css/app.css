@@ -1055,6 +1055,55 @@ html {
   overflow-wrap: anywhere;
   font-size: var(--fs-body);
 }
+.abc-equity-chart {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.abc-equity-chart figcaption {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.abc-equity-chart svg {
+  width: 100%;
+  height: auto;
+  min-height: 150px;
+  display: block;
+  overflow: visible;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
+.abc-equity-chart .abc-chart-grid {
+  stroke: var(--line-faint);
+  stroke-width: 1;
+}
+.abc-equity-chart .abc-chart-baseline {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 5 5;
+}
+.abc-equity-chart polyline {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.abc-equity-chart polyline.is-negative {
+  stroke: var(--red-bright);
+}
+.abc-chart-range {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-body);
+}
 .abc-arm-id {
   width: 44px;
   height: 44px;

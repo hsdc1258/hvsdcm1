@@ -42,19 +42,28 @@ function paperReport(sequence, equity, adaptive = adaptiveReport()) {
   };
 }
 
-function abcExperiment(sequence = 10) {
+function abcExperiment(sequence = 10, status = 'active') {
   const ids = ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'];
   const labels = ['Trend / momentum', 'Breakout / volatility', 'Mean reversion / crowd fade'];
   const hashes = [HASH_A, HASH_B, HASH_C];
   const arms = ['A', 'B', 'C'].map((armId, index) => ({
     arm_id: armId, strategy: { id: ids[index], label: labels[index], definition_hash: hashes[index] },
-    chain: { sequence: sequence + index + 1, hash: hashes[index] }, status: 'active', seed_equity: 100,
+    chain: { sequence, hash: hashes[index] }, status: index === 2 ? 'halted' : status, seed_equity: 100,
     equity: 103 - index, cash: 103 - index, realized_pnl: 3 - index, unrealized_pnl: 0,
     net_pnl: 3 - index, return_pct: 3 - index, max_drawdown_pct: index + .5, fees: .1, slippage_cost: .1,
     trade_count: 1, win_count: 1, loss_count: 0, open_position: index === 0 ? { id: 'p-1', symbol: 'BTCUSDT',
       direction: 'long', opened_at: '2026-08-31T00:00:30.000Z', entry_price: 100, mark_price: 101,
       quantity: 1, notional: 100, unrealized_pnl: 1, stop_price: 99, target_price: 103 } : null,
-    recent_trades: [], recent_decisions: [{ symbol: 'BTCUSDT', signal_bar_at: '2026-08-31T00:00:00.000Z',
+    equity_curve: [
+      { sequence: 1, at: '2026-08-31T00:00:00.000Z', equity: 100, net_pnl: 0 },
+      { sequence: 2, at: '2026-08-31T00:00:06.000Z', equity: 100.5 + index, net_pnl: .5 + index },
+      { sequence, at: '2026-08-31T00:01:00.000Z', equity: 103 - index, net_pnl: 3 - index },
+    ],
+    recent_trades: [{ id: `trade-${armId}`, symbol: 'BTCUSDT', direction: 'long',
+      opened_at: '2026-08-31T00:00:10.000Z', closed_at: '2026-08-31T00:00:40.000Z',
+      entry_price: 100, exit_price: 101, quantity: 1, notional: 100, net_pnl: 1,
+      return_pct: 1, fees: .1, slippage_cost: .1, reason: 'target' }],
+    recent_decisions: [{ symbol: 'BTCUSDT', signal_bar_at: '2026-08-31T00:00:00.000Z',
       observed_at: '2026-08-31T00:01:00.000Z', direction: index === 2 ? 'stand-aside' : 'long', score: .3,
       confidence: 42, reason: index === 2 ? 'score-below-threshold' : null, feed_sequence: sequence, feed_hash: HASH_A }],
     recent_logs: [{ sequence: 1, at: '2026-08-31T00:00:00.000Z', type: 'arm-started',
@@ -63,7 +72,7 @@ function abcExperiment(sequence = 10) {
   }));
   return { schema: 'abc-paper-experiment-v1', experiment_id: 'abc-paper-20260831', simulation: true,
     public_data_only: true, generated_at: '2026-08-31T00:01:01.000Z', started_at: '2026-08-31T00:00:00.000Z',
-    deadline_at: '2026-09-01T00:00:00.000Z', status: 'active', shared_feed: { sequence, hash: HASH_A,
+    deadline_at: '2026-09-01T00:00:00.000Z', status, shared_feed: { sequence, hash: HASH_A,
       last_packet_at: '2026-08-31T00:01:00.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
     assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4, risk_pct: 5,
@@ -177,22 +186,23 @@ async function advance(page, milliseconds) {
   await page.waitForTimeout(20);
 }
 
-async function assertGeometry(page, columns) {
+async function assertGeometry(page, expectedColumns) {
   const geometry = await page.evaluate(() => {
-    const panel = document.getElementById('paperAdaptive').getBoundingClientRect();
-    const table = document.querySelector('#paperAdaptive .paper-table-wrap');
+    const panel = document.getElementById('paperExperiment').getBoundingClientRect();
+    const charts = [...document.querySelectorAll('.abc-equity-chart svg')].map((chart) => {
+      const box = chart.getBoundingClientRect();
+      return { left: box.left, right: box.right, width: box.width };
+    });
     const gridColumns = (selector) => getComputedStyle(document.querySelector(selector)).gridTemplateColumns.split(' ').filter(Boolean).length;
     return { pageWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth,
       panelLeft: panel.left, panelRight: panel.right, viewport: innerWidth,
-      tableContainsOverflow: table.scrollWidth >= table.clientWidth,
-      summary: gridColumns('.adaptive-summary-grid'), state: gridColumns('.adaptive-state-grid'), detail: gridColumns('.adaptive-detail-grid'),
-      abc: gridColumns('.abc-arm-grid') };
+      charts, abc: gridColumns('.abc-arm-grid') };
   });
   assert.ok(geometry.pageWidth <= geometry.clientWidth + 1, JSON.stringify(geometry));
   assert.ok(geometry.panelLeft >= -1 && geometry.panelRight <= geometry.viewport + 1, JSON.stringify(geometry));
-  assert.equal(geometry.tableContainsOverflow, true);
-  assert.deepEqual([geometry.summary, geometry.state, geometry.detail], columns);
-  assert.equal(geometry.abc, columns[0] === 4 ? 3 : 1);
+  assert.equal(geometry.abc, expectedColumns);
+  assert.equal(geometry.charts.length, 3);
+  assert.ok(geometry.charts.every((chart) => chart.left >= -1 && chart.right <= geometry.viewport + 1 && chart.width > 0), JSON.stringify(geometry));
 }
 
 const { server, url } = await startServer();
@@ -201,86 +211,56 @@ try {
   {
     const responses = [
       { status: 200, report: paperReport(9, 101), experiment: abcExperiment(10) },
-      { status: 200, report: paperReport(10, 102, null), experiment: abcExperiment(11) },
+      { status: 500, error: 'temporary failure' },
       { status: 200, report: paperReport(11, 103), experiment: abcExperiment(12) },
+      { status: 200, report: paperReport(12, 104), experiment: abcExperiment(13, 'complete') },
     ];
     const { page, pageErrors } = await openFixture(browser, url, responses);
-    await page.waitForSelector('#paperAdaptive:not([hidden])');
-    assert.equal(await page.locator('#adaptiveChallengersBody tr').count(), 8);
-    assert.equal(await page.locator('#adaptiveAudit li').count(), 20);
-    assert.match(await page.locator('#adaptiveChampion').textContent(), /adaptive-balanced-v1/u);
-    assert.match(await page.locator('#adaptiveAuditRef').textContent(), /#20/u);
-    assert.equal(await page.locator('#unsafe-adaptive').count(), 0);
+    await page.waitForSelector('#paperExperiment:not([hidden])');
+    assert.equal(await page.locator('#paperReport').count(), 0);
+    assert.equal(await page.getByText('실시간 엔진 · 재귀 개선 감사').count(), 0);
     assert.equal(await page.locator('#unsafe-abc').count(), 0);
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
     assert.equal(await page.locator('#experimentLeaderboard tr').count(), 3);
+    assert.equal(await page.locator('.abc-equity-chart svg').count(), 3);
+    assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3]);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래' }).count(), 3);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 3);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단' }).count(), 3);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그' }).count(), 3);
+    assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
-    assert.match(await page.locator('#adaptiveAudit').textContent(), /<img id="unsafe-adaptive"/u);
-    await assertGeometry(page, [4, 2, 2]);
+    const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
+    assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
+    await assertGeometry(page, 3);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
       await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-desktop.png'), fullPage: true });
     }
 
     await advance(page, 5_000);
-    await page.waitForFunction(() => window.__paperFetchCount === 2 && document.getElementById('paperSequence').textContent === '10');
-    assert.equal(await page.locator('#paperAdaptive').getAttribute('hidden'), '');
-    await advance(page, 5_000);
-    await page.waitForFunction(() => window.__paperFetchCount === 3 && !document.getElementById('paperAdaptive').hidden);
-    assert.equal(await page.locator('#paperSequence').textContent(), '11');
-    await page.setViewportSize({ width: 390, height: 844 });
-    await assertGeometry(page, [1, 1, 1]);
-    if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });
-    assert.deepEqual(pageErrors, []);
-    await page.close();
-  }
-
-  {
-    const responses = [
-      { status: 200, report: paperReport(1, 101) },
-      { type: 'hang', lateReport: paperReport(99, 999) },
-      { status: 200, report: paperReport(3, 103) },
-      { type: 'hang', lateReport: paperReport(98, 998) },
-      { status: 500, error: 'temporary failure' },
-      { status: 200, report: paperReport(5, 105) },
-      { status: 401, error: 'expired' },
-    ];
-    const { page, pageErrors } = await openFixture(browser, url, responses);
-    await advance(page, 5_000);
-    await page.waitForFunction(() => window.__paperFetchCount === 2);
-    await page.locator('#refreshPaper').click();
-    await page.waitForFunction(() => window.__paperFetchCount === 3 && document.getElementById('paperSequence').textContent === '3');
-    await page.evaluate(() => window.__paperHangs.shift()());
-    await page.waitForTimeout(20);
-    assert.equal(await page.locator('#paperSequence').textContent(), '3');
-
-    await advance(page, 5_000);
-    await page.waitForFunction(() => window.__paperFetchCount === 4);
-    await advance(page, 4_000);
-    await page.waitForFunction(() => document.getElementById('paperReport').getAttribute('aria-busy') === 'false');
-    assert.equal(await page.locator('#paperReport').getAttribute('data-freshness'), 'stale');
-    assert.match(await page.locator('#paperErrorText').textContent(), /시간이 초과.*이전 보고/u);
-    assert.equal(await page.locator('#paperEquity').textContent(), '103.00 USDT');
-    await page.locator('#refreshPaper').click();
-    await page.waitForFunction(() => window.__paperFetchCount === 5
-      && document.getElementById('paperErrorText').textContent.includes('temporary failure'));
+    await page.waitForFunction(() => window.__paperFetchCount === 2 && !document.getElementById('paperError').hidden);
     assert.match(await page.locator('#paperErrorText').textContent(), /temporary failure.*이전 보고/u);
+    assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
     await page.locator('#refreshPaper').click();
-    await page.waitForFunction(() => window.__paperFetchCount === 6 && document.getElementById('paperSequence').textContent === '5');
-    assert.equal(await page.locator('#paperReport').getAttribute('data-freshness'), 'fresh');
+    await page.waitForFunction(() => window.__paperFetchCount === 3 && document.getElementById('experimentFeed').textContent.includes('#12'));
     assert.equal(await page.locator('#paperError').getAttribute('hidden'), '');
-    await advance(page, 1_000);
-    await page.waitForFunction(() => window.__paperFetchCount === 7 && !document.getElementById('ownerGate').hidden);
-    assert.equal(await page.locator('#labShell').getAttribute('hidden'), '');
-    assert.equal(await page.locator('#paperReport').getAttribute('hidden'), '');
-    assert.equal(await page.locator('#paperAdaptive').getAttribute('hidden'), '');
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertGeometry(page, 1);
+    if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });
+    await advance(page, 5_000);
+    await page.waitForFunction(() => window.__paperFetchCount === 4 && document.getElementById('paperExperiment').hidden);
+    assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 0);
+    assert.equal(await page.locator('#paperEmpty').getAttribute('hidden'), null);
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
 
   for (const status of [401, 404]) {
     const { page, pageErrors } = await openFixture(browser, url, [
-      { status: 200, report: paperReport(1, 101) }, { status, error: 'locked' },
+      { status: 200, experiment: abcExperiment(10) }, { status, error: 'locked' },
     ]);
     await advance(page, 5_000);
     await page.waitForFunction(() => !document.getElementById('ownerGate').hidden);
@@ -288,27 +268,7 @@ try {
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
-
-  {
-    const mutatedUrl = url.replace('/#paper', '/?mutant=render#paper');
-    const { page } = await openFixture(browser, mutatedUrl, [{ status: 200, report: paperReport(1, 101) }]);
-    await assert.rejects(async () => {
-      assert.equal(await page.locator('#paperAdaptive').getAttribute('hidden'), null);
-    });
-    await page.close();
-  }
-  {
-    const mutatedUrl = url.replace('/#paper', '/?mutant=poll#paper');
-    const { page } = await openFixture(browser, mutatedUrl, [
-      { status: 200, report: paperReport(1, 101) }, { status: 200, report: paperReport(2, 102) },
-    ]);
-    await assert.rejects(async () => {
-      await advance(page, 5_000);
-      assert.equal(await page.evaluate(() => window.__paperFetchCount), 2);
-    });
-    await page.close();
-  }
-  console.log('BEHAVIOR LAB UI E2E PASS · real Chromium · polling/render/timeout/relock/recovery/bounds/mobile');
+  console.log('BEHAVIOR LAB UI E2E PASS · active-only A/B/C · 3 curves/details · refresh retention · finished hidden · mobile bounds');
 } finally {
   await browser.close();
   await new Promise((resolveClose) => server.close(resolveClose));

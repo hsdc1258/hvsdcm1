@@ -22,7 +22,8 @@ const MAX_PROGRESS_BYTES = 800_000;
 const MAX_USAGE_BYTES = 64_000;
 const MAX_HARNESS_BYTES = 64_000;
 const MAX_HARNESS_INPUT_BYTES = 4_096;
-const MAX_BEHAVIOR_PAPER_BYTES = 64_000;
+const MAX_BEHAVIOR_PAPER_BYTES = 96_000;
+const MAX_ABC_EQUITY_CURVE_POINTS = 64;
 const MAX_BEHAVIOR_PAPER_SEQUENCE = 1_000_000;
 const MAX_BEHAVIOR_PAPER_TRADES = 25;
 const MAX_BEHAVIOR_PAPER_LOGS = 50;
@@ -1611,11 +1612,31 @@ function normalizeExperimentLogs(value) {
   return logs;
 }
 
+function normalizeExperimentEquityCurve(value, chainSequence, finalEquity) {
+  if (!Array.isArray(value) || value.length > MAX_ABC_EQUITY_CURVE_POINTS) return null;
+  const points = [];
+  for (const entry of value) {
+    if (!exactPaperKeys(entry, ['sequence', 'at', 'equity', 'net_pnl'])) return null;
+    const sequence = boundedPaperNumber(entry.sequence, 1, chainSequence, true);
+    const at = normalizePaperTimestamp(entry.at);
+    const equity = boundedPaperNumber(entry.equity, 0, 1_000_000);
+    const netPnl = boundedPaperNumber(entry.net_pnl, -100, 999_900);
+    const previous = points.at(-1);
+    if (sequence === null || !at || equity === null || netPnl === null
+      || Math.abs(netPnl - (equity - 100)) > 1e-6
+      || (previous && (sequence <= previous.sequence || Date.parse(at) <= Date.parse(previous.at)))) return null;
+    points.push({ sequence, at, equity, net_pnl: netPnl });
+  }
+  if (points.length && (points.at(-1).sequence !== chainSequence || Math.abs(points.at(-1).equity - finalEquity) > 1e-6)) return null;
+  return points;
+}
+
 function normalizeExperimentArm(value, armId, sharedSequence) {
-  const keys = ['arm_id', 'strategy', 'chain', 'status', 'seed_equity', 'equity', 'cash', 'realized_pnl',
+  const legacyKeys = ['arm_id', 'strategy', 'chain', 'status', 'seed_equity', 'equity', 'cash', 'realized_pnl',
     'unrealized_pnl', 'net_pnl', 'return_pct', 'max_drawdown_pct', 'fees', 'slippage_cost', 'trade_count',
     'win_count', 'loss_count', 'open_position', 'recent_trades', 'recent_decisions', 'recent_logs', 'last_cycle_at'];
-  if (!exactPaperKeys(value, keys) || value.arm_id !== armId
+  const hasEquityCurve = exactPaperKeys(value, [...legacyKeys, 'equity_curve']);
+  if ((!hasEquityCurve && !exactPaperKeys(value, legacyKeys)) || value.arm_id !== armId
     || !exactPaperKeys(value.strategy, ['id', 'label', 'definition_hash'])
     || value.strategy.id !== ABC_STRATEGY_IDS[armId] || value.strategy.label !== ABC_STRATEGY_LABELS[armId]
     || !normalizedExperimentHash(value.strategy.definition_hash)
@@ -1644,11 +1665,12 @@ function normalizeExperimentArm(value, armId, sharedSequence) {
   const trades = normalizeExperimentTrades(value.recent_trades);
   const decisions = normalizeExperimentDecisions(value.recent_decisions, sharedSequence);
   const logs = normalizeExperimentLogs(value.recent_logs);
+  const equityCurve = hasEquityCurve ? normalizeExperimentEquityCurve(value.equity_curve, chainSequence, numbers.equity) : [];
   const lastCycleAt = normalizePaperTimestamp(value.last_cycle_at, true);
-  if (openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined) return null;
+  if (openPosition === undefined || !trades || !decisions || !logs || !equityCurve || lastCycleAt === undefined) return null;
   return { arm_id: armId, strategy: { id: ABC_STRATEGY_IDS[armId], label: ABC_STRATEGY_LABELS[armId],
     definition_hash: value.strategy.definition_hash }, chain: { sequence: chainSequence, hash: chainHash }, status,
-    ...numbers, open_position: openPosition, recent_trades: trades, recent_decisions: decisions, recent_logs: logs,
+    ...numbers, equity_curve: equityCurve, open_position: openPosition, recent_trades: trades, recent_decisions: decisions, recent_logs: logs,
     last_cycle_at: lastCycleAt };
 }
 
