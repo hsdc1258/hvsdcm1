@@ -2465,7 +2465,7 @@ export function normalizeBehaviorLiveReport(input) {
     || !boundedPaperText(input.status_message, 240, true)
     || !exactPaperKeys(input.exchange, ['name', 'product', 'api', 'hold_mode'])
     || input.exchange.name !== 'Bitget' || input.exchange.product !== 'USDT-FUTURES'
-    || input.exchange.api !== 'uta-v3' || ![null, 'one_way_mode', 'hedge_mode'].includes(input.exchange.hold_mode)
+    || input.exchange.api !== 'classic-v2' || ![null, 'one_way_mode', 'hedge_mode'].includes(input.exchange.hold_mode)
     || JSON.stringify(input.allocation) !== JSON.stringify({ per_model_usdt: 3, total_usdt: 6,
       mode: 'isolated-margin-hard-cap' })
     || !Array.isArray(input.models) || input.models.length !== 2 || !Array.isArray(input.warnings)

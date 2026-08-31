@@ -133,7 +133,7 @@ function liveTradingReport() {
   return { schema: 'dual-live-v1', experiment_id: 'dual-live-20260901-v1', live_trading: true,
     generated_at: '2026-08-31T00:01:01.000Z', sequence: 2, status: 'active',
     status_message: '실포지션을 거래소 보호 주문과 함께 추적 중입니다.',
-    exchange: { name: 'Bitget', product: 'USDT-FUTURES', api: 'uta-v3', hold_mode: 'one_way_mode' },
+    exchange: { name: 'Bitget', product: 'USDT-FUTURES', api: 'classic-v2', hold_mode: 'one_way_mode' },
     allocation: { per_model_usdt: 3, total_usdt: 6, mode: 'isolated-margin-hard-cap' },
     models: [model('beast', '야수의 심장', '수수료 반영 공격형 추세·돌파, 고레버리지', ['BTCUSDT', 'SOLUSDT'], 25, true),
       model('ddokdogi', '똑도기', '다중요인 합의와 보수적 확률 보정, 70% 문턱', ['ETHUSDT', 'XRPUSDT'], 6)],

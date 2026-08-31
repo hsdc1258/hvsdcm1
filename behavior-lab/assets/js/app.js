@@ -1024,7 +1024,7 @@
       && Number.isFinite(Date.parse(report.generated_at)) && Number.isInteger(report.sequence) && report.sequence >= 0
       && ['blocked', 'armed', 'active', 'degraded', 'error'].includes(report.status)
       && report.exchange?.name === 'Bitget' && report.exchange.product === 'USDT-FUTURES'
-      && report.exchange.api === 'uta-v3'
+      && report.exchange.api === 'classic-v2'
       && JSON.stringify(report.allocation) === JSON.stringify({ per_model_usdt: 3, total_usdt: 6,
         mode: 'isolated-margin-hard-cap' })
       && Array.isArray(report.models) && report.models.length === 2

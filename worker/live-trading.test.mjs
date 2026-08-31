@@ -17,7 +17,7 @@ function report(sequence = 0) {
   const unsigned = { schema: 'dual-live-v1', experiment_id: BEHAVIOR_LIVE_EXPERIMENT_ID, live_trading: true,
     generated_at: '2026-09-01T00:00:00.000Z', sequence, status: 'blocked',
     status_message: '실거래 API 자격증명이 필요합니다.',
-    exchange: { name: 'Bitget', product: 'USDT-FUTURES', api: 'uta-v3', hold_mode: null },
+    exchange: { name: 'Bitget', product: 'USDT-FUTURES', api: 'classic-v2', hold_mode: null },
     allocation: { per_model_usdt: 3, total_usdt: 6, mode: 'isolated-margin-hard-cap' },
     models: [model('beast', '야수의 심장', '수수료 반영 공격형 추세·돌파, 고레버리지', ['BTCUSDT', 'SOLUSDT'], 25),
       model('ddokdogi', '똑도기', '다중요인 합의와 보수적 확률 보정, 70% 문턱', ['ETHUSDT', 'XRPUSDT'], 6)],
