@@ -99,7 +99,8 @@ test('component freshness advances with a fake clock and blocks a once-valid man
 
 test('published app bearer-gates dashboard and paper reads while retaining no exchange submission surface', () => {
   assert.equal((appSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length, 1);
-  assert.equal((appSource.match(/\/api\/behavior-lab\/paper/gu) || []).length, 1);
+  assert.match(appSource, /fetch\(`\$\{API_URL\}\/api\/behavior-lab\/paper`,/u);
+  assert.match(appSource, /fetch\(`\$\{API_URL\}\/api\/behavior-lab\/paper\/stop`,/u);
   assert.doesNotMatch(appSource, /api\.bitget\.com/iu);
   assert.match(appSource, /localStorage\.getItem\('hvsdcm\.token'\)/u);
   assert.match(appSource, /authorization: `Bearer \$\{ownerToken\(\)\}`/u);
@@ -109,6 +110,7 @@ test('published app bearer-gates dashboard and paper reads while retaining no ex
   assert.match(htmlSource, /content="noindex, nofollow, noarchive"/u);
   assert.match(htmlSource, /id="labShell"[^>]*\bhidden\b/u);
   assert.match(htmlSource, /id="paperTabPanel"/u);
+  assert.match(htmlSource, /id="stopPaper"[^>]*type="button"[^>]*\bhidden\b/u);
   assert.doesNotMatch(appSource, /scheduler|notification|health/iu);
   assert.match(appSource, /setInterval\(refreshLiveClock, 1_000\)/u);
   assert.match(appSource, /function createDraft\(\)[\s\S]*createFreshManualDraft/u);
@@ -122,23 +124,32 @@ test('owner paper UI removes the completed legacy session surface and keeps boun
   assert.match(appSource, /\['starting', 'active'\]\.includes\(payload\.experiment\.status\)/u);
 });
 
-test('owner paper UI renders six detailed, accessible time-scaled cost-aware curves and hides finished experiments', () => {
+test('owner paper UI renders a scan-first six-strategy summary with accessible detailed curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
+  assert.match(htmlSource, /6개 전략을 한눈에 비교해요/u);
+  assert.doesNotMatch(htmlSource, /SIMULTANEOUS 24H · SIX INDEPENDENT ARMS/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);
+  assert.match(htmlSource, /id="experimentLeaderReturn"/u);
+  assert.match(htmlSource, /실험 조건과 데이터 상태 보기/u);
   assert.match(appSource, /function validExperimentReport\(experiment\)/u);
-  assert.match(appSource, /deadline - started === 24 \* 60 \* 60_000/u);
+  assert.match(appSource, /run_mode === 'until-stopped'/u);
+  assert.match(appSource, /experiment\.deadline_at === null/u);
   assert.match(appSource, /experiment\.shared_feed\.credential_used === false/u);
   assert.match(appSource, /experiment\.assumptions\.strategy_mutation === false/u);
   assert.match(appSource, /'multi-paper-experiment-v2'/u);
   assert.match(appSource, /arm\.strategy\.policy/u);
   assert.match(appSource, /arm\.risk\.risk_pct/u);
   assert.match(appSource, /function renderEquityChart\(arm\)/u);
+  assert.match(appSource, /function patchRenderedNode\(current, next\)/u);
+  assert.match(appSource, /patchRenderedChildren\(elements\.experimentArms, arms\)/u);
   assert.match(appSource, /curve\.length <= 64/u);
   assert.match(appSource, /Date\.parse\(point\.at\) - firstAt/u);
   assert.match(appSource, /setAttribute\('role', 'img'\)/u);
   assert.match(appSource, /'최근 거래'/u);
   assert.match(appSource, /'진입 정책 \/ 위험'/u);
+  assert.match(appSource, /'전략 상세와 로그 보기'/u);
+  assert.match(appSource, /current\.tagName === 'DETAILS' && name === 'open'/u);
   assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
   assert.match(appSource, /state\.experiment = experiment;\s+paperStatus\(experiment\.status\)/u);
   assert.match(appSource, /renderExperiment\(activeExperiment\)/u);

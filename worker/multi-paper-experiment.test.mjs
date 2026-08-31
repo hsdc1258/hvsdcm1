@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import worker from './src/index.js';
 import {
   BEHAVIOR_ABC_SNAPSHOT_SOURCE,
+  BEHAVIOR_MULTI_CONTROL_SOURCE,
   BEHAVIOR_MULTI_EXPERIMENT_ID,
   BEHAVIOR_MULTI_SNAPSHOT_SOURCE,
   MAX_MULTI_PAPER_BYTES,
@@ -13,6 +15,7 @@ const HASHES = ['a', 'b', 'c', 'd', 'e', 'f', '9'].map((letter) => letter.repeat
 const SET_HASH = '26c95bb151fcca3cc3a869e4e6a3e8f47ad31eef5d2b75702fa1b698b9390941';
 const FEE_RATE = 6 / 10_000;
 const ADVERSE_SLIPPAGE_RATE = 4 / 10_000;
+const OWNER_SESSION_HASH = createHash('sha256').update('owner-session').digest('hex');
 const STRATEGIES = [
   { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
     definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1',
@@ -95,15 +98,17 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
     recent_trades: trades, recent_decisions: decisions, recent_logs: logs,
     last_cycle_at: '2026-08-31T00:01:20.000Z' };
   });
+  const generatedAt = status === 'complete' ? '2026-08-31T00:02:00.000Z' : '2026-08-31T00:02:00.000Z';
   return { schema: 'multi-paper-experiment-v2', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
     simulation: true, public_data_only: true, generated_at: '2026-08-31T00:02:00.000Z',
-    started_at: '2026-08-31T00:00:00.000Z', deadline_at: '2026-09-01T00:00:00.000Z', status,
+    started_at: '2026-08-31T00:00:00.000Z', run_mode: 'until-stopped', deadline_at: null,
+    stopped_at: status === 'complete' ? generatedAt : null, status,
     strategy_set_hash: SET_HASH, shared_feed: { sequence: effectiveSequence, hash: HASHES[6],
       last_packet_at: '2026-08-31T00:01:30.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
     assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
       modeled_round_trip_cost_bps: 20, risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
-      entry_cutoff_at: '2026-08-31T23:45:00.000Z', terminal_close: 'deadline', max_positions_per_arm: 1,
+      entry_cutoff_at: null, terminal_close: 'owner-stop', max_positions_per_arm: 1,
       strategy_mutation: false }, leaderboard: arms.map((arm, index) => ({ rank: index + 1,
       arm_id: arm.arm_id, equity: arm.equity, net_pnl: arm.net_pnl, return_pct: arm.return_pct,
       max_drawdown_pct: arm.max_drawdown_pct })), arms,
@@ -111,20 +116,26 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
       : ['All figures are simulated.', 'One day is not statistical evidence.'] };
 }
 
-function experimentDb() {
+function experimentDb(username = 'hvsdcm') {
   const rows = new Map();
   return { rows, prepare(sql) {
     return { values: [], bind(...values) { this.values = values; return this; },
       async first() {
-        if (sql.includes('SELECT s.*, u.username')) return { token_hash: 'stored-hash', role: 'user', disabled: 0, username: 'hvsdcm' };
+        if (sql.includes('SELECT s.*, u.username')) return this.values[0] === OWNER_SESSION_HASH
+          ? { token_hash: OWNER_SESSION_HASH, role: 'user', disabled: 0, username } : null;
         if (sql.includes('FROM usage_snapshots')) return rows.get(this.values[0]) || null;
         throw new Error(`Unexpected first SQL: ${sql}`);
       },
       async run() {
         if (sql.includes('UPDATE sessions')) return { success: true, meta: { changes: 1 } };
         if (!sql.includes('INSERT INTO usage_snapshots')) throw new Error(`Unexpected run SQL: ${sql}`);
-        assert.match(sql, /arms\[5\]\.chain/u);
         const [source, captured_at, payload] = this.values;
+        if (source === BEHAVIOR_MULTI_CONTROL_SOURCE) {
+          if (rows.has(source)) return { success: true, meta: { changes: 0 } };
+          rows.set(source, { source, captured_at, payload });
+          return { success: true, meta: { changes: 1 } };
+        }
+        assert.match(sql, /arms\[5\]\.chain/u);
         const next = JSON.parse(payload);
         const priorRow = rows.get(source);
         const prior = priorRow ? JSON.parse(priorRow.payload) : null;
@@ -140,9 +151,9 @@ function experimentDb() {
   } };
 }
 
-function envFor(db) {
+function envFor(db, overrides = {}) {
   return { ALLOWED_ORIGIN: 'https://hvsdcm1.xyz', OWNER_USERNAME: 'hvsdcm,claude-test',
-    BEHAVIOR_OWNER_USERNAME: 'hvsdcm', BEHAVIOR_PAPER_REPORT_TOKEN: 'paper-secret', DB: db };
+    BEHAVIOR_OWNER_USERNAME: 'hvsdcm', BEHAVIOR_PAPER_REPORT_TOKEN: 'paper-secret', DB: db, ...overrides };
 }
 function post(report, env) {
   return worker.fetch(new Request('https://api.test/api/behavior-lab/paper/report', { method: 'POST',
@@ -188,6 +199,79 @@ test('six-arm v2 normalization binds exact id, hashes, policies, lower risk, cos
   assert.equal(new Set(normalized.arms.map((arm) => arm.chain.hash)).size, 6);
   assert.ok(normalized.arms.every((arm) => arm.risk.risk_pct === 1.5 && arm.risk.leverage_cap === 3
     && arm.strategy.policy.min_target_bps > normalized.assumptions.modeled_round_trip_cost_bps));
+  assert.equal(normalized.run_mode, 'until-stopped');
+  assert.equal(normalized.deadline_at, null);
+  assert.equal(normalized.assumptions.terminal_close, 'owner-stop');
+});
+
+test('six-arm normalizer retains fixed-24h rollout compatibility while enforcing continuous stop semantics', () => {
+  const legacy = multiExperimentReport();
+  delete legacy.run_mode; delete legacy.stopped_at;
+  legacy.deadline_at = '2026-09-01T00:00:00.000Z';
+  legacy.assumptions.entry_cutoff_at = '2026-08-31T23:45:00.000Z';
+  legacy.assumptions.terminal_close = 'deadline';
+  assert.ok(normalizeBehaviorMultiPaperExperimentReport(legacy));
+  const mutations = [
+    (report) => { report.deadline_at = '2026-09-01T00:00:00.000Z'; },
+    (report) => { report.stopped_at = report.generated_at; },
+    (report) => { report.assumptions.terminal_close = 'deadline'; },
+  ];
+  for (const mutate of mutations) {
+    const report = multiExperimentReport(); mutate(report);
+    assert.equal(normalizeBehaviorMultiPaperExperimentReport(report), null);
+  }
+});
+
+test('exact owner can request one idempotent stop and only the ingest reporter can poll it', async () => {
+  const db = experimentDb(); const env = envFor(db);
+  db.rows.set(BEHAVIOR_MULTI_SNAPSHOT_SOURCE, { source: BEHAVIOR_MULTI_SNAPSHOT_SOURCE,
+    captured_at: '2026-08-31T00:02:01.000Z', payload: JSON.stringify(multiExperimentReport()) });
+  const stopRequest = () => worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), env);
+  const first = await stopRequest();
+  assert.equal(first.status, 202);
+  const firstBody = await first.json();
+  assert.equal(firstBody.stop_requested, true);
+  assert.ok(Number.isFinite(Date.parse(firstBody.stop_requested_at)));
+  const second = await stopRequest();
+  assert.equal(second.status, 202);
+  assert.equal((await second.json()).stop_requested_at, firstBody.stop_requested_at);
+  const control = await worker.fetch(new Request(`https://api.test/api/behavior-lab/paper/control?experiment_id=${BEHAVIOR_MULTI_EXPERIMENT_ID}`, {
+    headers: { authorization: 'Bearer paper-secret' },
+  }), env);
+  assert.equal(control.status, 200);
+  assert.deepEqual(await control.json(), { experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
+    stop_requested: true, stop_requested_at: firstBody.stop_requested_at });
+  const unauthorized = await worker.fetch(new Request(`https://api.test/api/behavior-lab/paper/control?experiment_id=${BEHAVIOR_MULTI_EXPERIMENT_ID}`), env);
+  assert.equal(unauthorized.status, 401);
+  const ownerBearerOnControl = await worker.fetch(new Request(`https://api.test/api/behavior-lab/paper/control?experiment_id=${BEHAVIOR_MULTI_EXPERIMENT_ID}`, {
+    headers: { authorization: 'Bearer owner-session' },
+  }), env);
+  assert.equal(ownerBearerOnControl.status, 401);
+  const nonOwner = envFor(experimentDb('claude-test'));
+  nonOwner.DB.rows.set(BEHAVIOR_MULTI_SNAPSHOT_SOURCE, db.rows.get(BEHAVIOR_MULTI_SNAPSHOT_SOURCE));
+  const nonOwnerStop = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), nonOwner);
+  assert.equal(nonOwnerStop.status, 404);
+  const reportBearerStop = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer paper-secret', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), env);
+  assert.equal(reportBearerStop.status, 401);
+  const wrongExperiment = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: 'multi-paper-wrong' }),
+  }), env);
+  assert.equal(wrongExperiment.status, 400);
+  const missingOwnerConfig = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), envFor(experimentDb(), { BEHAVIOR_OWNER_USERNAME: '' }));
+  assert.equal(missingOwnerConfig.status, 404);
 });
 
 test('six-arm v2 rejects cross-schema/id/hash/source-like downgrade and malformed private data', () => {

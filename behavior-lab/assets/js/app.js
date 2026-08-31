@@ -10,7 +10,8 @@
   const core = window.BehaviorLabCore;
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
+    ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null,
+    stopSubmitting: false, stopRequested: false, activeTab: 'market',
   };
 
   const elements = {
@@ -34,12 +35,18 @@
     freshnessText: document.getElementById('freshnessText'),
     fundingValue: document.getElementById('fundingValue'),
     experimentArms: document.getElementById('experimentArms'),
+    experimentAverageReturn: document.getElementById('experimentAverageReturn'),
     experimentDeadline: document.getElementById('experimentDeadline'),
     experimentFeed: document.getElementById('experimentFeed'),
+    experimentLeaderName: document.getElementById('experimentLeaderName'),
+    experimentLeaderPnl: document.getElementById('experimentLeaderPnl'),
+    experimentLeaderReturn: document.getElementById('experimentLeaderReturn'),
     experimentLastPacket: document.getElementById('experimentLastPacket'),
     experimentLeaderboard: document.getElementById('experimentLeaderboard'),
+    experimentOpenPositions: document.getElementById('experimentOpenPositions'),
     experimentStarted: document.getElementById('experimentStarted'),
     experimentStatus: document.getElementById('experimentStatus'),
+    experimentTotalTrades: document.getElementById('experimentTotalTrades'),
     inSampleMetrics: document.getElementById('inSampleMetrics'),
     interestValue: document.getElementById('interestValue'),
     liveStatus: document.getElementById('liveStatus'),
@@ -67,6 +74,7 @@
     paperStatus: document.getElementById('paperStatus'),
     paperTab: document.getElementById('paperTab'),
     paperTabPanel: document.getElementById('paperTabPanel'),
+    stopPaper: document.getElementById('stopPaper'),
     priceLine: document.getElementById('priceLine'),
     refreshPaper: document.getElementById('refreshPaper'),
     retryDashboard: document.getElementById('retryDashboard'),
@@ -459,12 +467,17 @@
     state.paperLoading = false;
     state.ownerVerified = false;
     state.experiment = null;
+    state.stopSubmitting = false;
+    state.stopRequested = false;
     elements.paperExperiment.hidden = true;
     elements.paperExperiment.dataset.freshness = 'stale';
     elements.paperExperiment.setAttribute('aria-busy', 'false');
     elements.paperEmpty.hidden = true;
     elements.paperError.hidden = true;
     elements.refreshPaper.disabled = false;
+    elements.stopPaper.hidden = true;
+    elements.stopPaper.disabled = false;
+    elements.stopPaper.textContent = '6개 실험 중단';
     elements.labShell.hidden = true;
     elements.ownerGate.hidden = false;
     elements.retryOwnerGate.hidden = status === 401 || status === 404;
@@ -500,6 +513,7 @@
     elements.paperTab.setAttribute('aria-selected', String(paperActive));
     elements.marketTabPanel.hidden = paperActive;
     elements.paperTabPanel.hidden = !paperActive;
+    document.body.classList.toggle('is-paper-view', paperActive);
     history.replaceState(null, '', paperActive ? '#paper' : '#market');
   }
 
@@ -549,8 +563,13 @@
     const started = Date.parse(experiment?.started_at);
     const deadline = Date.parse(experiment?.deadline_at);
     const v2 = experiment?.schema === 'multi-paper-experiment-v2';
+    const continuous = v2 && experiment?.run_mode === 'until-stopped';
+    const stopped = experiment?.stopped_at === null ? null : Date.parse(experiment?.stopped_at);
+    const validTiming = continuous
+      ? experiment.deadline_at === null && (stopped === null || Number.isFinite(stopped))
+      : Number.isFinite(deadline) && deadline - started === 24 * 60 * 60_000;
     return Boolean(experiment && profile && experiment.experiment_id === profile.experimentId && experiment.simulation === true
-      && experiment.public_data_only === true && Number.isFinite(started) && deadline - started === 24 * 60 * 60_000
+      && experiment.public_data_only === true && Number.isFinite(started) && validTiming
       && ['starting', 'active', 'complete', 'error'].includes(experiment.status)
       && Number.isInteger(experiment.shared_feed?.sequence) && experiment.shared_feed.sequence > 0
       && hash(experiment.shared_feed.hash) && experiment.shared_feed.credential_used === false
@@ -561,7 +580,9 @@
       && experiment.leaderboard.length === profile.armIds.length && Array.isArray(experiment.arms)
       && experiment.arms.length === profile.armIds.length
       && (!v2 || (hash(experiment.strategy_set_hash) && experiment.assumptions.modeled_round_trip_cost_bps === 20
-        && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3))
+        && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3
+        && (!continuous || (experiment.assumptions.entry_cutoff_at === null
+          && experiment.assumptions.terminal_close === 'owner-stop'))))
       && experiment.arms.every((arm, index) => arm.arm_id === profile.armIds[index]
         && arm.strategy?.id === profile.strategyIds[index]
         && hash(arm.strategy.definition_hash) && Number.isInteger(arm.chain?.sequence) && arm.chain.sequence > 0
@@ -639,25 +660,57 @@
     return figure;
   }
 
+  function strategyPresentation(strategyId, fallback) {
+    const presentations = {
+      'multi-trend-persistence-v2': ['추세 지속', '힘이 이어지는 방향을 따라가요.'],
+      'multi-breakout-confirmation-v2': ['돌파 확인', '가격이 범위를 벗어난 뒤 확인하고 따라가요.'],
+      'multi-range-reversion-v2': ['구간 회귀', '과하게 움직인 가격이 범위로 돌아오는 흐름을 봐요.'],
+      'multi-ofi-continuation-v2': ['체결 흐름', '매수와 매도 체결의 쏠림이 이어지는지 봐요.'],
+      'multi-overreaction-fade-v2': ['과민 반응 역추세', '군중의 과한 반응이 되돌아오는 구간을 찾아요.'],
+      'multi-consensus-conservative-v2': ['보수적 합의', '여러 신호가 같은 방향일 때만 움직여요.'],
+    };
+    return presentations[strategyId] || [fallback || strategyId, '고정된 규칙으로 공개 시장 데이터를 관찰해요.'];
+  }
+
+  function signedClass(value) {
+    return value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : 'is-neutral';
+  }
+
   function renderExperimentArm(arm) {
     const card = document.createElement('article');
     card.className = 'panel abc-arm-card';
+    card.dataset.armId = arm.arm_id;
+    card.dataset.outcome = signedClass(arm.net_pnl);
+    const [strategyName, strategyDescription] = strategyPresentation(arm.strategy.id, arm.strategy.label);
     const heading = document.createElement('div');
     heading.className = 'abc-arm-heading';
     heading.append(
       createText('span', 'abc-arm-id', arm.arm_id),
       createText('div', '', ''),
+      createText('span', `abc-position-state ${arm.open_position ? 'is-open' : ''}`,
+        arm.open_position ? `${String(arm.open_position.direction).toUpperCase()} 포지션` : arm.status === 'halted' ? '위험 한도 정지' : '포지션 대기'),
     );
-    heading.lastElementChild.append(createText('p', 'section-index', arm.strategy.label), createText('h3', '', arm.strategy.id));
+    heading.children[1].append(createText('h3', '', strategyName), createText('p', 'abc-strategy-description', strategyDescription),
+      createText('small', 'abc-strategy-id', arm.strategy.id));
+    const result = document.createElement('div');
+    result.className = 'abc-arm-result';
+    const returnValue = createText('strong', signedClass(arm.return_pct), formatPercent(arm.return_pct, true));
+    result.append(createText('span', '', '현재 수익률'), returnValue,
+      createText('small', '', `순손익 ${formatUsdt(arm.net_pnl, true)} · 자산 ${formatUsdt(arm.equity)}`));
     const metrics = document.createElement('div');
     metrics.className = 'abc-arm-metrics';
     metrics.append(
-      detailCell('자산', formatUsdt(arm.equity)), detailCell('순손익', formatUsdt(arm.net_pnl, true)),
-      detailCell('수익률', formatPercent(arm.return_pct, true)), detailCell('최대 낙폭', formatPercent(arm.max_drawdown_pct)),
-      detailCell('비용', `${formatUsdt(arm.fees + arm.slippage_cost)} · 수수료 ${formatUsdt(arm.fees)}`),
-      detailCell('거래', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
+      detailCell('최대 낙폭', formatPercent(arm.max_drawdown_pct)),
+      detailCell('전체 비용', formatUsdt(arm.fees + arm.slippage_cost)),
+      detailCell('거래 결과', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
+      detailCell('현재 상태', arm.open_position ? '포지션 보유' : arm.status === 'halted' ? '정지' : '관찰 중'),
     );
     const chart = renderEquityChart(arm);
+    const details = document.createElement('details');
+    details.className = 'abc-arm-details';
+    details.append(createText('summary', '', '전략 상세와 로그 보기'));
+    const detailsBody = document.createElement('div');
+    detailsBody.className = 'abc-arm-details-body';
     const policy = document.createElement('section');
     policy.className = 'abc-arm-section';
     policy.append(createText('h4', '', '진입 정책 / 위험'));
@@ -717,31 +770,109 @@
       return row;
     }));
     const chain = createText('p', 'abc-chain', `arm chain #${arm.chain.sequence} · ${arm.chain.hash.slice(0, 16)}… · ${arm.strategy.definition_hash.slice(0, 12)}…`);
-    card.append(heading, chart, metrics, policy, position, trades, decisions, logs, chain);
+    detailsBody.append(policy, position, trades, decisions, logs, chain);
+    details.append(detailsBody);
+    card.append(heading, result, chart, metrics, details);
     return card;
   }
 
+  function patchRenderedNode(current, next) {
+    if (current.nodeType !== next.nodeType
+      || (current.nodeType === Node.ELEMENT_NODE && current.nodeName !== next.nodeName)) {
+      current.replaceWith(next.cloneNode(true));
+      return;
+    }
+    if (current.nodeType === Node.TEXT_NODE) {
+      if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+      return;
+    }
+    if (current.nodeType !== Node.ELEMENT_NODE) return;
+    for (const name of current.getAttributeNames()) {
+      if (current.tagName === 'DETAILS' && name === 'open') continue;
+      if (!next.hasAttribute(name)) current.removeAttribute(name);
+    }
+    for (const name of next.getAttributeNames()) {
+      const value = next.getAttribute(name);
+      if (current.getAttribute(name) !== value) current.setAttribute(name, value);
+    }
+    const desired = [...next.childNodes];
+    for (let index = 0; index < desired.length; index += 1) {
+      const existing = current.childNodes[index];
+      if (!existing) current.append(desired[index].cloneNode(true));
+      else patchRenderedNode(existing, desired[index]);
+    }
+    while (current.childNodes.length > desired.length) current.lastChild.remove();
+  }
+
+  function patchRenderedChildren(container, desired) {
+    for (let index = 0; index < desired.length; index += 1) {
+      const current = container.children[index];
+      if (!current) container.append(desired[index]);
+      else patchRenderedNode(current, desired[index]);
+    }
+    while (container.children.length > desired.length) container.lastElementChild.remove();
+  }
+
+  function syncStopButton(experiment) {
+    const canStop = experiment?.schema === 'multi-paper-experiment-v2'
+      && experiment.run_mode === 'until-stopped' && ['starting', 'active'].includes(experiment.status);
+    elements.stopPaper.hidden = !canStop;
+    elements.stopPaper.disabled = !canStop || state.stopSubmitting || state.stopRequested;
+    elements.stopPaper.textContent = state.stopSubmitting ? '중단 요청 전송 중'
+      : state.stopRequested ? '중단 요청됨' : '6개 실험 중단';
+  }
+
   function renderExperiment(experiment) {
+    const retained = Boolean(state.experiment && !elements.paperExperiment.hidden
+      && elements.experimentArms.children.length === experiment.arms.length);
     state.experiment = experiment;
     paperStatus(experiment.status);
     const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행' };
     elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' ? 'is-live' : 'is-connecting'}`;
     elements.experimentStatus.textContent = labels[experiment.status];
     elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
-    elements.experimentDeadline.textContent = formatKoreanTime(experiment.deadline_at);
+    elements.experimentDeadline.textContent = experiment.run_mode === 'until-stopped'
+      ? '중단 버튼을 누를 때까지' : formatKoreanTime(experiment.deadline_at);
     elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
     elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
     const overviewCopy = elements.paperExperiment.querySelector('[data-experiment-copy]');
-    if (overviewCopy) overviewCopy.textContent = `동일한 공개 Bitget feed와 비용 모델을 ${experiment.arms.length}개 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.`;
-    elements.experimentLeaderboard.replaceChildren(...experiment.leaderboard.map((entry) => {
+    if (overviewCopy) overviewCopy.textContent = `같은 공개 시장 데이터와 비용 기준으로 ${experiment.arms.length}개 전략을 공정하게 비교해요.`;
+    const leader = experiment.leaderboard.find((entry) => entry.rank === 1) || experiment.leaderboard[0];
+    const leaderArm = experiment.arms.find((arm) => arm.arm_id === leader.arm_id);
+    const [leaderName] = strategyPresentation(leaderArm.strategy.id, leaderArm.strategy.label);
+    const averageReturn = experiment.arms.reduce((sum, arm) => sum + arm.return_pct, 0) / experiment.arms.length;
+    const openPositions = experiment.arms.filter((arm) => arm.open_position).length;
+    const totalTrades = experiment.arms.reduce((sum, arm) => sum + arm.trade_count, 0);
+    elements.experimentLeaderName.textContent = `${leader.arm_id} · ${leaderName}`;
+    elements.experimentLeaderReturn.textContent = formatPercent(leader.return_pct, true);
+    elements.experimentLeaderReturn.className = signedClass(leader.return_pct);
+    elements.experimentLeaderPnl.textContent = `순손익 ${formatUsdt(leader.net_pnl, true)} · 자산 ${formatUsdt(leader.equity)}`;
+    elements.experimentAverageReturn.textContent = formatPercent(averageReturn, true);
+    elements.experimentAverageReturn.className = signedClass(averageReturn);
+    elements.experimentOpenPositions.textContent = `${openPositions} / ${experiment.arms.length}`;
+    elements.experimentTotalTrades.textContent = `${totalTrades}회`;
+    const leaderboard = experiment.leaderboard.map((entry) => {
       const arm = experiment.arms.find((item) => item.arm_id === entry.arm_id);
-      const row = document.createElement('tr');
-      row.replaceChildren(createText('td', '', String(entry.rank)), createText('td', '', `${entry.arm_id} · ${arm.strategy.label}`),
-        createText('td', '', formatUsdt(entry.equity)), createText('td', '', `${formatUsdt(entry.net_pnl, true)} / ${formatPercent(entry.return_pct, true)}`),
-        createText('td', '', formatPercent(entry.max_drawdown_pct)));
+      const [name] = strategyPresentation(arm.strategy.id, arm.strategy.label);
+      const row = document.createElement('li');
+      row.className = 'paper-ranking-item';
+      const identity = document.createElement('div');
+      identity.append(createText('b', '', `${entry.arm_id} · ${name}`), createText('span', '', `자산 ${formatUsdt(entry.equity)} · 낙폭 ${formatPercent(entry.max_drawdown_pct)}`));
+      const resultBlock = document.createElement('div');
+      resultBlock.append(createText('strong', signedClass(entry.return_pct), formatPercent(entry.return_pct, true)),
+        createText('small', '', formatUsdt(entry.net_pnl, true)));
+      row.append(createText('span', 'paper-rank-number', String(entry.rank)), identity, resultBlock);
       return row;
-    }));
-    elements.experimentArms.replaceChildren(...experiment.arms.map(renderExperimentArm));
+    });
+    const arms = experiment.arms.map(renderExperimentArm);
+    if (retained) {
+      patchRenderedChildren(elements.experimentLeaderboard, leaderboard);
+      patchRenderedChildren(elements.experimentArms, arms);
+    } else {
+      elements.experimentLeaderboard.replaceChildren(...leaderboard);
+      elements.experimentArms.replaceChildren(...arms);
+    }
+    syncStopButton(experiment);
     elements.paperExperiment.hidden = false;
     elements.paperExperiment.setAttribute('aria-busy', 'false');
   }
@@ -791,15 +922,19 @@
         ? payload.experiment : null;
       if (!activeExperiment) {
         state.experiment = null;
+        state.stopRequested = false;
         paperStatus('starting');
         elements.paperExperiment.hidden = true;
         elements.experimentArms.replaceChildren();
         elements.experimentLeaderboard.replaceChildren();
         elements.paperEmpty.hidden = false;
         elements.paperError.hidden = true;
+        elements.stopPaper.hidden = true;
         return;
       }
       if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 모의실험 보고는 표시하지 않았습니다.');
+      state.stopRequested = payload.control?.experiment_id === activeExperiment.experiment_id
+        && payload.control.stop_requested === true;
       renderExperiment(activeExperiment);
       elements.paperExperiment.dataset.freshness = 'fresh';
       elements.paperError.hidden = true;
@@ -821,6 +956,38 @@
         elements.paperExperiment.setAttribute('aria-busy', 'false');
         elements.refreshPaper.disabled = false;
       }
+    }
+  }
+
+  async function requestPaperStop() {
+    const experiment = state.experiment;
+    if (state.stopSubmitting || state.stopRequested || experiment?.schema !== 'multi-paper-experiment-v2'
+      || experiment.run_mode !== 'until-stopped' || !['starting', 'active'].includes(experiment.status)) return;
+    state.stopSubmitting = true;
+    syncStopButton(experiment);
+    try {
+      const response = await fetch(`${API_URL}/api/behavior-lab/paper/stop`, {
+        method: 'POST', credentials: 'omit', cache: 'no-store',
+        headers: { accept: 'application/json', 'content-type': 'application/json',
+          authorization: `Bearer ${ownerToken()}` },
+        body: JSON.stringify({ experiment_id: experiment.experiment_id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 404) {
+        showOwnerGate(response.status);
+        return;
+      }
+      if (!response.ok || payload.stop_requested !== true) {
+        throw new Error(payload.error || '모의실험 중단 요청을 저장하지 못했습니다.');
+      }
+      state.stopRequested = true;
+      elements.paperError.hidden = true;
+    } catch (error) {
+      elements.paperErrorText.textContent = error?.message || '모의실험 중단 요청을 저장하지 못했습니다.';
+      elements.paperError.hidden = false;
+    } finally {
+      state.stopSubmitting = false;
+      if (state.ownerVerified) syncStopButton(state.experiment);
     }
   }
 
@@ -867,6 +1034,7 @@
   elements.marketTab.addEventListener('click', () => switchTab('market'));
   elements.paperTab.addEventListener('click', () => switchTab('paper'));
   elements.refreshPaper.addEventListener('click', () => void loadPaper({ force: true }));
+  elements.stopPaper.addEventListener('click', () => void requestPaperStop());
   elements.retryOwnerGate.addEventListener('click', () => void bootstrap());
   riskInputs.forEach((input) => input.addEventListener('input', () => {
     clearDraft();

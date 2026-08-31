@@ -8,9 +8,9 @@
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v5">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v7">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260831-v7" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260831-v9" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
@@ -169,13 +169,14 @@
     <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
       <div class="paper-heading section-heading-row">
         <div>
-          <p class="section-index">ACTIVE SIX-ARM PAPER EXPERIMENT / 100 USDT EACH</p>
-          <h2>현재 진행 중인 24시간 6-arm 모의실험</h2>
-          <p class="section-copy">종료된 세션은 표시하지 않습니다. 실제 자금·계정·주문 없이 공개 시장 데이터와 비용을 반영한 고정 전략 여섯 개를 비교합니다.</p>
+          <p class="section-index">모의투자 · 전략 비교</p>
+          <h2>6개 전략을 한눈에 비교해요</h2>
+          <p class="section-copy">각 전략은 100 USDT로 따로 움직여요. 실제 자금이나 거래소 계정은 사용하지 않아요.</p>
         </div>
         <div class="paper-actions">
           <span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span>
-          <button id="refreshPaper" class="text-button" type="button">새로고침</button>
+          <button id="refreshPaper" class="text-button" type="button">지금 업데이트</button>
+          <button id="stopPaper" class="text-button is-danger" type="button" hidden>6개 실험 중단</button>
         </div>
       </div>
 
@@ -183,20 +184,49 @@
       <div id="paperEmpty" class="empty-state" hidden><strong>NO ACTIVE EXPERIMENT</strong><p>현재 시작 중이거나 진행 중인 모의실험이 없습니다. 종료된 실험은 이 화면에 표시하지 않습니다.</p></div>
       <section id="paperExperiment" class="abc-experiment" aria-busy="true" hidden>
         <article class="panel abc-overview">
-          <div class="section-heading-row compact">
-            <div><p class="section-index">SIMULTANEOUS 24H · SIX INDEPENDENT ARMS</p><h2>비용 인식 고정 전략 전진 모의실험</h2></div>
+          <div class="paper-overview-heading">
+            <div><p class="section-index">지금 상황</p><h2>어떤 전략이 앞서고 있을까요?</h2></div>
             <span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span>
           </div>
-          <p class="section-copy" data-experiment-copy>동일한 공개 Bitget feed와 비용 모델을 여섯 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.</p>
-          <div class="adaptive-summary-grid abc-summary-grid">
-            <div><span>시작</span><b id="experimentStarted">—</b></div>
-            <div><span>정확한 24h 마감</span><b id="experimentDeadline">—</b></div>
-            <div><span>공유 feed 원장</span><b id="experimentFeed">—</b></div>
-            <div><span>최근 공개 패킷</span><b id="experimentLastPacket">—</b></div>
+          <p class="section-copy" data-experiment-copy>같은 공개 시장 데이터와 비용 기준으로 여섯 전략을 공정하게 비교해요.</p>
+
+          <div class="paper-glance" aria-label="모의실험 핵심 요약">
+            <div class="paper-leader-card">
+              <span>현재 1위</span>
+              <h3 id="experimentLeaderName">—</h3>
+              <strong id="experimentLeaderReturn">—</strong>
+              <small id="experimentLeaderPnl">순손익 —</small>
+            </div>
+            <div class="paper-glance-grid">
+              <div><span>6개 평균 수익률</span><b id="experimentAverageReturn">—</b></div>
+              <div><span>열린 포지션</span><b id="experimentOpenPositions">—</b></div>
+              <div><span>전체 거래</span><b id="experimentTotalTrades">—</b></div>
+              <div><span>마지막 반영</span><b id="experimentLastPacket">—</b></div>
+            </div>
           </div>
-          <div class="paper-table-wrap"><table aria-label="모의실험 arm 순위"><thead><tr><th>순위</th><th>전략</th><th>자산</th><th>순손익 / 수익률</th><th>최대 낙폭</th></tr></thead><tbody id="experimentLeaderboard"></tbody></table></div>
+
+          <section class="paper-ranking-section" aria-labelledby="paperRankingTitle">
+            <div class="paper-subheading"><h3 id="paperRankingTitle">현재 순위</h3><p>수익률 순서예요.</p></div>
+            <ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol>
+          </section>
+
+          <details class="paper-method">
+            <summary>실험 조건과 데이터 상태 보기</summary>
+            <div class="adaptive-summary-grid abc-summary-grid">
+              <div><span>시작</span><b id="experimentStarted">—</b></div>
+              <div><span>종료 방식</span><b id="experimentDeadline">—</b></div>
+              <div><span>공유 데이터 원장</span><b id="experimentFeed">—</b></div>
+              <div><span>전략 변경</span><b>실행 중 고정</b></div>
+            </div>
+          </details>
         </article>
-        <div id="experimentArms" class="abc-arm-grid"></div>
+        <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle">
+          <div class="paper-strategy-heading">
+            <div><p class="section-index">전략별 결과</p><h2 id="paperStrategyTitle">성과를 자세히 비교해요</h2></div>
+            <p>카드의 ‘상세와 로그’를 열면 진입 정책, 포지션, 판단 기록을 볼 수 있어요.</p>
+          </div>
+          <div id="experimentArms" class="abc-arm-grid"></div>
+        </section>
       </section>
     </section>
   </main>
