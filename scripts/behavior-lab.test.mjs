@@ -148,11 +148,13 @@ test('owner paper UI renders a scan-first six-strategy summary with accessible d
   assert.match(appSource, /setAttribute\('role', 'img'\)/u);
   assert.match(appSource, /'최근 거래 · 최신순'/u);
   assert.match(appSource, /function newestFirst\(items, timestampKey, sequenceKey\)/u);
+  assert.match(appSource, /function experimentDisplayStatus\(experiment, now = Date\.now\(\)\)/u);
+  assert.match(appSource, /PAPER_STALE_MS = 2 \* 60_000/u);
   assert.match(appSource, /'진입 정책 \/ 위험'/u);
   assert.match(appSource, /'전략 상세와 최신 기록 보기'/u);
   assert.match(appSource, /current\.tagName === 'DETAILS' && name === 'open'/u);
   assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
-  assert.match(appSource, /state\.experiment = experiment;\s+paperStatus\(experiment\.status\)/u);
+  assert.match(appSource, /state\.experiment = experiment;\s+const displayStatus = experimentDisplayStatus\(experiment\);/u);
   assert.match(appSource, /renderExperiment\(activeExperiment\)/u);
   assert.match(htmlSource, /NO ACTIVE EXPERIMENT/u);
 });

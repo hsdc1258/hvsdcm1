@@ -144,6 +144,7 @@ function browserHarness(responses) {
   };
 
   let now = 0;
+  Date.now = () => Date.parse('2026-08-31T00:01:30.000Z') + now;
   let timerId = 0;
   const timers = new Map();
   const schedule = (callback, delay, interval, args) => {
@@ -185,7 +186,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v10',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v11',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -326,6 +327,23 @@ try {
     await page.waitForFunction(() => window.__paperFetchCount === 4 && document.getElementById('paperExperiment').hidden);
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 0);
     assert.equal(await page.locator('#paperEmpty').getAttribute('hidden'), null);
+    assert.deepEqual(pageErrors, []);
+    await page.close();
+  }
+
+  {
+    const staleExperiment = multiExperiment(10);
+    staleExperiment.generated_at = '2026-08-30T23:55:00.000Z';
+    staleExperiment.shared_feed.last_packet_at = '2026-08-30T23:55:00.000Z';
+    for (const arm of staleExperiment.arms) arm.last_cycle_at = '2026-08-30T23:55:00.000Z';
+    const { page, pageErrors } = await openFixture(browser, url, [
+      { status: 200, report: paperReport(9, 101), experiment: staleExperiment },
+    ]);
+    await page.waitForSelector('#paperExperiment:not([hidden])');
+    assert.match(await page.locator('#paperStatus').textContent(), /STALE/u);
+    assert.match(await page.locator('#experimentStatus').textContent(), /STALE/u);
+    assert.match(await page.locator('#paperErrorText').textContent(), /2분 넘게 갱신되지 않았습니다/u);
+    assert.equal(await page.locator('#paperExperiment').getAttribute('data-freshness'), 'stale');
     assert.deepEqual(pageErrors, []);
     await page.close();
   }

@@ -7,6 +7,7 @@
   const PERIODS = ['5m', '15m', '1h', '4h'];
   const PAPER_REFRESH_MS = 5_000;
   const PAPER_REQUEST_TIMEOUT_MS = 4_000;
+  const PAPER_STALE_MS = 2 * 60_000;
   const core = window.BehaviorLabCore;
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
@@ -530,6 +531,14 @@
     elements.paperStatus.querySelector('span').textContent = labels[status] || '상태 미확인';
   }
 
+  function experimentDisplayStatus(experiment, now = Date.now()) {
+    if (!['starting', 'active'].includes(experiment.status)) return experiment.status;
+    const candidates = [experiment.generated_at, experiment.shared_feed?.last_packet_at,
+      ...experiment.arms.map((arm) => arm.last_cycle_at)].map(Date.parse).filter(Number.isFinite);
+    const latest = candidates.length ? Math.max(...candidates) : NaN;
+    return Number.isFinite(latest) && now - latest <= PAPER_STALE_MS ? experiment.status : 'stale';
+  }
+
   function paperValue(value) {
     if (value === null || value === undefined || value === '') return '—';
     if (typeof value === 'number') return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 6 }).format(value);
@@ -842,10 +851,11 @@
     const retained = Boolean(state.experiment && !elements.paperExperiment.hidden
       && elements.experimentArms.children.length === experiment.arms.length);
     state.experiment = experiment;
-    paperStatus(experiment.status);
-    const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행' };
-    elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' ? 'is-live' : 'is-connecting'}`;
-    elements.experimentStatus.textContent = labels[experiment.status];
+    const displayStatus = experimentDisplayStatus(experiment);
+    paperStatus(displayStatus);
+    const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행', stale: 'STALE · 마지막 반영 끊김' };
+    elements.experimentStatus.className = `adaptive-stream ${displayStatus === 'active' ? 'is-live' : 'is-connecting'}`;
+    elements.experimentStatus.textContent = labels[displayStatus];
     elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
     elements.experimentDeadline.textContent = experiment.run_mode === 'until-stopped'
       ? '중단 버튼을 누를 때까지' : formatKoreanTime(experiment.deadline_at);
@@ -891,6 +901,7 @@
     syncStopButton(experiment);
     elements.paperExperiment.hidden = false;
     elements.paperExperiment.setAttribute('aria-busy', 'false');
+    return displayStatus;
   }
 
   function markPaperRefreshError(error, timedOut = false) {
@@ -951,9 +962,12 @@
       if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 모의실험 보고는 표시하지 않았습니다.');
       state.stopRequested = payload.control?.experiment_id === activeExperiment.experiment_id
         && payload.control.stop_requested === true;
-      renderExperiment(activeExperiment);
-      elements.paperExperiment.dataset.freshness = 'fresh';
-      elements.paperError.hidden = true;
+      const displayStatus = renderExperiment(activeExperiment);
+      elements.paperExperiment.dataset.freshness = displayStatus === 'stale' ? 'stale' : 'fresh';
+      if (displayStatus === 'stale') {
+        elements.paperErrorText.textContent = '마지막 모의투자 보고가 2분 넘게 갱신되지 않았습니다. 러너 상태를 확인하고 이전 보고만 표시합니다.';
+        elements.paperError.hidden = false;
+      } else elements.paperError.hidden = true;
       elements.paperEmpty.hidden = true;
     } catch (error) {
       if (requestId !== state.paperRequestId) return;
