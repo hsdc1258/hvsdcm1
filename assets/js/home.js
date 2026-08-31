@@ -127,10 +127,16 @@
   // 메인 랜딩의 Behavior Lab 카드는 사람 소유자에게만 복제한다. <template> 내용은
   // 비소유자 DOM에 렌더되지 않으며, 링크 대상도 자체 owner API 게이트를 다시 거친다.
   function mountBehaviorOwnerEntry(username) {
-    if (!isBehaviorOwner(username) || !elements.behaviorOwnerMount) return;
-    const template = document.querySelector('template[data-behavior-owner]');
-    if (!template) return;
-    elements.behaviorOwnerMount.replaceChildren(template.content.cloneNode(true));
+    if (!isBehaviorOwner(username)) return;
+    const landingTemplate = document.querySelector('template[data-behavior-owner]');
+    const drawerTemplate = document.querySelector('template[data-behavior-drawer]');
+    if (landingTemplate && elements.behaviorOwnerMount) {
+      elements.behaviorOwnerMount.replaceChildren(landingTemplate.content.cloneNode(true));
+    }
+    const drawerMount = elements.drawer.querySelector('#behaviorDrawerMount');
+    if (drawerTemplate && drawerMount) {
+      drawerMount.replaceChildren(drawerTemplate.content.cloneNode(true));
+    }
   }
 
   // 로그인 후 이동은 동일 출처의 내부 경로만 허용한다.

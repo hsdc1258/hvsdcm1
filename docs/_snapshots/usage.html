@@ -1509,6 +1509,235 @@ label.list-row {
     transform: none;
   }
 }
+/* ==========================================================================
+   Workspace suite — Usage · Admin · WordMaster
+   세 화면의 제품 문법만 공유한다. 다른 학습 화면은 기존 앱 셸을 그대로 유지한다.
+   ========================================================================== */
+.workspace-app {
+  min-height: 100dvh;
+  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
+  background-size: auto, 64px 64px, 64px 64px, auto;
+}
+.workspace-app .topbar {
+  border-bottom-color: rgba(255,255,255,.08);
+  background: #07080b;
+}
+.workspace-app .topbar-crumb {
+  border-color: rgba(41,151,255,.2);
+  background: rgba(41,151,255,.09);
+  color: #8cc8ff;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.workspace-app .app-page {
+  padding-top: clamp(28px, 4vw, 56px);
+  padding-bottom: 80px;
+}
+.workspace-app .app-shell {
+  grid-template-columns: 284px minmax(0, 1fr);
+  gap: clamp(30px, 4vw, 64px);
+}
+.workspace-app .app-main {
+  width: 100%;
+  min-width: 0;
+}
+.workspace-app .sidebar {
+  top: calc(var(--topbar-h) + 28px);
+  gap: 22px;
+  max-height: calc(100dvh - var(--topbar-h) - 56px);
+  padding: 16px;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
+  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+}
+.sidebar-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px;
+}
+.workspace-app .sidebar-emblem {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 15px;
+  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+}
+.workspace-app .sidebar-emblem .brand-mark {
+  width: 30px;
+  height: 30px;
+}
+.workspace-app .sidebar-emblem > .ui-icon {
+  width: 23px;
+  height: 23px;
+  color: var(--accent);
+}
+.sidebar-product-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.sidebar-product-copy span {
+  color: var(--text-3);
+  font-size: .58rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+}
+.sidebar-product-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-app .sidebar-label {
+  padding-inline: 12px;
+  color: #777e8f;
+  font-size: .59rem;
+  letter-spacing: .14em;
+}
+.workspace-app .sidebar-item {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: #aeb4c2;
+}
+.workspace-app .sidebar-item:hover {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.05);
+}
+.workspace-app .sidebar-item.is-active, .workspace-app .sidebar-item[aria-current] {
+  border-color: rgba(41,151,255,.22);
+  background: rgba(41,151,255,.12);
+  color: #f7fbff;
+}
+.workspace-app .sidebar-item-featured {
+  border-color: rgba(41,151,255,.2);
+  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
+  color: #d9efff;
+}
+.workspace-app .sidebar-item-featured .ui-icon {
+  color: #55b5ff;
+}
+.sidebar-item-meta {
+  margin-left: auto;
+  padding: 3px 6px;
+  border: 1px solid rgba(48,209,88,.24);
+  border-radius: 999px;
+  background: rgba(48,209,88,.08);
+  color: #65e787;
+  font-size: .52rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.workspace-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #80c6ff;
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.workspace-kicker i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
+}
+.workspace-app .view-head {
+  align-items: flex-end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.workspace-app .view-head .title-1 {
+  font-size: clamp(2.25rem, 2rem + 1.25vw, 3.5rem);
+  line-height: .98;
+  letter-spacing: -.055em;
+}
+.workspace-app .view-head-main p {
+  max-width: 680px;
+  margin-top: 12px;
+  color: #858c9b;
+  font-size: .95rem;
+}
+.workspace-app .btn {
+  border-radius: 13px;
+}
+@media (max-width: 860px) {
+  .workspace-app .app-shell {
+    display: block;
+  }
+  .workspace-app .sidebar {
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    contain: inline-size;
+    min-width: 0;
+    max-width: 100%;
+    max-height: none;
+    margin-bottom: 30px;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 18px;
+    scrollbar-width: none;
+  }
+  .workspace-app .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .workspace-app .sidebar-product {
+    flex: none;
+    padding-right: 12px;
+    border-right: 1px solid var(--line-faint);
+  }
+  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
+    display: none;
+  }
+  .workspace-app .sidebar-group {
+    display: flex;
+    flex: none;
+    gap: 4px;
+  }
+  .workspace-app .sidebar-item {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 620px) {
+  .workspace-app .topbar-nav .topbar-link:not(:last-child) {
+    display: none;
+  }
+  .workspace-app .app-page {
+    padding-top: 20px;
+  }
+  .workspace-app .sidebar {
+    margin-inline: -4px;
+    margin-bottom: 24px;
+  }
+  .workspace-app .sidebar-product {
+    padding: 0 10px 0 2px;
+  }
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 42px;
+    height: 42px;
+  }
+  .workspace-app .view-head {
+    align-items: flex-start;
+    padding-bottom: 20px;
+  }
+  .workspace-app .view-head .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
 </style>
 <style>/* usage/assets/css/usage.css (inlined) */
 /* ==========================================================================
@@ -3532,6 +3761,145 @@ label.list-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* ==========================================================================
+   Control Center redesign
+   기존 렌더러와 상태 계약은 유지하고, 정보 우선순위와 밀도만 다시 설계한다.
+   ========================================================================== */
+.usage-page .us-wide {
+  width: min(1680px, calc(100% - 48px));
+}
+.usage-page .app-shell {
+  grid-template-columns: 276px minmax(0, 1fr);
+}
+.usage-page .us-view:not([hidden]) {
+  gap: 28px;
+}
+.usage-page .us-command-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 24px;
+}
+.usage-page .us-pipeline-workspace {
+  gap: 20px;
+}
+.usage-page .h-session-views {
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 16px;
+  background: rgba(17,19,25,.86);
+}
+.usage-page .h-session-view-tab {
+  min-height: 42px;
+  border-radius: 11px;
+  color: #858d9c;
+}
+.usage-page .h-session-view-tab.is-active {
+  background: rgba(41,151,255,.15);
+  color: #f5f9ff;
+  box-shadow: inset 0 0 0 1px rgba(41,151,255,.2);
+}
+.usage-page .us-empty {
+  position: relative;
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  padding: 52px 28px;
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 120%, rgba(41,151,255,.17), transparent 44%), rgba(18,20,26,.82);
+  color: #9299a8;
+  font-size: .95rem;
+}
+.usage-page .us-empty::before {
+  width: 58px;
+  height: 58px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(41,151,255,.22);
+  border-radius: 18px;
+  background: rgba(41,151,255,.09);
+  box-shadow: inset 0 0 0 14px rgba(41,151,255,.025);
+  content: "";
+}
+.usage-page .us-quota-rail {
+  top: calc(var(--topbar-h) + 28px);
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #171920, #0d0f14);
+  box-shadow: 0 24px 80px rgba(0,0,0,.2);
+}
+.usage-page .us-quota-head {
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.usage-page .us-quota-head h2 {
+  font-size: 1.25rem;
+}
+.usage-page .us-limit-widget {
+  padding: 18px 0;
+}
+.usage-page .us-quota-rail .list-group {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.025);
+}
+.usage-page [class~="gauge-track"] {
+  height: 8px;
+  background: #292c35;
+}
+.usage-page .h-task, .usage-page .h-session-panel, .usage-page .mod-panel, .usage-page .cp-approvals, .usage-page .cp-overview, .usage-page .cp-panel, .usage-page .cp-applications, .usage-page .cp-candidates, .usage-page .gd-sec {
+  border-color: rgba(255,255,255,.1);
+  border-radius: 22px;
+  background: rgba(18,20,26,.9);
+}
+.usage-page [class~="summary-strip"], .usage-page .cp-metrics {
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(105deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 46%, rgba(48,209,88,.05));
+}
+.usage-page [class~="summary-cell"], .usage-page .cp-metrics > div {
+  background: transparent;
+}
+.usage-page .view-head .toolbar-group {
+  align-items: center;
+}
+.usage-page #reload {
+  min-height: 44px;
+  padding-inline: 16px;
+  border-color: rgba(255,255,255,.1);
+  background: rgba(255,255,255,.055);
+}
+.usage-page .us-freshness {
+  color: #777f8e;
+}
+@media (max-width: 1400px) {
+  .usage-page .us-command-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .usage-page .us-quota-rail {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 860px) {
+  .usage-page .app-shell {
+    display: block;
+  }
+}
+@media (max-width: 700px) {
+  .usage-page .us-wide {
+    width: min(100% - 28px, 1680px);
+  }
+  .usage-page .us-view:not([hidden]) {
+    gap: 22px;
+  }
+  .usage-page .us-empty {
+    min-height: 200px;
+    border-radius: 20px;
+  }
+  .usage-page .h-session-views {
+    overflow-x: auto;
+  }
+}
 </style>
 <style>
 /* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
@@ -3539,7 +3907,7 @@ label.list-row {
 .snap-note code { color: var(--text); }
 </style>
 </head>
-<body>
+<body class="workspace-app usage-page">
   <div class="snap-note"><strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
   <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.
   <br><strong>여기서 확인할 것</strong> — 상위 탭이 <strong>진행 중 · 중단됨 · 완료 셋</strong>이고 <strong>어느 것이 눌려 있는지 눈으로 갈리는지</strong>, 진행 중 패널 머리의 <strong>관제탑 | 조직도</strong> 모드 토글에서 기본값(관제탑)이 눌려 있는지, 관제탑 카드의 칩이 이름 · 역할 · 모델 · 상태 · 진행률 · 소요를 각자 슬롯으로 내고 위임 깊이가 들여쓰기로 남는지, (조직도 모드로 바꿔 보면) 총괄이 <strong>최상단 뿌리</strong>로 서고 수평 trunk에서 단계마다 개별 stem이 내려오는지, 카드가 되는 단계가 <strong>보고된 단계와 액터가 붙은 단계뿐</strong>이고 나머지(대기 · 기록 없음)는 조직도 아래 한 줄이 이름으로 받는지 (DESIGN.md §1.1 v9), 사용자 입력이 조직도 node로 만들어지지 <strong>않고</strong> 요청 원문이 상세 머리의 inset 한 곳에만 있는지, 노드 · 연결선 · 글자가 어디서도 겹치지 않는지, 오른쪽 Codex · Claude 한도 rail에서 제목과 수집 시각이 폭을 다투지 않는지, 게이지의 세 색 구간과 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.
@@ -3552,6 +3920,7 @@ label.list-row {
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">usage</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
       </nav>
     </div>
@@ -3565,7 +3934,10 @@ label.list-row {
          .us-view의 기본 display가 none이라 저자 규칙이 [hidden]을 이기지 않는다. -->
     <div class="app-shell">
       <aside class="sidebar" aria-label="운영 화면">
-        <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+        <div class="sidebar-product">
+          <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+          <div class="sidebar-product-copy"><span>CONTROL</span><strong>운영 센터</strong></div>
+        </div>
 
         <div class="sidebar-group" role="tablist" aria-orientation="vertical" aria-label="운영 화면">
           <p class="sidebar-label">운영</p>
@@ -3574,6 +3946,13 @@ label.list-row {
           <button id="tabCompetition" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewCompetition" data-usage-view="competition" tabindex="-1"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></button>
           <button id="tabGuide" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewGuide" data-usage-view="guide" tabindex="-1"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-network"></use></svg><span class="sidebar-item-text">구조</span></button>
         </div>
+
+        <nav class="sidebar-group" aria-label="워크스페이스 도구">
+          <p class="sidebar-label">워크스페이스</p>
+          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
+          <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
+          <a class="sidebar-item" href="/admin/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg><span class="sidebar-item-text">관리자</span></a>
+        </nav>
 
         <div class="sidebar-group">
           <p class="sidebar-label">범위</p>
@@ -3586,6 +3965,7 @@ label.list-row {
           <header class="view-head">
             <div class="view-head-main">
               <div>
+                <span class="workspace-kicker"><i aria-hidden="true"></i>CONTROL CENTER</span>
                 <h1 class="title-1">AI 실행 현황</h1>
                 <p>세션별 파이프라인, 투입 에이전트, Codex · Claude 한도</p>
               </div>
@@ -3594,7 +3974,7 @@ label.list-row {
               <!-- 자동 갱신 시계. 1초마다 바뀌므로 aria-live를 걸지 않는다 — 수동 새로고침
                    결과만 아래 #usageRefreshStatus가 polite로 알린다. -->
               <span id="usageFreshness" class="us-freshness"></span>
-              <button id="reload" class="btn btn-secondary btn-sm" type="button">새로고침</button>
+              <button id="reload" class="btn btn-secondary btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-refresh"></use></svg>새로고침</button>
             </div>
           </header>
 

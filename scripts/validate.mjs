@@ -2148,10 +2148,10 @@ function validateGlobalsAndOrder() {
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
     'index.html': ['/assets/js/home.js?v=20260901-dark-workspace-v2'],
-    'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
+    'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260901-dark-workspace-v3'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-dark-workspace-v2', '/usage/assets/js/usage.js?v=20260901-dark-workspace-v2'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-dark-workspace-v3', '/usage/assets/js/usage.js?v=20260901-dark-workspace-v3'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
@@ -2173,13 +2173,13 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/assets/css/home.css?v=20260901-dark-workspace-v2'],
-    'WordMaster/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', 'assets/css/style.css'],
-    'smstudy/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', 'assets/css/style.css'],
-    'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/usage/assets/css/usage.css?v=20260901-dark-workspace-v2'],
-    'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/behavior-lab/assets/css/app.css?v=20260901-v11'],
+    'index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/assets/css/home.css?v=20260901-dark-workspace-v2'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css?v=20260901-dark-workspace-v3'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css'],
+    'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
+    'usage/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/usage/assets/css/usage.css?v=20260901-dark-workspace-v3'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/gichul/gichul.css?v=20260829-n4'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v11'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2445,7 +2445,7 @@ function validateLandingGating() {
   // 규칙을 강제하는지. 정적으로 볼 수 있는 것은 문서에 무엇이 적혀 있는가까지다.
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
-  const templatePattern = /<template data-(?:study|owner|behavior-owner)>[^]*?<\/template>/gu;
+  const templatePattern = /<template data-(?:study|owner|behavior-owner|behavior-drawer)>[^]*?<\/template>/gu;
   const gatedTemplates = homeHtml.match(templatePattern) || [];
   const staticMarkup = homeHtml.replace(templatePattern, '');
   const templateMarkup = gatedTemplates.join('\n');
@@ -2492,8 +2492,11 @@ function validateLandingGating() {
     && JSON.stringify(renderedOwners) === JSON.stringify(configuredOwners),
   'owner boundary: Worker and landing UI must expose owner controls to the sole human owner only');
   const behaviorOwnerTemplate = /<template data-behavior-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
+  const behaviorDrawerTemplate = /<template data-behavior-drawer>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
   check(behaviorOwnerTemplate.includes('href="/behavior-lab/#paper"'),
     'index.html: the owner landing template must link directly to the Behavior Lab paper tab');
+  check(behaviorDrawerTemplate.includes('href="/behavior-lab/#live"'),
+    'index.html: the exact-owner drawer template must link directly to live trading');
   check(!ownerTemplate.includes('href="/behavior-lab/'),
     'index.html: Behavior Lab must not enter the broader owner template that also mounts for claude-test');
   check(homeJs.includes("const BEHAVIOR_OWNER_USERNAME = 'hvsdcm';")

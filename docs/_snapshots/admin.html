@@ -1505,6 +1505,235 @@ label.list-row {
     transform: none;
   }
 }
+/* ==========================================================================
+   Workspace suite — Usage · Admin · WordMaster
+   세 화면의 제품 문법만 공유한다. 다른 학습 화면은 기존 앱 셸을 그대로 유지한다.
+   ========================================================================== */
+.workspace-app {
+  min-height: 100dvh;
+  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
+  background-size: auto, 64px 64px, 64px 64px, auto;
+}
+.workspace-app .topbar {
+  border-bottom-color: rgba(255,255,255,.08);
+  background: #07080b;
+}
+.workspace-app .topbar-crumb {
+  border-color: rgba(41,151,255,.2);
+  background: rgba(41,151,255,.09);
+  color: #8cc8ff;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.workspace-app .app-page {
+  padding-top: clamp(28px, 4vw, 56px);
+  padding-bottom: 80px;
+}
+.workspace-app .app-shell {
+  grid-template-columns: 284px minmax(0, 1fr);
+  gap: clamp(30px, 4vw, 64px);
+}
+.workspace-app .app-main {
+  width: 100%;
+  min-width: 0;
+}
+.workspace-app .sidebar {
+  top: calc(var(--topbar-h) + 28px);
+  gap: 22px;
+  max-height: calc(100dvh - var(--topbar-h) - 56px);
+  padding: 16px;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
+  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+}
+.sidebar-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px;
+}
+.workspace-app .sidebar-emblem {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 15px;
+  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+}
+.workspace-app .sidebar-emblem .brand-mark {
+  width: 30px;
+  height: 30px;
+}
+.workspace-app .sidebar-emblem > .ui-icon {
+  width: 23px;
+  height: 23px;
+  color: var(--accent);
+}
+.sidebar-product-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.sidebar-product-copy span {
+  color: var(--text-3);
+  font-size: .58rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+}
+.sidebar-product-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-app .sidebar-label {
+  padding-inline: 12px;
+  color: #777e8f;
+  font-size: .59rem;
+  letter-spacing: .14em;
+}
+.workspace-app .sidebar-item {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: #aeb4c2;
+}
+.workspace-app .sidebar-item:hover {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.05);
+}
+.workspace-app .sidebar-item.is-active, .workspace-app .sidebar-item[aria-current] {
+  border-color: rgba(41,151,255,.22);
+  background: rgba(41,151,255,.12);
+  color: #f7fbff;
+}
+.workspace-app .sidebar-item-featured {
+  border-color: rgba(41,151,255,.2);
+  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
+  color: #d9efff;
+}
+.workspace-app .sidebar-item-featured .ui-icon {
+  color: #55b5ff;
+}
+.sidebar-item-meta {
+  margin-left: auto;
+  padding: 3px 6px;
+  border: 1px solid rgba(48,209,88,.24);
+  border-radius: 999px;
+  background: rgba(48,209,88,.08);
+  color: #65e787;
+  font-size: .52rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.workspace-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #80c6ff;
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.workspace-kicker i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
+}
+.workspace-app .view-head {
+  align-items: flex-end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.workspace-app .view-head .title-1 {
+  font-size: clamp(2.25rem, 2rem + 1.25vw, 3.5rem);
+  line-height: .98;
+  letter-spacing: -.055em;
+}
+.workspace-app .view-head-main p {
+  max-width: 680px;
+  margin-top: 12px;
+  color: #858c9b;
+  font-size: .95rem;
+}
+.workspace-app .btn {
+  border-radius: 13px;
+}
+@media (max-width: 860px) {
+  .workspace-app .app-shell {
+    display: block;
+  }
+  .workspace-app .sidebar {
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    contain: inline-size;
+    min-width: 0;
+    max-width: 100%;
+    max-height: none;
+    margin-bottom: 30px;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 18px;
+    scrollbar-width: none;
+  }
+  .workspace-app .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .workspace-app .sidebar-product {
+    flex: none;
+    padding-right: 12px;
+    border-right: 1px solid var(--line-faint);
+  }
+  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
+    display: none;
+  }
+  .workspace-app .sidebar-group {
+    display: flex;
+    flex: none;
+    gap: 4px;
+  }
+  .workspace-app .sidebar-item {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 620px) {
+  .workspace-app .topbar-nav .topbar-link:not(:last-child) {
+    display: none;
+  }
+  .workspace-app .app-page {
+    padding-top: 20px;
+  }
+  .workspace-app .sidebar {
+    margin-inline: -4px;
+    margin-bottom: 24px;
+  }
+  .workspace-app .sidebar-product {
+    padding: 0 10px 0 2px;
+  }
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 42px;
+    height: 42px;
+  }
+  .workspace-app .view-head {
+    align-items: flex-start;
+    padding-bottom: 20px;
+  }
+  .workspace-app .view-head .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
 </style>
 <style>/* admin/assets/css/admin.css (inlined) */
 /* ==========================================================================
@@ -1647,6 +1876,208 @@ label.list-row {
     gap: var(--space-4);
   }
 }
+/* ---- dark operations redesign ---- */
+.admin-page .app-shell {
+  min-height: calc(100dvh - var(--topbar-h) - 138px);
+}
+.admin-page .ad-login {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
+  align-items: stretch;
+  gap: 28px;
+  min-height: 650px;
+}
+.ad-login-intro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: clamp(36px, 6vw, 84px);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 32px;
+  background: radial-gradient(circle at 78% 22%, rgba(41,151,255,.22), transparent 18rem), linear-gradient(145deg, #161a24, #090a0e 72%);
+}
+.ad-login-intro::after {
+  position: absolute;
+  right: -90px;
+  bottom: -120px;
+  width: 320px;
+  height: 320px;
+  border: 1px solid rgba(41,151,255,.15);
+  border-radius: 50%;
+  box-shadow: 0 0 0 60px rgba(41,151,255,.025), 0 0 0 120px rgba(41,151,255,.018);
+  content: "";
+}
+.ad-login-symbol {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin: 28px 0;
+  place-items: center;
+  border: 1px solid rgba(41,151,255,.25);
+  border-radius: 21px;
+  background: rgba(41,151,255,.12);
+  color: #70bfff;
+}
+.ad-login-symbol .ui-icon {
+  width: 30px;
+  height: 30px;
+}
+.ad-login-intro h1 {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+  font-size: clamp(3rem, 3.4vw, 4rem);
+  line-height: .95;
+  letter-spacing: -.07em;
+}
+.ad-login-intro > p {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  margin-top: 24px;
+  color: #9aa2b2;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.ad-login-facts {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 42px;
+}
+.ad-login-facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+  color: #c4c9d4;
+  font-size: .78rem;
+}
+.ad-login-facts .ui-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+.admin-page .ad-login-card {
+  align-self: center;
+  width: 100%;
+  padding: 34px;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 26px;
+  background: #14161c;
+  box-shadow: 0 30px 90px rgba(0,0,0,.38);
+}
+.ad-login-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ad-secure-mark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ad-secure-mark .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+.admin-page .ad-login-card .field-input {
+  min-height: 54px;
+  border-radius: 14px;
+  background: #0b0c10;
+}
+.admin-page .ad-login-card .btn {
+  width: 100%;
+  min-height: 54px;
+}
+.admin-page .ad-panel {
+  gap: 28px;
+}
+.admin-page #stats {
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 20px;
+  background: linear-gradient(110deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 42%, rgba(48,209,88,.05));
+}
+.admin-page #stats > div {
+  min-height: 116px;
+  justify-content: center;
+  background: transparent;
+}
+.admin-page #stats > div .stat-value {
+  color: #f8fbff;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  letter-spacing: -.05em;
+}
+.admin-page .ad-view > .list-group, .admin-page .table-wrap {
+  border-color: rgba(255,255,255,.1);
+  border-radius: 20px;
+  background: rgba(18,20,26,.88);
+}
+.admin-page .toolbar {
+  padding: 14px;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 18px;
+  background: rgba(18,20,26,.9);
+}
+.admin-page .table th {
+  background: #111319;
+  color: #8b93a3;
+}
+.admin-page .table tbody tr:hover td {
+  background: rgba(41,151,255,.045);
+}
+@media (max-width: 1100px) {
+  .admin-page .ad-login {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .ad-login-intro {
+    min-height: 420px;
+  }
+  .admin-page .ad-login-card {
+    width: 100%;
+  }
+}
+@media (max-width: 620px) {
+  .admin-page .ad-login {
+    min-height: 0;
+  }
+  .ad-login-intro {
+    min-height: 360px;
+    padding: 28px;
+    border-radius: 24px;
+  }
+  .ad-login-intro h1 {
+    font-size: clamp(2.45rem, 12vw, 3.1rem);
+  }
+  .ad-login-intro > p {
+    font-size: .92rem;
+  }
+  .ad-login-facts {
+    margin-top: 28px;
+  }
+  .admin-page .ad-login-card {
+    padding: 24px;
+    border-radius: 22px;
+  }
+  .admin-page #stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 </style>
 <style>
 /* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
@@ -1654,7 +2085,7 @@ label.list-row {
 .snap-note code { color: var(--text); }
 </style>
 </head>
-<body>
+<body class="workspace-app admin-page">
   <div class="snap-note"><strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
   <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며, 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다. 사이드바 최상단에는 흰 헤어라인 로고 엠블럼(<code>.sidebar-emblem</code>)이 있고, 그 아래 각 항목은 아이콘 없이 <strong>텍스트 전용 행</strong>이다(DESIGN.md §8/v5 — 이모지 슬롯 폐지).
   <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>). 사이드바가 대문자 소제목으로 묶여 있고, 엠블럼이 로고와 같은 사각형 3개 기하를 그대로 쓰는지.
@@ -1667,8 +2098,9 @@ label.list-row {
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>운영</a>
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
-        <span class="topbar-link">private · secure</span>
       </nav>
     </div>
   </header>
@@ -1682,11 +2114,21 @@ label.list-row {
            각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
            admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
-        <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+        <div class="sidebar-product">
+          <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+          <div class="sidebar-product-copy"><span>OWNER ONLY</span><strong>관리 센터</strong></div>
+        </div>
 
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
           <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
+        </nav>
+
+        <nav class="sidebar-group" aria-label="워크스페이스 도구">
+          <p class="sidebar-label">워크스페이스</p>
+          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
+          <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">Usage</span></a>
+          <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
@@ -1708,16 +2150,23 @@ label.list-row {
 
       <main id="adminMain" class="app-main" tabindex="-1">
         <section id="login" class="ad-login hidden">
+          <div class="ad-login-intro">
+            <span class="workspace-kicker"><i aria-hidden="true"></i>PRIVATE OPERATIONS</span>
+            <div class="ad-login-symbol" aria-hidden="true"><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></div>
+            <h1>워크스페이스를<br>운영하는 한 화면.</h1>
+            <p>계정, 접속 기기, 학습 데이터를 안전한 관리자 세션에서 확인합니다.</p>
+            <ul class="ad-login-facts" aria-label="관리자 화면 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg>탭 단위 세션</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg>기기 추적</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-database"></use></svg>학습 데이터</li></ul>
+          </div>
           <form id="adminLogin" class="card ad-login-card">
-            <div>
-              <h1 class="title-3">관리자 인증</h1>
-              <p class="ad-login-sub">계정 · 접속 기기 · 공용 답안</p>
+            <div class="ad-login-card-head">
+              <span class="ad-secure-mark"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg></span>
+              <div><h2 class="title-3">관리자 인증</h2><p class="ad-login-sub">Owner access only</p></div>
             </div>
             <div class="field">
               <label class="field-label" for="adminPassword">관리자 비밀번호</label>
               <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required autofocus>
             </div>
-            <button class="btn btn-primary" type="submit">로그인</button>
+            <button class="btn btn-primary btn-lg" type="submit">관리자 화면 열기</button>
             <p id="loginError" class="field-error" role="alert"></p>
           </form>
         </section>
@@ -1726,13 +2175,14 @@ label.list-row {
           <header class="view-head">
             <div class="view-head-main">
               <div>
+                <span class="workspace-kicker"><i aria-hidden="true"></i>ADMIN CONSOLE</span>
                 <h1 id="viewTitle" class="title-1">개요</h1>
                 <p id="viewSub">운영 상태 요약</p>
               </div>
             </div>
             <div class="toolbar-group">
-              <button id="refresh" class="btn btn-secondary btn-sm" type="button">새로고침</button>
-              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button">로그아웃</button>
+              <button id="refresh" class="btn btn-secondary btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-refresh"></use></svg>새로고침</button>
+              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-log-out"></use></svg>로그아웃</button>
             </div>
           </header>
 

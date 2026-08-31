@@ -8,11 +8,11 @@
   <meta name="robots" content="noindex, nofollow">
   <title>hvsdcm admin</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v2">
-  <link rel="stylesheet" href="/admin/assets/css/admin.css">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
+  <link rel="stylesheet" href="/admin/assets/css/admin.css?v=20260901-dark-workspace-v3">
   <script src="/admin/assets/js/admin.js" defer></script>
 </head>
-<body>
+<body class="workspace-app admin-page">
   <a class="skip-link" href="#adminMain">본문으로 건너뛰기</a>
 
   <header class="topbar">
@@ -20,8 +20,9 @@
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>운영</a>
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
-        <span class="topbar-link">private · secure</span>
       </nav>
     </div>
   </header>
@@ -35,11 +36,21 @@
            각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
            admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
-        <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+        <div class="sidebar-product">
+          <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
+          <div class="sidebar-product-copy"><span>OWNER ONLY</span><strong>관리 센터</strong></div>
+        </div>
 
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
           <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
+        </nav>
+
+        <nav class="sidebar-group" aria-label="워크스페이스 도구">
+          <p class="sidebar-label">워크스페이스</p>
+          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
+          <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">Usage</span></a>
+          <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
@@ -61,16 +72,23 @@
 
       <main id="adminMain" class="app-main" tabindex="-1">
         <section id="login" class="ad-login">
+          <div class="ad-login-intro">
+            <span class="workspace-kicker"><i aria-hidden="true"></i>PRIVATE OPERATIONS</span>
+            <div class="ad-login-symbol" aria-hidden="true"><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></div>
+            <h1>워크스페이스를<br>운영하는 한 화면.</h1>
+            <p>계정, 접속 기기, 학습 데이터를 안전한 관리자 세션에서 확인합니다.</p>
+            <ul class="ad-login-facts" aria-label="관리자 화면 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg>탭 단위 세션</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg>기기 추적</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-database"></use></svg>학습 데이터</li></ul>
+          </div>
           <form id="adminLogin" class="card ad-login-card">
-            <div>
-              <h1 class="title-3">관리자 인증</h1>
-              <p class="ad-login-sub">계정 · 접속 기기 · 공용 답안</p>
+            <div class="ad-login-card-head">
+              <span class="ad-secure-mark"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg></span>
+              <div><h2 class="title-3">관리자 인증</h2><p class="ad-login-sub">Owner access only</p></div>
             </div>
             <div class="field">
               <label class="field-label" for="adminPassword">관리자 비밀번호</label>
               <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required autofocus>
             </div>
-            <button class="btn btn-primary" type="submit">로그인</button>
+            <button class="btn btn-primary btn-lg" type="submit">관리자 화면 열기</button>
             <p id="loginError" class="field-error" role="alert"></p>
           </form>
         </section>
@@ -79,13 +97,14 @@
           <header class="view-head">
             <div class="view-head-main">
               <div>
+                <span class="workspace-kicker"><i aria-hidden="true"></i>ADMIN CONSOLE</span>
                 <h1 id="viewTitle" class="title-1">개요</h1>
                 <p id="viewSub">운영 상태 요약</p>
               </div>
             </div>
             <div class="toolbar-group">
-              <button id="refresh" class="btn btn-secondary btn-sm" type="button">새로고침</button>
-              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button">로그아웃</button>
+              <button id="refresh" class="btn btn-secondary btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-refresh"></use></svg>새로고침</button>
+              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-log-out"></use></svg>로그아웃</button>
             </div>
           </header>
 

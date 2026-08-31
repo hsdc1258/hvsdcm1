@@ -17,7 +17,7 @@
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v2">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
   <link rel="stylesheet" href="/assets/css/home.css?v=20260901-dark-workspace-v2">
   <script src="/assets/js/home.js?v=20260901-dark-workspace-v2" defer></script>
 </head>
@@ -75,8 +75,15 @@
     <template data-owner>
       <div class="drawer-owner">
         <p class="list-group-head">계정</p>
-        <nav class="list-group" aria-label="계정 도구"><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a></nav>
+        <nav class="list-group" aria-label="계정 도구">
+          <span id="behaviorDrawerMount" class="drawer-exact-owner-slot"></span>
+          <a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a>
+          <a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">관리자</span><span class="list-row-sub">계정 · 접속 · 학습 데이터</span></span></a>
+        </nav>
       </div>
+    </template>
+    <template data-behavior-drawer>
+      <a class="list-row list-row-nav" href="/behavior-lab/#live"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">코인매매</span><span class="list-row-sub">Behavior Lab · 실투 현황</span></span></a>
     </template>
     <div class="drawer-bottom">
       <div class="drawer-social">

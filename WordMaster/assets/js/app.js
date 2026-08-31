@@ -403,10 +403,11 @@
     const s = summaryStats();
     const poolSize = getRangeWords(state.home.startDay, state.home.endDay).length;
     app.innerHTML = `
-      <header class="view-head">
+      <header class="view-head wm-view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
+            <span class="workspace-kicker"><i aria-hidden="true"></i>WORDMASTER 2000</span>
             <h1>시험 설정</h1>
             <p>DAY 범위를 정하면 한국어 뜻 주관식 시험이 시작됩니다.</p>
           </div>
@@ -456,7 +457,7 @@
               <span class="list-row-value"><select id="orderMode" class="field-input-inline">${renderSortOptions(state.home.order)}</select></span>
             </div>
           </div>
-          <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button">시험 시작</button>
+          <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>시험 시작</button>
         </section>
 
         <aside class="wm-panel">
@@ -519,10 +520,11 @@
     const progress = Math.round((current / total) * 100);
 
     app.innerHTML = `
-      <header class="view-head">
+      <header class="view-head wm-view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
+            <span class="workspace-kicker"><i aria-hidden="true"></i>FOCUS SESSION</span>
             <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
             <h1>뜻 시험</h1>
           </div>
@@ -609,7 +611,7 @@
     const wrongRows = session.results.filter((row) => !row.correct);
 
     app.innerHTML = `
-      <header class="view-head">
+      <header class="view-head wm-view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
@@ -683,10 +685,11 @@
     const filteredWrongEntries = filterWrongEntries(wrongEntries, state.wrongSearch);
 
     app.innerHTML = `
-      <header class="view-head">
+      <header class="view-head wm-view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
+            <span class="workspace-kicker"><i aria-hidden="true"></i>LEARNING LOG</span>
             <h1>학습 기록</h1>
             <p>계정 DB에 저장된 풀이 기록입니다. 이 브라우저에는 사본만 남습니다.</p>
           </div>

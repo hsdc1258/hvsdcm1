@@ -200,6 +200,9 @@ body.logged .drawer-login {
 .drawer.logged .drawer-logout {
   display: flex;
 }
+.drawer-exact-owner-slot {
+  display: contents;
+}
 /* Hero */
 .hero {
   min-height: min(900px, 100dvh);

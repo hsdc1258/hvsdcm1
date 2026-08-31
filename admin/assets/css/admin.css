@@ -138,3 +138,205 @@
     gap: var(--space-4);
   }
 }
+/* ---- dark operations redesign ---- */
+.admin-page .app-shell {
+  min-height: calc(100dvh - var(--topbar-h) - 138px);
+}
+.admin-page .ad-login {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
+  align-items: stretch;
+  gap: 28px;
+  min-height: 650px;
+}
+.ad-login-intro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: clamp(36px, 6vw, 84px);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 32px;
+  background: radial-gradient(circle at 78% 22%, rgba(41,151,255,.22), transparent 18rem), linear-gradient(145deg, #161a24, #090a0e 72%);
+}
+.ad-login-intro::after {
+  position: absolute;
+  right: -90px;
+  bottom: -120px;
+  width: 320px;
+  height: 320px;
+  border: 1px solid rgba(41,151,255,.15);
+  border-radius: 50%;
+  box-shadow: 0 0 0 60px rgba(41,151,255,.025), 0 0 0 120px rgba(41,151,255,.018);
+  content: "";
+}
+.ad-login-symbol {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin: 28px 0;
+  place-items: center;
+  border: 1px solid rgba(41,151,255,.25);
+  border-radius: 21px;
+  background: rgba(41,151,255,.12);
+  color: #70bfff;
+}
+.ad-login-symbol .ui-icon {
+  width: 30px;
+  height: 30px;
+}
+.ad-login-intro h1 {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+  font-size: clamp(3rem, 3.4vw, 4rem);
+  line-height: .95;
+  letter-spacing: -.07em;
+}
+.ad-login-intro > p {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  margin-top: 24px;
+  color: #9aa2b2;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.ad-login-facts {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 42px;
+}
+.ad-login-facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+  color: #c4c9d4;
+  font-size: .78rem;
+}
+.ad-login-facts .ui-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+.admin-page .ad-login-card {
+  align-self: center;
+  width: 100%;
+  padding: 34px;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 26px;
+  background: #14161c;
+  box-shadow: 0 30px 90px rgba(0,0,0,.38);
+}
+.ad-login-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ad-secure-mark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ad-secure-mark .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+.admin-page .ad-login-card .field-input {
+  min-height: 54px;
+  border-radius: 14px;
+  background: #0b0c10;
+}
+.admin-page .ad-login-card .btn {
+  width: 100%;
+  min-height: 54px;
+}
+.admin-page .ad-panel {
+  gap: 28px;
+}
+.admin-page #stats {
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 20px;
+  background: linear-gradient(110deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 42%, rgba(48,209,88,.05));
+}
+.admin-page #stats > div {
+  min-height: 116px;
+  justify-content: center;
+  background: transparent;
+}
+.admin-page #stats > div .stat-value {
+  color: #f8fbff;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  letter-spacing: -.05em;
+}
+.admin-page .ad-view > .list-group, .admin-page .table-wrap {
+  border-color: rgba(255,255,255,.1);
+  border-radius: 20px;
+  background: rgba(18,20,26,.88);
+}
+.admin-page .toolbar {
+  padding: 14px;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 18px;
+  background: rgba(18,20,26,.9);
+}
+.admin-page .table th {
+  background: #111319;
+  color: #8b93a3;
+}
+.admin-page .table tbody tr:hover td {
+  background: rgba(41,151,255,.045);
+}
+@media (max-width: 1100px) {
+  .admin-page .ad-login {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .ad-login-intro {
+    min-height: 420px;
+  }
+  .admin-page .ad-login-card {
+    width: 100%;
+  }
+}
+@media (max-width: 620px) {
+  .admin-page .ad-login {
+    min-height: 0;
+  }
+  .ad-login-intro {
+    min-height: 360px;
+    padding: 28px;
+    border-radius: 24px;
+  }
+  .ad-login-intro h1 {
+    font-size: clamp(2.45rem, 12vw, 3.1rem);
+  }
+  .ad-login-intro > p {
+    font-size: .92rem;
+  }
+  .ad-login-facts {
+    margin-top: 28px;
+  }
+  .admin-page .ad-login-card {
+    padding: 24px;
+    border-radius: 22px;
+  }
+  .admin-page #stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1514,6 +1514,235 @@ label.list-row {
     transform: none;
   }
 }
+/* ==========================================================================
+   Workspace suite — Usage · Admin · WordMaster
+   세 화면의 제품 문법만 공유한다. 다른 학습 화면은 기존 앱 셸을 그대로 유지한다.
+   ========================================================================== */
+.workspace-app {
+  min-height: 100dvh;
+  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
+  background-size: auto, 64px 64px, 64px 64px, auto;
+}
+.workspace-app .topbar {
+  border-bottom-color: rgba(255,255,255,.08);
+  background: #07080b;
+}
+.workspace-app .topbar-crumb {
+  border-color: rgba(41,151,255,.2);
+  background: rgba(41,151,255,.09);
+  color: #8cc8ff;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.workspace-app .app-page {
+  padding-top: clamp(28px, 4vw, 56px);
+  padding-bottom: 80px;
+}
+.workspace-app .app-shell {
+  grid-template-columns: 284px minmax(0, 1fr);
+  gap: clamp(30px, 4vw, 64px);
+}
+.workspace-app .app-main {
+  width: 100%;
+  min-width: 0;
+}
+.workspace-app .sidebar {
+  top: calc(var(--topbar-h) + 28px);
+  gap: 22px;
+  max-height: calc(100dvh - var(--topbar-h) - 56px);
+  padding: 16px;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
+  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+}
+.sidebar-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px;
+}
+.workspace-app .sidebar-emblem {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 15px;
+  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+}
+.workspace-app .sidebar-emblem .brand-mark {
+  width: 30px;
+  height: 30px;
+}
+.workspace-app .sidebar-emblem > .ui-icon {
+  width: 23px;
+  height: 23px;
+  color: var(--accent);
+}
+.sidebar-product-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.sidebar-product-copy span {
+  color: var(--text-3);
+  font-size: .58rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+}
+.sidebar-product-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-app .sidebar-label {
+  padding-inline: 12px;
+  color: #777e8f;
+  font-size: .59rem;
+  letter-spacing: .14em;
+}
+.workspace-app .sidebar-item {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: #aeb4c2;
+}
+.workspace-app .sidebar-item:hover {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.05);
+}
+.workspace-app .sidebar-item.is-active, .workspace-app .sidebar-item[aria-current] {
+  border-color: rgba(41,151,255,.22);
+  background: rgba(41,151,255,.12);
+  color: #f7fbff;
+}
+.workspace-app .sidebar-item-featured {
+  border-color: rgba(41,151,255,.2);
+  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
+  color: #d9efff;
+}
+.workspace-app .sidebar-item-featured .ui-icon {
+  color: #55b5ff;
+}
+.sidebar-item-meta {
+  margin-left: auto;
+  padding: 3px 6px;
+  border: 1px solid rgba(48,209,88,.24);
+  border-radius: 999px;
+  background: rgba(48,209,88,.08);
+  color: #65e787;
+  font-size: .52rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.workspace-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #80c6ff;
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.workspace-kicker i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
+}
+.workspace-app .view-head {
+  align-items: flex-end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.workspace-app .view-head .title-1 {
+  font-size: clamp(2.25rem, 2rem + 1.25vw, 3.5rem);
+  line-height: .98;
+  letter-spacing: -.055em;
+}
+.workspace-app .view-head-main p {
+  max-width: 680px;
+  margin-top: 12px;
+  color: #858c9b;
+  font-size: .95rem;
+}
+.workspace-app .btn {
+  border-radius: 13px;
+}
+@media (max-width: 860px) {
+  .workspace-app .app-shell {
+    display: block;
+  }
+  .workspace-app .sidebar {
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    contain: inline-size;
+    min-width: 0;
+    max-width: 100%;
+    max-height: none;
+    margin-bottom: 30px;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 18px;
+    scrollbar-width: none;
+  }
+  .workspace-app .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .workspace-app .sidebar-product {
+    flex: none;
+    padding-right: 12px;
+    border-right: 1px solid var(--line-faint);
+  }
+  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
+    display: none;
+  }
+  .workspace-app .sidebar-group {
+    display: flex;
+    flex: none;
+    gap: 4px;
+  }
+  .workspace-app .sidebar-item {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 620px) {
+  .workspace-app .topbar-nav .topbar-link:not(:last-child) {
+    display: none;
+  }
+  .workspace-app .app-page {
+    padding-top: 20px;
+  }
+  .workspace-app .sidebar {
+    margin-inline: -4px;
+    margin-bottom: 24px;
+  }
+  .workspace-app .sidebar-product {
+    padding: 0 10px 0 2px;
+  }
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 42px;
+    height: 42px;
+  }
+  .workspace-app .view-head {
+    align-items: flex-start;
+    padding-bottom: 20px;
+  }
+  .workspace-app .view-head .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
 </style>
 <style>/* assets/css/home.css (inlined) */
 /* Dark Workspace — landing composition. Shared tokens and controls stay in system.css. */
@@ -1717,6 +1946,9 @@ body.logged .drawer-login {
 }
 .drawer.logged .drawer-logout {
   display: flex;
+}
+.drawer-exact-owner-slot {
+  display: contents;
 }
 /* Hero */
 .hero {
@@ -2384,9 +2616,16 @@ body.logged .drawer-login {
 
       <div class="drawer-owner">
         <p class="list-group-head">계정</p>
-        <nav class="list-group" aria-label="계정 도구"><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a></nav>
+        <nav class="list-group" aria-label="계정 도구">
+          <span id="behaviorDrawerMount" class="drawer-exact-owner-slot"></span>
+          <a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a>
+          <a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">관리자</span><span class="list-row-sub">계정 · 접속 · 학습 데이터</span></span></a>
+        </nav>
       </div>
 
+    <template data-behavior-drawer>
+      <a class="list-row list-row-nav" href="/behavior-lab/#live"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">코인매매</span><span class="list-row-sub">Behavior Lab · 실투 현황</span></span></a>
+    </template>
     <div class="drawer-bottom">
       <div class="drawer-social">
         <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5l-.7 1.2a18.3 18.3 0 0 0-5.5 0l-.6-1.2a19.7 19.7 0 0 0-4.9 1.5C.5 9-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a13.1 13.1 0 0 1-1.9-.9l.4-.3c3.9 1.8 8.2 1.8 12.1 0l.4.3a12.3 12.3 0 0 1-1.9.9l1.2 2a19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.4-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg></a>

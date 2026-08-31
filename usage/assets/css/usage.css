@@ -2019,3 +2019,142 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* ==========================================================================
+   Control Center redesign
+   기존 렌더러와 상태 계약은 유지하고, 정보 우선순위와 밀도만 다시 설계한다.
+   ========================================================================== */
+.usage-page .us-wide {
+  width: min(1680px, calc(100% - 48px));
+}
+.usage-page .app-shell {
+  grid-template-columns: 276px minmax(0, 1fr);
+}
+.usage-page .us-view:not([hidden]) {
+  gap: 28px;
+}
+.usage-page .us-command-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 24px;
+}
+.usage-page .us-pipeline-workspace {
+  gap: 20px;
+}
+.usage-page .h-session-views {
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 16px;
+  background: rgba(17,19,25,.86);
+}
+.usage-page .h-session-view-tab {
+  min-height: 42px;
+  border-radius: 11px;
+  color: #858d9c;
+}
+.usage-page .h-session-view-tab.is-active {
+  background: rgba(41,151,255,.15);
+  color: #f5f9ff;
+  box-shadow: inset 0 0 0 1px rgba(41,151,255,.2);
+}
+.usage-page .us-empty {
+  position: relative;
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  padding: 52px 28px;
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 120%, rgba(41,151,255,.17), transparent 44%), rgba(18,20,26,.82);
+  color: #9299a8;
+  font-size: .95rem;
+}
+.usage-page .us-empty::before {
+  width: 58px;
+  height: 58px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(41,151,255,.22);
+  border-radius: 18px;
+  background: rgba(41,151,255,.09);
+  box-shadow: inset 0 0 0 14px rgba(41,151,255,.025);
+  content: "";
+}
+.usage-page .us-quota-rail {
+  top: calc(var(--topbar-h) + 28px);
+  overflow: hidden;
+  border-color: rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #171920, #0d0f14);
+  box-shadow: 0 24px 80px rgba(0,0,0,.2);
+}
+.usage-page .us-quota-head {
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.usage-page .us-quota-head h2 {
+  font-size: 1.25rem;
+}
+.usage-page .us-limit-widget {
+  padding: 18px 0;
+}
+.usage-page .us-quota-rail .list-group {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.025);
+}
+.usage-page [class~="gauge-track"] {
+  height: 8px;
+  background: #292c35;
+}
+.usage-page .h-task, .usage-page .h-session-panel, .usage-page .mod-panel, .usage-page .cp-approvals, .usage-page .cp-overview, .usage-page .cp-panel, .usage-page .cp-applications, .usage-page .cp-candidates, .usage-page .gd-sec {
+  border-color: rgba(255,255,255,.1);
+  border-radius: 22px;
+  background: rgba(18,20,26,.9);
+}
+.usage-page [class~="summary-strip"], .usage-page .cp-metrics {
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(105deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 46%, rgba(48,209,88,.05));
+}
+.usage-page [class~="summary-cell"], .usage-page .cp-metrics > div {
+  background: transparent;
+}
+.usage-page .view-head .toolbar-group {
+  align-items: center;
+}
+.usage-page #reload {
+  min-height: 44px;
+  padding-inline: 16px;
+  border-color: rgba(255,255,255,.1);
+  background: rgba(255,255,255,.055);
+}
+.usage-page .us-freshness {
+  color: #777f8e;
+}
+@media (max-width: 1400px) {
+  .usage-page .us-command-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .usage-page .us-quota-rail {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 860px) {
+  .usage-page .app-shell {
+    display: block;
+  }
+}
+@media (max-width: 700px) {
+  .usage-page .us-wide {
+    width: min(100% - 28px, 1680px);
+  }
+  .usage-page .us-view:not([hidden]) {
+    gap: 22px;
+  }
+  .usage-page .us-empty {
+    min-height: 200px;
+    border-radius: 20px;
+  }
+  .usage-page .h-session-views {
+    overflow-x: auto;
+  }
+}
