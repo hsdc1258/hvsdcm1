@@ -49,6 +49,8 @@ const ABC_STRATEGY_LABELS = {
   A: 'Trend / momentum', B: 'Breakout / volatility', C: 'Mean reversion / crowd fade',
 };
 const MULTI_ARM_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const MULTI_FEE_RATE = 6 / 10_000;
+const MULTI_ADVERSE_SLIPPAGE_RATE = 4 / 10_000;
 const MULTI_STRATEGIES = {
   A: { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
     definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1', style: 'trend-continuation',
@@ -1796,6 +1798,11 @@ function normalizeMultiPosition(value, startedAtMs, latestAtMs) {
     stop_price: boundedPaperNumber(result.stop_price, 0, 1_000_000_000),
     target_price: boundedPaperNumber(result.target_price, 0, 1_000_000_000),
   };
+  const sign = result?.direction === 'long' ? 1 : -1;
+  const modeledExitPrice = numbers && numbers.mark_price * (1 - sign * MULTI_ADVERSE_SLIPPAGE_RATE);
+  const modeledExitFee = numbers && numbers.quantity * modeledExitPrice * MULTI_FEE_RATE;
+  const expectedUnrealizedPnl = numbers && sign * numbers.quantity
+    * (modeledExitPrice - numbers.entry_price) - modeledExitFee;
   if (!result || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(result.symbol)
     || !['long', 'short'].includes(result.direction) || !openedAt
     || Object.values(numbers).some((entry) => entry === null)
@@ -1803,6 +1810,7 @@ function normalizeMultiPosition(value, startedAtMs, latestAtMs) {
       .some((key) => numbers[key] <= 0)
     || Date.parse(openedAt) < startedAtMs || Date.parse(openedAt) > latestAtMs
     || !closePaperNumber(numbers.notional, numbers.entry_price * numbers.quantity)
+    || !closePaperNumber(numbers.unrealized_pnl, expectedUnrealizedPnl)
     || (result.direction === 'long'
       ? !(numbers.stop_price < numbers.entry_price && numbers.entry_price < numbers.target_price)
       : !(numbers.target_price < numbers.entry_price && numbers.entry_price < numbers.stop_price))) return undefined;
@@ -1834,6 +1842,8 @@ function normalizeMultiTrades(value, startedAtMs, latestAtMs) {
       || ['entry_price', 'exit_price', 'quantity', 'notional'].some((key) => numbers[key] <= 0)
       || Date.parse(openedAt) < startedAtMs || Date.parse(closedAt) < Date.parse(openedAt)
       || Date.parse(closedAt) > latestAtMs || !closePaperNumber(numbers.notional, numbers.entry_price * numbers.quantity)
+      || !closePaperNumber(numbers.fees,
+        numbers.quantity * (numbers.entry_price + numbers.exit_price) * MULTI_FEE_RATE)
       || !closePaperNumber(numbers.net_pnl, (result.direction === 'long' ? 1 : -1)
         * numbers.quantity * (numbers.exit_price - numbers.entry_price) - numbers.fees)
       || !closePaperNumber(numbers.return_pct, numbers.net_pnl / numbers.notional * 100)
@@ -1958,16 +1968,20 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
   const recentLosses = trades?.filter((trade) => trade.net_pnl < 0).length ?? 0;
   const retainedEntryFee = openPosition === null ? 0 : numbers.fees - recentFees;
   const retainedRealizedPnl = recentNetPnl - retainedEntryFee;
+  const modeledOpenEntryFee = !openPosition ? 0 : openPosition.notional * MULTI_FEE_RATE;
+  const modeledPreEntryEquity = !openPosition ? 0 : numbers.cash + modeledOpenEntryFee;
   if (!equityCurve || openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined
     || !closePaperNumber(numbers.realized_pnl, numbers.cash - 100)
     || !closePaperNumber(numbers.equity, numbers.cash + numbers.unrealized_pnl)
     || (openPosition === null ? !closePaperNumber(numbers.unrealized_pnl, 0)
       : !closePaperNumber(openPosition.unrealized_pnl, numbers.unrealized_pnl))
+    || (openPosition !== null && (!(modeledPreEntryEquity > 0)
+      || !closePaperNumber(openPosition.leverage, openPosition.notional / modeledPreEntryEquity)))
     || trades.length > numbers.trade_count || numbers.fees + 1e-6 < recentFees
     || numbers.slippage_cost + 1e-6 < recentSlippage
     || recentWins > numbers.win_count || recentLosses > numbers.loss_count
     || (trades.length === numbers.trade_count && (!closePaperNumber(retainedRealizedPnl, numbers.realized_pnl)
-      || (openPosition !== null && !closePaperNumber(retainedEntryFee, openPosition.notional * 6 / 10_000))
+      || (openPosition !== null && !closePaperNumber(retainedEntryFee, modeledOpenEntryFee))
       || recentWins !== numbers.win_count || recentLosses !== numbers.loss_count))
     || (status === 'starting' && !startingState) || (status !== 'starting' && lastCycleAt === null)
     || (lastCycleAt && (Date.parse(lastCycleAt) < startedAtMs || Date.parse(lastCycleAt) > latestAtMs))
