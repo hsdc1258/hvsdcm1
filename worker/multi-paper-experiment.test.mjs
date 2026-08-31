@@ -47,9 +47,13 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
   const arms = ['A', 'B', 'C', 'D', 'E', 'F'].map((armId, index) => {
     const strategy = STRATEGIES[index];
     const curveLength = maximal ? 64 : 2;
+    const entryFee = maximal ? .06 : 0;
+    const finalEquity = 100 - entryFee;
     const curve = Array.from({ length: curveLength }, (_, point) => ({
       sequence: point === curveLength - 1 ? effectiveSequence : point + 1,
-      at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + point * 1_000).toISOString(), equity: 100, net_pnl: 0 }));
+      at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + point * 1_000).toISOString(),
+      equity: point === curveLength - 1 ? finalEquity : 100,
+      net_pnl: point === curveLength - 1 ? -entryFee : 0 }));
     const trades = Array.from({ length: maximal ? 25 : 0 }, (_, trade) => ({ id: maximal ? safe240 : `trade-${armId}-${trade}`,
       symbol: 'BTCUSDT', direction: trade % 2 ? 'short' : 'long', opened_at: '2026-08-31T00:00:10.000Z',
       closed_at: '2026-08-31T00:00:40.000Z', entry_price: 100, exit_price: trade % 2 ? 99.88 : 100.12, quantity: 1,
@@ -70,8 +74,9 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
       definition_hash: strategy.definition_hash, policy: policyObject(strategy.policy) },
     risk: { risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10, max_hold_minutes: 45,
       minimum_hold_before_opposite_minutes: 5 }, chain: { sequence: effectiveSequence, hash: HASHES[index] },
-    status: 'active', seed_equity: 100, equity: 100, cash: 100, realized_pnl: 0, unrealized_pnl: 0,
-    net_pnl: 0, return_pct: 0, max_drawdown_pct: 0, fees: trades.length * .12,
+    status: 'active', seed_equity: 100, equity: finalEquity, cash: finalEquity,
+    realized_pnl: -entryFee, unrealized_pnl: 0, net_pnl: -entryFee, return_pct: -entryFee,
+    max_drawdown_pct: entryFee, fees: trades.length * .12 + entryFee,
     slippage_cost: trades.length * .08, trade_count: trades.length, win_count: 0, loss_count: 0, equity_curve: curve,
     open_position: maximal ? { id: safe240, symbol: 'BTCUSDT', direction: 'long',
       opened_at: '2026-08-31T00:00:30.000Z', entry_price: 100, mark_price: 100, quantity: 1,
@@ -134,6 +139,19 @@ function post(report, env) {
     body: JSON.stringify(report) }), env);
 }
 
+function installOpenPosition(report, position) {
+  const arm = report.arms[0];
+  arm.open_position = position;
+  arm.cash = 99.94; arm.realized_pnl = -.06; arm.unrealized_pnl = position.unrealized_pnl;
+  arm.equity = arm.cash + arm.unrealized_pnl; arm.net_pnl = arm.equity - 100; arm.return_pct = arm.net_pnl;
+  arm.max_drawdown_pct = Math.max(0, -arm.net_pnl); arm.fees = .06;
+  arm.equity_curve.at(-1).equity = arm.equity; arm.equity_curve.at(-1).net_pnl = arm.net_pnl;
+  report.leaderboard = [...report.arms].sort((left, right) => right.equity - left.equity
+    || left.arm_id.localeCompare(right.arm_id)).map((entry, index) => ({ rank: index + 1,
+    arm_id: entry.arm_id, equity: entry.equity, net_pnl: entry.net_pnl, return_pct: entry.return_pct,
+    max_drawdown_pct: entry.max_drawdown_pct }));
+}
+
 test('six-arm v2 normalization binds exact id, hashes, policies, lower risk, costs, and six unique chains', () => {
   const normalized = normalizeBehaviorMultiPaperExperimentReport(multiExperimentReport());
   assert.ok(normalized);
@@ -170,11 +188,11 @@ test('actual v2 POST rejects impossible position, trade, count, state, and exper
     entry_price: 100, exit_price: 100.12, quantity: 1, notional: 100, net_pnl: 0, return_pct: 0,
     fees: .12, slippage_cost: .08, reason: 'target' };
   const mutations = [
-    (report) => { report.arms[0].open_position = { ...validPosition, entry_price: -100, mark_price: -90,
-      quantity: -1, notional: -100, stop_price: -110, target_price: -80 }; },
-    (report) => { report.arms[0].open_position = { ...validPosition, quantity: 0, notional: 0 }; },
-    (report) => { report.arms[0].open_position = { ...validPosition, opened_at: '2026-08-31T00:03:00.000Z' }; },
-    (report) => { report.arms[0].open_position = { ...validPosition, stop_price: 101, target_price: 99 }; },
+    (report) => { installOpenPosition(report, { ...validPosition, entry_price: -100, mark_price: -90,
+      quantity: -1, notional: -100, stop_price: -110, target_price: -80 }); },
+    (report) => { installOpenPosition(report, { ...validPosition, quantity: 0, notional: 0 }); },
+    (report) => { installOpenPosition(report, { ...validPosition, opened_at: '2026-08-31T00:03:00.000Z' }); },
+    (report) => { installOpenPosition(report, { ...validPosition, stop_price: 101, target_price: 99 }); },
     (report) => { report.arms[0].recent_trades = [{ ...validTrade, entry_price: 0 }];
       report.arms[0].trade_count = 1; report.arms[0].fees = .12; report.arms[0].slippage_cost = .08; },
     (report) => { report.arms[0].recent_trades = [{ ...validTrade,

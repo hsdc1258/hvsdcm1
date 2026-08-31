@@ -1956,6 +1956,8 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
   const recentNetPnl = trades?.reduce((sum, trade) => sum + trade.net_pnl, 0) ?? 0;
   const recentWins = trades?.filter((trade) => trade.net_pnl > 0).length ?? 0;
   const recentLosses = trades?.filter((trade) => trade.net_pnl < 0).length ?? 0;
+  const retainedEntryFee = openPosition === null ? 0 : numbers.fees - recentFees;
+  const retainedRealizedPnl = recentNetPnl - retainedEntryFee;
   if (!equityCurve || openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined
     || !closePaperNumber(numbers.realized_pnl, numbers.cash - 100)
     || !closePaperNumber(numbers.equity, numbers.cash + numbers.unrealized_pnl)
@@ -1964,7 +1966,8 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
     || trades.length > numbers.trade_count || numbers.fees + 1e-6 < recentFees
     || numbers.slippage_cost + 1e-6 < recentSlippage
     || recentWins > numbers.win_count || recentLosses > numbers.loss_count
-    || (trades.length === numbers.trade_count && (!closePaperNumber(recentNetPnl, numbers.realized_pnl)
+    || (trades.length === numbers.trade_count && (!closePaperNumber(retainedRealizedPnl, numbers.realized_pnl)
+      || (openPosition !== null && !closePaperNumber(retainedEntryFee, openPosition.notional * 6 / 10_000))
       || recentWins !== numbers.win_count || recentLosses !== numbers.loss_count))
     || (status === 'starting' && !startingState) || (status !== 'starting' && lastCycleAt === null)
     || (lastCycleAt && (Date.parse(lastCycleAt) < startedAtMs || Date.parse(lastCycleAt) > latestAtMs))
