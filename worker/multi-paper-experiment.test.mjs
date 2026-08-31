@@ -52,9 +52,9 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
       at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + point * 1_000).toISOString(), equity: 100, net_pnl: 0 }));
     const trades = Array.from({ length: maximal ? 25 : 0 }, (_, trade) => ({ id: maximal ? safe240 : `trade-${armId}-${trade}`,
       symbol: 'BTCUSDT', direction: trade % 2 ? 'short' : 'long', opened_at: '2026-08-31T00:00:10.000Z',
-      closed_at: '2026-08-31T00:00:40.000Z', entry_price: 100, exit_price: 101, quantity: 1,
-      notional: 100, net_pnl: 1, return_pct: 1, fees: .12, slippage_cost: .08,
-      reason: maximal ? safe240 : 'target' }));
+      closed_at: '2026-08-31T00:00:40.000Z', entry_price: 100, exit_price: trade % 2 ? 99.88 : 100.12, quantity: 1,
+      notional: 100, net_pnl: 0, return_pct: 0, fees: .12, slippage_cost: .08,
+      reason: 'target' }));
     const decisions = Array.from({ length: maximal ? 20 : 1 }, (_, decision) => ({ symbol: 'BTCUSDT',
       signal_bar_at: new Date(Date.parse('2026-08-31T00:00:00.000Z') + decision * 1_000).toISOString(),
       observed_at: new Date(Date.parse('2026-08-31T00:01:00.000Z') + decision * 1_000).toISOString(),
@@ -71,8 +71,8 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
     risk: { risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10, max_hold_minutes: 45,
       minimum_hold_before_opposite_minutes: 5 }, chain: { sequence: effectiveSequence, hash: HASHES[index] },
     status: 'active', seed_equity: 100, equity: 100, cash: 100, realized_pnl: 0, unrealized_pnl: 0,
-    net_pnl: 0, return_pct: 0, max_drawdown_pct: 0, fees: 0, slippage_cost: 0,
-    trade_count: trades.length, win_count: trades.length, loss_count: 0, equity_curve: curve,
+    net_pnl: 0, return_pct: 0, max_drawdown_pct: 0, fees: trades.length * .12,
+    slippage_cost: trades.length * .08, trade_count: trades.length, win_count: 0, loss_count: 0, equity_curve: curve,
     open_position: maximal ? { id: safe240, symbol: 'BTCUSDT', direction: 'long',
       opened_at: '2026-08-31T00:00:30.000Z', entry_price: 100, mark_price: 100, quantity: 1,
       notional: 100, leverage: 1, unrealized_pnl: 0, stop_price: 99, target_price: 103 } : null,
@@ -158,6 +158,42 @@ test('six-arm v2 rejects cross-schema/id/hash/source-like downgrade and malforme
   for (const mutate of mutations) {
     const report = multiExperimentReport(); mutate(report);
     assert.equal(normalizeBehaviorMultiPaperExperimentReport(report), null);
+  }
+});
+
+test('actual v2 POST rejects impossible position, trade, count, state, and experiment status without a D1 write', async () => {
+  const validPosition = { id: 'BTCUSDT-1-long', symbol: 'BTCUSDT', direction: 'long',
+    opened_at: '2026-08-31T00:01:30.000Z', entry_price: 100, mark_price: 100, quantity: 1,
+    notional: 100, leverage: 1, unrealized_pnl: 0, stop_price: 99, target_price: 103 };
+  const validTrade = { id: 'BTCUSDT-0-long', symbol: 'BTCUSDT', direction: 'long',
+    opened_at: '2026-08-31T00:00:10.000Z', closed_at: '2026-08-31T00:00:40.000Z',
+    entry_price: 100, exit_price: 100.12, quantity: 1, notional: 100, net_pnl: 0, return_pct: 0,
+    fees: .12, slippage_cost: .08, reason: 'target' };
+  const mutations = [
+    (report) => { report.arms[0].open_position = { ...validPosition, entry_price: -100, mark_price: -90,
+      quantity: -1, notional: -100, stop_price: -110, target_price: -80 }; },
+    (report) => { report.arms[0].open_position = { ...validPosition, quantity: 0, notional: 0 }; },
+    (report) => { report.arms[0].open_position = { ...validPosition, opened_at: '2026-08-31T00:03:00.000Z' }; },
+    (report) => { report.arms[0].open_position = { ...validPosition, stop_price: 101, target_price: 99 }; },
+    (report) => { report.arms[0].recent_trades = [{ ...validTrade, entry_price: 0 }];
+      report.arms[0].trade_count = 1; report.arms[0].fees = .12; report.arms[0].slippage_cost = .08; },
+    (report) => { report.arms[0].recent_trades = [{ ...validTrade,
+      opened_at: '2026-08-31T00:01:00.000Z', closed_at: '2026-08-31T00:00:40.000Z' }];
+      report.arms[0].trade_count = 1; report.arms[0].fees = .12; report.arms[0].slippage_cost = .08; },
+    (report) => { report.arms[0].recent_trades = [{ ...validTrade, closed_at: '2026-08-31T00:03:00.000Z' }];
+      report.arms[0].trade_count = 1; report.arms[0].fees = .12; report.arms[0].slippage_cost = .08; },
+    (report) => { report.arms[0].win_count = 1; },
+    (report) => { report.arms[0].equity = 101; report.arms[0].net_pnl = 1; report.arms[0].return_pct = 1; },
+    (report) => { report.status = 'complete'; for (const arm of report.arms) {
+      arm.status = 'starting'; arm.recent_decisions = []; arm.last_cycle_at = null;
+    } },
+  ];
+  for (const mutate of mutations) {
+    const report = multiExperimentReport(); mutate(report);
+    const db = experimentDb();
+    const response = await post(report, envFor(db));
+    assert.equal(response.status, 400);
+    assert.equal(db.rows.has(BEHAVIOR_MULTI_SNAPSHOT_SOURCE), false);
   }
 });
 

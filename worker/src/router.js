@@ -93,7 +93,7 @@ const VALID_MULTI_GATE_REASONS = new Set([
   'warmup-incomplete', 'regime-warmup-incomplete', 'invalid-quote', 'stress-regime', 'regime-mismatch',
   'spread-too-wide', 'score-below-threshold', 'persistence-insufficient', 'feature-agreement-insufficient',
   'required-feature-mismatch', 'trend-direction-mismatch', 'target-below-cost-floor',
-  'net-reward-risk-insufficient', 'post-exit-cooldown',
+  'net-reward-risk-insufficient', 'post-exit-cooldown', 'candidate-stale',
 ]);
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
 const VALID_BEHAVIOR_PAPER_LOG_TYPES = new Set([
@@ -1776,18 +1776,75 @@ export function normalizeBehaviorPaperExperimentReport(input) {
     leaderboard, arms, limitations };
 }
 
-function normalizeMultiPosition(value) {
+function closePaperNumber(left, right) {
+  return Math.abs(left - right) <= Math.max(1e-6, Math.max(Math.abs(left), Math.abs(right)) * 1e-9);
+}
+
+function normalizeMultiPosition(value, startedAtMs, latestAtMs) {
   if (value === null) return null;
   const keys = ['id', 'symbol', 'direction', 'opened_at', 'entry_price', 'mark_price', 'quantity', 'notional',
     'leverage', 'unrealized_pnl', 'stop_price', 'target_price'];
   const result = normalizeExperimentDetail(value, keys);
+  const openedAt = result && normalizePaperTimestamp(result.opened_at);
+  const numbers = result && {
+    entry_price: boundedPaperNumber(result.entry_price, 0, 1_000_000_000),
+    mark_price: boundedPaperNumber(result.mark_price, 0, 1_000_000_000),
+    quantity: boundedPaperNumber(result.quantity, 0, 1_000_000_000),
+    notional: boundedPaperNumber(result.notional, 0, 1_000_000_000),
+    leverage: boundedPaperNumber(result.leverage, 0, 3),
+    unrealized_pnl: boundedPaperNumber(result.unrealized_pnl, -1_000_000, 1_000_000),
+    stop_price: boundedPaperNumber(result.stop_price, 0, 1_000_000_000),
+    target_price: boundedPaperNumber(result.target_price, 0, 1_000_000_000),
+  };
   if (!result || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(result.symbol)
-    || !['long', 'short'].includes(result.direction) || !normalizePaperTimestamp(result.opened_at)
-    || boundedPaperNumber(result.leverage, 0, 3) === null) return undefined;
-  return result;
+    || !['long', 'short'].includes(result.direction) || !openedAt
+    || Object.values(numbers).some((entry) => entry === null)
+    || ['entry_price', 'mark_price', 'quantity', 'notional', 'leverage', 'stop_price', 'target_price']
+      .some((key) => numbers[key] <= 0)
+    || Date.parse(openedAt) < startedAtMs || Date.parse(openedAt) > latestAtMs
+    || !closePaperNumber(numbers.notional, numbers.entry_price * numbers.quantity)
+    || (result.direction === 'long'
+      ? !(numbers.stop_price < numbers.entry_price && numbers.entry_price < numbers.target_price)
+      : !(numbers.target_price < numbers.entry_price && numbers.entry_price < numbers.stop_price))) return undefined;
+  return { id: result.id, symbol: result.symbol, direction: result.direction, opened_at: openedAt, ...numbers };
 }
 
-function normalizeMultiDecisions(value, sharedSequence) {
+function normalizeMultiTrades(value, startedAtMs, latestAtMs) {
+  if (!Array.isArray(value) || value.length > 25) return null;
+  const keys = ['id', 'symbol', 'direction', 'opened_at', 'closed_at', 'entry_price', 'exit_price', 'quantity',
+    'notional', 'net_pnl', 'return_pct', 'fees', 'slippage_cost', 'reason'];
+  const trades = [];
+  for (const entry of value) {
+    const result = normalizeExperimentDetail(entry, keys);
+    const openedAt = result && normalizePaperTimestamp(result.opened_at);
+    const closedAt = result && normalizePaperTimestamp(result.closed_at);
+    const numbers = result && {
+      entry_price: boundedPaperNumber(result.entry_price, 0, 1_000_000_000),
+      exit_price: boundedPaperNumber(result.exit_price, 0, 1_000_000_000),
+      quantity: boundedPaperNumber(result.quantity, 0, 1_000_000_000),
+      notional: boundedPaperNumber(result.notional, 0, 1_000_000_000),
+      net_pnl: boundedPaperNumber(result.net_pnl, -1_000_000, 1_000_000),
+      return_pct: boundedPaperNumber(result.return_pct, -1_000_000, 1_000_000),
+      fees: boundedPaperNumber(result.fees, 0, 1_000_000),
+      slippage_cost: boundedPaperNumber(result.slippage_cost, 0, 1_000_000),
+    };
+    if (!result || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(result.symbol)
+      || !['long', 'short'].includes(result.direction) || !openedAt || !closedAt
+      || Object.values(numbers).some((item) => item === null)
+      || ['entry_price', 'exit_price', 'quantity', 'notional'].some((key) => numbers[key] <= 0)
+      || Date.parse(openedAt) < startedAtMs || Date.parse(closedAt) < Date.parse(openedAt)
+      || Date.parse(closedAt) > latestAtMs || !closePaperNumber(numbers.notional, numbers.entry_price * numbers.quantity)
+      || !closePaperNumber(numbers.net_pnl, (result.direction === 'long' ? 1 : -1)
+        * numbers.quantity * (numbers.exit_price - numbers.entry_price) - numbers.fees)
+      || !closePaperNumber(numbers.return_pct, numbers.net_pnl / numbers.notional * 100)
+      || !['stop', 'target', 'opposite-signal', 'max-hold', 'risk-halt', 'deadline'].includes(result.reason)) return null;
+    trades.push({ id: result.id, symbol: result.symbol, direction: result.direction,
+      opened_at: openedAt, closed_at: closedAt, ...numbers, reason: result.reason });
+  }
+  return trades;
+}
+
+function normalizeMultiDecisions(value, sharedSequence, startedAtMs, latestAtMs) {
   if (!Array.isArray(value) || value.length > 20) return null;
   const keys = ['symbol', 'signal_bar_at', 'observed_at', 'regime', 'direction', 'score', 'confidence',
     'spread_bps', 'feature_agreement', 'target_distance_bps', 'net_reward_risk', 'gate_reasons',
@@ -1812,6 +1869,8 @@ function normalizeMultiDecisions(value, sharedSequence) {
     if (!['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(entry.symbol)
       || !['trend-up', 'trend-down', 'range', 'stress'].includes(entry.regime)
       || !['long', 'short', 'stand-aside'].includes(entry.direction) || !signalBarAt || !observedAt
+      || Date.parse(signalBarAt) > Date.parse(observedAt) || Date.parse(observedAt) < startedAtMs
+      || Date.parse(observedAt) > latestAtMs
       || [score, confidence, spreadBps, featureAgreement, targetDistanceBps, netRewardRisk, feedSequence]
         .some((item) => item === null) || !feedHash
       || (entry.direction === 'stand-aside' ? gateReasons.length < 1 : gateReasons.length !== 0)) return null;
@@ -1823,12 +1882,13 @@ function normalizeMultiDecisions(value, sharedSequence) {
   return decisions;
 }
 
-function normalizeMultiLogs(value) {
+function normalizeMultiLogs(value, startedAtMs, latestAtMs) {
   if (!Array.isArray(value) || value.length > 30) return null;
   const keys = ['sequence', 'at', 'type', 'message'];
   const logs = value.map((entry) => normalizeExperimentDetail(entry, keys));
   if (logs.some((entry) => !entry || boundedPaperNumber(entry.sequence, 1, 1_000_000, true) === null
     || !normalizePaperTimestamp(entry.at) || !VALID_MULTI_EVENT_TYPES.has(entry.type)
+    || Date.parse(entry.at) < startedAtMs || Date.parse(entry.at) > latestAtMs
     || boundedPaperText(entry.message, 240, true) === null || containsForbiddenPaperPrivateText(entry.message))) return null;
   return logs;
 }
@@ -1843,7 +1903,7 @@ function normalizeMultiPolicy(value, armId) {
   return JSON.stringify(value) === JSON.stringify(facts) ? facts : null;
 }
 
-function normalizeMultiArm(value, armId, sharedSequence) {
+function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs) {
   const keys = ['arm_id', 'strategy', 'risk', 'chain', 'status', 'seed_equity', 'equity', 'cash',
     'realized_pnl', 'unrealized_pnl', 'net_pnl', 'return_pct', 'max_drawdown_pct', 'fees',
     'slippage_cost', 'trade_count', 'win_count', 'loss_count', 'equity_curve', 'open_position',
@@ -1880,12 +1940,36 @@ function normalizeMultiArm(value, armId, sharedSequence) {
     || Math.abs(numbers.return_pct - numbers.net_pnl) > 1e-6
     || numbers.win_count + numbers.loss_count > numbers.trade_count) return null;
   const equityCurve = normalizeExperimentEquityCurve(value.equity_curve, chainSequence, numbers.equity);
-  const openPosition = normalizeMultiPosition(value.open_position);
-  const trades = normalizeExperimentTrades(value.recent_trades);
-  const decisions = normalizeMultiDecisions(value.recent_decisions, sharedSequence);
-  const logs = normalizeMultiLogs(value.recent_logs);
+  const openPosition = normalizeMultiPosition(value.open_position, startedAtMs, latestAtMs);
+  const trades = normalizeMultiTrades(value.recent_trades, startedAtMs, latestAtMs);
+  const decisions = normalizeMultiDecisions(value.recent_decisions, sharedSequence, startedAtMs, latestAtMs);
+  const logs = normalizeMultiLogs(value.recent_logs, startedAtMs, latestAtMs);
   const lastCycleAt = normalizePaperTimestamp(value.last_cycle_at, true);
-  if (!equityCurve || openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined) return null;
+  const startingState = status === 'starting' && openPosition === null && numbers.trade_count === 0
+    && numbers.win_count === 0 && numbers.loss_count === 0 && closePaperNumber(numbers.equity, 100)
+    && closePaperNumber(numbers.cash, 100) && closePaperNumber(numbers.realized_pnl, 0)
+    && closePaperNumber(numbers.unrealized_pnl, 0) && closePaperNumber(numbers.fees, 0)
+    && closePaperNumber(numbers.slippage_cost, 0) && decisions?.length === 0 && trades?.length === 0
+    && lastCycleAt === null;
+  const recentFees = trades?.reduce((sum, trade) => sum + trade.fees, 0) ?? 0;
+  const recentSlippage = trades?.reduce((sum, trade) => sum + trade.slippage_cost, 0) ?? 0;
+  const recentNetPnl = trades?.reduce((sum, trade) => sum + trade.net_pnl, 0) ?? 0;
+  const recentWins = trades?.filter((trade) => trade.net_pnl > 0).length ?? 0;
+  const recentLosses = trades?.filter((trade) => trade.net_pnl < 0).length ?? 0;
+  if (!equityCurve || openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined
+    || !closePaperNumber(numbers.realized_pnl, numbers.cash - 100)
+    || !closePaperNumber(numbers.equity, numbers.cash + numbers.unrealized_pnl)
+    || (openPosition === null ? !closePaperNumber(numbers.unrealized_pnl, 0)
+      : !closePaperNumber(openPosition.unrealized_pnl, numbers.unrealized_pnl))
+    || trades.length > numbers.trade_count || numbers.fees + 1e-6 < recentFees
+    || numbers.slippage_cost + 1e-6 < recentSlippage
+    || recentWins > numbers.win_count || recentLosses > numbers.loss_count
+    || (trades.length === numbers.trade_count && (!closePaperNumber(recentNetPnl, numbers.realized_pnl)
+      || recentWins !== numbers.win_count || recentLosses !== numbers.loss_count))
+    || (status === 'starting' && !startingState) || (status !== 'starting' && lastCycleAt === null)
+    || (lastCycleAt && (Date.parse(lastCycleAt) < startedAtMs || Date.parse(lastCycleAt) > latestAtMs))
+    || (['complete', 'error'].includes(status) && openPosition !== null)
+    || equityCurve.some((point) => Date.parse(point.at) < startedAtMs || Date.parse(point.at) > latestAtMs)) return null;
   return { arm_id: armId, strategy: { id: expected.id, label: expected.label,
     definition_hash: expected.definition_hash, policy: normalizeMultiPolicy(value.strategy.policy, armId) },
   risk: { ...value.risk }, chain: { sequence: chainSequence, hash: chainHash }, status,
@@ -1922,8 +2006,18 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
   if (!exactPaperKeys(input.assumptions, Object.keys(assumptions))
     || JSON.stringify(input.assumptions) !== JSON.stringify(assumptions)) return null;
   if (!Array.isArray(input.arms) || input.arms.length !== 6) return null;
-  const arms = input.arms.map((arm, index) => normalizeMultiArm(arm, MULTI_ARM_IDS[index], sharedSequence));
+  const startedAtMs = Date.parse(startedAt);
+  const latestAtMs = Math.min(Date.parse(generatedAt), Date.parse(deadlineAt));
+  const arms = input.arms.map((arm, index) => normalizeMultiArm(arm, MULTI_ARM_IDS[index], sharedSequence,
+    startedAtMs, latestAtMs));
   if (arms.some((arm) => !arm) || new Set(arms.map((arm) => arm.chain.hash)).size !== 6) return null;
+  const armStatuses = arms.map((arm) => arm.status);
+  const coherentStatus = status === 'starting' ? armStatuses.every((armStatus) => armStatus === 'starting')
+    : status === 'complete' ? armStatuses.every((armStatus) => armStatus === 'complete')
+      : status === 'active' ? armStatuses.every((armStatus) => ['active', 'halted'].includes(armStatus))
+        : status === 'error' && armStatuses.some((armStatus) => armStatus === 'error')
+          && armStatuses.every((armStatus) => ['complete', 'error'].includes(armStatus));
+  if (!coherentStatus) return null;
   if (!Array.isArray(input.leaderboard) || input.leaderboard.length !== 6) return null;
   const expectedLeaderboard = [...arms].sort((left, right) => right.equity - left.equity || left.arm_id.localeCompare(right.arm_id));
   const leaderboard = input.leaderboard.map((row, index) => {
