@@ -9,11 +9,12 @@ import {
   CompetitionSubmissionError,
   claimCompetitionSubmissionJob,
   readCompetitionSubmissionConfig,
+  runCompetitionSubmissionCli,
   runCompetitionSubmissionOnce,
   updateCompetitionSubmissionJobState,
 } from './competition-submit.mjs';
 
-const TOKEN = 's'.repeat(64);
+const TOKEN = 'Ab3_-xY9'.repeat(8);
 const NOW = '2026-08-31T12:00:00.000Z';
 const SUBMISSION_URL = 'https://submit.organizer.example/apply';
 
@@ -343,8 +344,9 @@ test('client redacts a token from rejection text and rejects malformed or oversi
     (error) => {
       assert.ok(error instanceof CompetitionSubmissionError);
       assert.equal(error.code, 'api_rejected');
+      assert.equal(error.message, 'competition submission API rejected the request (HTTP 500)');
+      assert.doesNotMatch(error.message, /failed with/u);
       assert.doesNotMatch(error.message, new RegExp(TOKEN, 'u'));
-      assert.match(error.message, /\[redacted\]/u);
       return true;
     },
   );
@@ -380,6 +382,70 @@ test('client redacts a token from rejection text and rejects malformed or oversi
     }),
     (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_response',
   );
+});
+
+test('rejected response bodies never reach helper errors or CLI stderr in reversible token forms', async (t) => {
+  const configPath = withConfig(t);
+  const fullyEncoded = [...Buffer.from(TOKEN, 'utf8')]
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`)
+    .join('');
+  const mixedEncoded = [...TOKEN]
+    .map((character, index) => (index % 2 === 0
+      ? character : `%${character.charCodeAt(0).toString(16).padStart(2, '0')}`))
+    .join('');
+  const repeatedlyEncoded = encodeURIComponent(fullyEncoded);
+  const credentialForms = [
+    TOKEN, fullyEncoded, fullyEncoded.toUpperCase(), mixedEncoded, repeatedlyEncoded,
+  ];
+  const assertCredentialAbsent = (value) => {
+    const retained = String(value);
+    for (const form of credentialForms) assert.equal(retained.includes(form), false, form);
+    let decoded = retained;
+    for (let pass = 0; pass < 4; pass += 1) {
+      try { decoded = decodeURIComponent(decoded); } catch { break; }
+      assert.equal(decoded.includes(TOKEN), false, `decoded pass ${pass + 1}`);
+    }
+  };
+  const rejected = (body, status = 401) => async () => new Response(
+    `organizer reflected ${body} and this text must also be omitted`, { status },
+  );
+
+  for (const [index, reflected] of credentialForms.entries()) {
+    for (const helper of [
+      () => claimCompetitionSubmissionJob({
+        apiUrl: 'https://api.test', token: TOKEN, fetchImpl: rejected(reflected),
+      }),
+      () => updateCompetitionSubmissionJobState({
+        apiUrl: 'https://api.test', token: TOKEN, fetchImpl: rejected(reflected, 403),
+        jobId: 'competition-final-contest-image',
+        state: { state: 'running', lease_id: 'lease-123' },
+      }),
+    ]) {
+      let retainedError;
+      await assert.rejects(helper(), (error) => {
+        retainedError = error;
+        return error instanceof CompetitionSubmissionError && error.code === 'api_rejected';
+      });
+      assertCredentialAbsent(retainedError.message);
+      assert.doesNotMatch(retainedError.message, /organizer reflected|must also be omitted/u);
+    }
+
+    let stderr = '';
+    let stdout = '';
+    const exitCode = await runCompetitionSubmissionCli(['--config', configPath], {
+      runOnce: (options) => runCompetitionSubmissionOnce({
+        ...options,
+        fetchImpl: rejected(reflected, index % 2 === 0 ? 401 : 422),
+      }),
+      stderr: { write(chunk) { stderr += String(chunk); } },
+      stdout: { write(chunk) { stdout += String(chunk); } },
+    });
+    assert.equal(exitCode, 1);
+    assert.equal(stdout, '');
+    assert.match(stderr, /^\[competition-submit\] api_rejected: competition submission API rejected the request \(HTTP (?:401|422)\)\n$/u);
+    assertCredentialAbsent(stderr);
+    assert.doesNotMatch(stderr, /organizer reflected|must also be omitted/u);
+  }
 });
 
 test('request timeout is bounded and private config rejects unknown sensitive-shaped fields', async (t) => {

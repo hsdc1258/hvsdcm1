@@ -184,6 +184,13 @@ async function requestJson(url, {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: controller.signal,
     });
+    if (!response.ok) {
+      controller.abort();
+      fail(
+        `competition submission API rejected the request (HTTP ${response.status})`,
+        'api_rejected',
+      );
+    }
     responseText = await boundedText(response);
   } catch (error) {
     if (error instanceof CompetitionSubmissionError) throw error;
@@ -193,12 +200,6 @@ async function requestJson(url, {
     );
   } finally {
     clearTimer(timer);
-  }
-  if (!response.ok) {
-    fail(
-      `competition submission API rejected the request (HTTP ${response.status}): ${safeMessage(responseText, [token])}`,
-      'api_rejected',
-    );
   }
   let parsed;
   try { parsed = JSON.parse(responseText); }
@@ -506,18 +507,25 @@ function parseArgs(argv) {
   return { configPath };
 }
 
-async function main() {
+export async function runCompetitionSubmissionCli(argv = process.argv.slice(2), {
+  runOnce = runCompetitionSubmissionOnce,
+  stdout = process.stdout,
+  stderr = process.stderr,
+} = {}) {
   try {
-    const result = await runCompetitionSubmissionOnce(parseArgs(process.argv.slice(2)));
-    process.stdout.write(`${JSON.stringify(result)}\n`);
+    const result = await runOnce(parseArgs(argv));
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return 0;
   } catch (error) {
     const code = error instanceof CompetitionSubmissionError ? error.code : 'unexpected_failure';
     const message = error instanceof CompetitionSubmissionError
       ? error.message
       : 'unexpected competition submission failure';
-    process.stderr.write(`[competition-submit] ${code}: ${safeMessage(message)}\n`);
-    process.exitCode = 1;
+    stderr.write(`[competition-submit] ${code}: ${safeMessage(message)}\n`);
+    return 1;
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_FILE) await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_FILE) {
+  process.exitCode = await runCompetitionSubmissionCli();
+}
