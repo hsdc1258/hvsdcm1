@@ -90,7 +90,8 @@ redacted verification fields in a version 1 evidence file and merge it into that
 node scripts/competition-evidence.mjs `
   --report C:\path\outside-git\competition-report.json `
   --evidence C:\path\outside-git\competition-official-evidence.json `
-  --out C:\path\outside-git\competition-verified-report.json
+  --out C:\path\outside-git\competition-verified-report.json `
+  --evidence-out C:\path\outside-git\competition-official-evidence.next.json
 ```
 
 The evidence merge is bound to the exact `contest_id + category` candidate key, exact-keyed, and
@@ -100,7 +101,11 @@ that predates the discovery or an existing verification, same-time conflicts, li
 as official sources, evidence recorded after the report observation, unknown candidate IDs,
 and any `active` result that fails the reporter's official/open/eligible/deadline/risk invariants.
 Use the merged report for the dry-run and POST; never copy application answers or contact data into
-the evidence file.
+the evidence file. The optional `--evidence-out` artifact regenerates the complete canonical evidence
+ledger from every verified candidate in the merged report, including already-verified candidates that
+were carried by an earlier published snapshot. Replace the prior ledger only after this artifact and
+the merged report both pass dry-run validation; this prevents a later batch from silently forgetting
+earlier official verification.
 
 ## Reporter
 
@@ -150,6 +155,17 @@ requires a response bound to the same body `idempotency_key`, and never prints t
 exact report is an acknowledged replay, not another logical write; reusing a key with different raw
 field values is rejected by the API even when storage normalization would produce the same saved text.
 JSON object key order alone does not create a conflict.
+
+For a snapshot that would become the newest owner-visible report, D1 atomically preserves every
+previously verified candidate, redacted application, and approval action. The same verification time
+cannot be reused with changed official facts, and the same approval request ID cannot be rebound to a
+different action hash, timestamp, summary, or approval wording. A raw discovery report that omits this
+state is rejected with `report_state_regression`; a competing writer that changed the expected latest
+snapshot is rejected with `report_concurrent_conflict` and should be rebuilt from the new latest state.
+An unchanged approval action carries its existing decision. Changed wording or action must use a new
+request ID and returns to pending; an approval may disappear only after that exact action was approved
+and the application advances with later evidence to a kind-specific downstream state. Older historical
+snapshots remain ingestible without replacing the owner-visible latest state.
 
 The report schema rejects raw identity, contact details, application prose, signatures, cookies,
 consents, payments, receipts, final-submission payloads, and private data or tokens embedded in

@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 16; number += 1) {
+  for (let number = 1; number <= 17; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3074,6 +3074,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0014': 'competitions',
       '0015': 'competition_candidate_capacity',
       '0016': 'competition_approval_requests',
+      '0017': 'competition_approval_report_links',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4800,27 +4801,43 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
   assert.ok(afterBody.applications[0].approval.decided_at);
 });
 
-test('competition approval rejects a stale report atomically and request ids cannot be rebound', async (t) => {
+test('competition approval survives a newer snapshot while raw state regression and request rebinding fail', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;
   const { database, env } = context;
   const first = competitionWithPreparationApproval();
   assert.equal((await competitionRequest(env, { body: first })).status, 201);
 
+  const approved = await competitionApprovalRequest(env);
+  assert.equal(approved.status, 201);
+
+  const carried = structuredClone(first);
+  carried.idempotency_key = 'competition-carried-approval-request';
+  carried.run.id = 'competition-carried-approval-request';
+  carried.run.finished_at = new Date(Date.parse(first.run.finished_at) + 1_000).toISOString();
+  assert.equal((await competitionRequest(env, { body: carried })).status, 201);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_requests',
+  ).get().count), 1, 'one immutable action is reused');
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_report_approval_requests',
+  ).get().count), 2, 'both immutable reports link the same action');
+  const looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(looked.status, 200);
+  assert.equal((await looked.json()).applications[0].approval.status, 'approved');
+
   const newer = competitionFixture();
-  setCompetitionTimeline(newer, Date.parse(first.run.started_at) + 1_000);
+  setCompetitionTimeline(newer, Date.parse(carried.run.started_at) + 2_000);
   newer.idempotency_key = 'competition-newer-without-old-approval';
   newer.run.id = 'competition-newer-without-old-approval';
-  assert.equal((await competitionRequest(env, { body: newer })).status, 201);
-  const stale = await competitionApprovalRequest(env);
-  assert.equal(stale.status, 409);
-  assert.deepEqual(await stale.json(), { error: 'approval_stale' });
-  assert.equal(Number(database.prepare(
-    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
-  ).get().count), 0);
+  const regression = await competitionRequest(env, { body: newer });
+  assert.equal(regression.status, 409);
+  assert.deepEqual(await regression.json(), { error: 'report_state_regression' });
 
   const rebound = competitionWithPreparationApproval();
-  setCompetitionTimeline(rebound, Date.parse(newer.run.started_at) + 1_000);
+  setCompetitionTimeline(rebound, Date.parse(carried.run.started_at) + 3_000);
   rebound.idempotency_key = 'competition-rebound-approval-request';
   rebound.run.id = 'competition-rebound-approval-request';
   rebound.approvals[0].action_sha256 = 'b'.repeat(64);
@@ -4829,10 +4846,179 @@ test('competition approval rejects a stale report atomically and request ids can
   assert.deepEqual(await collision.json(), { error: 'approval_request_conflict' });
   assert.equal(Number(database.prepare(
     'SELECT COUNT(*) AS count FROM competition_reports',
-  ).get().count), 2, 'the conflicting report batch rolls back');
+  ).get().count), 2, 'only the original and safely carried snapshots exist');
   assert.equal(Number(database.prepare(
     'SELECT COUNT(*) AS count FROM competition_approval_requests',
   ).get().count), 1);
+
+  const reworded = structuredClone(carried);
+  reworded.idempotency_key = 'competition-reworded-approval-request';
+  reworded.run.id = 'competition-reworded-approval-request';
+  reworded.run.finished_at = new Date(Date.parse(carried.run.finished_at) + 4_000).toISOString();
+  reworded.approvals[0].approval_text += ' 변경된 문구';
+  const wordingCollision = await competitionRequest(env, { body: reworded });
+  assert.equal(wordingCollision.status, 409);
+  assert.deepEqual(await wordingCollision.json(), { error: 'approval_request_conflict' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 2, 'the same request id cannot be rebound by changing only its wording');
+});
+
+test('competition approval transitions preserve exact decisions without freezing later workflow', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionWithPreparationApproval();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const replacement = structuredClone(first);
+  setCompetitionTimeline(replacement, Date.parse(first.run.started_at) + 10_000);
+  replacement.idempotency_key = 'competition-replacement-approval-request';
+  replacement.run.id = 'competition-replacement-approval-request';
+  replacement.approvals[0].request_id = 'competition-preparation-organizer-2026-image-v2';
+  replacement.approvals[0].action_sha256 = 'c'.repeat(64);
+  replacement.approvals[0].approval_text += ' 새 조건을 다시 확인합니다.';
+  assert.equal((await competitionRequest(env, { body: replacement })).status, 201);
+  let looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(looked.status, 200);
+  let body = await looked.json();
+  assert.equal(body.applications[0].approval.request_id, replacement.approvals[0].request_id);
+  assert.equal(body.applications[0].approval.status, 'pending', 'changed action never reuses a decision');
+
+  const approved = await competitionApprovalRequest(env, {
+    requestId: replacement.approvals[0].request_id,
+    body: { decision: 'approved', action_sha256: 'c'.repeat(64) },
+  });
+  assert.equal(approved.status, 201);
+
+  const unauthorized = structuredClone(replacement);
+  setCompetitionTimeline(unauthorized, Date.parse(replacement.run.started_at) + 10_000);
+  unauthorized.idempotency_key = 'competition-preparation-cannot-authorize-submission';
+  unauthorized.run.id = 'competition-preparation-cannot-authorize-submission';
+  unauthorized.applications[0].state = 'AUTHORIZED';
+  unauthorized.applications[0].blocker = 'none';
+  unauthorized.applications[0].next_action = 'none';
+  unauthorized.approvals = [];
+  const unauthorizedResponse = await competitionRequest(env, { body: unauthorized });
+  assert.equal(unauthorizedResponse.status, 409);
+  assert.deepEqual(await unauthorizedResponse.json(), { error: 'report_state_regression' });
+
+  const premature = structuredClone(replacement);
+  setCompetitionTimeline(premature, Date.parse(replacement.run.started_at) + 10_000);
+  premature.idempotency_key = 'competition-approved-preparation-predated';
+  premature.run.id = 'competition-approved-preparation-predated';
+  premature.applications[0].state = 'PREPARED';
+  premature.applications[0].blocker = 'none';
+  premature.applications[0].next_action = 'draft_application';
+  premature.approvals = [];
+  const prematureResponse = await competitionRequest(env, { body: premature });
+  assert.equal(prematureResponse.status, 409);
+  assert.deepEqual(await prematureResponse.json(), { error: 'report_state_regression' });
+
+  const progressed = structuredClone(replacement);
+  setCompetitionTimeline(progressed, Date.now());
+  progressed.idempotency_key = 'competition-approved-preparation-progressed';
+  progressed.run.id = 'competition-approved-preparation-progressed';
+  progressed.applications[0].state = 'PREPARED';
+  progressed.applications[0].blocker = 'none';
+  progressed.applications[0].next_action = 'draft_application';
+  progressed.approvals = [];
+  assert.equal((await competitionRequest(env, { body: progressed })).status, 201);
+  looked = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  body = await looked.json();
+  assert.equal(body.applications[0].state, 'PREPARED');
+  assert.equal(body.applications[0].approval, null);
+
+  const heldContext = await competitionTestContext(t);
+  if (!heldContext) return;
+  const heldFirst = competitionWithPreparationApproval();
+  assert.equal((await competitionRequest(heldContext.env, { body: heldFirst })).status, 201);
+  assert.equal((await competitionApprovalRequest(heldContext.env, {
+    body: { decision: 'held', action_sha256: 'a'.repeat(64) },
+  })).status, 201);
+  const bypass = structuredClone(heldFirst);
+  setCompetitionTimeline(bypass, Date.parse(heldFirst.run.started_at) + 10_000);
+  bypass.idempotency_key = 'competition-held-preparation-bypass';
+  bypass.run.id = 'competition-held-preparation-bypass';
+  bypass.applications[0].state = 'PREPARED';
+  bypass.applications[0].blocker = 'none';
+  bypass.applications[0].next_action = 'draft_application';
+  bypass.approvals = [];
+  const rejected = await competitionRequest(heldContext.env, { body: bypass });
+  assert.equal(rejected.status, 409);
+  assert.deepEqual(await rejected.json(), { error: 'report_state_regression' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 3);
+});
+
+test('competition report guard rejects a same-time official fact rewrite atomically', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const rewritten = structuredClone(first);
+  rewritten.idempotency_key = 'competition-same-time-official-rewrite';
+  rewritten.run.id = 'competition-same-time-official-rewrite';
+  rewritten.run.finished_at = new Date(Date.parse(first.run.finished_at) + 1_000).toISOString();
+  rewritten.candidates[0].organizer = 'Rewritten Organizer';
+  const response = await competitionRequest(env, { body: rewritten });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_state_regression' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_report_guards',
+  ).get().count), 1);
+});
+
+test('competition report guard rolls back a writer whose expected prior changed', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const winner = structuredClone(first);
+  winner.idempotency_key = 'competition-concurrent-winner';
+  winner.run.id = 'competition-concurrent-winner';
+  winner.run.finished_at = new Date(Date.parse(first.run.finished_at) + 1_000).toISOString();
+  const loser = structuredClone(first);
+  loser.idempotency_key = 'competition-concurrent-loser';
+  loser.run.id = 'competition-concurrent-loser';
+  loser.run.finished_at = new Date(Date.parse(first.run.finished_at) + 2_000).toISOString();
+
+  let injected = false;
+  const racingEnv = {
+    ...env,
+    DB: {
+      prepare(sql) { return env.DB.prepare(sql); },
+      async batch(statements) {
+        if (!injected) {
+          injected = true;
+          const winningResponse = await competitionRequest(env, { body: winner });
+          assert.equal(winningResponse.status, 201);
+        }
+        return env.DB.batch(statements);
+      },
+    },
+  };
+  const response = await competitionRequest(racingEnv, { body: loser });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_concurrent_conflict' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 2, 'the stale writer batch is fully rolled back');
+  assert.equal(Number(database.prepare(
+    "SELECT COUNT(*) AS count FROM competition_reports WHERE idempotency_key = 'competition-concurrent-loser'",
+  ).get().count), 0);
 });
 
 test('competition approval expiry is checked by the same SQLite clock that stores the decision', async (t) => {

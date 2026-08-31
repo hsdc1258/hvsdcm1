@@ -840,7 +840,16 @@ async function reportCompetitionsInternal(request, env) {
       : competitionError('idempotency_conflict', 409);
   }
 
+  const prior = await env.DB.prepare(`
+    SELECT idempotency_key, COALESCE(finished_at, started_at) AS observed_at
+    FROM competition_reports
+    ORDER BY COALESCE(finished_at, started_at) DESC,
+      received_at DESC, idempotency_key DESC
+    LIMIT 1
+  `).first();
+
   const receivedAt = new Date().toISOString();
+  const observedAt = report.run.finished_at || report.run.started_at;
   const statements = [
     env.DB.prepare(`
       INSERT INTO competition_reports(
@@ -959,9 +968,56 @@ async function reportCompetitionsInternal(request, env) {
       ) AND NOT EXISTS (
         SELECT 1 FROM competition_approval_requests AS stored
         WHERE stored.request_id = json_extract(item.value, '$.request_id')
-          AND stored.idempotency_key = ?1
       )
     `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
+    env.DB.prepare(`
+      INSERT INTO competition_report_approval_requests(
+        idempotency_key, request_id, contest_id, category, kind, action_sha256,
+        requested_at, expires_at, read_summary, approval_text
+      )
+      SELECT ?1,
+        json_extract(item.value, '$.request_id'),
+        json_extract(item.value, '$.contest_id'),
+        json_extract(item.value, '$.category'),
+        json_extract(item.value, '$.kind'),
+        json_extract(item.value, '$.action_sha256'),
+        json_extract(item.value, '$.requested_at'),
+        json_extract(item.value, '$.expires_at'),
+        json_extract(item.value, '$.read_summary'),
+        json_extract(item.value, '$.approval_text')
+      FROM json_each(?3) AS item
+      WHERE EXISTS (
+        SELECT 1 FROM competition_reports
+        WHERE idempotency_key = ?1 AND payload_hash = ?2
+      ) AND EXISTS (
+        SELECT 1 FROM competition_approval_requests AS request
+        WHERE request.request_id = json_extract(item.value, '$.request_id')
+      ) AND NOT EXISTS (
+        SELECT 1 FROM competition_report_approval_requests AS stored
+        WHERE stored.idempotency_key = ?1
+          AND stored.request_id = json_extract(item.value, '$.request_id')
+      )
+      ON CONFLICT(idempotency_key, request_id) DO NOTHING
+    `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
+    env.DB.prepare(`
+      INSERT INTO competition_report_guards(
+        idempotency_key, prior_idempotency_key, enforce_continuity, approval_count
+      )
+      SELECT ?1, ?3, ?4, ?5
+      WHERE EXISTS (
+        SELECT 1 FROM competition_reports
+        WHERE idempotency_key = ?1 AND payload_hash = ?2
+      ) AND NOT EXISTS (
+        SELECT 1 FROM competition_report_guards WHERE idempotency_key = ?1
+      )
+      ON CONFLICT(idempotency_key) DO NOTHING
+    `).bind(
+      report.idempotency_key,
+      payloadHash,
+      prior?.idempotency_key || null,
+      prior && Date.parse(observedAt) >= Date.parse(prior.observed_at) ? 1 : 0,
+      report.approvals.length,
+    ),
   ];
   const results = await env.DB.batch(statements);
   if (resultChanges(results[0]) === 1) return acceptedResponse(report, false, 201);
@@ -979,6 +1035,15 @@ export async function reportCompetitions(request, env) {
   try {
     return await reportCompetitionsInternal(request, env);
   } catch (error) {
+    if (/competition report prior changed/iu.test(String(error?.message || error))) {
+      return competitionError('report_concurrent_conflict', 409);
+    }
+    if (/competition report state regression/iu.test(String(error?.message || error))) {
+      return competitionError('report_state_regression', 409);
+    }
+    if (/competition approval (?:report link does not match action|links incomplete)/iu.test(String(error?.message || error))) {
+      return competitionError('approval_request_conflict', 409);
+    }
     if (/UNIQUE constraint failed:\s*competition_approval_requests\.request_id/iu.test(String(error?.message || error))) {
       return competitionError('approval_request_conflict', 409);
     }
@@ -1038,8 +1103,9 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     )
     INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
     SELECT request.request_id, ?2, ?3, clock.decided_at
-    FROM competition_approval_requests AS request
-    JOIN latest ON latest.idempotency_key = request.idempotency_key
+    FROM competition_report_approval_requests AS link
+    JOIN latest ON latest.idempotency_key = link.idempotency_key
+    JOIN competition_approval_requests AS request ON request.request_id = link.request_id
     CROSS JOIN clock
     WHERE request.request_id = ?1
       AND request.action_sha256 = ?2
@@ -1078,8 +1144,9 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
       stored.action_sha256 AS stored_action_sha256,
       stored.decision AS stored_decision,
       stored.decided_at AS stored_decided_at
-    FROM competition_approval_requests AS request
-    JOIN latest ON latest.idempotency_key = request.idempotency_key
+    FROM competition_report_approval_requests AS link
+    JOIN latest ON latest.idempotency_key = link.idempotency_key
+    JOIN competition_approval_requests AS request ON request.request_id = link.request_id
     LEFT JOIN competition_approval_decisions AS stored ON stored.request_id = request.request_id
     WHERE request.request_id = ?1
   `).bind(normalizedRequestId).first();
@@ -1192,10 +1259,11 @@ async function getCompetitionsInternal(request, env) {
     env.DB.prepare(`
       SELECT request.*,
         decision.decision, decision.decided_at
-      FROM competition_approval_requests AS request
+      FROM competition_report_approval_requests AS link
+      JOIN competition_approval_requests AS request ON request.request_id = link.request_id
       LEFT JOIN competition_approval_decisions AS decision
         ON decision.request_id = request.request_id
-      WHERE request.idempotency_key = ?1
+      WHERE link.idempotency_key = ?1
       ORDER BY request.requested_at DESC, request.request_id
     `).bind(latest.idempotency_key).all(),
   ]);

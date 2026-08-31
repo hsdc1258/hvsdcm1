@@ -180,6 +180,32 @@ export function mergeCompetitionOfficialEvidence(report, evidence, options = {})
   return validateCompetitionReport(output);
 }
 
+export function competitionEvidenceLedger(report) {
+  validateCompetitionReport(report);
+  return {
+    version: 1,
+    candidates: report.candidates
+      .filter((candidate) => candidate.official_verification === 'verified')
+      .map((candidate) => ({
+        contest_id: candidate.contest_id,
+        category: candidate.category,
+        organizer: candidate.organizer,
+        official_url: candidate.official_url,
+        verified_at: candidate.official_verified_at,
+        acceptance: candidate.acceptance,
+        deadline_at: candidate.deadline_at,
+        eligibility: candidate.eligibility,
+        rights_risk: candidate.rights_risk,
+        submission_risk: candidate.submission_risk,
+        status: candidate.status,
+      }))
+      .sort((left, right) => (
+        left.contest_id.localeCompare(right.contest_id)
+        || left.category.localeCompare(right.category)
+      )),
+  };
+}
+
 function atomicWrite(file, value, fsImpl = fs) {
   const fullPath = path.resolve(file);
   fsImpl.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -195,7 +221,7 @@ export function parseCompetitionEvidenceArgs(argv, parseOptions = {}) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!['--report', '--evidence', '--out'].includes(argument)) {
+    if (!['--report', '--evidence', '--out', '--evidence-out'].includes(argument)) {
       throw new Error('unknown argument: ' + argument);
     }
     const value = argv[index + 1];
@@ -203,16 +229,22 @@ export function parseCompetitionEvidenceArgs(argv, parseOptions = {}) {
     index += 1;
     if (argument === '--report') options.report = value;
     else if (argument === '--evidence') options.evidence = value;
-    else options.out = value;
+    else if (argument === '--out') options.out = value;
+    else options.evidenceOut = value;
   }
   if (!options.report || !options.evidence || !options.out) {
     throw new Error('--report, --evidence, and --out are required');
   }
-  requireCompetitionDistinctPaths([
+  const paths = [
     ['--report', options.report],
     ['--evidence', options.evidence],
     ['--out', options.out],
-  ], { fsImpl: parseOptions.fsImpl || fs, label: 'competition evidence' });
+  ];
+  if (options.evidenceOut) paths.push(['--evidence-out', options.evidenceOut]);
+  requireCompetitionDistinctPaths(paths, {
+    fsImpl: parseOptions.fsImpl || fs,
+    label: 'competition evidence',
+  });
   return options;
 }
 
@@ -223,6 +255,8 @@ export function runCompetitionEvidenceCli(argv, options = {}) {
   const evidence = readBoundedJson(args.evidence, fsImpl);
   const merged = mergeCompetitionOfficialEvidence(report, evidence);
   atomicWrite(args.out, merged, fsImpl);
+  const ledger = competitionEvidenceLedger(merged);
+  if (args.evidenceOut) atomicWrite(args.evidenceOut, ledger, fsImpl);
   return {
     ok: true,
     run_id: merged.run.id,
@@ -230,6 +264,7 @@ export function runCompetitionEvidenceCli(argv, options = {}) {
     verified: merged.candidates.filter(
       (candidate) => candidate.official_verification === 'verified',
     ).length,
+    evidence_candidates: ledger.candidates.length,
   };
 }
 

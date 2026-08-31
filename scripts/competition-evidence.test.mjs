@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  competitionEvidenceLedger,
   mergeCompetitionOfficialEvidence,
   parseCompetitionEvidenceArgs,
   runCompetitionEvidenceCli,
@@ -53,6 +55,7 @@ test('evidence report, input, and output paths are all distinct before any read 
     ['--report', 'work/Report.JSON', '--evidence', 'work/evidence.json', '--out', 'WORK/report.json'],
     ['--report', 'work/report.json', '--evidence', 'work/Evidence.JSON', '--out', 'WORK/evidence.json'],
     ['--report', 'work/report.json', '--evidence', 'work/evidence.json', '--out', 'work/../work/report.json'],
+    ['--report', 'work/report.json', '--evidence', 'work/evidence.json', '--out', 'work/merged.json', '--evidence-out', 'WORK/EVIDENCE.JSON'],
   ]) {
     assert.throws(() => parseCompetitionEvidenceArgs(args), /paths must differ/u);
   }
@@ -92,6 +95,63 @@ test('official evidence upgrades only the matching candidate and emits a fresh r
   assert.equal(merged.candidates[0].rights_risk, 'medium');
   assert.equal(merged.candidates[0].status, 'deferred');
   assert.equal(merged.applications.length, 0);
+});
+
+test('a merged report can regenerate the complete canonical official-evidence ledger', () => {
+  const merged = mergeCompetitionOfficialEvidence(unverifiedReport(), evidence(), {
+    finishedAt: '2026-08-31T01:15:00+09:00',
+  });
+  const ledger = competitionEvidenceLedger(merged);
+  assert.deepEqual(ledger, evidence({
+    verified_at: '2026-08-31T01:12:00+09:00',
+  }));
+});
+
+test('the CLI writes a complete ledger containing carried and newly verified candidates', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'competition-evidence-'));
+  t.after(() => {
+    assert.equal(path.dirname(directory), os.tmpdir());
+    assert.match(path.basename(directory), /^competition-evidence-/u);
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  const reportPath = path.join(directory, 'report.json');
+  const evidencePath = path.join(directory, 'evidence.json');
+  const outPath = path.join(directory, 'merged.json');
+  const ledgerPath = path.join(directory, 'ledger.json');
+  const report = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
+  const newCandidate = structuredClone(report.candidates[0]);
+  newCandidate.contest_id = 'organizer-2026-second';
+  newCandidate.title = 'Second Example Contest';
+  newCandidate.official_url = null;
+  newCandidate.official_verification = 'unverified';
+  newCandidate.official_verified_at = null;
+  newCandidate.acceptance = 'unknown';
+  newCandidate.deadline_at = null;
+  newCandidate.eligibility = 'unknown';
+  newCandidate.rights_risk = 'unknown';
+  newCandidate.submission_risk = 'unknown';
+  newCandidate.status = 'verifying';
+  report.candidates.push(newCandidate);
+  report.sources[0].candidate_count = 2;
+  fs.writeFileSync(reportPath, `${JSON.stringify(report)}\n`, 'utf8');
+  fs.writeFileSync(evidencePath, `${JSON.stringify(evidence({
+    contest_id: newCandidate.contest_id,
+  }))}\n`, 'utf8');
+
+  const result = runCompetitionEvidenceCli([
+    '--report', reportPath,
+    '--evidence', evidencePath,
+    '--out', outPath,
+    '--evidence-out', ledgerPath,
+  ]);
+  assert.equal(result.verified, 2);
+  assert.equal(result.evidence_candidates, 2);
+  const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+  assert.deepEqual(ledger.candidates.map((candidate) => candidate.contest_id), [
+    'organizer-2026-image',
+    'organizer-2026-second',
+  ]);
+  assert.equal(JSON.parse(fs.readFileSync(outPath, 'utf8')).candidates.length, 2);
 });
 
 test('official evidence is exact, candidate-bound, and chronologically bound', () => {
