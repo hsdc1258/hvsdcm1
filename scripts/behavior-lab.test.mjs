@@ -126,3 +126,15 @@ test('owner paper UI renders only a bounded adaptive v2 summary on a five-second
   assert.match(appSource, /recent\.length <= 20/u);
   assert.match(appSource, /renderAdaptiveReport\(report\.adaptive\)/u);
 });
+
+test('owner paper UI renders the strict simultaneous A/B/C experiment without replacing the legacy session', () => {
+  assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
+  assert.match(htmlSource, /id="experimentLeaderboard"/u);
+  assert.match(htmlSource, /id="experimentArms"/u);
+  assert.match(appSource, /function validExperimentReport\(experiment\)/u);
+  assert.match(appSource, /deadline - started === 24 \* 60 \* 60_000/u);
+  assert.match(appSource, /experiment\.shared_feed\.credential_used === false/u);
+  assert.match(appSource, /experiment\.assumptions\.strategy_mutation === false/u);
+  assert.match(appSource, /renderExperiment\(payload\.experiment\)/u);
+  assert.match(appSource, /renderPaper\(payload\.report\)/u);
+});

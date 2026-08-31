@@ -2500,6 +2500,94 @@ html {
 .paper-report[data-freshness="stale"] {
   opacity: .72;
 }
+.abc-experiment {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.abc-experiment[aria-busy="true"] {
+  opacity: .72;
+}
+.abc-overview {
+  gap: var(--space-5);
+  border-top: 3px solid var(--accent);
+}
+.abc-arm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.abc-arm-card {
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-4);
+}
+.abc-arm-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.abc-arm-heading h3, .abc-arm-heading p, .abc-arm-section h4 {
+  margin: 0;
+}
+.abc-arm-heading h3 {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-body);
+}
+.abc-arm-id {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+.abc-arm-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--line);
+}
+.abc-arm-metrics > div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: 4px;
+  background: var(--surface-2);
+}
+.abc-arm-metrics span, .abc-arm-metrics b {
+  overflow-wrap: anywhere;
+}
+.abc-arm-section {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.abc-arm-section h4 {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.abc-list {
+  max-height: 240px;
+  overflow: auto;
+}
+.abc-list small, .abc-chain {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  overflow-wrap: anywhere;
+}
+.abc-chain {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
 .adaptive-audit span, .adaptive-reasons li {
   overflow-wrap: anywhere;
 }
@@ -2609,6 +2697,9 @@ html {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .adaptive-state-grid, .adaptive-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .abc-arm-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2888,6 +2979,23 @@ html {
 
       <div id="paperError" class="error-panel" role="alert" hidden><p id="paperErrorText"></p></div>
       <div id="paperEmpty" class="empty-state" hidden><strong>WAITING FOR FIRST REPORT</strong><p>첫 검증된 실시간 모의 보고가 도착하면 여기에 표시됩니다.</p></div>
+      <section id="paperExperiment" class="abc-experiment" aria-busy="true" hidden>
+        <article class="panel abc-overview">
+          <div class="section-heading-row compact">
+            <div><p class="section-index">SIMULTANEOUS 24H A/B/C · 100 USDT EACH</p><h2>고정 전략 전진 모의실험</h2></div>
+            <span id="experimentStatus" class="adaptive-stream is-connecting">보고 확인 중</span>
+          </div>
+          <p class="section-copy">동일한 공개 Bitget feed·시각·체결 비용·위험 규칙을 세 독립 계정에 동시에 적용합니다. 실험 중 전략 변경이나 승격은 없습니다.</p>
+          <div class="adaptive-summary-grid abc-summary-grid">
+            <div><span>시작</span><b id="experimentStarted">—</b></div>
+            <div><span>정확한 24h 마감</span><b id="experimentDeadline">—</b></div>
+            <div><span>공유 feed 원장</span><b id="experimentFeed">—</b></div>
+            <div><span>최근 공개 패킷</span><b id="experimentLastPacket">—</b></div>
+          </div>
+          <div class="paper-table-wrap"><table aria-label="A/B/C 모의실험 순위"><thead><tr><th>순위</th><th>전략</th><th>자산</th><th>순손익 / 수익률</th><th>최대 낙폭</th></tr></thead><tbody id="experimentLeaderboard"></tbody></table></div>
+        </article>
+        <div id="experimentArms" class="abc-arm-grid"></div>
+      </section>
       <div id="paperReport" class="paper-report" aria-busy="true" hidden>
         <div class="paper-meta">
           <span>마감 <b id="paperDeadline">—</b></span>

@@ -31,6 +31,18 @@ const MAX_BEHAVIOR_ADAPTIVE_AUDIT_LOGS = 20;
 export const BEHAVIOR_PAPER_SESSION_ID = 'paper-20260831-100usd';
 export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
+export const BEHAVIOR_ABC_EXPERIMENT_ID = 'abc-paper-20260831';
+export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_ABC_EXPERIMENT_ID}`;
+const ABC_ARM_IDS = ['A', 'B', 'C'];
+const ABC_STRATEGY_IDS = {
+  A: 'abc-trend-momentum-v1', B: 'abc-breakout-volatility-v1', C: 'abc-mean-reversion-crowd-fade-v1',
+};
+const ABC_STRATEGY_LABELS = {
+  A: 'Trend / momentum', B: 'Breakout / volatility', C: 'Mean reversion / crowd fade',
+};
+const VALID_ABC_EVENT_TYPES = new Set([
+  'arm-started', 'decision', 'position-opened', 'position-marked', 'position-closed', 'arm-terminal', 'arm-error',
+]);
 const VALID_BEHAVIOR_PAPER_STATUSES = new Set(['starting', 'active', 'halted', 'complete', 'error']);
 const VALID_BEHAVIOR_PAPER_LOG_TYPES = new Set([
   'session-started', 'cycle-error', 'risk-halted', 'entry-cutoff', 'position-opened',
@@ -1529,6 +1541,168 @@ export function normalizeBehaviorPaperReport(input) {
   };
 }
 
+function exactPaperKeys(value, keys) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key)));
+}
+
+function normalizedExperimentHash(value, allowGenesis = false) {
+  const text = boundedPaperText(value, 64, true);
+  return allowGenesis && text === 'GENESIS' ? text : text && /^[a-f0-9]{64}$/u.test(text) ? text : null;
+}
+
+function normalizeExperimentDetail(value, keys) {
+  if (!exactPaperKeys(value, keys)) return null;
+  const normalized = normalizePaperDetail(value, { maxKeys: keys.length, maxString: 240 });
+  return normalized && exactPaperKeys(normalized, keys) ? normalized : null;
+}
+
+function normalizeExperimentPosition(value) {
+  if (value === null) return null;
+  const keys = ['id', 'symbol', 'direction', 'opened_at', 'entry_price', 'mark_price', 'quantity', 'notional',
+    'unrealized_pnl', 'stop_price', 'target_price'];
+  const result = normalizeExperimentDetail(value, keys);
+  if (!result || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(result.symbol)
+    || !['long', 'short'].includes(result.direction) || !normalizePaperTimestamp(result.opened_at)) return undefined;
+  return result;
+}
+
+function normalizeExperimentTrades(value) {
+  if (!Array.isArray(value) || value.length > 25) return null;
+  const keys = ['id', 'symbol', 'direction', 'opened_at', 'closed_at', 'entry_price', 'exit_price', 'quantity',
+    'notional', 'net_pnl', 'return_pct', 'fees', 'slippage_cost', 'reason'];
+  const trades = value.map((entry) => normalizeExperimentDetail(entry, keys));
+  if (trades.some((entry) => !entry || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(entry.symbol)
+    || !['long', 'short'].includes(entry.direction) || !normalizePaperTimestamp(entry.opened_at)
+    || !normalizePaperTimestamp(entry.closed_at))) return null;
+  return trades;
+}
+
+function normalizeExperimentDecisions(value, sharedSequence) {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const keys = ['symbol', 'signal_bar_at', 'observed_at', 'direction', 'score', 'confidence', 'reason', 'feed_sequence', 'feed_hash'];
+  const decisions = [];
+  for (const entry of value) {
+    if (!exactPaperKeys(entry, keys)) return null;
+    const signalBarAt = normalizePaperTimestamp(entry.signal_bar_at);
+    const observedAt = normalizePaperTimestamp(entry.observed_at);
+    const score = boundedPaperNumber(entry.score, -1, 1);
+    const confidence = boundedPaperNumber(entry.confidence, 0, 100, true);
+    const feedSequence = boundedPaperNumber(entry.feed_sequence, 1, sharedSequence, true);
+    const feedHash = normalizedExperimentHash(entry.feed_hash);
+    const reason = entry.reason === null ? null : boundedPaperText(entry.reason, 160, true);
+    if (!['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(entry.symbol)
+      || !['long', 'short', 'stand-aside'].includes(entry.direction) || !signalBarAt || !observedAt
+      || score === null || confidence === null || feedSequence === null || !feedHash
+      || (reason !== null && containsForbiddenPaperPrivateText(reason))) return null;
+    decisions.push({ symbol: entry.symbol, signal_bar_at: signalBarAt, observed_at: observedAt,
+      direction: entry.direction, score, confidence, reason, feed_sequence: feedSequence, feed_hash: feedHash });
+  }
+  return decisions;
+}
+
+function normalizeExperimentLogs(value) {
+  if (!Array.isArray(value) || value.length > 30) return null;
+  const keys = ['sequence', 'at', 'type', 'message'];
+  const logs = value.map((entry) => normalizeExperimentDetail(entry, keys));
+  if (logs.some((entry) => !entry || boundedPaperNumber(entry.sequence, 1, 1_000_000, true) === null
+    || !normalizePaperTimestamp(entry.at) || !VALID_ABC_EVENT_TYPES.has(entry.type)
+    || boundedPaperText(entry.message, 240, true) === null || containsForbiddenPaperPrivateText(entry.message))) return null;
+  return logs;
+}
+
+function normalizeExperimentArm(value, armId, sharedSequence) {
+  const keys = ['arm_id', 'strategy', 'chain', 'status', 'seed_equity', 'equity', 'cash', 'realized_pnl',
+    'unrealized_pnl', 'net_pnl', 'return_pct', 'max_drawdown_pct', 'fees', 'slippage_cost', 'trade_count',
+    'win_count', 'loss_count', 'open_position', 'recent_trades', 'recent_decisions', 'recent_logs', 'last_cycle_at'];
+  if (!exactPaperKeys(value, keys) || value.arm_id !== armId
+    || !exactPaperKeys(value.strategy, ['id', 'label', 'definition_hash'])
+    || value.strategy.id !== ABC_STRATEGY_IDS[armId] || value.strategy.label !== ABC_STRATEGY_LABELS[armId]
+    || !normalizedExperimentHash(value.strategy.definition_hash)
+    || !exactPaperKeys(value.chain, ['sequence', 'hash'])) return null;
+  const chainSequence = boundedPaperNumber(value.chain.sequence, 1, 1_000_000, true);
+  const chainHash = normalizedExperimentHash(value.chain.hash);
+  const status = boundedPaperText(value.status, 16, true);
+  const numbers = {
+    seed_equity: boundedPaperNumber(value.seed_equity, 100, 100),
+    equity: boundedPaperNumber(value.equity, 0, 1_000_000), cash: boundedPaperNumber(value.cash, 0, 1_000_000),
+    realized_pnl: boundedPaperNumber(value.realized_pnl, -1_000_000, 1_000_000),
+    unrealized_pnl: boundedPaperNumber(value.unrealized_pnl, -1_000_000, 1_000_000),
+    net_pnl: boundedPaperNumber(value.net_pnl, -100, 999_900), return_pct: boundedPaperNumber(value.return_pct, -100, 999_900),
+    max_drawdown_pct: boundedPaperNumber(value.max_drawdown_pct, 0, 100), fees: boundedPaperNumber(value.fees, 0, 1_000_000),
+    slippage_cost: boundedPaperNumber(value.slippage_cost, 0, 1_000_000),
+    trade_count: boundedPaperNumber(value.trade_count, 0, 10_000, true), win_count: boundedPaperNumber(value.win_count, 0, 10_000, true),
+    loss_count: boundedPaperNumber(value.loss_count, 0, 10_000, true),
+  };
+  if (chainSequence === null || chainSequence > sharedSequence || !chainHash
+    || !['starting', 'active', 'halted', 'complete', 'error'].includes(status)
+    || Object.values(numbers).some((entry) => entry === null)
+    || Math.abs(numbers.net_pnl - (numbers.equity - 100)) > 1e-6
+    || Math.abs(numbers.return_pct - numbers.net_pnl) > 1e-6
+    || numbers.win_count + numbers.loss_count > numbers.trade_count) return null;
+  const openPosition = normalizeExperimentPosition(value.open_position);
+  const trades = normalizeExperimentTrades(value.recent_trades);
+  const decisions = normalizeExperimentDecisions(value.recent_decisions, sharedSequence);
+  const logs = normalizeExperimentLogs(value.recent_logs);
+  const lastCycleAt = normalizePaperTimestamp(value.last_cycle_at, true);
+  if (openPosition === undefined || !trades || !decisions || !logs || lastCycleAt === undefined) return null;
+  return { arm_id: armId, strategy: { id: ABC_STRATEGY_IDS[armId], label: ABC_STRATEGY_LABELS[armId],
+    definition_hash: value.strategy.definition_hash }, chain: { sequence: chainSequence, hash: chainHash }, status,
+    ...numbers, open_position: openPosition, recent_trades: trades, recent_decisions: decisions, recent_logs: logs,
+    last_cycle_at: lastCycleAt };
+}
+
+export function normalizeBehaviorPaperExperimentReport(input) {
+  const keys = ['schema', 'experiment_id', 'simulation', 'public_data_only', 'generated_at', 'started_at', 'deadline_at',
+    'status', 'shared_feed', 'assumptions', 'leaderboard', 'arms', 'limitations'];
+  if (!exactPaperKeys(input, keys) || input.schema !== 'abc-paper-experiment-v1'
+    || input.experiment_id !== BEHAVIOR_ABC_EXPERIMENT_ID || input.simulation !== true || input.public_data_only !== true) return null;
+  const generatedAt = normalizePaperTimestamp(input.generated_at);
+  const startedAt = normalizePaperTimestamp(input.started_at);
+  const deadlineAt = normalizePaperTimestamp(input.deadline_at);
+  const status = boundedPaperText(input.status, 16, true);
+  if (!generatedAt || !startedAt || !deadlineAt || Date.parse(deadlineAt) - Date.parse(startedAt) !== DAY_MS
+    || Date.parse(generatedAt) < Date.parse(startedAt) || Date.parse(generatedAt) > Date.parse(deadlineAt) + 60 * 60_000
+    || !['starting', 'active', 'complete', 'error'].includes(status)) return null;
+  const feedKeys = ['sequence', 'hash', 'last_packet_at', 'credential_used', 'symbols', 'channels'];
+  if (!exactPaperKeys(input.shared_feed, feedKeys)) return null;
+  const sharedSequence = boundedPaperNumber(input.shared_feed.sequence, 1, 100_000_000, true);
+  const sharedHash = normalizedExperimentHash(input.shared_feed.hash);
+  const lastPacketAt = normalizePaperTimestamp(input.shared_feed.last_packet_at, true);
+  if (sharedSequence === null || !sharedHash || lastPacketAt === undefined || input.shared_feed.credential_used !== false
+    || JSON.stringify(input.shared_feed.symbols) !== JSON.stringify(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'])
+    || JSON.stringify(input.shared_feed.channels) !== JSON.stringify(['ticker', 'books5', 'trade', 'candle1m'])
+    || (lastPacketAt && Date.parse(lastPacketAt) > Date.parse(generatedAt))) return null;
+  const assumptionKeys = ['seed_equity_per_arm', 'fee_bps_per_side', 'slippage_bps_per_side', 'risk_pct', 'leverage_cap',
+    'drawdown_halt_pct', 'entry_cutoff_at', 'terminal_close', 'max_positions_per_arm', 'strategy_mutation'];
+  if (!exactPaperKeys(input.assumptions, assumptionKeys)
+    || input.assumptions.seed_equity_per_arm !== 100 || input.assumptions.fee_bps_per_side !== 6
+    || input.assumptions.slippage_bps_per_side !== 4 || input.assumptions.risk_pct !== 5
+    || input.assumptions.leverage_cap !== 10 || input.assumptions.drawdown_halt_pct !== 20
+    || normalizePaperTimestamp(input.assumptions.entry_cutoff_at) !== new Date(Date.parse(deadlineAt) - 15 * 60_000).toISOString()
+    || input.assumptions.terminal_close !== 'deadline' || input.assumptions.max_positions_per_arm !== 1
+    || input.assumptions.strategy_mutation !== false) return null;
+  if (!Array.isArray(input.arms) || input.arms.length !== 3) return null;
+  const arms = input.arms.map((arm, index) => normalizeExperimentArm(arm, ABC_ARM_IDS[index], sharedSequence));
+  if (arms.some((arm) => !arm) || new Set(arms.map((arm) => arm.chain.hash)).size !== 3) return null;
+  if (!Array.isArray(input.leaderboard) || input.leaderboard.length !== 3) return null;
+  const expectedLeaderboard = [...arms].sort((left, right) => right.equity - left.equity || left.arm_id.localeCompare(right.arm_id));
+  const leaderboard = input.leaderboard.map((row, index) => {
+    if (!exactPaperKeys(row, ['rank', 'arm_id', 'equity', 'net_pnl', 'return_pct', 'max_drawdown_pct'])) return null;
+    const arm = expectedLeaderboard[index];
+    return row.rank === index + 1 && row.arm_id === arm.arm_id && ['equity', 'net_pnl', 'return_pct', 'max_drawdown_pct']
+      .every((key) => row[key] === arm[key]) ? { ...row } : null;
+  });
+  const limitations = normalizePaperLimitations(input.limitations);
+  if (leaderboard.some((row) => !row) || !limitations) return null;
+  return { schema: 'abc-paper-experiment-v1', experiment_id: BEHAVIOR_ABC_EXPERIMENT_ID, simulation: true,
+    public_data_only: true, generated_at: generatedAt, started_at: startedAt, deadline_at: deadlineAt, status,
+    shared_feed: { sequence: sharedSequence, hash: sharedHash, last_packet_at: lastPacketAt, credential_used: false,
+      symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
+    assumptions: { ...input.assumptions, entry_cutoff_at: normalizePaperTimestamp(input.assumptions.entry_cutoff_at) },
+    leaderboard, arms, limitations };
+}
+
 function containsForbiddenPaperPrivateText(value) {
   return /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/iu.test(value)
     || containsForbiddenPaperPrivateIdentifier(value)
@@ -1572,6 +1746,7 @@ async function reportBehaviorPaper(request, env) {
   }
   const body = await readBehaviorPaperJson(request);
   if (body.error) return body.error;
+  if (body.value?.schema === 'abc-paper-experiment-v1') return reportBehaviorPaperExperiment(body.value, env);
   const report = normalizeBehaviorPaperReport(body.value);
   if (!report) return json({ error: '잘못된 모의투자 보고입니다.' }, 400);
   const receivedAt = new Date().toISOString();
@@ -1630,6 +1805,59 @@ async function reportBehaviorPaper(request, env) {
   return json({ ok: true, session_id: report.session_id, sequence: report.sequence });
 }
 
+async function reportBehaviorPaperExperiment(value, env) {
+  const report = normalizeBehaviorPaperExperimentReport(value);
+  if (!report) return json({ error: '잘못된 A/B/C 모의실험 보고입니다.' }, 400);
+  const receivedAt = new Date().toISOString();
+  const inserted = await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source) DO UPDATE SET
+      captured_at = excluded.captured_at,
+      payload = excluded.payload
+    WHERE CAST(json_extract(excluded.payload, '$.shared_feed.sequence') AS INTEGER)
+        >= CAST(json_extract(usage_snapshots.payload, '$.shared_feed.sequence') AS INTEGER)
+      AND CAST(json_extract(excluded.payload, '$.arms[0].chain.sequence') AS INTEGER)
+        >= CAST(json_extract(usage_snapshots.payload, '$.arms[0].chain.sequence') AS INTEGER)
+      AND CAST(json_extract(excluded.payload, '$.arms[1].chain.sequence') AS INTEGER)
+        >= CAST(json_extract(usage_snapshots.payload, '$.arms[1].chain.sequence') AS INTEGER)
+      AND CAST(json_extract(excluded.payload, '$.arms[2].chain.sequence') AS INTEGER)
+        >= CAST(json_extract(usage_snapshots.payload, '$.arms[2].chain.sequence') AS INTEGER)
+      AND (
+        CAST(json_extract(excluded.payload, '$.shared_feed.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.shared_feed.sequence') AS INTEGER)
+        OR CAST(json_extract(excluded.payload, '$.arms[0].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[0].chain.sequence') AS INTEGER)
+        OR CAST(json_extract(excluded.payload, '$.arms[1].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[1].chain.sequence') AS INTEGER)
+        OR CAST(json_extract(excluded.payload, '$.arms[2].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[2].chain.sequence') AS INTEGER)
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.shared_feed.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.shared_feed.sequence') AS INTEGER)
+        OR json_extract(excluded.payload, '$.shared_feed.hash') = json_extract(usage_snapshots.payload, '$.shared_feed.hash')
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.arms[0].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[0].chain.sequence') AS INTEGER)
+        OR json_extract(excluded.payload, '$.arms[0].chain.hash') = json_extract(usage_snapshots.payload, '$.arms[0].chain.hash')
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.arms[1].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[1].chain.sequence') AS INTEGER)
+        OR json_extract(excluded.payload, '$.arms[1].chain.hash') = json_extract(usage_snapshots.payload, '$.arms[1].chain.hash')
+      )
+      AND (
+        CAST(json_extract(excluded.payload, '$.arms[2].chain.sequence') AS INTEGER)
+          > CAST(json_extract(usage_snapshots.payload, '$.arms[2].chain.sequence') AS INTEGER)
+        OR json_extract(excluded.payload, '$.arms[2].chain.hash') = json_extract(usage_snapshots.payload, '$.arms[2].chain.hash')
+      )
+  `).bind(BEHAVIOR_ABC_SNAPSHOT_SOURCE, receivedAt, JSON.stringify(report)).run();
+  if (inserted?.meta?.changes !== 1) return json({ error: '더 최신인 A/B/C 보고가 이미 저장되어 있습니다.' }, 409);
+  return json({ ok: true, experiment_id: report.experiment_id, shared_feed_sequence: report.shared_feed.sequence });
+}
+
 async function getBehaviorPaper(request, env) {
   const owner = await behaviorOwner(request, env);
   if (owner.response) return owner.response;
@@ -1639,14 +1867,26 @@ async function getBehaviorPaper(request, env) {
     WHERE source = ?1
     LIMIT 1
   `).bind(BEHAVIOR_PAPER_SNAPSHOT_SOURCE).first();
-  if (!row) {
-    return json({ session_id: BEHAVIOR_PAPER_SESSION_ID, deadline_at: BEHAVIOR_PAPER_DEADLINE, report: null }, 200,
+  const experimentRow = await env.DB.prepare(`
+    SELECT source, captured_at, payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_ABC_SNAPSHOT_SOURCE).first();
+  let experiment = null;
+  if (experimentRow?.source === BEHAVIOR_ABC_SNAPSHOT_SOURCE) {
+    try { experiment = normalizeBehaviorPaperExperimentReport(JSON.parse(experimentRow.payload)); } catch { experiment = null; }
+    if (!experiment) return json({ error: 'A/B/C 보고 데이터를 읽지 못했습니다.' }, 500,
       { 'cache-control': 'private, no-store' });
   }
+  if (!row) return json({ session_id: BEHAVIOR_PAPER_SESSION_ID, deadline_at: BEHAVIOR_PAPER_DEADLINE,
+    report: null, experiment, experiment_received_at: experimentRow?.captured_at ?? null }, 200,
+  { 'cache-control': 'private, no-store' });
   let report;
   try { report = normalizeBehaviorPaperReport(JSON.parse(row.payload)); } catch { report = null; }
   if (!report) return json({ error: '보고 데이터를 읽지 못했습니다.' }, 500);
-  return json({ report, received_at: row.captured_at }, 200, { 'cache-control': 'private, no-store' });
+  return json({ report, received_at: row.captured_at, experiment, experiment_received_at: experimentRow?.captured_at ?? null }, 200,
+    { 'cache-control': 'private, no-store' });
 }
 
 function completedTaskLimit(request) {

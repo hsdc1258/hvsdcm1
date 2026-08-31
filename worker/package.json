@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "db:init": "wrangler d1 migrations apply hvsdcm --local",
-    "test": "node --test behavior-lab.test.mjs paper-report.test.mjs test.mjs",
+    "test": "node --test abc-paper-experiment.test.mjs behavior-lab.test.mjs paper-report.test.mjs test.mjs",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

@@ -10,7 +10,7 @@
   const core = window.BehaviorLabCore;
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, paper: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
+    ownerVerified: false, paper: null, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
   };
 
   const elements = {
@@ -43,6 +43,13 @@
     draftText: document.getElementById('draftText'),
     freshnessText: document.getElementById('freshnessText'),
     fundingValue: document.getElementById('fundingValue'),
+    experimentArms: document.getElementById('experimentArms'),
+    experimentDeadline: document.getElementById('experimentDeadline'),
+    experimentFeed: document.getElementById('experimentFeed'),
+    experimentLastPacket: document.getElementById('experimentLastPacket'),
+    experimentLeaderboard: document.getElementById('experimentLeaderboard'),
+    experimentStarted: document.getElementById('experimentStarted'),
+    experimentStatus: document.getElementById('experimentStatus'),
     inSampleMetrics: document.getElementById('inSampleMetrics'),
     interestValue: document.getElementById('interestValue'),
     liveStatus: document.getElementById('liveStatus'),
@@ -72,6 +79,7 @@
     paperEquity: document.getElementById('paperEquity'),
     paperError: document.getElementById('paperError'),
     paperErrorText: document.getElementById('paperErrorText'),
+    paperExperiment: document.getElementById('paperExperiment'),
     paperLastCycle: document.getElementById('paperLastCycle'),
     paperLimitations: document.getElementById('paperLimitations'),
     paperLogs: document.getElementById('paperLogs'),
@@ -480,7 +488,9 @@
     state.paperLoading = false;
     state.ownerVerified = false;
     state.paper = null;
+    state.experiment = null;
     elements.paperReport.hidden = true;
+    elements.paperExperiment.hidden = true;
     elements.paperReport.dataset.freshness = 'stale';
     elements.paperReport.setAttribute('aria-busy', 'false');
     elements.paperAdaptive.hidden = true;
@@ -608,6 +618,112 @@
       return row;
     }) : [createText('li', '', '아직 로그가 없습니다.')];
     elements.paperLogs.replaceChildren(...rows);
+  }
+
+  function validExperimentReport(experiment) {
+    const hash = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
+    const armIds = ['A', 'B', 'C'];
+    const strategyIds = ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'];
+    const started = Date.parse(experiment?.started_at);
+    const deadline = Date.parse(experiment?.deadline_at);
+    return Boolean(experiment && experiment.schema === 'abc-paper-experiment-v1'
+      && experiment.experiment_id === 'abc-paper-20260831' && experiment.simulation === true
+      && experiment.public_data_only === true && Number.isFinite(started) && deadline - started === 24 * 60 * 60_000
+      && ['starting', 'active', 'complete', 'error'].includes(experiment.status)
+      && Number.isInteger(experiment.shared_feed?.sequence) && experiment.shared_feed.sequence > 0
+      && hash(experiment.shared_feed.hash) && experiment.shared_feed.credential_used === false
+      && JSON.stringify(experiment.shared_feed.symbols) === JSON.stringify(SYMBOLS)
+      && JSON.stringify(experiment.shared_feed.channels) === JSON.stringify(['ticker', 'books5', 'trade', 'candle1m'])
+      && experiment.assumptions?.seed_equity_per_arm === 100 && experiment.assumptions.max_positions_per_arm === 1
+      && experiment.assumptions.strategy_mutation === false && Array.isArray(experiment.leaderboard)
+      && experiment.leaderboard.length === 3 && Array.isArray(experiment.arms) && experiment.arms.length === 3
+      && experiment.arms.every((arm, index) => arm.arm_id === armIds[index] && arm.strategy?.id === strategyIds[index]
+        && hash(arm.strategy.definition_hash) && Number.isInteger(arm.chain?.sequence) && arm.chain.sequence > 0
+        && hash(arm.chain.hash) && finite(arm.equity) && finite(arm.net_pnl) && finite(arm.return_pct)
+        && finite(arm.max_drawdown_pct) && finite(arm.fees) && finite(arm.slippage_cost)
+        && Number.isInteger(arm.trade_count) && Array.isArray(arm.recent_trades) && arm.recent_trades.length <= 25
+        && Array.isArray(arm.recent_decisions) && arm.recent_decisions.length <= 20
+        && Array.isArray(arm.recent_logs) && arm.recent_logs.length <= 30)
+      && Array.isArray(experiment.limitations));
+  }
+
+  function renderExperimentList(items, emptyText, renderer) {
+    const list = document.createElement('ol');
+    list.className = 'paper-logs abc-list';
+    list.replaceChildren(...(items.length ? items.map(renderer) : [createText('li', '', emptyText)]));
+    return list;
+  }
+
+  function renderExperimentArm(arm) {
+    const card = document.createElement('article');
+    card.className = 'panel abc-arm-card';
+    const heading = document.createElement('div');
+    heading.className = 'abc-arm-heading';
+    heading.append(
+      createText('span', 'abc-arm-id', arm.arm_id),
+      createText('div', '', ''),
+    );
+    heading.lastElementChild.append(createText('p', 'section-index', arm.strategy.label), createText('h3', '', arm.strategy.id));
+    const metrics = document.createElement('div');
+    metrics.className = 'abc-arm-metrics';
+    metrics.append(
+      detailCell('자산', formatUsdt(arm.equity)), detailCell('순손익', formatUsdt(arm.net_pnl, true)),
+      detailCell('수익률', formatPercent(arm.return_pct, true)), detailCell('최대 낙폭', formatPercent(arm.max_drawdown_pct)),
+      detailCell('비용', `${formatUsdt(arm.fees + arm.slippage_cost)} · 수수료 ${formatUsdt(arm.fees)}`),
+      detailCell('거래', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
+    );
+    const position = document.createElement('section');
+    position.className = 'abc-arm-section';
+    position.append(createText('h4', '', '현재 포지션'));
+    const positionGrid = document.createElement('div');
+    positionGrid.className = 'paper-kv';
+    if (!arm.open_position) positionGrid.append(detailCell('상태', '열린 포지션 없음'));
+    else positionGrid.append(...Object.entries(arm.open_position).slice(0, 12).map(([key, value]) => detailCell(key, value)));
+    position.append(positionGrid);
+    const decisions = document.createElement('section');
+    decisions.className = 'abc-arm-section';
+    decisions.append(createText('h4', '', '최근 판단'));
+    decisions.append(renderExperimentList(arm.recent_decisions, '아직 판단이 없습니다.', (decision) => {
+      const row = document.createElement('li');
+      row.append(createText('time', '', formatKoreanTime(decision.observed_at)),
+        createText('span', '', `${decision.symbol} · ${decision.direction} · score ${paperValue(decision.score)}`),
+        createText('small', '', `feed #${decision.feed_sequence} · ${String(decision.feed_hash).slice(0, 12)}… · ${decision.reason || 'entry candidate'}`));
+      return row;
+    }));
+    const logs = document.createElement('section');
+    logs.className = 'abc-arm-section';
+    logs.append(createText('h4', '', '최근 로그'));
+    logs.append(renderExperimentList(arm.recent_logs, '아직 로그가 없습니다.', (log) => {
+      const row = document.createElement('li');
+      row.append(createText('time', '', formatKoreanTime(log.at)), createText('span', '', log.message),
+        createText('small', '', `#${log.sequence} · ${log.type}`));
+      return row;
+    }));
+    const chain = createText('p', 'abc-chain', `arm chain #${arm.chain.sequence} · ${arm.chain.hash.slice(0, 16)}… · ${arm.strategy.definition_hash.slice(0, 12)}…`);
+    card.append(heading, metrics, position, decisions, logs, chain);
+    return card;
+  }
+
+  function renderExperiment(experiment) {
+    state.experiment = experiment;
+    const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행', complete: 'COMPLETE · 24h 종료', error: 'ERROR · 확인 필요' };
+    elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' || experiment.status === 'complete' ? 'is-live' : experiment.status === 'starting' ? 'is-connecting' : 'is-error'}`;
+    elements.experimentStatus.textContent = labels[experiment.status];
+    elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
+    elements.experimentDeadline.textContent = formatKoreanTime(experiment.deadline_at);
+    elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
+    elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
+    elements.experimentLeaderboard.replaceChildren(...experiment.leaderboard.map((entry) => {
+      const arm = experiment.arms.find((item) => item.arm_id === entry.arm_id);
+      const row = document.createElement('tr');
+      row.replaceChildren(createText('td', '', String(entry.rank)), createText('td', '', `${entry.arm_id} · ${arm.strategy.label}`),
+        createText('td', '', formatUsdt(entry.equity)), createText('td', '', `${formatUsdt(entry.net_pnl, true)} / ${formatPercent(entry.return_pct, true)}`),
+        createText('td', '', formatPercent(entry.max_drawdown_pct)));
+      return row;
+    }));
+    elements.experimentArms.replaceChildren(...experiment.arms.map(renderExperimentArm));
+    elements.paperExperiment.hidden = false;
+    elements.paperExperiment.setAttribute('aria-busy', 'false');
   }
 
   function validAdaptiveReport(adaptive) {
@@ -746,7 +862,7 @@
   function markPaperRefreshError(error, timedOut = false) {
     const fallback = timedOut ? '모의투자 보고 요청 시간이 초과되었습니다.' : '모의투자 보고를 불러오지 못했습니다.';
     const message = timedOut ? fallback : error?.message || fallback;
-    const retained = Boolean(state.paper && !elements.paperReport.hidden);
+    const retained = Boolean((state.paper && !elements.paperReport.hidden) || (state.experiment && !elements.paperExperiment.hidden));
     elements.paperErrorText.textContent = retained
       ? `${message} 업데이트하지 못했습니다. 이전 보고를 표시합니다.`
       : message;
@@ -765,6 +881,7 @@
     state.paperController = controller;
     state.paperLoading = true;
     elements.paperReport.setAttribute('aria-busy', 'true');
+    elements.paperExperiment.setAttribute('aria-busy', 'true');
     let timedOut = false;
     let timeoutId;
     const timeout = new Promise((_, reject) => {
@@ -784,17 +901,25 @@
       if (response.status === 401 || response.status === 404) throw new OwnerAccessError(response.status);
       if (!response.ok) throw new Error(payload.error || '모의투자 보고를 불러오지 못했습니다.');
       if (verifyOwner) unlockOwnerShell();
-      if (!payload.report) {
-        state.paper = null;
+      if (!payload.report && !payload.experiment) {
+        state.paper = null; state.experiment = null;
         paperStatus('starting');
         elements.paperReport.hidden = true;
+        elements.paperExperiment.hidden = true;
         elements.paperAdaptive.hidden = true;
         elements.paperEmpty.hidden = false;
         elements.paperError.hidden = true;
         return;
       }
-      if (!validPaperReport(payload.report)) throw new Error('검증되지 않은 모의투자 보고는 표시하지 않았습니다.');
-      renderPaper(payload.report);
+      if (payload.report) {
+        if (!validPaperReport(payload.report)) throw new Error('검증되지 않은 모의투자 보고는 표시하지 않았습니다.');
+        renderPaper(payload.report);
+      } else { state.paper = null; elements.paperReport.hidden = true; elements.paperAdaptive.hidden = true; }
+      if (payload.experiment) {
+        if (!validExperimentReport(payload.experiment)) throw new Error('검증되지 않은 A/B/C 모의실험 보고는 표시하지 않았습니다.');
+        renderExperiment(payload.experiment);
+      } else { state.experiment = null; elements.paperExperiment.hidden = true; }
+      elements.paperEmpty.hidden = true;
     } catch (error) {
       if (requestId !== state.paperRequestId) return;
       if (error instanceof OwnerAccessError) {
@@ -810,6 +935,7 @@
         state.paperLoading = false;
         state.paperController = null;
         elements.paperReport.setAttribute('aria-busy', 'false');
+        elements.paperExperiment.setAttribute('aria-busy', 'false');
         elements.refreshPaper.disabled = false;
       }
     }
