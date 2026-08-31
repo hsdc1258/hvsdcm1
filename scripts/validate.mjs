@@ -2147,11 +2147,11 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/home.js?v=20260901-dark-workspace-v1'],
+    'index.html': ['/assets/js/home.js?v=20260901-dark-workspace-v2'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-competition-v6', '/usage/assets/js/usage.js?v=20260901-competition-v6'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-dark-workspace-v2', '/usage/assets/js/usage.js?v=20260901-dark-workspace-v2'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
@@ -2173,13 +2173,13 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css', '/assets/css/home.css'],
-    'WordMaster/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
-    'smstudy/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
-    'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260901-competition-v6', '/usage/assets/css/usage.css?v=20260901-competition-v6'],
-    'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260901-v10'],
+    'index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/assets/css/home.css?v=20260901-dark-workspace-v2'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', 'assets/css/style.css'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', 'assets/css/style.css'],
+    'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/admin/assets/css/admin.css'],
+    'usage/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/usage/assets/css/usage.css?v=20260901-dark-workspace-v2'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/gichul/gichul.css?v=20260829-n4'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v2', '/behavior-lab/assets/css/app.css?v=20260901-v11'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
