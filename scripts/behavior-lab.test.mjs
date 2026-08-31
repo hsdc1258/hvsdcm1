@@ -136,5 +136,7 @@ test('owner paper UI renders three detailed, accessible time-scaled A/B/C curves
   assert.match(appSource, /setAttribute\('role', 'img'\)/u);
   assert.match(appSource, /'최근 거래'/u);
   assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
+  assert.match(appSource, /state\.experiment = experiment;\s+paperStatus\(experiment\.status\)/u);
   assert.match(appSource, /renderExperiment\(activeExperiment\)/u);
+  assert.match(htmlSource, /NO ACTIVE EXPERIMENT/u);
 });

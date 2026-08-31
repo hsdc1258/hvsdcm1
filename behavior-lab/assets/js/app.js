@@ -690,6 +690,7 @@
 
   function renderExperiment(experiment) {
     state.experiment = experiment;
+    paperStatus(experiment.status);
     const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행' };
     elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' ? 'is-live' : 'is-connecting'}`;
     elements.experimentStatus.textContent = labels[experiment.status];

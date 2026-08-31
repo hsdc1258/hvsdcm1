@@ -217,6 +217,7 @@ try {
     ];
     const { page, pageErrors } = await openFixture(browser, url, responses);
     await page.waitForSelector('#paperExperiment:not([hidden])');
+    assert.match(await page.locator('#paperStatus').textContent(), /ACTIVE/u);
     assert.equal(await page.locator('#paperReport').count(), 0);
     assert.equal(await page.getByText('실시간 엔진 · 재귀 개선 감사').count(), 0);
     assert.equal(await page.locator('#unsafe-abc').count(), 0);
@@ -240,11 +241,13 @@ try {
 
     await advance(page, 5_000);
     await page.waitForFunction(() => window.__paperFetchCount === 2 && !document.getElementById('paperError').hidden);
+    assert.match(await page.locator('#paperStatus').textContent(), /STALE/u);
     assert.match(await page.locator('#paperErrorText').textContent(), /temporary failure.*이전 보고/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
     await page.locator('#refreshPaper').click();
     await page.waitForFunction(() => window.__paperFetchCount === 3 && document.getElementById('experimentFeed').textContent.includes('#12'));
+    assert.match(await page.locator('#paperStatus').textContent(), /ACTIVE/u);
     assert.equal(await page.locator('#paperError').getAttribute('hidden'), '');
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 3);
     await page.setViewportSize({ width: 390, height: 844 });
