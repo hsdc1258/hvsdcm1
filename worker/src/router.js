@@ -1832,6 +1832,7 @@ async function reportBehaviorPaperExperiment(value, env) {
           > CAST(json_extract(usage_snapshots.payload, '$.arms[1].chain.sequence') AS INTEGER)
         OR CAST(json_extract(excluded.payload, '$.arms[2].chain.sequence') AS INTEGER)
           > CAST(json_extract(usage_snapshots.payload, '$.arms[2].chain.sequence') AS INTEGER)
+        OR excluded.payload = usage_snapshots.payload
       )
       AND (
         CAST(json_extract(excluded.payload, '$.shared_feed.sequence') AS INTEGER)
@@ -1855,7 +1856,8 @@ async function reportBehaviorPaperExperiment(value, env) {
       )
   `).bind(BEHAVIOR_ABC_SNAPSHOT_SOURCE, receivedAt, JSON.stringify(report)).run();
   if (inserted?.meta?.changes !== 1) return json({ error: '더 최신인 A/B/C 보고가 이미 저장되어 있습니다.' }, 409);
-  return json({ ok: true, experiment_id: report.experiment_id, shared_feed_sequence: report.shared_feed.sequence });
+  return json({ ok: true, experiment_id: report.experiment_id, shared_feed_sequence: report.shared_feed.sequence,
+    snapshot_fingerprint: await sha256(JSON.stringify(report)) });
 }
 
 async function getBehaviorPaper(request, env) {
