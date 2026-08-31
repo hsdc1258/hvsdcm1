@@ -13,7 +13,7 @@
     applied: '지원 완료',
     blocked: '막힘',
     closed: '종료',
-    unknown: '미확인',
+    unknown: '수집 범위 확인 필요',
   };
   const ELIGIBILITY_LABELS = {
     eligible: '지원 가능', qualified: '지원 가능', yes: '지원 가능',
@@ -103,7 +103,7 @@
     network: '네트워크 오류',
     invalid_response: '잘못된 응답',
     parse_error: '응답 해석 실패',
-    unknown: '미확인',
+    unknown: '수집 범위 제한',
   };
   const SOURCE_KIND_LABELS = {
     listing: '공고 목록',
@@ -592,7 +592,7 @@
       <div><strong>${escapeHtml(source.name)}</strong><span>${escapeHtml(source.kind)} · ${escapeHtml(relative(source.checkedAt, now))}${source.found === null ? '' : ` · ${source.found}건`}</span>${link(source.referenceUrl, '원본 확인 ↗', 'cp-source-link')}</div>
       <span class="cp-state${tone(source.status)}">${escapeHtml(COVERAGE_LABELS[source.status] || COVERAGE_LABELS.unknown)}</span>
       ${source.error ? `<p>${escapeHtml(source.error)}</p>` : ''}
-      ${source.failureCode ? `<p><b>실패 코드</b> ${escapeHtml(source.failureCode)}</p>` : ''}
+      ${source.failureCode ? `<p><b>확인 사유</b> ${escapeHtml(source.failureCode)}</p>` : ''}
       ${source.manualCheck ? `<p><b>수동 확인</b> ${escapeHtml(source.manualCheck)}</p>` : ''}
     </li>`).join('') : '<li class="us-empty">원본별 수집 기록이 없습니다.</li>';
     return `<section class="cp-panel" aria-labelledby="cpCoverageTitle"><div class="cp-section-head"><div><p class="us-eyebrow">COVERAGE</p><h2 id="cpCoverageTitle" class="title-2">원본 수집 범위</h2></div></div><ul class="cp-sources">${rows}</ul></section>`;
@@ -679,7 +679,7 @@
 
   function renderDashboard(data, filters = {}, now = Date.now()) {
     const notices = data.partial
-      ? `<div class="cp-notice" role="status"><strong>일부 결과만 표시합니다.</strong><span>${escapeHtml(data.errors[0] || '실패하거나 불완전한 원본이 있습니다. 원본별 상태를 확인해 주세요.')}</span></div>`
+      ? `<div class="cp-notice" role="status"><strong>일부 결과만 표시합니다.</strong><span>${escapeHtml(data.errors[0] || '원본 장애, 수집 범위 제한 또는 웹 표시 상한이 있습니다. 원본별 확인 사유를 확인해 주세요.')}</span></div>`
       : '';
     return `${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
   }

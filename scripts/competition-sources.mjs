@@ -6,6 +6,8 @@ import {
 
 const DROPPED_CANDIDATES = Symbol('droppedCandidates');
 const ALLCON_MAX_PAGES_PER_TYPE = 50;
+const THINKGOOD_MAX_PAGES = 50;
+const EPEOPLE_MAX_PAGES = 20;
 
 export const CONTEST_POSITIVE = /(?:공모(?:전|제)?|경진(?:대회)?|아이디어\s*(?:공모(?:전)?|제안대회|대회)|(?:토론|자원봉사|창업|발명|트레일러닝)\s*대회|(?:문학|발명|미술|광고|디자인|과학)대전|예술제|가요제|슬로건|이름찾기|청년기업가대상|어워드|콘테스트|챌린지|해커톤|competition|contest|challenge|hackathon|award)/iu;
 export const CONTEST_EXCLUDED = /(?:지원금|지원\s*사업|보조금|융자|대출|사업화\s*지원|판로\s*지원|입주기업|입주사|(?:채용|구인|인턴)\s*(?:공고|모집|정보)|일자리\s*(?:지원|사업|채용|구인)|(?:구매|입찰|조달|용역)\s*(?:공고|모집|사업)|경품\s*(?:추첨|이벤트)|추첨\s*(?:이벤트|행사)|댓글\s*이벤트|이벤트\s*투표|설문\s*(?:조사|참여|이벤트))/iu;
@@ -31,6 +33,13 @@ function safeDiscoveryUrl(href, pageUrl, allowedHosts) {
 function inferredOrganizer(title, fallback = '주최기관 공식 확인 필요') {
   const bracketed = title.match(/^\[([^\]]{2,60})\]/u)?.[1];
   return text(bracketed || fallback);
+}
+
+function boundedOrganizer(value, title) {
+  const organizer = text(value);
+  if (!organizer || organizer.length > 160 || Buffer.byteLength(organizer, 'utf8') > 160
+    || !isCompetitionPublicTextSafe(organizer)) return inferredOrganizer(title);
+  return organizer;
 }
 
 export function inferCompetitionCategory(title) {
@@ -167,6 +176,59 @@ function invalidStructuralCount($, selector, isValid, isKnownNavigation = () => 
 }
 
 function parseThinkgood(source, body, pageUrl) {
+  if (new URL(pageUrl).pathname.endsWith('/user/contest/subList.do')) {
+    let payload;
+    try { payload = JSON.parse(body); } catch { return result([], false); }
+    if (!payload || Array.isArray(payload) || typeof payload !== 'object'
+      || String(payload.status) !== '1' || !Array.isArray(payload.listJsonData)) {
+      return result([], false);
+    }
+    const currentPageNo = Number(payload.currentPageNo);
+    const recordsPerPage = Number(payload.recordsPerPage);
+    const totalCount = Number(payload.totalcnt);
+    const totalPages = Math.ceil(totalCount / recordsPerPage);
+    if (!Number.isSafeInteger(currentPageNo) || currentPageNo < 1 || currentPageNo > 100_000
+      || !Number.isSafeInteger(recordsPerPage) || recordsPerPage < 1 || recordsPerPage > 100
+      || !Number.isSafeInteger(totalCount) || totalCount < 0 || totalCount > 1_000_000
+      || (totalCount > 0 && currentPageNo > totalPages)) {
+      return result([], false);
+    }
+    const items = [];
+    let ambiguousCount = 0;
+    for (const row of payload.listJsonData) {
+      if (!row || Array.isArray(row) || typeof row !== 'object') {
+        ambiguousCount += 1;
+        continue;
+      }
+      const process = text(row.process).toUpperCase();
+      if (process === 'END') continue;
+      if (!['ING', 'INGEND', 'YET'].includes(process)) {
+        ambiguousCount += 1;
+        continue;
+      }
+      const title = text(row.program_nm);
+      if (!CONTEST_POSITIVE.test(title) || CONTEST_EXCLUDED.test(title)) continue;
+      const id = Number(row.contest_pk);
+      if (!Number.isSafeInteger(id) || id < 1) {
+        ambiguousCount += 1;
+        continue;
+      }
+      const candidate = normalizeCandidate({
+        title,
+        organizer: boundedOrganizer(row.host_company || row.supervises_company, title),
+        discoveryUrl: safeDiscoveryUrl(
+          '/thinkgood/user/contest/view.do?contest_pk=' + id,
+          pageUrl,
+          source.allowedHosts,
+        ),
+      });
+      if (candidate) items.push(candidate);
+      else if (meaningfulCandidateShape({ title })) ambiguousCount += 1;
+    }
+    const parsed = result(items, true, ambiguousCount);
+    parsed.coverageLimited = totalPages > THINKGOOD_MAX_PAGES;
+    return parsed;
+  }
   const $ = cheerio.load(body);
   const selector = 'a[href*="user/contest/view.do?contest_pk="]';
   const validAnchors = $(selector).filter((_, anchor) => /[?&]contest_pk=\d+(?:&|$)/u.test(
@@ -180,9 +242,13 @@ function parseThinkgood(source, body, pageUrl) {
     $,
     selector,
     (_, anchor) => /[?&]contest_pk=\d+(?:&|$)/u.test($(anchor).attr('href') || ''),
+    (anchor) => /(?:\[\[|\{\{)\s*contest_pk\s*(?:\]\]|\}\})/iu.test(
+      $(anchor).attr('href') || '',
+    ),
   );
   $('[data-contest_pk], [data-contest-pk]').each((_, anchor) => {
     const id = $(anchor).attr('data-contest_pk') || $(anchor).attr('data-contest-pk');
+    if (/(?:\[\[|\{\{)\s*contest_pk\s*(?:\]\]|\}\})/iu.test(id || '')) return;
     if (!/^\d+$/u.test(id || '')) {
       ambiguousCount += 1;
       return;
@@ -270,11 +336,14 @@ function parseCampus(source, body, pageUrl) {
 
 function parseContestKorea(source, body, pageUrl) {
   const $ = cheerio.load(body);
-  const selector = 'a[href*="/sub/view.php"][href*="str_no="]';
+  const selector = 'a[href*="view.php"][href*="str_no="]';
   const valid = (_, anchor) => {
-    const href = $(anchor).attr('href') || '';
-    return /(?:[?&])(?:int_gbn|Txt_gbn)=1(?:&|$)/u.test(href)
-      && /[?&]str_no=\d+(?:&|$)/u.test(href);
+    try {
+      const value = new URL($(anchor).attr('href') || '', pageUrl);
+      const type = value.searchParams.get('int_gbn') || value.searchParams.get('Txt_gbn');
+      return value.pathname === '/sub/view.php' && type === '1'
+        && /^\d+$/u.test(value.searchParams.get('str_no') || '');
+    } catch { return false; }
   };
   return result(linkItems($, source, pageUrl, selector, {
     include: valid,
@@ -284,9 +353,10 @@ function parseContestKorea(source, body, pageUrl) {
     valid,
     (anchor) => {
       try {
-        const value = new URL($(anchor).attr('href') || '', pageUrl).searchParams;
-        const type = value.get('int_gbn') || value.get('Txt_gbn');
-        return /^\d+$/u.test(type || '') && type !== '1';
+        const value = new URL($(anchor).attr('href') || '', pageUrl);
+        const type = value.searchParams.get('int_gbn') || value.searchParams.get('Txt_gbn');
+        return value.pathname === '/sub/view.php'
+          && /^\d+$/u.test(type || '') && type !== '1';
       } catch { return false; }
     },
   ));
@@ -335,7 +405,12 @@ function parseAllcon(source, body, pageUrl) {
       const anchor = fragment('a[href*="/view/contest/"],a[href*="/hit/contest/"]').first();
       const title = titleFromAnchor(fragment, anchor);
       const href = anchor.attr('href') || '';
-      if (/(?:서포터즈|앰배서더|설명회)/u.test(title)) continue;
+      const kindMarkup = cheerio.load('<div id="competition-kind"></div>');
+      kindMarkup('#competition-kind').html(String(row.cl_type_str || ''));
+      kindMarkup('#competition-kind').find('script,style').remove();
+      const kind = text(kindMarkup('#competition-kind').text());
+      if (/(?:서포터즈|앰배서더|설명회)/u.test(title)
+        || (kind && kind !== '공모전' && !CONTEST_POSITIVE.test(title))) continue;
       if (!/\/(?:view|hit)\/contest\/\d+/u.test(href)) {
         dropped += 1;
         continue;
@@ -405,10 +480,11 @@ function parseStampit(source, body, pageUrl) {
     include: (_, anchor) => valid(_, anchor) && /공모전/u.test(text(
       $(anchor).closest('article,li,[class*="activityitem_item"]').text(),
     )),
-    organizer: (title, anchor) => text(
+    organizer: (title, anchor) => boundedOrganizer(
       $(anchor).closest('article,li,[class*="activityitem_item"]')
         .find('[class*="company"]').first().text(),
-    ) || inferredOrganizer(title),
+      title,
+    ),
   });
   return result(
     items,
@@ -432,10 +508,7 @@ function strictGovernmentItems($, source, pageUrl, selector, organizer, isValidD
   $(selector).each((_, anchor) => {
     const title = titleFromAnchor($, anchor);
     if (!CONTEST_POSITIVE.test(title)) return;
-    if (CONTEST_EXCLUDED.test(title)) {
-      ambiguousCount += 1;
-      return;
-    }
+    if (CONTEST_EXCLUDED.test(title)) return;
     if (isValidDetail && !isValidDetail(anchor, $)) {
       ambiguousCount += 1;
       return;
@@ -456,7 +529,13 @@ function parseBizinfo(source, body, pageUrl) {
   const selector = 'a[href*="selectSIIA200Detail.do"][href*="pblancId="]';
   const parsed = strictGovernmentItems($, source, pageUrl, selector, (title, anchor) => {
     const row = $(anchor).closest('tr');
-    return text(row.find('td').last().text()) || inferredOrganizer(title);
+    const cells = row.find('td');
+    const headers = row.closest('table').find('thead th').toArray()
+      .map((header) => text($(header).text()));
+    const operatorIndex = headers.findIndex((header) => header.includes('사업수행기관'));
+    const operator = operatorIndex >= 0 ? text(cells.eq(operatorIndex).text()) : '';
+    return operator || text(cells.length > 5 ? cells.eq(5).text() : cells.last().text())
+      || inferredOrganizer(title);
   }, (anchor) => /[?&]pblancId=[A-Za-z0-9_-]{1,80}(?:&|$)/u.test(
     $(anchor).attr('href') || '',
   ));
@@ -476,10 +555,7 @@ function parseKstartup(source, body, pageUrl) {
   $('[onclick*="btnBizView"]').each((_, element) => {
     const title = titleFromAnchor($, element) || text($(element).closest('li').text());
     if (!CONTEST_POSITIVE.test(title)) return;
-    if (CONTEST_EXCLUDED.test(title)) {
-      ambiguousCount += 1;
-      return;
-    }
+    if (CONTEST_EXCLUDED.test(title)) return;
     const id = ($(element).attr('onclick') || '').match(
       /btnBizView\(\s*['"]?(\d+)['"]?\s*(?:,|\))/u,
     )?.[1];
@@ -510,10 +586,7 @@ function parseEpeople(source, body, pageUrl) {
   $(selector).each((_, anchor) => {
     const title = titleFromAnchor($, anchor);
     if (!CONTEST_POSITIVE.test(title)) return;
-    if (CONTEST_EXCLUDED.test(title)) {
-      ambiguousCount += 1;
-      return;
-    }
+    if (CONTEST_EXCLUDED.test(title)) return;
     const id = $(anchor).attr('data-idearegno') || $(anchor).attr('data-ideaRegNo');
     if (!/^[A-Za-z0-9-]{8,40}$/u.test(id || '')) {
       ambiguousCount += 1;
@@ -540,11 +613,36 @@ const bizinfoSearch = 'https://www.bizinfo.go.kr/sii/siia/selectSIIA200View.do'
   + '&preKeywords=&hashCode=&rowsSel=6&rows=15&cpage=1&cat=&schJrsdCodeTy='
   + '&schWntyAt=&schAreaDetailCodes=&schEndAt=N&orderGb=&sort=&schPblancDiv=';
 
+const thinkgoodApi = 'https://www.thinkcontest.com/thinkgood/user/contest/subList.do';
+const thinkgoodRequests = Array.from({ length: THINKGOOD_MAX_PAGES }, (_, index) => ({
+  url: thinkgoodApi,
+  method: 'POST',
+  headers: {
+    accept: 'application/json, text/javascript, */*; q=0.01',
+    'content-type': 'application/json; charset=UTF-8',
+    'x-requested-with': 'XMLHttpRequest',
+    origin: 'https://www.thinkcontest.com',
+    referer: 'https://www.thinkcontest.com/thinkgood/user/contest/index.do',
+  },
+  body: JSON.stringify({
+    recordsPerPage: 10,
+    currentPageNo: index + 1,
+    contest_field: '',
+    host_organ: '',
+    enter_qualified: '',
+    award_size: '',
+    searchStatus: 'Y',
+    sidx: '',
+    sord: '',
+  }),
+}));
+
 export const SOURCE_DEFINITIONS = Object.freeze([
   {
     id: 'thinkgood', kind: 'listing', name: '씽굿',
     referenceUrl: 'https://www.thinkcontest.com/thinkgood/user/contest/index.do',
     pageUrls: ['https://www.thinkcontest.com/thinkgood/user/contest/index.do'],
+    requests: thinkgoodRequests,
     coverageLimited: true,
     allowedHosts: ['www.thinkcontest.com', 'thinkcontest.com'], parsePage: parseThinkgood,
   },
@@ -602,8 +700,11 @@ export const SOURCE_DEFINITIONS = Object.freeze([
   {
     id: 'contestkorea', kind: 'listing', name: '콘테스트코리아',
     referenceUrl: 'https://www.contestkorea.com/sub/list.php?int_gbn=1',
-    pageUrls: Array.from({ length: 5 }, (_, index) =>
-      `https://www.contestkorea.com/sub/list.php?int_gbn=1&page=${index + 1}`),
+    pageUrls: [
+      'https://www.contestkorea.com/sub/list.php?displayrow=500&int_gbn=1'
+      + '&Txt_sGn=1&Txt_key=all&Txt_word=&Txt_sortkey=a.int_sort&Txt_sortword=desc&page=1',
+    ],
+    coverageLimited: true,
     allowedHosts: ['www.contestkorea.com', 'contestkorea.com'], parsePage: parseContestKorea,
   },
   {
@@ -640,8 +741,9 @@ export const SOURCE_DEFINITIONS = Object.freeze([
   {
     id: 'epeople', kind: 'official', name: '국민생각함',
     referenceUrl: 'https://idea.epeople.go.kr/nep/thk/subj/SubjThinkList.npaid',
-    pageUrls: Array.from({ length: 5 }, (_, index) =>
+    pageUrls: Array.from({ length: EPEOPLE_MAX_PAGES }, (_, index) =>
       `https://idea.epeople.go.kr/nep/thk/subj/SubjThinkList.npaid?pageIndex=${index + 1}`),
+    coverageLimited: true,
     allowedHosts: ['idea.epeople.go.kr', 'www.epeople.go.kr'], parsePage: parseEpeople,
   },
 ]);

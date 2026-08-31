@@ -92,16 +92,13 @@ function verificationQueue(crawl) {
   };
 }
 
-export async function runCompetitionCrawlCli(argv) {
-  const options = parseCompetitionCrawlArgs(argv);
-  enableSystemCertificates();
-  const crawl = await runCompetitionCrawl({
-    timeoutMs: options.timeoutMs,
-    maxPerSource: options.maxPerSource,
-  });
-  atomicWrite(options.reportOut, crawl.report);
-  if (options.verificationOut) {
-    atomicWrite(options.verificationOut, verificationQueue(crawl));
+export function buildCompetitionCrawlSummary(crawl, queue = verificationQueue(crawl)) {
+  const verificationCounts = new Map(crawl.results.map((entry) => [entry.source.id, 0]));
+  for (const candidate of queue.candidates) {
+    verificationCounts.set(
+      candidate.source_id,
+      (verificationCounts.get(candidate.source_id) || 0) + 1,
+    );
   }
   return {
     ok: true,
@@ -111,6 +108,7 @@ export async function runCompetitionCrawlCli(argv) {
       sources: crawl.report.sources.length,
       succeeded: crawl.report.run.source_coverage.succeeded,
       candidates: crawl.report.candidates.length,
+      verification_candidates: queue.candidates.length,
       applications: crawl.report.applications.length,
       manual_check: crawl.report.sources.filter((source) => source.manual_check).length,
     },
@@ -120,11 +118,33 @@ export async function runCompetitionCrawlCli(argv) {
         id: entry.source.id,
         status: reported.status,
         failure_code: reported.failure_code,
+        partial_reasons: [...new Set([
+          ...(entry.partialReasons || []),
+          ...(verificationCounts.get(entry.source.id) > reported.candidate_count
+            ? ['report_capacity']
+            : []),
+        ])],
         extracted: entry.extractedCount,
         retained: reported.candidate_count,
+        verification_retained: verificationCounts.get(entry.source.id),
       };
     }),
   };
+}
+
+export async function runCompetitionCrawlCli(argv) {
+  const options = parseCompetitionCrawlArgs(argv);
+  enableSystemCertificates();
+  const crawl = await runCompetitionCrawl({
+    timeoutMs: options.timeoutMs,
+    maxPerSource: options.maxPerSource,
+  });
+  const queue = verificationQueue(crawl);
+  atomicWrite(options.reportOut, crawl.report);
+  if (options.verificationOut) {
+    atomicWrite(options.verificationOut, queue);
+  }
+  return buildCompetitionCrawlSummary(crawl, queue);
 }
 
 async function main() {

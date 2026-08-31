@@ -12,6 +12,10 @@ export const DEFAULT_SOURCE_BUDGET_MS = 90_000;
 const MAX_DYNAMIC_PAGE_URLS = 300;
 const HOST_FAILURE_CODES = new Set(['timeout', 'network', 'rate_limited', 'http_403']);
 const MAX_CONSECUTIVE_HOST_FAILURES = 2;
+const SAFE_REQUEST_HEADERS = new Set([
+  'accept', 'content-type', 'origin', 'referer', 'user-agent', 'x-requested-with',
+]);
+const MAX_REQUEST_BODY_BYTES = 32_000;
 
 class CrawlFailure extends Error {
   constructor(code, message) {
@@ -44,9 +48,58 @@ function allowedUrl(value, source) {
   return url;
 }
 
-async function fetchPage(source, pageUrl, options) {
+function normalizePageRequest(value, source) {
+  const input = typeof value === 'string' ? { url: value } : value;
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some((key) => !['url', 'method', 'headers', 'body'].includes(key))) {
+    throw new CrawlFailure('invalid_response', 'invalid source request descriptor');
+  }
+  const url = allowedUrl(input.url, source).href;
+  const method = String(input.method || 'GET').toUpperCase();
+  if (!['GET', 'POST'].includes(method)) {
+    throw new CrawlFailure('invalid_response', 'unsupported source request method');
+  }
+  const headers = {};
+  if (input.headers !== undefined) {
+    if (!input.headers || typeof input.headers !== 'object' || Array.isArray(input.headers)) {
+      throw new CrawlFailure('invalid_response', 'invalid source request headers');
+    }
+    for (const [rawName, rawValue] of Object.entries(input.headers)) {
+      const name = rawName.toLowerCase();
+      const headerValue = String(rawValue);
+      if (!SAFE_REQUEST_HEADERS.has(name) || !headerValue || headerValue.length > 512
+        || /[\r\n]/u.test(headerValue)) {
+        throw new CrawlFailure('invalid_response', 'unsafe source request header');
+      }
+      if (['origin', 'referer'].includes(name)) allowedUrl(headerValue, source);
+      headers[name] = headerValue;
+    }
+  }
+  const body = input.body === undefined ? undefined : String(input.body);
+  if (method === 'GET' && body !== undefined) {
+    throw new CrawlFailure('invalid_response', 'GET source request cannot contain a body');
+  }
+  if (method === 'POST' && (body === undefined || Buffer.byteLength(body, 'utf8') > MAX_REQUEST_BODY_BYTES)) {
+    throw new CrawlFailure('invalid_response', 'invalid source request body');
+  }
+  return { url, method, headers, body };
+}
+
+function pageRequestKey(request) {
+  return [request.method, request.url, JSON.stringify(request.headers), request.body || ''].join('\n');
+}
+
+async function fetchPage(source, requestValue, options) {
   const { fetchImpl, timeoutMs, maxBytes } = options;
-  let current = allowedUrl(pageUrl, source);
+  const sourceRequest = normalizePageRequest(requestValue, source);
+  let current = allowedUrl(sourceRequest.url, source);
+  let method = sourceRequest.method;
+  let body = sourceRequest.body;
+  const headers = {
+    accept: 'text/html,application/xhtml+xml,application/json',
+    'user-agent': 'hvsdcm1-competition-discovery/1.0',
+    ...sourceRequest.headers,
+  };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const aborted = new Promise((_, reject) => {
@@ -57,12 +110,11 @@ async function fetchPage(source, pageUrl, options) {
   try {
     for (let redirects = 0; redirects <= 5; redirects += 1) {
       const response = await Promise.race([fetchImpl(current.href, {
+        method,
+        body,
         redirect: 'manual',
         signal: controller.signal,
-        headers: {
-          accept: 'text/html,application/xhtml+xml',
-          'user-agent': 'hvsdcm1-competition-discovery/1.0',
-        },
+        headers,
       }), aborted]);
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers?.get?.('location');
@@ -74,6 +126,14 @@ async function fetchPage(source, pageUrl, options) {
           cancellation?.catch?.(() => {});
         } catch { /* Redirect body disposal is best-effort; the shared timer still bounds the page. */ }
         current = allowedUrl(new URL(location, current).href, source);
+        if (response.status === 303
+          || ([301, 302].includes(response.status) && method === 'POST')) {
+          method = 'GET';
+          body = undefined;
+          delete headers['content-type'];
+          delete headers['x-requested-with'];
+          delete headers.origin;
+        }
         continue;
       }
       if (!response.ok) {
@@ -84,15 +144,20 @@ async function fetchPage(source, pageUrl, options) {
       }
       const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
       if (contentType && !contentType.includes('text/html')
-        && !contentType.includes('application/xhtml+xml')) {
+        && !contentType.includes('application/xhtml+xml')
+        && !contentType.includes('application/json')
+        && !contentType.includes('+json')) {
         throw new CrawlFailure('invalid_response', 'source returned an unsupported content type');
       }
       const declared = Number(response.headers?.get?.('content-length'));
       if (Number.isFinite(declared) && declared > maxBytes) {
         throw new CrawlFailure('invalid_response', 'source response exceeded the byte limit');
       }
-      const body = await readBoundedBody(response, { maxBytes, signal: controller.signal });
-      return { body, url: current.href };
+      const responseBody = await readBoundedBody(response, {
+        maxBytes,
+        signal: controller.signal,
+      });
+      return { body: responseBody, url: current.href };
     }
     throw new CrawlFailure('invalid_response', 'source redirect limit exceeded');
   } catch (error) {
@@ -182,30 +247,41 @@ export async function crawlCompetitionSource(source, options = {}) {
   const sourceDeadline = monotonicClock() + sourceBudgetMs;
   const items = [];
   let firstFailure = null;
+  const partialReasons = new Set();
+  const recordPartial = (code, reason = code) => {
+    // `unknown` is reserved for a deliberate local coverage ceiling. A later
+    // host or parser failure is more actionable and must survive into the
+    // strict one-code report contract and owner UI.
+    if (!firstFailure || (firstFailure === 'unknown' && code !== 'unknown')) {
+      firstFailure = code;
+    }
+    partialReasons.add(reason);
+  };
   let recognizedPages = 0;
   let ambiguousCount = 0;
   const seenPageIdentitySets = new Set();
   let consecutiveHostFailures = 0;
 
-  const pageQueue = [...source.pageUrls];
-  const scheduledPages = new Set(pageQueue.map((value) => new URL(value).href));
+  const pageQueue = [...(source.requests || source.pageUrls)]
+    .map((value) => normalizePageRequest(value, source));
+  const scheduledPages = new Set(pageQueue.map(pageRequestKey));
   let dynamicPageCount = 0;
   for (let pageIndex = 0; pageIndex < pageQueue.length; pageIndex += 1) {
-    const pageUrl = pageQueue[pageIndex];
+    const pageRequest = pageQueue[pageIndex];
     const remainingBudget = sourceDeadline - monotonicClock();
     if (remainingBudget <= 0) {
-      firstFailure ||= 'timeout';
+      recordPartial('timeout', 'source_budget');
       break;
     }
     try {
-      const page = await fetchPage(source, pageUrl, {
+      const page = await fetchPage(source, pageRequest, {
         fetchImpl,
         timeoutMs: Math.max(1, Math.min(timeoutMs, Math.ceil(remainingBudget))),
         maxBytes,
       });
       const parsed = parseCompetitionSourcePage(source, page.body, page.url);
       if (!parsed.recognized) {
-        firstFailure ||= 'invalid_response';
+        recordPartial('invalid_response', 'parser_unrecognized');
         continue;
       }
       recognizedPages += 1;
@@ -214,30 +290,37 @@ export async function crawlCompetitionSource(source, options = {}) {
       const pageIdentities = [...new Set(parsed.items.map(withinSourceKey))].sort();
       if (pageIdentities.length > 0) {
         const fingerprint = pageIdentities.join('\n');
-        if (seenPageIdentitySets.has(fingerprint)) firstFailure ||= 'unknown';
+        if (seenPageIdentitySets.has(fingerprint)) {
+          recordPartial('invalid_response', 'duplicate_page');
+        }
         seenPageIdentitySets.add(fingerprint);
       }
       items.push(...parsed.items);
-      if (parsed.coverageLimited) firstFailure ||= 'unknown';
-      for (const additionalPageUrl of parsed.additionalPageUrls || []) {
+      if (parsed.coverageLimited) recordPartial('unknown', 'bounded_coverage');
+      const additionalRequests = [
+        ...(parsed.additionalPageUrls || []).map((url) => ({ url })),
+        ...(parsed.additionalPageRequests || []),
+      ];
+      for (const additionalPageRequest of additionalRequests) {
         let normalized;
-        try { normalized = allowedUrl(additionalPageUrl, source).href; }
+        try { normalized = normalizePageRequest(additionalPageRequest, source); }
         catch {
-          firstFailure ||= 'invalid_response';
+          recordPartial('invalid_response', 'unsafe_dynamic_request');
           continue;
         }
-        if (scheduledPages.has(normalized)) continue;
+        const key = pageRequestKey(normalized);
+        if (scheduledPages.has(key)) continue;
         if (dynamicPageCount >= MAX_DYNAMIC_PAGE_URLS) {
-          firstFailure ||= 'unknown';
+          recordPartial('unknown', 'dynamic_page_limit');
           continue;
         }
-        scheduledPages.add(normalized);
+        scheduledPages.add(key);
         pageQueue.push(normalized);
         dynamicPageCount += 1;
       }
     } catch (error) {
       const failureCode = error instanceof CrawlFailure ? error.code : 'parse_error';
-      firstFailure ||= failureCode;
+      recordPartial(failureCode);
       consecutiveHostFailures = HOST_FAILURE_CODES.has(failureCode)
         ? consecutiveHostFailures + 1
         : 0;
@@ -248,9 +331,9 @@ export async function crawlCompetitionSource(source, options = {}) {
   const checkedAt = timestamp(clock);
   const withinSource = dedupeWithinSource(items, maxPerSource);
   const candidates = withinSource.candidates;
-  if (withinSource.truncated) firstFailure ||= 'unknown';
-  if (source.coverageLimited) firstFailure ||= 'unknown';
-  if (ambiguousCount > 0) firstFailure ||= 'unknown';
+  if (withinSource.truncated) recordPartial('unknown', 'source_limit');
+  if (source.coverageLimited) recordPartial('unknown', 'bounded_coverage');
+  if (ambiguousCount > 0) recordPartial('invalid_response', 'parser_ambiguity');
   if (candidates.length > 0) {
     return {
       source,
@@ -260,6 +343,7 @@ export async function crawlCompetitionSource(source, options = {}) {
       manualCheck: Boolean(firstFailure),
       candidates,
       extractedCount: items.length,
+      partialReasons: [...partialReasons],
     };
   }
   if (firstFailure) {
@@ -271,6 +355,7 @@ export async function crawlCompetitionSource(source, options = {}) {
       manualCheck: true,
       candidates: [],
       extractedCount: items.length,
+      partialReasons: [...partialReasons],
     };
   }
   return {
@@ -281,6 +366,7 @@ export async function crawlCompetitionSource(source, options = {}) {
     manualCheck: recognizedPages === 0,
     candidates: [],
     extractedCount: items.length,
+    partialReasons: [],
   };
 }
 
@@ -465,16 +551,18 @@ export function buildCompetitionCrawlReport(results, times = {}) {
     );
   }
   const sources = results.map((entry) => {
-    const overflowed = deduped.overflowSourceIds.has(entry.source.id);
     return {
       id: entry.source.id,
       kind: entry.source.kind,
       name: entry.source.name,
       reference_url: entry.source.referenceUrl,
       checked_at: entry.checkedAt,
-      status: overflowed ? 'partial' : entry.status,
-      failure_code: overflowed && entry.failureCode === 'none' ? 'unknown' : entry.failureCode,
-      manual_check: overflowed || entry.manualCheck,
+      // The 500-row web report is a presentation/storage ceiling. The full
+      // verification queue is retained separately, so report truncation must
+      // not be misreported as a source crawl failure.
+      status: entry.status,
+      failure_code: entry.failureCode,
+      manual_check: entry.manualCheck,
       candidate_count: candidateCounts.get(entry.source.id),
     };
   });
@@ -482,7 +570,8 @@ export function buildCompetitionCrawlReport(results, times = {}) {
   const failed = sources.filter((source) => source.status === 'failed').length;
   const runStatus = failed === sources.length
     ? 'failed'
-    : sources.some((source) => ['failed', 'partial'].includes(source.status))
+    : deduped.overflowSourceIds.size > 0
+      || sources.some((source) => ['failed', 'partial'].includes(source.status))
       ? 'partial'
       : 'complete';
   const report = {

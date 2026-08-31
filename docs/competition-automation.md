@@ -33,13 +33,18 @@ privacy terms, AI policy, deliverables, and receipt mechanism from that official
 The local crawler performs the actual list parsing; a successful HTTP status alone is not counted as
 successful discovery. It follows an HTTPS host allowlist, keeps the timeout and byte cap active through
 the complete response body, uses three concurrent
-requests, and reports selector drift, TLS/network failures, timeouts, 403 responses, and ambiguous
+source workers, and reports selector drift, TLS/network failures, timeouts, 403 responses, and ambiguous
 government listings as manual coverage. If one page succeeds and a later page fails, the discovered
 items are retained while the source is marked partial. CampusPick and EveryCareer are separate health
 checks for the same corpus, so their candidates are deduplicated before source counts are calculated.
-Wevity, Linkareer, ContestKorea, Bizinfo, and 국민생각함 traverse five bounded pages per run;
-Gongmobox traverses its home plus six contest categories. Allcon reads its rendered home plus the
-site's real JSON listing endpoint for six types, validates each response's requested/current page and
+Wevity, Linkareer, and Bizinfo traverse five bounded pages per run. 국민생각함 traverses 20
+bounded pages and remains explicit partial coverage because the live corpus is larger. ContestKorea
+requests one 500-row contest-list response, accepts both absolute and live relative detail links, and
+also remains bounded partial coverage. Gongmobox traverses its home plus six contest categories.
+Thinkgood calls the site's public JSON listing endpoint for 50 bounded pages with a fixed safe-field
+projection; unrelated response fields are never retained or logged. Its much larger advertised corpus
+keeps the source partial/manual instead of pretending the bounded window is complete. Allcon reads its
+rendered home plus the site's real JSON listing endpoint for six types, validates each response's requested/current page and
 pagination totals, and follows every advertised page up to 50 pages per type and 300 dynamically added
 URLs per source. Exceeding either bound is explicit partial coverage; the empty browser shell is never
 counted as coverage. Each source also has a 90-second total budget, and two consecutive timeout,
@@ -48,17 +53,21 @@ of allowing an ignored pagination parameter to look successful. Stampit traverse
 paginator and becomes partial if that page count grows beyond the configured window. CampusPick and its
 EveryCareer alias currently return the same 24 detail rows in one response with no pagination, cursor,
 or load-more contract. Selector drift or a newly exposed
-pagination control makes the affected source partial instead of silently truncating it. Thinkgood and
-the robots-allowed K-Startup fragment do not expose a dependable pagination contract, so those rows
-are always marked `partial` / `manual_check:true` instead of being misreported as full coverage.
+pagination control makes the affected source partial instead of silently truncating it. These bounded
+windows and the robots-allowed K-Startup fragment are always marked `partial` /
+`manual_check:true` instead of being misreported as full coverage.
 Contest-scoped detail rows are retained even when their title does not
 match a narrow keyword; government feeds still require contest evidence and exclude context-specific
 grant, hiring, procurement, and event records.
 
-The crawler retains up to 2,500 distinct rows per source and 500 redacted candidates per report. A
-capacity overflow never discards the entire daily artifact or claims complete coverage: affected
-sources become `partial` with `manual_check:true`, while the external verification queue preserves the
-broader discovery work. The strict report transport accepts at most 1 MB.
+The crawler retains up to 2,500 distinct rows per source and 500 redacted candidates per report. The
+500-row report limit is a presentation/storage ceiling, not a source failure: a healthy source keeps
+its own `ok` status, the overall run remains partial, and the external verification queue preserves the
+broader discovery work. CLI output separates `report_capacity` from true source partial reasons such as
+`bounded_coverage`, `duplicate_page`, parser ambiguity, and host failures. The strict report keeps one
+bounded code: an actionable host/parser failure takes precedence, while `unknown` is reserved for a
+deliberate coverage ceiling and is rendered as `수집 범위 제한`. The strict report transport
+accepts at most 1 MB.
 
 Create a strict report and an official-verification queue outside Git with:
 
@@ -67,7 +76,8 @@ Create a strict report and an official-verification queue outside Git with:
 Install the lockfile before the first run in a fresh checkout (`npm ci --ignore-scripts`). Cheerio is a
 runtime dependency of the local crawler, not only a test dependency.
 
-The command prints only source status and counts. Raw HTML is never saved or logged. Candidate output is
+The command prints only bounded source identifiers, statuses, safe reason codes, and counts. Raw HTML
+is never saved or logged. Candidate output is
 redacted and remains unverified / verifying; the crawler does not invent organizer verification,
 eligibility, deadlines, acceptance, or applications. The report is passed through the same strict
 validateCompetitionReport contract before it is written. It can then be dry-run and sent with the

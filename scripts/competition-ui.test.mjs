@@ -154,7 +154,7 @@ test('top-level canonical fields render human labels, safe source action, and bo
   assert.doesNotMatch(markup, />new</u);
   assert.match(markup, /공고 목록/u);
   assert.match(markup, /class="cp-source-link" href="https:\/\/official\.example\/source"/u);
-  assert.match(markup, /실패 코드<\/b> 시간 초과/u);
+  assert.match(markup, /확인 사유<\/b> 시간 초과/u);
   assert.match(markup, /수동 확인<\/b> 필요/u);
   assert.equal((card.match(/지원 가능/gu) || []).length, 1);
 });
@@ -272,7 +272,7 @@ test('the adapter selects the newest report wrapper and correlates contest plus 
   assert.equal(normalized.runs[0].id, 'new');
   assert.equal(normalized.candidates.some((candidate) => candidate.title === '옛 후보'), false);
   const markup = ui.renderDashboard(normalized, {}, NOW);
-  assert.match(markup, /실패 코드<\/b> 접근 거부/u);
+  assert.match(markup, /확인 사유<\/b> 접근 거부/u);
   assert.doesNotMatch(markup, /HTTP_403/u);
   assert.match(markup, /수동 확인<\/b> 필요/u);
   assert.match(markup, /권리 위험<\/dt><dd>비독점 이용/u);
@@ -356,7 +356,7 @@ test('risk, blocker, next-action, and source failure enums render only Korean la
   });
   assert.deepEqual(Array.from(normalized.sources, (source) => source.failureCode), [
     '', '시간 초과', '접근 거부', '찾을 수 없음', '요청 제한', '네트워크 오류',
-    '잘못된 응답', '응답 해석 실패', '미확인', '미확인',
+    '잘못된 응답', '응답 해석 실패', '수집 범위 제한', '미확인',
   ]);
   assert.deepEqual(Array.from(normalized.applications[0].blockers), []);
   assert.deepEqual(Array.from(normalized.applications.at(-1).blockers), ['미확인']);

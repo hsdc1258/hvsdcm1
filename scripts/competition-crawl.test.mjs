@@ -9,7 +9,10 @@ import {
   SOURCE_DEFINITIONS,
   parseCompetitionSourcePage,
 } from './competition-sources.mjs';
-import { parseCompetitionCrawlArgs } from './competition-crawl.mjs';
+import {
+  buildCompetitionCrawlSummary,
+  parseCompetitionCrawlArgs,
+} from './competition-crawl.mjs';
 
 const SOURCE_IDS = [
   'thinkgood',
@@ -56,16 +59,21 @@ test('source registry freezes exactly twelve distinct coverage rows', () => {
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'wevity').pageUrls.length, 5);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'linkareer').pageUrls.length, 5);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'gongmobox').pageUrls.length, 7);
-  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'contestkorea').pageUrls.length, 5);
+  const thinkgood = SOURCE_DEFINITIONS.find((source) => source.id === 'thinkgood');
+  assert.equal(thinkgood.requests.length, 50);
+  assert.ok(thinkgood.requests.every((request) => request.method === 'POST'));
+  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'contestkorea').pageUrls.length, 1);
   const allconUrls = SOURCE_DEFINITIONS.find((source) => source.id === 'allcon').pageUrls;
   assert.equal(allconUrls.length, 7);
   assert.equal(allconUrls.filter((url) => url.includes('/page/ajax.contest_list.php')).length, 6);
   assert.equal(allconUrls.some((url) => url.includes('/list/contest/')), false);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'bizinfo').pageUrls.length, 5);
-  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'epeople').pageUrls.length, 5);
+  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'epeople').pageUrls.length, 20);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'stampit').pageUrls.length, 17);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'thinkgood').coverageLimited, true);
+  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'contestkorea').coverageLimited, true);
   assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'kstartup').coverageLimited, true);
+  assert.equal(SOURCE_DEFINITIONS.find((source) => source.id === 'epeople').coverageLimited, true);
 });
 
 test('crawl output files must be distinct before any network work begins', () => {
@@ -93,6 +101,89 @@ test('all twelve parsers extract bounded public contest discoveries', () => {
     assert.match(parsed.items[0].discoveryUrl, /^https:\/\//u, source.id);
     assert.doesNotMatch(parsed.items[0].title, /^(?:추천|\d+\.)/u, source.id);
   }
+});
+
+test('Thinkgood uses its public JSON listing endpoint without retaining unrelated response fields', async () => {
+  const original = SOURCE_DEFINITIONS.find((source) => source.id === 'thinkgood');
+  const source = {
+    ...original,
+    requests: [original.requests[0]],
+    coverageLimited: false,
+  };
+  let requestInit;
+  const crawled = await crawlCompetitionSource(source, {
+    fetchImpl: async (_url, init) => {
+      requestInit = init;
+      return new Response(JSON.stringify({
+        status: 1,
+        currentPageNo: 1,
+        recordsPerPage: 10,
+        totalcnt: 1,
+        listJsonData: [{
+          contest_pk: 701,
+          process: 'ING',
+          program_nm: '안전한 AI 아이디어 공모전',
+          host_company: '긴주최기관'.repeat(50),
+          manager_email: 'must-not-survive@example.test',
+          manager_phone: '010-9999-9999',
+        }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    clock: () => Date.parse('2026-08-31T00:01:00Z'),
+  });
+  assert.equal(requestInit.method, 'POST');
+  assert.equal(requestInit.headers['x-requested-with'], 'XMLHttpRequest');
+  assert.equal(JSON.parse(requestInit.body).currentPageNo, 1);
+  assert.deepEqual(
+    [crawled.status, crawled.failureCode, crawled.candidates.length],
+    ['ok', 'none', 1],
+  );
+  assert.equal(crawled.candidates[0].organizer, '주최기관 공식 확인 필요');
+  assert.doesNotMatch(JSON.stringify(crawled.candidates), /must-not-survive|010-9999/u);
+});
+
+test('source request descriptors reject secrets, cross-host context, and GET bodies before fetch', async () => {
+  const original = SOURCE_DEFINITIONS.find((source) => source.id === 'thinkgood');
+  const invalidRequests = [
+    { url: original.requests[0].url, method: 'POST', headers: { authorization: 'Bearer nope' }, body: '{}' },
+    { url: original.requests[0].url, method: 'POST', headers: { cookie: 'session=nope' }, body: '{}' },
+    { url: original.requests[0].url, method: 'POST', headers: { origin: 'https://evil.example' }, body: '{}' },
+    { url: original.requests[0].url, method: 'GET', body: '{}' },
+  ];
+  for (const request of invalidRequests) {
+    let fetchCalls = 0;
+    await assert.rejects(
+      crawlCompetitionSource({ ...original, requests: [request] }, {
+        fetchImpl: async () => { fetchCalls += 1; },
+      }),
+      /(?:unsafe source request header|escaped its HTTPS host allowlist|GET source request)/u,
+    );
+    assert.equal(fetchCalls, 0);
+  }
+});
+
+test('Thinkgood template placeholders are ignored without creating parser ambiguity', () => {
+  const source = SOURCE_DEFINITIONS.find((entry) => entry.id === 'thinkgood');
+  const parsed = parseCompetitionSourcePage(
+    source,
+    '<a href="/thinkgood/user/contest/view.do?contest_pk=[[contest_pk]]">템플릿 공모전</a>',
+    source.pageUrls[0],
+  );
+  assert.deepEqual([parsed.recognized, parsed.items.length, parsed.ambiguousCount], [false, 0, 0]);
+});
+
+test('ContestKorea accepts its live relative detail links only inside the contest path', () => {
+  const source = SOURCE_DEFINITIONS.find((entry) => entry.id === 'contestkorea');
+  const parsed = parseCompetitionSourcePage(
+    source,
+    [
+      '<a href="view.php?int_gbn=1&str_no=321">상대경로 아이디어 공모전</a>',
+      '<a href="/other/view.php?int_gbn=1&str_no=322">다른 경로 공모전</a>',
+    ].join(''),
+    source.pageUrls[0],
+  );
+  assert.deepEqual(parsed.items.map((item) => item.title), ['상대경로 아이디어 공모전']);
+  assert.equal(parsed.ambiguousCount, 1);
 });
 
 test('Allcon parses strict AJAX rows and recognizes empty results fail-closed', () => {
@@ -148,6 +239,37 @@ test('Allcon parses strict AJAX rows and recognizes empty results fail-closed', 
   assert.equal(markupHost.items[0].organizer, '기관');
 });
 
+test('Allcon cleanly skips ordinary education rows but keeps a typed hackathon discovery', () => {
+  const source = SOURCE_DEFINITIONS.find((entry) => entry.id === 'allcon');
+  const parsed = parseCompetitionSourcePage(source, JSON.stringify({
+    currentPage: 1, perPage: 15, totalCount: 2, totalPage: 1,
+    rows: [
+      {
+        cl_title: "<a href='/hit/contest/5101'>일반 마케팅 교육</a>",
+        cl_type_str: '교육', cl_host: '교육기관',
+      },
+      {
+        cl_title: "<a href='/hit/contest/5102'>공공데이터 해커톤</a>",
+        cl_type_str: '교육', cl_host: '주최기관',
+      },
+    ],
+  }), source.pageUrls[1]);
+  assert.deepEqual(parsed.items.map((item) => item.title), ['공공데이터 해커톤']);
+  assert.equal(parsed.ambiguousCount, 0);
+});
+
+test('Stampit retains a contest with an overlong organizer using a conservative placeholder', () => {
+  const source = SOURCE_DEFINITIONS.find((entry) => entry.id === 'stampit');
+  const parsed = parseCompetitionSourcePage(
+    source,
+    `<article class="activityitem_item"><span>공모전</span><a href="/extraactivity/detail/long-host"><span class="activityitem_title">안전한 디자인 공모전</span></a><span class="activityitem_company">${'긴주최기관'.repeat(50)}</span></article>`,
+    source.pageUrls[0],
+  );
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.items[0].organizer, '주최기관 공식 확인 필요');
+  assert.equal(parsed.ambiguousCount, 0);
+});
+
 test('Allcon follows every advertised page and marks totals beyond its safety bound partial', async () => {
   const original = SOURCE_DEFINITIONS.find((source) => source.id === 'allcon');
   const source = { ...original, pageUrls: [original.pageUrls[1]] };
@@ -196,7 +318,13 @@ test('Allcon follows every advertised page and marks totals beyond its safety bo
 
 test('a source that ignores pagination is partial even when every response parses', async () => {
   const original = SOURCE_DEFINITIONS.find((entry) => entry.id === 'contestkorea');
-  const source = { ...original, pageUrls: original.pageUrls.slice(0, 2) };
+  const source = {
+    ...original,
+    pageUrls: [
+      'https://www.contestkorea.com/sub/list.php?page=1',
+      'https://www.contestkorea.com/sub/list.php?page=2',
+    ],
+  };
   const body = '<a href="/sub/view.php?int_gbn=1&str_no=15"><strong>반복 공모전</strong></a>';
   const crawled = await crawlCompetitionSource(source, {
     fetchImpl: async () => new Response(body, {
@@ -207,8 +335,9 @@ test('a source that ignores pagination is partial even when every response parse
   });
   assert.deepEqual(
     [crawled.status, crawled.failureCode, crawled.manualCheck, crawled.candidates.length],
-    ['partial', 'unknown', true, 1],
+    ['partial', 'invalid_response', true, 1],
   );
+  assert.deepEqual(crawled.partialReasons, ['duplicate_page', 'bounded_coverage']);
 });
 
 test('dynamic pagination stops after two consecutive host failures', async () => {
@@ -243,7 +372,10 @@ test('dynamic pagination stops after two consecutive host failures', async () =>
 
 test('source total budget stops slow-success pagination as partial', async () => {
   const original = SOURCE_DEFINITIONS.find((entry) => entry.id === 'contestkorea');
-  const source = { ...original, pageUrls: original.pageUrls.slice(0, 3) };
+  const source = {
+    ...original,
+    pageUrls: [1, 2, 3].map((page) => `https://www.contestkorea.com/sub/list.php?page=${page}`),
+  };
   const ticks = [0, 0, 500, 1_001];
   let calls = 0;
   const crawled = await crawlCompetitionSource(source, {
@@ -278,7 +410,7 @@ test('government parsers exclude grants, jobs, and event votes fail-closed', () 
     bizinfo.pageUrls[0],
   );
   assert.deepEqual(parsedBusiness.items.map((item) => item.title), ['진짜 데이터 경진대회']);
-  assert.equal(parsedBusiness.ambiguousCount, 1);
+  assert.equal(parsedBusiness.ambiguousCount, 0);
 
   const epeople = SOURCE_DEFINITIONS.find((source) => source.id === 'epeople');
   const peopleHtml = [
@@ -287,7 +419,7 @@ test('government parsers exclude grants, jobs, and event votes fail-closed', () 
   ].join('');
   const parsedPeople = parseCompetitionSourcePage(epeople, peopleHtml, epeople.pageUrls[0]);
   assert.deepEqual(parsedPeople.items.map((item) => item.title), ['진짜 정책 아이디어 공모전']);
-  assert.equal(parsedPeople.ambiguousCount, 1);
+  assert.equal(parsedPeople.ambiguousCount, 0);
 });
 
 test('Bizinfo recognizes only its exact official empty-result table sentinel', () => {
@@ -307,6 +439,19 @@ test('Bizinfo recognizes only its exact official empty-result table sentinel', (
     bizinfo.pageUrls[1],
   );
   assert.equal(unscopedText.recognized, false);
+});
+
+test('Bizinfo selects the operating institution instead of the trailing view count', () => {
+  const source = SOURCE_DEFINITIONS.find((entry) => entry.id === 'bizinfo');
+  const parsed = parseCompetitionSourcePage(source, [
+    '<table><thead><tr><th>번호</th><th>지원분야</th><th>지원사업명</th><th>신청기간</th>',
+    '<th>소관부처·지자체</th><th>사업수행기관</th><th>등록일</th><th>조회수</th></tr></thead>',
+    '<tbody><tr><td>2</td><td>경영</td><td><a href="/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_1">',
+    '2026 지역SW 공모전</a></td><td>2026-08-03 ~ 2026-09-30</td>',
+    '<td>과학기술정보통신부</td><td>정보통신산업진흥원</td><td>2026-08-07</td><td>2723</td>',
+    '</tr></tbody></table>',
+  ].join(''), source.pageUrls[0]);
+  assert.equal(parsed.items[0].organizer, '정보통신산업진흥원');
 });
 
 test('Bizinfo pagination keeps a first-page candidate when later pages are officially empty', async () => {
@@ -391,7 +536,7 @@ test('mixed valid and structurally drifted detail links are explicit partial cov
     });
     assert.deepEqual(
       [crawled.status, crawled.failureCode, crawled.manualCheck, crawled.candidates.length],
-      ['partial', 'unknown', true, 1],
+      ['partial', 'invalid_response', true, 1],
       id,
     );
   }
@@ -415,7 +560,7 @@ test('new pagination controls on single-response sources force manual partial co
     });
     assert.deepEqual(
       [crawled.status, crawled.failureCode, crawled.manualCheck, crawled.candidates.length],
-      ['partial', 'unknown', true, 1],
+      ['partial', 'invalid_response', true, 1],
       id,
     );
   }
@@ -596,9 +741,10 @@ test('ambiguous government discoveries force manual partial coverage', async () 
     clock: () => Date.parse('2026-08-31T00:01:00Z'),
   });
   assert.equal(result.status, 'partial');
-  assert.equal(result.failureCode, 'unknown');
+  assert.equal(result.failureCode, 'invalid_response');
   assert.equal(result.manualCheck, true);
   assert.equal(result.candidates.length, 1);
+  assert.deepEqual(result.partialReasons, ['parser_ambiguity']);
 });
 
 test('a source with a known bounded coverage window is explicit partial coverage', async () => {
@@ -614,6 +760,7 @@ test('a source with a known bounded coverage window is explicit partial coverage
     [result.status, result.failureCode, result.manualCheck, result.candidates.length],
     ['partial', 'unknown', true, 1],
   );
+  assert.deepEqual(result.partialReasons, ['bounded_coverage']);
   const noResults = await crawlCompetitionSource(source, {
     fetchImpl: async () => new Response('recognized', {
       status: 200,
@@ -625,6 +772,35 @@ test('a source with a known bounded coverage window is explicit partial coverage
     [noResults.status, noResults.failureCode, noResults.manualCheck, noResults.candidates.length],
     ['partial', 'unknown', true, 0],
   );
+});
+
+test('a real host failure survives an earlier bounded-coverage marker', async () => {
+  const source = fixtureSource([
+    'https://fixture.example/one',
+    'https://fixture.example/two',
+  ]);
+  source.parsePage = (_source, body) => ({
+    recognized: true,
+    ambiguousCount: 0,
+    coverageLimited: true,
+    items: body.includes('candidate') ? [{
+      title: 'Fixture 아이디어 공모전',
+      organizer: 'Fixture Organizer',
+      discoveryUrl: 'https://fixture.example/contest/1',
+      category: 'idea',
+    }] : [],
+  });
+  const result = await crawlCompetitionSource(source, {
+    fetchImpl: async (url) => String(url).endsWith('/one')
+      ? new Response('candidate', { status: 200, headers: { 'content-type': 'text/html' } })
+      : new Response('forbidden', { status: 403, headers: { 'content-type': 'text/html' } }),
+    clock: () => Date.parse('2026-08-31T00:01:00Z'),
+  });
+  assert.deepEqual(
+    [result.status, result.failureCode, result.manualCheck, result.candidates.length],
+    ['partial', 'http_403', true, 1],
+  );
+  assert.deepEqual(result.partialReasons, ['bounded_coverage', 'http_403']);
 });
 
 test('cross-source duplicate is retained once and candidate counts are recomputed', () => {
@@ -745,7 +921,7 @@ test('an official-source duplicate replaces its discovery-listing copy', () => {
   assert.equal(report.sources[1].candidate_count, 1);
 });
 
-test('per-source and global capacity limits are visible as partial coverage', async () => {
+test('per-source capacity is partial while the web report cap leaves source truth intact', async () => {
   const source = fixtureSource();
   source.parsePage = () => ({
     recognized: true,
@@ -776,6 +952,7 @@ test('per-source and global capacity limits are visible as partial coverage', as
     status: 'ok',
     failureCode: 'none',
     manualCheck: false,
+    partialReasons: [],
     candidates: Array.from({ length: 501 }, (_, index) => ({
       title: `Fixture ${index} 아이디어 공모전`,
       organizer: 'Fixture Organizer',
@@ -791,8 +968,15 @@ test('per-source and global capacity limits are visible as partial coverage', as
   assert.equal(buildCompetitionVerificationCandidates([many]).length, 501);
   assert.deepEqual(
     [report.sources[0].status, report.sources[0].failure_code, report.sources[0].manual_check],
-    ['partial', 'unknown', true],
+    ['ok', 'none', false],
   );
+  assert.equal(report.run.status, 'partial');
+  const summary = buildCompetitionCrawlSummary(
+    { report, results: [many] },
+    { candidates: buildCompetitionVerificationCandidates([many]) },
+  );
+  assert.equal(summary.counts.verification_candidates, 501);
+  assert.deepEqual(summary.sources[0].partial_reasons, ['report_capacity']);
 });
 
 test('private-looking listing text is dropped before strict report assembly', () => {
@@ -840,7 +1024,7 @@ test('private URL aliases and assignments drop only the untrusted listing rows',
   });
   assert.deepEqual(
     [crawled.status, crawled.failureCode, crawled.manualCheck, crawled.candidates.length],
-    ['partial', 'unknown', true, 1],
+    ['partial', 'invalid_response', true, 1],
   );
   const report = buildCompetitionCrawlReport([{
     source,
@@ -879,7 +1063,7 @@ test('official parser identifier drift is partial manual coverage, never clean n
     });
     assert.deepEqual(
       [crawled.status, crawled.failureCode, crawled.manualCheck, crawled.candidates.length],
-      ['partial', 'unknown', true, 0],
+      ['partial', 'invalid_response', true, 0],
       id,
     );
   }
