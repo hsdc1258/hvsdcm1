@@ -22,10 +22,10 @@
 
   <header class="topbar">
     <div class="topbar-inner container-wide us-wide">
-      <a class="brand" href="/">hvsdcm</a>
+      <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">usage</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
-        <a class="topbar-link" href="/">홈</a>
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
       </nav>
     </div>
   </header>
@@ -38,16 +38,14 @@
          .us-view의 기본 display가 none이라 저자 규칙이 [hidden]을 이기지 않는다. -->
     <div class="app-shell">
       <aside class="sidebar" aria-label="운영 화면">
-        <div class="sidebar-emblem" aria-hidden="true">
-          <svg class="brand-mark" viewBox="0 0 200 200" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>
-        </div>
+        <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
 
         <div class="sidebar-group" role="tablist" aria-orientation="vertical" aria-label="운영 화면">
           <p class="sidebar-label">운영</p>
-          <button id="tabOps" class="sidebar-item is-active" type="button" role="tab" aria-selected="true" aria-controls="viewOps" data-usage-view="ops"><span class="sidebar-item-text">실행 현황</span></button>
-          <button id="tabModerator" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewModerator" data-usage-view="moderator" tabindex="-1"><span class="sidebar-item-text">모더</span><span id="modTabBadge" class="sidebar-item-badge" hidden></span></button>
-          <button id="tabCompetition" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewCompetition" data-usage-view="competition" tabindex="-1"><span class="sidebar-item-text">공모전</span></button>
-          <button id="tabGuide" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewGuide" data-usage-view="guide" tabindex="-1"><span class="sidebar-item-text">구조</span></button>
+          <button id="tabOps" class="sidebar-item is-active" type="button" role="tab" aria-selected="true" aria-controls="viewOps" data-usage-view="ops"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">실행 현황</span></button>
+          <button id="tabModerator" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewModerator" data-usage-view="moderator" tabindex="-1"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg><span class="sidebar-item-text">모더</span><span id="modTabBadge" class="sidebar-item-badge" hidden></span></button>
+          <button id="tabCompetition" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewCompetition" data-usage-view="competition" tabindex="-1"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></button>
+          <button id="tabGuide" class="sidebar-item" type="button" role="tab" aria-selected="false" aria-controls="viewGuide" data-usage-view="guide" tabindex="-1"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-network"></use></svg><span class="sidebar-item-text">구조</span></button>
         </div>
 
         <div class="sidebar-group">

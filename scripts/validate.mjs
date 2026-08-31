@@ -233,28 +233,20 @@ function validateUiContracts() {
   check(!/id="loginModal"[^>]*(?:role="dialog"|aria-modal=)/u.test(homeHtml),
     'home: sheet backdrop must not carry dialog semantics — they belong on the .sheet form');
   check(/id="loginTitle"/u.test(homeHtml), 'home: login dialog label target #loginTitle is missing');
-  // 랜딩 3곳(상단바·드로어·푸터)은 텍스트 앞에 .brand-mark 인라인 로고가 온다(DESIGN.md §8).
-  // 예전 검사는 마크를 선택(`?`)으로 두고 `.test()` 한 번만 돌려, 로고를 전부 지워도
-  // 통과했다 — review M-1이 변이 실험으로 실증. 로고의 단일 원본은 assets/logo.svg
-  // 하나뿐이므로(DESIGN.md §8 "단일 원본") 사각형 3개의 좌표를 거기서 뽑아 쓴다 —
-  // 좌표를 여기 다시 적으면 원본이 바뀌어도 검사만 따로 남는다 (LESSONS 단일 원본 자동 도출).
+  // 랜딩 3곳(상단바·드로어·푸터)은 같은 외부 SVG 자산을 사용한다. 로고 기하를 HTML에
+  // 복제하지 않아야 파비콘·내부 화면과 한 번에 바뀐다.
   const logoSvg = readFileSync(path.join(ROOT, 'assets/logo.svg'), 'utf8');
-  const logoRects = [...logoSvg.matchAll(/<rect\b[^>]*\/>/gu)].map(([rect]) => rect);
-  check(logoRects.length === 3, `assets/logo.svg: expected exactly 3 <rect> shapes but found ${logoRects.length} — the brand-mark contract cannot be derived`);
-  // .brand는 정확히 3개여야 하고(상단바·드로어·푸터), 그 셋 모두가 원본과 같은 사각형 3개를
-  // 품은 완전한 brand-mark SVG를 "hvsdcm" 바로 앞에 가지고 있어야 한다 — 개수가 모자라거나
-  // 넘쳐도, 마크가 비었거나 원본과 달라져도 실패한다. 클래스는 토큰으로 비교한다
-  // (`footer-brand`처럼 하이픈으로 이어진 이름이 `\bbrand\b`에 걸려 오탐하지 않도록).
+  const logoPaths = [...logoSvg.matchAll(/<path\b[^>]*\/>/gu)];
+  check(logoPaths.length === 3, `assets/logo.svg: expected exactly 3 path shapes but found ${logoPaths.length}`);
   const brandContainers = [...homeHtml.matchAll(/<(a|span)\b[^>]*\sclass="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/gu)]
     .filter(([, , classValue]) => classValue.split(/\s+/u).includes('brand'));
   check(brandContainers.length === 3,
     `home: expected exactly 3 .brand containers (topbar·drawer·footer) but found ${brandContainers.length}`);
   const intactBrandMarks = brandContainers.filter(([, , , inner]) => {
-    const svgMatch = /^<svg\b[^>]*class="brand-mark"[^>]*>([\s\S]*?)<\/svg>hvsdcm$/u.exec(inner.trim());
-    return Boolean(svgMatch) && logoRects.every((rect) => svgMatch[1].includes(rect));
+    return /^<img\b[^>]*class="brand-mark"[^>]*src="\/assets\/logo\.svg"[^>]*alt=""[^>]*>hvsdcm$/u.test(inner.trim());
   }).length;
   check(intactBrandMarks === brandContainers.length,
-    `home: ${brandContainers.length - intactBrandMarks} of ${brandContainers.length} .brand containers are missing an intact brand-mark logo (matching assets/logo.svg) directly before "hvsdcm"`);
+    `home: ${brandContainers.length - intactBrandMarks} of ${brandContainers.length} .brand containers do not use /assets/logo.svg directly before "hvsdcm"`);
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
   check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
   check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
@@ -356,7 +348,7 @@ function validateUiContracts() {
   };
   for (const [name, source] of Object.entries(appSurfaces)) {
     check(/<header class="topbar">/u.test(source), `${name}: shared topbar landmark is missing`);
-    check(/class="brand"[^>]*>hvsdcm</u.test(source), `${name}: topbar wordmark must render "hvsdcm" in one piece`);
+    check(/class="brand"[^>]*><img\b[^>]*src="\/assets\/logo\.svg"[^>]*>hvsdcm</u.test(source), `${name}: topbar must use the shared logo before the hvsdcm wordmark`);
     check(source.includes('class="skip-link"'), `${name}: skip navigation link is missing`);
     check(source.includes('class="app-shell"'), `${name}: app shell layout is missing`);
     check(/<aside class="sidebar"[^>]*aria-label=/u.test(source), `${name}: labelled sidebar landmark is missing`);
@@ -1939,10 +1931,12 @@ function validateEmojiSystem() {
     }
   }
 
-  // 검사가 죽은 채 통과하지 않도록, 이모지 슬롯이 실제로 존재하는지 확인한다.
-  // 사이클4에서 이모지 체계를 도입했으므로 0이면 회귀다 (LESSONS 규칙 6·7).
-  check(sloted > 0, 'emoji system: no emoji slot found on any surface — the DESIGN.md §5 system has regressed');
-  check(labelToGlyph.size > 0, 'emoji system: no emoji↔label pair could be derived — the consistency check is inert');
+  // 정적 셸은 OS 의존 이모지를 제거하고 하나의 선형 SVG 아이콘 세트를 쓴다. 과목 내부의
+  // 기존 데이터 이모지는 아래 앱별 매핑 검사가 계속 잠근다.
+  const landingHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  check(!landingHtml.includes('data-emoji='), 'index.html: static navigation must use vector icons, not emoji slots');
+  check((landingHtml.match(/class="ui-icon(?:\s[^"]*)?"/gu) || []).length >= 12,
+    'index.html: the vector icon system looks truncated');
 }
 
 // smstudy의 단원 이모지는 마크업이 아니라 데이터 매핑(SMSTUDY_DATA.EMOJI)에서 나온다.
@@ -2153,7 +2147,7 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/site-emoji.js', '/assets/js/home.js?v=20260831-owner-boundary-v2'],
+    'index.html': ['/assets/js/home.js?v=20260901-dark-workspace-v1'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
@@ -2240,9 +2234,7 @@ function validateOgImageLock() {
     sha256: '4d702de6f212f303c88a51d99eb63344ed0503bce69bb255ddb490fe61dcf6ad',
   };
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  // .brand-mark 인라인 로고(DESIGN.md §8)가 텍스트 앞에 올 수 있다 — og.png가 잠그는 것은
-  // 브랜드 문자열 자체이지 마크업 구조가 아니다.
-  check(new RegExp(`class="brand"[^>]*>(?:<svg\\b[^>]*class="brand-mark"[^>]*>[\\s\\S]*?<\\/svg>)?${OG_LOCK.brand}<`, 'u').test(homeHtml),
+  check(new RegExp(`class="brand"[^>]*><img\\b[^>]*class="brand-mark"[^>]*src="\\/assets\\/logo\\.svg"[^>]*>${OG_LOCK.brand}<`, 'u').test(homeHtml),
     'og lock: index.html wordmark != OG_LOCK.brand — regenerate assets/og.png with the new brand, then update OG_LOCK (brand + sha256) together');
   check(/property="og:image"[^>]*assets\/og\.png/u.test(homeHtml) && /name="twitter:image"[^>]*assets\/og\.png/u.test(homeHtml),
     'og lock: index.html og:image/twitter:image must reference assets/og.png');

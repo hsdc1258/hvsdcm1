@@ -88,7 +88,7 @@
     const isAdmin = isOwner(username);
     const user = document.createElement(isAdmin ? 'a' : 'span');
     prefix.className = 'welcome-prefix';
-    prefix.textContent = 'Welcome,';
+    prefix.textContent = 'Welcome back,';
     user.className = isAdmin ? 'welcome-user welcome-admin' : 'welcome-user';
     user.textContent = isAdmin ? 'Admin' : username;
     if (isAdmin) {
@@ -103,17 +103,6 @@
     document.body.classList.add('logged');
     // 로그인해도 문서 제목은 바꾸지 않는다 — 랜딩은 어느 상태에서도 학습을 말하지 않는다
     // (plan.md §1-1). 이전 값 "hvsdcm — Study, distilled."가 그 계약의 예외였다.
-  }
-
-  // 이모지 리터럴은 마크업에 없다. 슬롯은 data-emoji="<키>"만 갖고 글자는 여기서
-  // site-emoji.js의 매핑에서 채운다 (DESIGN.md §5 — 대상당 글리프 하나, 원본 한 곳).
-  // 매핑이 없거나 키가 빠지면 슬롯은 빈 채로 남는다 — 이모지는 aria-hidden이고 의미를
-  // 단독으로 지지 않으므로 화면은 그대로 읽힌다.
-  function paintEmoji(root) {
-    const map = window.SITE_EMOJI || {};
-    for (const slot of root.querySelectorAll('[data-emoji]')) {
-      slot.textContent = map[slot.dataset.emoji] || '';
-    }
   }
 
   // 학습·계정 진입점은 <template>으로만 존재한다 — 미로그인 문서에는 아예 렌더되지
@@ -133,8 +122,6 @@
         template.parentNode.insertBefore(template.content.cloneNode(true), template);
       }
     }
-    // 템플릿 안의 슬롯은 주입되기 전까지 문서에 없다 — 주입 직후에 다시 칠한다.
-    paintEmoji(document);
   }
 
   // 메인 랜딩의 Behavior Lab 카드는 사람 소유자에게만 복제한다. <template> 내용은
@@ -144,7 +131,6 @@
     const template = document.querySelector('template[data-behavior-owner]');
     if (!template) return;
     elements.behaviorOwnerMount.replaceChildren(template.content.cloneNode(true));
-    paintEmoji(elements.behaviorOwnerMount);
   }
 
   // 로그인 후 이동은 동일 출처의 내부 경로만 허용한다.
@@ -238,6 +224,9 @@
   elements.menuButton.addEventListener('click', () => {
     setMenuOpen(!elements.drawer.classList.contains('open'));
   });
+  elements.drawer.addEventListener('click', (event) => {
+    if (event.target.closest('a[href^="#"]')) setMenuOpen(false);
+  });
   elements.shade.addEventListener('click', () => setMenuOpen(false));
   elements.loginTriggers.forEach((trigger) => trigger.addEventListener('click', openLogin));
   elements.closeLogin.addEventListener('click', closeLogin);
@@ -266,8 +255,6 @@
       closeLogin();
     }
   });
-
-  paintEmoji(document);
 
   const savedUsername = localStorage.getItem('hvsdcm.user');
   const token = localStorage.getItem('hvsdcm.token');

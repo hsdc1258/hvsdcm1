@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="description" content="hvsdcm의 개인 웹사이트.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="hvsdcm">
@@ -15,180 +16,130 @@
   <meta name="twitter:description" content="hvsdcm의 개인 웹사이트.">
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>hvsdcm</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
   <link rel="stylesheet" href="/assets/css/home.css">
-  <script src="/assets/js/site-emoji.js" defer></script>
-  <script src="/assets/js/home.js?v=20260831-owner-boundary-v2" defer></script>
+  <script src="/assets/js/home.js?v=20260901-dark-workspace-v1" defer></script>
 </head>
-<body>
-  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+<body class="home-page">
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+    <symbol id="icon-book-open" viewBox="0 0 24 24"><path d="M2 4.5A3.5 3.5 0 0 1 5.5 1H11v18H5.5A3.5 3.5 0 0 0 2 22.5zM22 4.5A3.5 3.5 0 0 0 18.5 1H13v18h5.5a3.5 3.5 0 0 1 3.5 3.5z"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-4 3 3 6-7"/></symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/></symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="icon-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3z"/></symbol>
+    <symbol id="icon-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3 1.5-5A7 7 0 0 1 3 12V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></symbol>
+    <symbol id="icon-signal" viewBox="0 0 24 24"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/></symbol>
+    <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22a8 8 0 0 1 16 0"/></symbol>
+  </svg>
 
-  <header class="topbar">
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <header class="topbar home-topbar">
     <nav class="topbar-inner container-wide" aria-label="전역 내비게이션">
-      <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
-        <span aria-hidden="true"></span><span aria-hidden="true"></span>
-      </button>
-      <a class="brand" href="/" aria-label="hvsdcm 홈"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</a>
+      <div class="topbar-start">
+        <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer"><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+        <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
+      </div>
       <div class="topbar-nav">
-        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger>로그인</button>
+        <a class="topbar-anchor" href="#contact">Contact</a>
+        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>로그인</button>
       </div>
     </nav>
   </header>
 
   <div id="shade" class="shade" aria-hidden="true"></div>
-
   <aside id="drawer" class="drawer" aria-label="주 메뉴">
-    <div class="drawer-head">
-      <span class="brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
+    <div class="drawer-head"><span class="brand"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</span><span class="drawer-state"><i aria-hidden="true"></i>PRIVATE SPACE</span></div>
+    <div class="drawer-public">
+      <p class="list-group-head">메뉴</p>
+      <nav class="list-group" aria-label="공개 메뉴">
+        <a class="list-row list-row-nav" href="#main"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-home"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">Overview</span><span class="list-row-sub">워크스페이스 소개</span></span></a>
+        <a class="list-row list-row-nav" href="#contact"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-message"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">Contact</span><span class="list-row-sub">연락 채널</span></span></a>
+      </nav>
+      <button class="btn btn-primary drawer-login" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>워크스페이스 열기</button>
     </div>
     <template data-study>
       <div class="drawer-study">
         <p class="list-group-head">학습</p>
         <nav class="list-group" aria-label="학습 도구">
-          <a class="list-row list-row-nav" href="/WordMaster/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="WordMaster" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">WordMaster</span>
-              <span class="list-row-sub">DAY 1–50 · 2,000단어</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="/smstudy/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="smstudy" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">사회·문화</span>
-              <span class="list-row-sub">13중단원 · 기출 78문항</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="/gichul/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="gichul" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">기출</span>
-              <span class="list-row-sub">평가원 6월 · 9월 · 수능 문제지</span>
-            </span>
-          </a>
+          <a class="list-row list-row-nav" href="/WordMaster/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-book-open"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">WordMaster</span><span class="list-row-sub">DAY 1–50 · 2,000단어</span></span></a>
+          <a class="list-row list-row-nav" href="/smstudy/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사회·문화</span><span class="list-row-sub">13중단원 · 기출 78문항</span></span></a>
+          <a class="list-row list-row-nav" href="/gichul/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-file"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">기출</span><span class="list-row-sub">평가원 6월 · 9월 · 수능 문제지</span></span></a>
         </nav>
       </div>
     </template>
-    <!-- 소유자 전용 그룹. 사용량은 개인 운영 데이터라 다른 계정에는 항목 자체를 만들지
-         않는다 (review WP1 M-5). 서버도 같은 규칙을 강제한다 — 비소유자의
-         GET /api/usage는 404다(worker/src/router.js). -->
     <template data-owner>
       <div class="drawer-owner">
         <p class="list-group-head">계정</p>
-        <nav class="list-group" aria-label="계정 도구">
-          <a class="list-row list-row-nav" href="/usage/">
-            <span class="list-row-lead"><span class="emoji-box" data-emoji="usage" aria-hidden="true"></span></span>
-            <span class="list-row-body">
-              <span class="list-row-title">사용량</span>
-              <span class="list-row-sub">Codex · AI 하네스</span>
-            </span>
-          </a>
-        </nav>
+        <nav class="list-group" aria-label="계정 도구"><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a></nav>
       </div>
     </template>
     <div class="drawer-bottom">
       <div class="drawer-social">
-        <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-        </a>
-        <a class="icon-link" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
-        </a>
+        <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5l-.7 1.2a18.3 18.3 0 0 0-5.5 0l-.6-1.2a19.7 19.7 0 0 0-4.9 1.5C.5 9-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a13.1 13.1 0 0 1-1.9-.9l.4-.3c3.9 1.8 8.2 1.8 12.1 0l.4.3a12.3 12.3 0 0 1-1.9.9l1.2 2a19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.4-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg></a>
+        <a class="icon-link" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg></a>
       </div>
-      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button">로그아웃</button>
+      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-log-out"></use></svg>로그아웃</button>
     </div>
   </aside>
 
   <main id="main" tabindex="-1">
     <section class="hero" aria-labelledby="welcomeTitle">
-      <div class="container hero-inner">
-        <h1 id="welcomeTitle" class="display-xl hero-title"><span class="welcome-prefix">hvsdcm</span></h1>
-        <div id="account" class="account hero-actions">
-          <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger>로그인</button>
-          <a class="link-arrow" href="#contact"><span>프로필 보기</span></a>
+      <div class="container-wide hero-grid">
+        <div class="hero-copy-block">
+          <p class="hero-kicker"><span class="kicker-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg></span>PRIVATE DIGITAL SPACE</p>
+          <h1 id="welcomeTitle" class="display-xl hero-title">Built for focus.<br><span>Nothing else.</span></h1>
+          <p class="hero-copy">필요한 것만 빠르게 열고, 나머지는 조용히 숨겨 둡니다. 단순하고 안전한 개인 워크스페이스.</p>
+          <div id="account" class="account hero-actions">
+            <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>워크스페이스 열기</button>
+            <a class="text-link" href="#contact">연락처 보기 <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
+          </div>
+          <ul class="hero-trust" aria-label="워크스페이스 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg>Private first</li><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg>Dark only</li><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>One workspace</li></ul>
         </div>
+        <aside class="workspace-card" aria-label="워크스페이스 상태">
+          <div class="workspace-card-head"><span>WORKSPACE / 01</span><span class="live-chip"><i aria-hidden="true"></i>READY</span></div>
+          <div class="workspace-visual" aria-hidden="true"><img src="/assets/logo.svg" alt=""><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span></div>
+          <div class="workspace-card-title"><p>Personal command center</p><strong>hvsdcm</strong></div>
+          <dl class="workspace-stats"><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg>ACCESS</dt><dd>Private</dd></div><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg>STATUS</dt><dd>Online</dd></div><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg>THEME</dt><dd>Dark</dd></div></dl>
+        </aside>
       </div>
     </section>
 
-    <!-- 사람 소유자(hvsdcm)에게만 home.js가 복제하는 랜딩 진입점이다. 비로그인·다른
-         계정에는 섹션 노드 자체가 생기지 않으며, 실제 데이터 접근은 Worker가 다시 막는다. -->
     <template data-behavior-owner>
-      <section id="behaviorLabEntry" class="section reveal" aria-labelledby="behaviorLabEntryTitle">
-        <div class="container-text">
-          <header class="section-head">
-            <p class="eyebrow">PRIVATE</p>
-            <h2 id="behaviorLabEntryTitle" class="title-1">내 도구</h2>
-          </header>
-          <div class="list-group">
-            <a class="list-row list-row-nav" href="/behavior-lab/#paper">
-              <span class="list-row-lead"><span class="emoji-box" data-emoji="behaviorLab" aria-hidden="true"></span></span>
-              <span class="list-row-body">
-                <span class="list-row-title">Behavior Lab</span>
-                <span class="list-row-sub">$100 모의투자 · 실시간 로그와 수익률</span>
-              </span>
-            </a>
-          </div>
+      <section id="behaviorLabEntry" class="owner-section reveal" aria-labelledby="behaviorLabEntryTitle">
+        <div class="container-wide">
+          <header class="section-heading"><div><p class="eyebrow">OWNER TOOL</p><h2 id="behaviorLabEntryTitle">내 도구</h2></div><span class="section-number">01</span></header>
+          <a class="owner-card" href="/behavior-lab/#paper"><span class="owner-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chart"></use></svg></span><span class="owner-card-body"><small>LIVE PAPER MODELS</small><strong>Behavior Lab</strong><span>$100 모의투자 모델과 실시간 판단을 한 화면에서 비교합니다.</span></span><span class="owner-card-meta"><span>PAPER ONLY</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></span></a>
         </div>
       </section>
     </template>
     <div id="behaviorOwnerMount"></div>
 
-    <section id="contact" class="section section-last reveal" aria-labelledby="contactTitle">
-      <div class="container-text">
-        <header class="section-head">
-          <h2 id="contactTitle" class="title-1">연락</h2>
-        </header>
-        <div class="list-group">
-          <a class="list-row list-row-nav" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener">
-            <span class="list-row-lead">
-              <span class="emoji-box" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-              </span>
-            </span>
-            <span class="list-row-body">
-              <span class="list-row-title">Discord</span>
-              <span class="list-row-sub">hvsdcm</span>
-            </span>
-          </a>
-          <a class="list-row list-row-nav" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener">
-            <span class="list-row-lead">
-              <span class="emoji-box" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg>
-              </span>
-            </span>
-            <span class="list-row-body">
-              <span class="list-row-title">Instagram</span>
-              <span class="list-row-sub">hvsdcm.exe</span>
-            </span>
-          </a>
+    <section id="contact" class="contact-section reveal" aria-labelledby="contactTitle">
+      <div class="container-wide">
+        <header class="section-heading"><div><p class="eyebrow">CONTACT</p><h2 id="contactTitle">필요할 때 연결하세요.</h2></div><span class="section-number">02</span></header>
+        <div class="contact-grid">
+          <a class="contact-card" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener"><span class="contact-icon discord-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5l-.7 1.2a18.3 18.3 0 0 0-5.5 0l-.6-1.2a19.7 19.7 0 0 0-4.9 1.5C.5 9-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a13.1 13.1 0 0 1-1.9-.9l.4-.3c3.9 1.8 8.2 1.8 12.1 0l.4.3a12.3 12.3 0 0 1-1.9.9l1.2 2a19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.4-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg></span><span><small>FASTEST</small><strong>Discord</strong><span>@hvsdcm</span></span><svg class="ui-icon card-arrow" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
+          <a class="contact-card" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener"><span class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg></span><span><small>UPDATES</small><strong>Instagram</strong><span>@hvsdcm.exe</span></span><svg class="ui-icon card-arrow" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="container footer-inner">
-      <span class="brand footer-brand"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>hvsdcm</span>
-      <span class="footer-copy text-tertiary">© 2026 hvsdcm</span>
-    </div>
-  </footer>
+  <footer class="footer"><div class="container-wide footer-inner"><span class="brand footer-brand"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</span><span class="footer-note">PERSONAL SPACE · SEOUL</span><span class="footer-copy">© 2026</span></div></footer>
 
   <div id="loginModal" class="sheet-backdrop" aria-hidden="true">
     <form id="loginForm" class="sheet login-sheet" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-      <h2 id="loginTitle" class="sheet-title">로그인</h2>
-      <p class="sheet-sub">계정으로 계속합니다.</p>
-      <div class="field">
-        <label class="field-label" for="username">아이디</label>
-        <input class="field-input" id="username" autocomplete="username" placeholder="아이디" required>
-      </div>
-      <div class="field">
-        <label class="field-label" for="password">비밀번호</label>
-        <input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required>
-      </div>
+      <div class="sheet-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg></div>
+      <div><p class="eyebrow">PRIVATE ACCESS</p><h2 id="loginTitle" class="sheet-title">워크스페이스 로그인</h2><p class="sheet-sub">계정 정보를 입력하면 원래 보던 화면으로 이어집니다.</p></div>
+      <div class="field"><label class="field-label" for="username">아이디</label><input class="field-input" id="username" autocomplete="username" placeholder="아이디" required></div>
+      <div class="field"><label class="field-label" for="password">비밀번호</label><input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required></div>
       <div id="loginError" class="field-error" role="alert"></div>
-      <button class="btn btn-primary btn-lg login-submit" type="submit">계속</button>
-      <button class="btn btn-ghost" type="button" id="closeLogin">닫기</button>
+      <div class="sheet-actions"><button class="btn btn-primary btn-lg login-submit" type="submit">계속</button><button class="btn btn-ghost" type="button" id="closeLogin">닫기</button></div>
     </form>
   </div>
 </body>

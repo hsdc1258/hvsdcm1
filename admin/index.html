@@ -17,10 +17,10 @@
 
   <header class="topbar">
     <div class="topbar-inner container-wide">
-      <a class="brand" href="/">hvsdcm</a>
+      <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
-        <a class="topbar-link" href="/">홈</a>
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
         <span class="topbar-link">private · secure</span>
       </nav>
     </div>
@@ -35,24 +35,22 @@
            각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
            admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
-        <div class="sidebar-emblem" aria-hidden="true">
-          <svg class="brand-mark" viewBox="0 0 200 200" focusable="false"><rect x="30" y="30" width="36" height="140" fill="currentColor"/><rect x="134" y="30" width="36" height="140" fill="currentColor"/><rect x="82" y="82" width="36" height="36" fill="currentColor"/></svg>
-        </div>
+        <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
 
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약"><span class="sidebar-item-text">개요</span></button>
+          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
           <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><span class="sidebar-item-text">사용자</span></button>
-          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><span class="sidebar-item-text">접속 기기</span></button>
+          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-users"></use></svg><span class="sidebar-item-text">사용자</span></button>
+          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg><span class="sidebar-item-text">접속 기기</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="학습 데이터">
           <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><span class="sidebar-item-text">공용 답안</span></button>
+          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-message"></use></svg><span class="sidebar-item-text">공용 답안</span></button>
         </nav>
 
         <div class="sidebar-group">

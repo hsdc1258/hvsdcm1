@@ -175,11 +175,11 @@
   --space-10: 112px;
   --section-gap: clamp(64px, 3.5rem + 3.4vw, 112px);
   /* ---- 반경 ---- */
-  --radius-xs: 4px;
-  --radius-s: 6px;
-  --radius-m: 10px;
-  --radius-l: 14px;
-  --radius-xl: 20px;
+  --radius-xs: 5px;
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 18px;
+  --radius-xl: 26px;
   --radius-full: 980px;
   /* ---- 그림자 — 떠 있는 오버레이 전용 (DESIGN.md §4) ---- */
   --shadow-1: 0 1px 2px rgba(0,0,0,.5);
@@ -196,9 +196,9 @@
   --dur-slow: .6s;
   /* ---- 레이아웃 ---- */
   --container: 1000px;
-  --container-wide: 1200px;
+  --container-wide: 1240px;
   --container-text: 680px;
-  --topbar-h: 48px;
+  --topbar-h: 64px;
   --focus-ring: 0 0 0 4px rgba(41,151,255,.35);
   /* ---- 그룹 리스트 기하 ---- */
   --row-min-h: 44px;
@@ -351,7 +351,7 @@ hr {
   border: 0;
 }
 .app-page {
-  padding: var(--space-5) 0 var(--space-8);
+  padding: var(--space-6) 0 var(--space-9);
 }
 .app-main {
   min-width: 0;
@@ -504,12 +504,12 @@ hr {
 .num {
   font-variant-numeric: tabular-nums;
 }
-/* 브랜드 워드마크 — hvsdcm은 한 덩어리(R-5). 자간 분리 연출 금지. */
+/* Compact mark + word lockup. The SVG is the single brand source. */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: .35em;
-  font-weight: 700;
+  gap: 9px;
+  font-weight: 750;
   letter-spacing: normal;
   color: var(--text);
   text-decoration: none;
@@ -518,12 +518,20 @@ hr {
 .brand:hover {
   text-decoration: none;
 }
-/* 인라인 로고 마크 — assets/logo.svg의 사각형 3개를 좌표 그대로 복제한다(DESIGN.md §8).
-   좌표·비율은 고정이고, 색은 currentColor라 얹히는 자리의 텍스트색을 그대로 따른다. */
 .brand-mark {
-  width: .8em;
-  height: .8em;
+  width: 32px;
+  height: 32px;
   flex: none;
+}
+.ui-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 /* ==========================================================================
    이모지 슬롯 (DESIGN.md §5)
@@ -564,10 +572,9 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  /* DESIGN.md §3은 유리 효과(blur/glass)를 예외 없이 금지한다. 반투명 + blur 대신
-     불투명 표면색으로 가독성을 확보한다 — --text 18.06:1 / --text-2 7.64:1 on --bg-alt. */
-  background: var(--bg-alt);
-  border-bottom: 1px solid var(--line-faint);
+  background: rgba(11,11,13,.86);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(16px) saturate(130%);
 }
 .topbar-inner {
   height: 100%;
@@ -576,7 +583,7 @@ hr {
   gap: var(--space-4);
 }
 .topbar .brand {
-  font-size: 1.0625rem;
+  font-size: 1rem;
 }
 .topbar-nav {
   display: flex;
@@ -585,6 +592,9 @@ hr {
   margin-left: auto;
 }
 .topbar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--fs-caption);
   font-weight: 500;
   color: var(--text-2);
@@ -594,6 +604,10 @@ hr {
 .topbar-link:hover {
   color: var(--text);
   text-decoration: none;
+}
+.topbar-link .ui-icon {
+  width: 15px;
+  height: 15px;
 }
 .topbar-crumb {
   font-size: var(--fs-caption);
@@ -615,8 +629,8 @@ hr {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 36px;
-  padding: 8px 18px;
+  min-height: 44px;
+  padding: 10px 18px;
   border: 1px solid transparent;
   border-radius: var(--radius-full);
   font-size: var(--fs-caption);
@@ -669,13 +683,13 @@ hr {
   background: var(--red-fill-hover);
 }
 .btn-sm {
-  min-height: 30px;
-  padding: 5px 12px;
-  font-size: var(--fs-micro);
+  min-height: 40px;
+  padding: 8px 13px;
+  font-size: var(--fs-caption);
 }
 .btn-lg {
-  min-height: 44px;
-  padding: 11px 24px;
+  min-height: 50px;
+  padding: 13px 24px;
   font-size: var(--fs-body);
 }
 /* 애플 "더 알아보기" 어법의 화살표 링크 */
@@ -750,7 +764,8 @@ hr {
 }
 .field-input {
   width: 100%;
-  padding: 10px 13px;
+  min-height: 46px;
+  padding: 11px 14px;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
@@ -1252,8 +1267,8 @@ label.list-row {
    ========================================================================== */
 .app-shell {
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
-  gap: var(--space-6);
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: var(--space-7);
   align-items: start;
 }
 .sidebar {
@@ -1263,6 +1278,10 @@ label.list-row {
   gap: var(--space-5);
   max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
   overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
+  background: rgba(255,255,255,.025);
 }
 /* 사이드바 최상단 엠블럼 — 흰 헤어라인 박스 + 흰 로고 마크(DESIGN.md §8, plan.md §3.4).
    그라디언트·그림자 없음(§3·§4). 보더는 --line-strong(기존 토큰 중 가장 강한 헤어라인)로
@@ -1271,14 +1290,15 @@ label.list-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 48px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-m);
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
   color: var(--text);
 }
 .sidebar-emblem .brand-mark {
-  width: 20px;
-  height: 20px;
+  width: 34px;
+  height: 34px;
 }
 .sidebar-group {
   display: grid;
@@ -1297,9 +1317,9 @@ label.list-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 34px;
-  padding: 6px 10px;
-  border-radius: var(--radius-s);
+  min-height: 44px;
+  padding: 9px 12px;
+  border-radius: var(--radius-m);
   border: 0;
   background: transparent;
   color: var(--text-2);
@@ -1313,6 +1333,14 @@ label.list-row {
   background: var(--line-faint);
   color: var(--text);
   text-decoration: none;
+}
+.sidebar-item .ui-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--text-3);
+}
+.sidebar-item:hover .ui-icon, .sidebar-item.is-active .ui-icon, .sidebar-item[aria-current] .ui-icon {
+  color: var(--accent);
 }
 .sidebar-item.is-active, .sidebar-item[aria-current] {
   background: var(--surface-3);
@@ -1640,8 +1668,12 @@ html {
   background: var(--surface);
 }
 .lab-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-width: 88px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 18px;
   border: 0;
   border-radius: 9px;
@@ -1650,6 +1682,10 @@ html {
   font-size: 14px;
   font-weight: 700;
   transition: background .16s ease, color .16s ease;
+}
+.lab-tab .ui-icon {
+  width: 16px;
+  height: 16px;
 }
 .lab-tab:hover {
   color: var(--text);
@@ -2838,8 +2874,8 @@ html {
           <span><b>Behavior Lab</b><small>PAPER TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
-          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel">시장</button>
-          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel">모델</button>
+          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>시장</button>
+          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg>모델</button>
         </nav>
         <span class="read-only-mark"><i></i> PAPER ONLY</span>
       </div>
@@ -2895,7 +2931,7 @@ html {
         </section>
       </section>
     </main>
-    <footer class="lab-footer"><div><b>Behavior Lab</b><p>교육·연구용 관찰 도구. 미래 성과나 수익을 보장하지 않습니다.</p></div><a href="/">hvsdcm</a></footer>
+    <footer class="lab-footer"><div><b>Behavior Lab</b><p>교육·연구용 관찰 도구. 미래 성과나 수익을 보장하지 않습니다.</p></div><a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a></footer>
   </div>
 </body>
 </html>
