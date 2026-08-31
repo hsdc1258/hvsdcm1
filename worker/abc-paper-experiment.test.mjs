@@ -60,7 +60,8 @@ function experimentDb() {
         const monotonic = !prior || refs(next).every((ref, index) => ref.sequence >= refs(prior)[index].sequence
           && (ref.sequence > refs(prior)[index].sequence || ref.hash === refs(prior)[index].hash));
         const advanced = !prior || refs(next).some((ref, index) => ref.sequence > refs(prior)[index].sequence);
-        if (!monotonic || !advanced) return { success: true, meta: { changes: 0 } };
+        const identical = priorRow?.payload === payload;
+        if (!monotonic || (!advanced && !identical)) return { success: true, meta: { changes: 0 } };
         rows.set(source, { source, captured_at, payload });
         return { success: true, meta: { changes: 1 } };
       } };
@@ -100,11 +101,15 @@ test('A/B/C normalization fails closed on unknown, secret, private-route, mutati
   for (const mutate of mutations) { const report = experimentReport(); mutate(report); assert.equal(normalizeBehaviorPaperExperimentReport(report), null); }
 });
 
-test('owner ingest stores A/B/C separately and rejects replay while owner read remains legacy-compatible', async () => {
+test('owner ingest stores A/B/C separately and ACKs an exact idempotent retry while owner read remains legacy-compatible', async () => {
   const db = experimentDb(); const env = envFor(db);
-  assert.equal((await post(experimentReport(), env)).status, 200);
+  const first = await post(experimentReport(), env);
+  assert.equal(first.status, 200);
+  assert.match((await first.json()).snapshot_fingerprint, /^[a-f0-9]{64}$/u);
   assert.ok(db.rows.has(BEHAVIOR_ABC_SNAPSHOT_SOURCE));
-  assert.equal((await post(experimentReport(), env)).status, 409);
+  const retry = await post(experimentReport(), env);
+  assert.equal(retry.status, 200);
+  assert.match((await retry.json()).snapshot_fingerprint, /^[a-f0-9]{64}$/u);
   const read = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper', {
     headers: { authorization: 'Bearer owner-session' },
   }), env);
