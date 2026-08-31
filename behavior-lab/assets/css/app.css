@@ -1020,6 +1020,94 @@ html {
 .paper-report[data-freshness="stale"] {
   opacity: .72;
 }
+.abc-experiment {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.abc-experiment[aria-busy="true"] {
+  opacity: .72;
+}
+.abc-overview {
+  gap: var(--space-5);
+  border-top: 3px solid var(--accent);
+}
+.abc-arm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.abc-arm-card {
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-4);
+}
+.abc-arm-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.abc-arm-heading h3, .abc-arm-heading p, .abc-arm-section h4 {
+  margin: 0;
+}
+.abc-arm-heading h3 {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-body);
+}
+.abc-arm-id {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+.abc-arm-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--line);
+}
+.abc-arm-metrics > div {
+  min-width: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: 4px;
+  background: var(--surface-2);
+}
+.abc-arm-metrics span, .abc-arm-metrics b {
+  overflow-wrap: anywhere;
+}
+.abc-arm-section {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.abc-arm-section h4 {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.abc-list {
+  max-height: 240px;
+  overflow: auto;
+}
+.abc-list small, .abc-chain {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  overflow-wrap: anywhere;
+}
+.abc-chain {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
 .adaptive-audit span, .adaptive-reasons li {
   overflow-wrap: anywhere;
 }
@@ -1129,6 +1217,9 @@ html {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .adaptive-state-grid, .adaptive-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .abc-arm-grid {
     grid-template-columns: 1fr;
   }
 }
