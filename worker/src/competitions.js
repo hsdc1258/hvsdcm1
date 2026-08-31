@@ -7,11 +7,15 @@ const MAX_REPORT_BYTES = 1_000_000;
 const MAX_SOURCES = 32;
 const MAX_CANDIDATES = 500;
 const MAX_APPLICATIONS = 3;
+const MAX_APPROVALS = 3;
+const MAX_DECISION_BYTES = 4_096;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+const APPROVAL_REQUEST_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u;
 const CATEGORY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/u;
 const PROFILE_PATTERN = /^hmac-sha256:[a-f0-9]{64}$/u;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const EXPLICIT_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/u;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
@@ -70,6 +74,17 @@ const APPLICATION_NEXT_ACTIONS = new Set([
   'review_submission', 'prepare_artifacts', 'draft_application', 'stage_form',
   'request_approval', 'manual_check', 'hold',
 ]);
+const APPROVAL_KINDS = new Set([
+  'preparation', 'legal_consent', 'rights_acceptance', 'payment', 'final_submission',
+]);
+const APPROVAL_DECISIONS = new Set(['approved', 'held']);
+const APPROVAL_APPLICATION_STATES = new Map([
+  ['preparation', 'WAITING_RIGHTS_APPROVAL'],
+  ['legal_consent', 'WAITING_LEGAL_CONSENT'],
+  ['rights_acceptance', 'WAITING_RIGHTS_APPROVAL'],
+  ['payment', 'WAITING_FEE_APPROVAL'],
+  ['final_submission', 'WAITING_APPROVAL'],
+]);
 
 const FORBIDDEN_FIELD_PARTS = new Set([
   'pii', 'email', 'e_mail', 'phone', 'mobile', 'address', 'birth', 'birthday', 'dob',
@@ -89,6 +104,8 @@ const SAFE_SCHEMA_FIELDS = new Set([
   'official_verification', 'official_verified_at', 'acceptance', 'deadline_at',
   'eligibility', 'rights_risk', 'submission_risk', 'fit_score', 'effort_score',
   'profile_id', 'state', 'blocker', 'next_action', 'updated_at',
+  'approvals', 'request_id', 'action_sha256', 'requested_at', 'expires_at',
+  'read_summary', 'approval_text', 'decision',
 ]);
 
 class ReportValidationError extends Error {
@@ -562,6 +579,31 @@ function normalizeApplication(input) {
   };
 }
 
+function normalizeApproval(input) {
+  strictObject(input, [
+    'request_id', 'contest_id', 'category', 'kind', 'action_sha256', 'requested_at',
+    'expires_at', 'read_summary', 'approval_text',
+  ]);
+  if (typeof input.action_sha256 !== 'string' || !SHA256_PATTERN.test(input.action_sha256)) fail();
+  const approval = {
+    request_id: normalizedId(input.request_id, APPROVAL_REQUEST_PATTERN),
+    contest_id: normalizedId(input.contest_id),
+    category: normalizedId(input.category, CATEGORY_PATTERN),
+    kind: enumValue(input.kind, APPROVAL_KINDS),
+    action_sha256: input.action_sha256,
+    requested_at: normalizedInstant(input.requested_at),
+    expires_at: normalizedInstant(input.expires_at, true),
+    read_summary: normalizedText(input.read_summary, 2_000, { privatePatterns: true }),
+    approval_text: normalizedText(input.approval_text, 1_000, { privatePatterns: true }),
+  };
+  if (approval.expires_at && Date.parse(approval.expires_at) <= Date.parse(approval.requested_at)) fail();
+  if (approval.kind !== 'preparation') {
+    if (!approval.expires_at
+      || Date.parse(approval.expires_at) - Date.parse(approval.requested_at) > 15 * 60_000) fail();
+  }
+  return approval;
+}
+
 function canonicalPublicHost(value) {
   return new URL(value).hostname.toLowerCase().replace(/\.+$/u, '').replace(/^www\d*\./u, '');
 }
@@ -574,7 +616,9 @@ function matchesListingHost(host, listingHosts) {
 
 function normalizeReport(input) {
   if (containsForbiddenFields(input)) fail('forbidden_data');
-  strictObject(input, ['version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications']);
+  strictObject(input, [
+    'version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications', 'approvals',
+  ]);
   if (input.version !== 1) fail();
   if (!Array.isArray(input.sources)
     || input.sources.length < 1
@@ -582,7 +626,9 @@ function normalizeReport(input) {
     || !Array.isArray(input.candidates)
     || input.candidates.length > MAX_CANDIDATES
     || !Array.isArray(input.applications)
-    || input.applications.length > MAX_APPLICATIONS) fail();
+    || input.applications.length > MAX_APPLICATIONS
+    || (input.approvals !== undefined && !Array.isArray(input.approvals))
+    || (input.approvals?.length || 0) > MAX_APPROVALS) fail();
 
   const report = {
     version: 1,
@@ -591,6 +637,7 @@ function normalizeReport(input) {
     sources: input.sources.map(normalizeSource),
     candidates: input.candidates.map(normalizeCandidate),
     applications: input.applications.map(normalizeApplication),
+    approvals: (input.approvals || []).map(normalizeApproval),
   };
   const sourceIds = new Set(report.sources.map((source) => source.id));
   if (sourceIds.size !== report.sources.length) fail();
@@ -641,11 +688,13 @@ function normalizeReport(input) {
   }
 
   const applicationKeys = new Set();
+  const applications = new Map();
   for (const application of report.applications) {
     const candidate = candidates.get(`${application.contest_id}|${application.category}`);
     const key = `${application.contest_id}|${application.category}`;
     if (!candidate || applicationKeys.has(key)) fail();
     applicationKeys.add(key);
+    applications.set(key, application);
     if (Date.parse(application.updated_at) > observationTime
       || Date.parse(application.updated_at) < Date.parse(candidate.discovered_at)) fail();
     if (candidate.official_verification !== 'verified'
@@ -656,6 +705,20 @@ function normalizeReport(input) {
       || candidate.submission_risk === 'blocked'
       || candidate.status !== 'active'
       || Date.parse(candidate.deadline_at) <= observationTime) fail();
+  }
+  const approvalIds = new Set();
+  const approvalKeys = new Set();
+  for (const approval of report.approvals) {
+    const key = `${approval.contest_id}|${approval.category}`;
+    const application = applications.get(key);
+    if (!application || approvalIds.has(approval.request_id) || approvalKeys.has(key)) fail();
+    approvalIds.add(approval.request_id);
+    approvalKeys.add(key);
+    if (application.state !== APPROVAL_APPLICATION_STATES.get(approval.kind)) fail();
+    if (Date.parse(approval.requested_at) < Date.parse(application.updated_at)
+      || Date.parse(approval.requested_at) > observationTime) fail();
+    if (approval.kind !== 'preparation'
+      && Date.parse(approval.expires_at) <= observationTime) fail();
   }
   return report;
 }
@@ -878,6 +941,27 @@ async function reportCompetitionsInternal(request, env) {
       )
       ON CONFLICT(idempotency_key, contest_id, category, profile_id) DO NOTHING
     `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.applications)),
+    env.DB.prepare(`
+      INSERT INTO competition_approval_requests(
+        request_id, idempotency_key, contest_id, category, kind, action_sha256,
+        requested_at, expires_at, read_summary, approval_text
+      )
+      SELECT
+        json_extract(item.value, '$.request_id'), ?1,
+        json_extract(item.value, '$.contest_id'), json_extract(item.value, '$.category'),
+        json_extract(item.value, '$.kind'), json_extract(item.value, '$.action_sha256'),
+        json_extract(item.value, '$.requested_at'), json_extract(item.value, '$.expires_at'),
+        json_extract(item.value, '$.read_summary'), json_extract(item.value, '$.approval_text')
+      FROM json_each(?3) AS item
+      WHERE EXISTS (
+        SELECT 1 FROM competition_reports
+        WHERE idempotency_key = ?1 AND payload_hash = ?2
+      ) AND NOT EXISTS (
+        SELECT 1 FROM competition_approval_requests AS stored
+        WHERE stored.request_id = json_extract(item.value, '$.request_id')
+      )
+      ON CONFLICT(request_id) DO NOTHING
+    `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
   ];
   const results = await env.DB.batch(statements);
   if (resultChanges(results[0]) === 1) return acceptedResponse(report, false, 201);
@@ -896,6 +980,124 @@ export async function reportCompetitions(request, env) {
     return await reportCompetitionsInternal(request, env);
   } catch (error) {
     console.error('competition_request_error', error);
+    return competitionJson({ error: '서버 오류' }, 500);
+  }
+}
+
+async function readApprovalDecisionJson(request) {
+  if (!/^application\/json(?:\s*;|$)/iu.test(request.headers.get('content-type') || '')) {
+    return { response: competitionError('content_type_required', 415) };
+  }
+  const contentLength = Number(request.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_DECISION_BYTES) {
+    return { response: competitionError('payload_too_large', 413) };
+  }
+  let raw;
+  try { raw = await request.text(); } catch { return { response: competitionError('invalid_json') }; }
+  if (bytes(raw) > MAX_DECISION_BYTES) return { response: competitionError('payload_too_large', 413) };
+  try { return { value: JSON.parse(raw) }; } catch { return { response: competitionError('invalid_json') }; }
+}
+
+async function decideCompetitionApprovalInternal(request, env, requestId) {
+  const session = await authenticate(request, env);
+  if (!session) return competitionJson({ error: '로그인이 필요합니다.' }, 401);
+  if (!isOwnerSession(session, env)) return competitionJson({ error: 'Not found' }, 404);
+  let normalizedRequestId;
+  try {
+    normalizedRequestId = normalizedId(requestId, APPROVAL_REQUEST_PATTERN);
+  } catch {
+    return competitionError('invalid_approval');
+  }
+  const parsed = await readApprovalDecisionJson(request);
+  if (parsed.response) return parsed.response;
+  let decision;
+  let actionSha256;
+  try {
+    strictObject(parsed.value, ['decision', 'action_sha256']);
+    decision = enumValue(parsed.value.decision, APPROVAL_DECISIONS);
+    if (typeof parsed.value.action_sha256 !== 'string'
+      || !SHA256_PATTERN.test(parsed.value.action_sha256)) fail();
+    actionSha256 = parsed.value.action_sha256;
+  } catch (error) {
+    if (error instanceof ReportValidationError) return competitionError('invalid_approval');
+    throw error;
+  }
+
+  const approval = await env.DB.prepare(`
+    WITH latest AS (
+      SELECT idempotency_key
+      FROM competition_reports
+      ORDER BY COALESCE(finished_at, started_at) DESC,
+        received_at DESC, idempotency_key DESC
+      LIMIT 1
+    )
+    SELECT request.*,
+      stored.action_sha256 AS stored_action_sha256,
+      stored.decision AS stored_decision,
+      stored.decided_at AS stored_decided_at
+    FROM competition_approval_requests AS request
+    JOIN latest ON latest.idempotency_key = request.idempotency_key
+    LEFT JOIN competition_approval_decisions AS stored ON stored.request_id = request.request_id
+    WHERE request.request_id = ?1
+  `).bind(normalizedRequestId).first();
+  if (!approval) return competitionError('approval_stale', 409);
+  if (approval.action_sha256 !== actionSha256) return competitionError('approval_stale', 409);
+  if (approval.expires_at && Date.parse(approval.expires_at) <= Date.now()) {
+    return competitionError('approval_expired', 409);
+  }
+  if (approval.stored_decision) {
+    if (approval.stored_action_sha256 !== actionSha256 || approval.stored_decision !== decision) {
+      return competitionError('approval_conflict', 409);
+    }
+    return competitionJson({
+      ok: true,
+      request_id: approval.request_id,
+      action_sha256: actionSha256,
+      decision,
+      decided_at: approval.stored_decided_at,
+      replayed: true,
+    });
+  }
+
+  const decidedAt = new Date().toISOString();
+  const inserted = await env.DB.prepare(`
+    INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
+    VALUES (?1, ?2, ?3, ?4)
+    ON CONFLICT(request_id) DO NOTHING
+  `).bind(approval.request_id, actionSha256, decision, decidedAt).run();
+  if (resultChanges(inserted) === 1) {
+    return competitionJson({
+      ok: true,
+      request_id: approval.request_id,
+      action_sha256: actionSha256,
+      decision,
+      decided_at: decidedAt,
+      replayed: false,
+    }, 201);
+  }
+  const raced = await env.DB.prepare(`
+    SELECT action_sha256, decision, decided_at
+    FROM competition_approval_decisions
+    WHERE request_id = ?1
+  `).bind(approval.request_id).first();
+  if (raced?.action_sha256 === actionSha256 && raced?.decision === decision) {
+    return competitionJson({
+      ok: true,
+      request_id: approval.request_id,
+      action_sha256: actionSha256,
+      decision,
+      decided_at: raced.decided_at,
+      replayed: true,
+    });
+  }
+  return competitionError('approval_conflict', 409);
+}
+
+export async function decideCompetitionApproval(request, env, requestId) {
+  try {
+    return await decideCompetitionApprovalInternal(request, env, requestId);
+  } catch (error) {
+    console.error('competition_approval_error', error);
     return competitionJson({ error: '서버 오류' }, 500);
   }
 }
@@ -959,7 +1161,7 @@ async function getCompetitionsInternal(request, env) {
   const reports = reportRows.results || [];
   if (reports.length === 0) return competitionJson(emptyCompetitionResponse());
   const latest = reports[0];
-  const [sourceRows, candidateRows, applicationRows] = await Promise.all([
+  const [sourceRows, candidateRows, applicationRows, approvalRows] = await Promise.all([
     env.DB.prepare(`
       SELECT * FROM competition_sources
       WHERE idempotency_key = ?1
@@ -974,6 +1176,15 @@ async function getCompetitionsInternal(request, env) {
       SELECT * FROM competition_applications
       WHERE idempotency_key = ?1
       ORDER BY updated_at DESC, contest_id, category
+    `).bind(latest.idempotency_key).all(),
+    env.DB.prepare(`
+      SELECT request.*,
+        decision.decision, decision.decided_at
+      FROM competition_approval_requests AS request
+      LEFT JOIN competition_approval_decisions AS decision
+        ON decision.request_id = request.request_id
+      WHERE request.idempotency_key = ?1
+      ORDER BY request.requested_at DESC, request.request_id
     `).bind(latest.idempotency_key).all(),
   ]);
   const sources = (sourceRows.results || []).map((row) => ({
@@ -1008,6 +1219,21 @@ async function getCompetitionsInternal(request, env) {
     fit_score: Number(row.fit_score),
     effort_score: Number(row.effort_score),
   }));
+  const approvals = new Map((approvalRows.results || []).map((row) => {
+    const status = row.decision
+      || (row.expires_at && Date.parse(row.expires_at) <= Date.now() ? 'expired' : 'pending');
+    return [`${row.contest_id}|${row.category}`, {
+      request_id: row.request_id,
+      kind: row.kind,
+      action_sha256: row.action_sha256,
+      requested_at: row.requested_at,
+      expires_at: row.expires_at,
+      read_summary: row.read_summary,
+      approval_text: row.approval_text,
+      status,
+      decided_at: row.decided_at || null,
+    }];
+  }));
   const applications = (applicationRows.results || []).map((row) => ({
     contest_id: row.contest_id,
     category: row.category,
@@ -1015,6 +1241,7 @@ async function getCompetitionsInternal(request, env) {
     updated_at: row.updated_at,
     blocker: row.blocker,
     next_action: row.next_action,
+    approval: approvals.get(`${row.contest_id}|${row.category}`) || null,
   }));
   const latestScanAt = latest.finished_at || latest.started_at;
   const latestScanTime = Date.parse(latestScanAt);
@@ -1026,7 +1253,8 @@ async function getCompetitionsInternal(request, env) {
       verified: candidates.filter((candidate) => candidate.official_verification === 'verified').length,
       ready: candidates.filter((candidate) => candidate.status === 'active').length,
       awaiting_approval: applications.filter((application) => (
-        application.state === 'WAITING_APPROVAL'
+        application.approval?.status === 'pending'
+        || (!application.approval && application.state === 'WAITING_APPROVAL')
       )).length,
       deadline_soon: candidates.filter((candidate) => {
         const deadline = Date.parse(candidate.deadline_at || '');

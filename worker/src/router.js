@@ -13,7 +13,11 @@ import {
   readJson,
   sha256,
 } from './lib.js';
-import { getCompetitions, reportCompetitions } from './competitions.js';
+import {
+  decideCompetitionApproval,
+  getCompetitions,
+  reportCompetitions,
+} from './competitions.js';
 import { BehaviorLabRequestError, getBehaviorLabDashboard } from './behavior-lab.js';
 
 const MAX_PROGRESS_BYTES = 800_000;
@@ -3407,6 +3411,12 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/harness/report') return reportHarness(request, env);
   if (method === 'POST' && path === '/api/competitions/report') {
     return reportCompetitions(request, env);
+  }
+  const competitionApprovalMatch = path.match(
+    /^\/api\/competitions\/approvals\/([A-Za-z0-9][A-Za-z0-9._-]{0,159})\/decision$/u,
+  );
+  if (method === 'POST' && competitionApprovalMatch) {
+    return decideCompetitionApproval(request, env, competitionApprovalMatch[1]);
   }
   if (method === 'GET' && path === '/api/competitions') return getCompetitions(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);

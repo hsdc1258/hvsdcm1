@@ -86,6 +86,29 @@ function fixture(overrides = {}) {
   };
 }
 
+function approvalFixture({ status = 'pending', summary = '수상작 이용 범위가 넓으므로 공식 권리 조건을 읽어야 합니다.' } = {}) {
+  const payload = fixture();
+  payload.candidates[0] = {
+    contest_id: 'contest-1', category: 'design', title: '청소년 디자인 공모전', organizer: '예시 재단',
+    source_id: 'official', discovery_url: 'https://discovery.example/item',
+    official_url: 'https://organizer.example/rules', official_verification: 'verified',
+    deadline_at: '2026-09-05T14:59:00Z', eligibility: 'eligible', status: 'active',
+    rights_risk: 'high', submission_risk: 'medium', recency: 'new',
+  };
+  payload.applications[0] = {
+    contest_id: 'contest-1', category: 'design', state: 'WAITING_RIGHTS_APPROVAL',
+    blocker: 'rights', next_action: 'review_rights', updated_at: '2026-08-30T17:30:00Z',
+    approval: {
+      request_id: 'competition-preparation-contest-1', kind: 'preparation',
+      action_sha256: 'a'.repeat(64), requested_at: '2026-08-30T17:30:00Z', expires_at: null,
+      read_summary: summary,
+      approval_text: '작품 초안과 비식별 서류 준비만 허용합니다.',
+      status, decided_at: status === 'pending' ? null : '2026-08-30T17:31:00Z',
+    },
+  };
+  return payload;
+}
+
 test('the adapter accepts wrapped object maps and canonicalizes variants', () => {
   const { ui } = competitionContext();
   const normalized = ui.normalizePayload({
@@ -279,6 +302,70 @@ test('the adapter selects the newest report wrapper and correlates contest plus 
   assert.match(markup, /제출 위험<\/dt><dd>PDF만 허용/u);
 });
 
+test('approval inbox is first and attaches review, approval scope, official source and action hash', () => {
+  const { ui } = competitionContext();
+  const normalized = ui.normalizePayload(approvalFixture({
+    summary: '<img src=x onerror=alert(1)> 권리 조건을 읽어야 합니다.',
+  }));
+  const markup = ui.renderDashboard(normalized, {}, NOW);
+  assert.ok(markup.indexOf('승인해야 하는 목록') < markup.indexOf('스캔 현황'));
+  assert.match(markup, /대기 1건 · 항상 최상단/u);
+  assert.match(markup, /읽어야 하는 내용/u);
+  assert.match(markup, /승인하는 내용/u);
+  assert.match(markup, /작품 초안과 비식별 서류 준비만 허용합니다/u);
+  assert.match(markup, /개인정보 입력·서명·법적 동의·결제·전송·최종 제출을 포함하지 않습니다/u);
+  assert.match(markup, /주최기관 공식 공고 열기/u);
+  assert.match(markup, /data-competition-approval-decision="approved"/u);
+  assert.match(markup, new RegExp('a{64}', 'u'));
+  assert.doesNotMatch(markup, /<img src=x/u);
+  assert.equal(normalized.applications[0].status, 'awaiting-approval');
+});
+
+test('approval controller posts the exact action once and updates the visible decision', async () => {
+  const shell = competitionContext();
+  const calls = [];
+  const controller = shell.ui.createDashboard({
+    request: async (path, options) => {
+      calls.push({ path, options });
+      if (!options) return approvalFixture();
+      return {
+        ok: true,
+        request_id: 'competition-preparation-contest-1',
+        action_sha256: 'a'.repeat(64),
+        decision: 'approved',
+        decided_at: '2026-08-30T17:31:00Z',
+        replayed: false,
+      };
+    },
+    now: () => NOW,
+  });
+  controller.activate();
+  await flush();
+  const button = {
+    dataset: {
+      requestId: 'competition-preparation-contest-1',
+      actionSha256: 'a'.repeat(64),
+      competitionApprovalDecision: 'approved',
+    },
+    disabled: false,
+    isConnected: true,
+  };
+  shell.store.get('competitionBody').listeners.click({
+    target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
+  });
+  await flush();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].path, '/api/competitions/approvals/competition-preparation-contest-1/decision');
+  assert.equal(calls[1].options.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    decision: 'approved', action_sha256: 'a'.repeat(64),
+  });
+  assert.match(shell.store.get('competitionBody').innerHTML, /승인됨/u);
+  assert.doesNotMatch(shell.store.get('competitionBody').innerHTML, /data-competition-approval-decision="approved"/u);
+  assert.equal(shell.store.get('competitionRefreshStatus').textContent, '승인됨 · 자동화가 다음 단계에서 이 결정을 확인합니다.');
+  assert.equal(controller.state().pendingDecision, null);
+});
+
 test('every exact backend application state maps without a broad waiting wildcard', () => {
   const { ui } = competitionContext();
   const states = [
@@ -307,7 +394,7 @@ test('every exact backend application state maps without a broad waiting wildcar
   assert.deepEqual(Array.from(normalized.applications, (application) => application.status), states.map(([, expected]) => expected));
   const markup = ui.renderDashboard(normalized, {}, NOW);
   assert.match(markup, /지원 상태 보드/u);
-  assert.match(markup, /읽기 전용 · 17건/u);
+  assert.match(markup, /승인은 최상단에서 처리 · 17건/u);
   assert.match(markup, /승인 대기/u);
   assert.match(markup, /막힘/u);
   const unknownWaiting = ui.normalizePayload({
@@ -592,7 +679,9 @@ test('controller renders loading, empty, error/retry and manual refresh states',
   assert.match(failure.store.get('competitionBody').innerHTML, /data-competition-retry/u);
 });
 
-function usageContext({ href = 'https://hvsdcm1.xyz/usage/', storedView = null } = {}) {
+function usageContext({
+  href = 'https://hvsdcm1.xyz/usage/', storedView = null, competitionPayload = fixture(),
+} = {}) {
   const pageUrl = new URL(href);
   const store = new Map();
   const tabs = ['ops', 'moderator', 'competition', 'guide'].map((name, index) => {
@@ -616,6 +705,7 @@ function usageContext({ href = 'https://hvsdcm1.xyz/usage/', storedView = null }
     activeElement: null,
   };
   const requests = [];
+  const requestDetails = [];
   const context = {
     document,
     location: {
@@ -631,10 +721,20 @@ function usageContext({ href = 'https://hvsdcm1.xyz/usage/', storedView = null }
       setItem(key, value) { this.values.set(key, String(value)); },
       removeItem(key) { this.values.delete(key); },
     },
-    fetch: async (url) => {
+    fetch: async (url, options = {}) => {
       const href = String(url);
       requests.push(href);
-      if (href.includes('/api/competitions')) return { ok: true, status: 200, json: async () => fixture() };
+      requestDetails.push({ href, options });
+      if (href.includes('/api/competitions/approvals/')) return {
+        ok: true,
+        status: 201,
+        json: async () => ({
+          ok: true, request_id: 'competition-preparation-contest-1',
+          action_sha256: 'a'.repeat(64), decision: 'approved',
+          decided_at: '2026-08-30T17:31:00Z', replayed: false,
+        }),
+      };
+      if (href.includes('/api/competitions')) return { ok: true, status: 200, json: async () => competitionPayload };
       if (href.includes('/api/moderator')) return {
         ok: true, status: 200, json: async () => ({ items: [], commands: [], counts: {}, unread_counts: {} }),
       };
@@ -651,7 +751,7 @@ function usageContext({ href = 'https://hvsdcm1.xyz/usage/', storedView = null }
   vm.createContext(context);
   vm.runInContext(COMPETITION_SOURCE, context, { filename: 'competition.js' });
   vm.runInContext(USAGE_SOURCE, context, { filename: 'usage.js' });
-  return { context, store, tabs, requests };
+  return { context, store, tabs, requests, requestDetails };
 }
 
 test('the competition deep link overrides a stored view and loads its API once', async () => {
@@ -665,6 +765,36 @@ test('the competition deep link overrides a stored view and loads its API once',
   assert.equal(shell.store.get('viewCompetition').hidden, false);
   assert.equal(shell.tabs[2].attributes['aria-selected'], 'true');
   assert.equal(shell.context.localStorage.values.get('hvsdcm.usage.view'), 'competition');
+});
+
+test('the owner shell sends web approval with bearer JSON through the shared timeout path', async () => {
+  const shell = usageContext({
+    href: 'https://hvsdcm1.xyz/usage/?view=competition',
+    competitionPayload: approvalFixture(),
+  });
+  await flush();
+  await flush();
+  const button = {
+    dataset: {
+      requestId: 'competition-preparation-contest-1',
+      actionSha256: 'a'.repeat(64),
+      competitionApprovalDecision: 'approved',
+    },
+    disabled: false,
+    isConnected: true,
+  };
+  shell.store.get('competitionBody').listeners.click({
+    target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
+  });
+  await flush();
+  const posted = shell.requestDetails.find((entry) => entry.href.includes('/approvals/'));
+  assert.ok(posted);
+  assert.equal(posted.options.method, 'POST');
+  assert.equal(posted.options.headers.authorization, 'Bearer gate-token');
+  assert.equal(posted.options.headers['content-type'], 'application/json');
+  assert.deepEqual(JSON.parse(posted.options.body), {
+    decision: 'approved', action_sha256: 'a'.repeat(64),
+  });
 });
 
 test('the ARIA tab is wired and the API stays lazy through first activation', async () => {

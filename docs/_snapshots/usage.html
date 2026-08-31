@@ -2970,7 +2970,7 @@ label.list-row {
 /* ==========================================================================
    공모전 — 자동 발견 결과를 읽기 전용으로 검토하는 owner 표면
    ========================================================================== */
-.cp-body, .cp-overview, .cp-panel, .cp-applications, .cp-candidates, .cp-candidate-list, .cp-candidate, .cp-application {
+.cp-body, .cp-approvals, .cp-approval-list, .cp-approval-card, .cp-overview, .cp-panel, .cp-applications, .cp-candidates, .cp-candidate-list, .cp-candidate, .cp-application {
   display: grid;
   min-width: 0;
 }
@@ -2991,7 +2991,7 @@ label.list-row {
 .cp-filters .field {
   min-width: 0;
 }
-.cp-section-head, .cp-candidate > header, .cp-source, .cp-application > div {
+.cp-section-head, .cp-approval-card > header, .cp-candidate > header, .cp-source, .cp-application > div {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -3002,12 +3002,116 @@ label.list-row {
   color: var(--text-3);
   font-size: var(--fs-caption);
 }
-.cp-overview, .cp-panel, .cp-applications, .cp-candidates {
+.cp-approvals, .cp-overview, .cp-panel, .cp-applications, .cp-candidates {
   gap: var(--space-4);
   padding: var(--space-5);
   background: var(--surface);
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-l);
+}
+.cp-approvals {
+  border-color: var(--line-strong);
+  background: linear-gradient(145deg, var(--surface), var(--surface-2));
+}
+.cp-approval-intro {
+  max-width: 78ch;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.cp-approval-list {
+  gap: var(--space-4);
+}
+.cp-approval-card {
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-m);
+}
+.cp-approval-card.is-pending {
+  border-color: var(--orange);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+.cp-approval-card h3, .cp-approval-card h4 {
+  margin: 0;
+  color: var(--text);
+}
+.cp-approval-card h3 {
+  margin-top: 4px;
+  font-size: var(--fs-title-3);
+  line-height: var(--lh-title);
+}
+.cp-approval-card h4 {
+  font-size: var(--fs-body-sm);
+  font-weight: 650;
+}
+.cp-approval-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--line-faint);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-s);
+}
+.cp-approval-facts > div {
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--surface-2);
+}
+.cp-approval-facts dt {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.cp-approval-facts dd {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: var(--fs-caption);
+  overflow-wrap: anywhere;
+}
+.cp-approval-copy {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
+.cp-approval-copy.is-decision {
+  border-left-color: var(--orange);
+}
+.cp-approval-copy p, .cp-approval-result {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+}
+.cp-approval-boundary {
+  color: var(--text-3) !important;
+}
+.cp-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.cp-approval-actions .btn {
+  min-height: 44px;
+}
+.cp-approval-hash {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+.cp-approval-hash summary {
+  cursor: pointer;
+}
+.cp-approval-hash code {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 .cp-overview {
   background: linear-gradient(135deg, var(--surface), var(--surface-2));
@@ -3356,8 +3460,11 @@ label.list-row {
   .cp-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .cp-overview, .cp-panel, .cp-applications, .cp-candidates {
+  .cp-approvals, .cp-overview, .cp-panel, .cp-applications, .cp-candidates {
     padding: var(--space-4);
+  }
+  .cp-approval-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 480px) {
@@ -3374,7 +3481,7 @@ label.list-row {
   .cp-metrics {
     grid-template-columns: minmax(0, 1fr);
   }
-  .cp-section-head, .cp-candidate > header {
+  .cp-section-head, .cp-approval-card > header, .cp-candidate > header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -3385,6 +3492,16 @@ label.list-row {
   .cp-notice {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .cp-approval-card {
+    padding: var(--space-4);
+  }
+  .cp-approval-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cp-approval-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

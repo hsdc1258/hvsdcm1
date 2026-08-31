@@ -129,6 +129,19 @@
     failed: '검증 실패',
     unknown: '미확인',
   };
+  const APPROVAL_KIND_LABELS = {
+    preparation: '준비 승인',
+    legal_consent: '법적 동의 승인',
+    rights_acceptance: '권리 조건 승인',
+    payment: '결제 승인',
+    final_submission: '최종 제출 승인',
+  };
+  const APPROVAL_STATUS_LABELS = {
+    pending: '승인 대기',
+    approved: '승인됨',
+    held: '보류됨',
+    expired: '만료됨',
+  };
 
   const escapeHtml = (value) => String(value ?? '').replace(
     /[&<>"']/gu,
@@ -259,9 +272,37 @@
     return category ? `${id}\u0000${category}` : id;
   }
 
+  function normalizeApproval(entry) {
+    const source = object(entry);
+    const requestId = text(source.request_id);
+    const actionSha256 = text(source.action_sha256).toLowerCase();
+    if (!requestId || !/^[a-f0-9]{64}$/u.test(actionSha256)) return null;
+    const rawKind = text(source.kind).toLowerCase();
+    const rawStatus = text(source.status).toLowerCase();
+    return {
+      requestId,
+      kind: Object.prototype.hasOwnProperty.call(APPROVAL_KIND_LABELS, rawKind) ? rawKind : 'unknown',
+      actionSha256,
+      requestedAt: source.requested_at,
+      expiresAt: source.expires_at,
+      readSummary: text(source.read_summary),
+      approvalText: text(source.approval_text),
+      status: Object.prototype.hasOwnProperty.call(APPROVAL_STATUS_LABELS, rawStatus) ? rawStatus : 'expired',
+      decidedAt: source.decided_at,
+    };
+  }
+
   function normalizeApplication(entry, fallbackId = '') {
     const source = object(entry);
-    const status = enumKey(first(source.state, source.status, source.stage), STATUS_KEYS);
+    const approval = normalizeApproval(source.approval);
+    const reportedStatus = enumKey(first(source.state, source.status, source.stage), STATUS_KEYS);
+    const status = approval?.status === 'pending'
+      ? 'awaiting-approval'
+      : approval?.status === 'approved'
+        ? 'approved'
+        : approval?.status === 'held' || approval?.status === 'expired'
+          ? 'blocked'
+          : reportedStatus;
     const blockerFields = ['blockers', 'blocker', 'missing', 'issues'];
     const nextAction = first(source.next_action, source.next, source.action);
     return {
@@ -272,6 +313,7 @@
       blockersKnown: blockerFields.some((key) => Object.prototype.hasOwnProperty.call(source, key)),
       nextAction: nextAction ? codedLabel(nextAction, NEXT_ACTION_LABELS) : '',
       updatedAt: first(source.updated_at, source.changed_at, source.at),
+      approval,
     };
   }
 
@@ -535,6 +577,74 @@
       : `<span class="cp-missing">${escapeHtml(label)} 없음</span>`;
   }
 
+  function approvalStatusAt(approval, now) {
+    if (!approval) return 'expired';
+    if (approval.status !== 'pending') return approval.status;
+    const expiresAt = time(approval.expiresAt);
+    return expiresAt !== null && expiresAt <= now ? 'expired' : 'pending';
+  }
+
+  function renderApprovalInbox(applications, candidates, now) {
+    const candidatesByKey = new Map(candidates.map((candidate) => [
+      applicationKey({ contest_id: candidate.id, category: candidate.category }), candidate,
+    ]));
+    const rows = applications.map((application) => ({
+      application,
+      candidate: candidatesByKey.get(applicationKey(application))
+        || candidates.find((candidate) => candidate.id === application.id),
+      status: approvalStatusAt(application.approval, now),
+    })).filter((entry) => entry.application.approval).sort((left, right) => {
+      const rank = { pending: 0, approved: 1, held: 2, expired: 3 };
+      const statusOrder = (rank[left.status] ?? 4) - (rank[right.status] ?? 4);
+      if (statusOrder) return statusOrder;
+      return (time(left.candidate?.deadline) ?? Number.MAX_SAFE_INTEGER)
+        - (time(right.candidate?.deadline) ?? Number.MAX_SAFE_INTEGER);
+    });
+    const pending = rows.filter((entry) => entry.status === 'pending').length;
+    const cards = rows.length ? rows.map(({ application, candidate, status }) => {
+      const approval = application.approval;
+      const title = candidate?.title || application.title || application.id || '이름 없는 지원';
+      const kind = APPROVAL_KIND_LABELS[approval.kind] || '승인 유형 미확인';
+      const controls = status === 'pending'
+        ? `<div class="cp-approval-actions">
+            <button class="btn btn-primary" type="button" data-competition-approval-decision="approved" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">${escapeHtml(kind)}</button>
+            <button class="btn btn-secondary" type="button" data-competition-approval-decision="held" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">보류</button>
+          </div>`
+        : `<p class="cp-approval-result"><strong>${escapeHtml(APPROVAL_STATUS_LABELS[status] || '처리 상태 미확인')}</strong>${approval.decidedAt ? ` · ${escapeHtml(dateTime(approval.decidedAt))}` : ''}</p>`;
+      return `<article class="cp-approval-card${status === 'pending' ? ' is-pending' : ''}">
+        <header>
+          <div><p class="us-eyebrow">${escapeHtml(candidate?.organizer || '주최기관 미확인')}</p><h3>${escapeHtml(title)}</h3></div>
+          <span class="cp-state${tone(status === 'pending' ? 'awaiting-approval' : status === 'approved' ? 'approved' : 'blocked')}">${escapeHtml(APPROVAL_STATUS_LABELS[status] || '미확인')}</span>
+        </header>
+        <dl class="cp-approval-facts">
+          <div><dt>승인 종류</dt><dd>${escapeHtml(kind)}</dd></div>
+          <div><dt>마감</dt><dd>${escapeHtml(candidate?.deadline ? dateTime(candidate.deadline) : '미확인')}</dd></div>
+          <div><dt>지원 자격</dt><dd>${escapeHtml(ELIGIBILITY_LABELS[candidate?.eligibilityStatus] || ELIGIBILITY_LABELS.unknown)}</dd></div>
+          <div><dt>권리 위험</dt><dd>${escapeHtml(candidate?.rightsRisk || '미확인')}</dd></div>
+          <div><dt>제출 위험</dt><dd>${escapeHtml(candidate?.submissionRisk || '미확인')}</dd></div>
+          <div><dt>유효 시간</dt><dd>${escapeHtml(approval.expiresAt ? dateTime(approval.expiresAt) : '준비 승인 · 만료 없음')}</dd></div>
+        </dl>
+        <section class="cp-approval-copy" aria-label="읽어야 하는 내용">
+          <h4>읽어야 하는 내용</h4>
+          <p>${escapeHtml(approval.readSummary || '자동 검토 요약이 없습니다. 공식 공고를 직접 확인해야 합니다.')}</p>
+          ${link(candidate?.officialUrl, candidate?.officialVerification === 'verified' ? '주최기관 공식 공고 열기 ↗' : '공고 링크 열기 ↗', 'cp-official-link')}
+        </section>
+        <section class="cp-approval-copy is-decision" aria-label="승인하는 내용">
+          <h4>승인하는 내용</h4>
+          <p>${escapeHtml(approval.approvalText || '승인 범위가 없어 승인할 수 없습니다.')}</p>
+          <p class="cp-approval-boundary">준비 승인은 개인정보 입력·서명·법적 동의·결제·전송·최종 제출을 포함하지 않습니다.</p>
+        </section>
+        <details class="cp-approval-hash"><summary>이 승인에 묶인 action hash</summary><code>${escapeHtml(approval.actionSha256)}</code></details>
+        ${controls}
+      </article>`;
+    }).join('') : '<p class="us-empty">현재 웹 승인 요청이 없습니다.</p>';
+    return `<section class="cp-approvals" aria-labelledby="cpApprovalsTitle">
+      <div class="cp-section-head"><div><p class="us-eyebrow">APPROVAL INBOX</p><h2 id="cpApprovalsTitle" class="title-2">승인해야 하는 목록</h2></div><p>대기 ${pending}건 · 항상 최상단</p></div>
+      <p class="cp-approval-intro">자동 검토 요약과 정확한 승인 범위를 읽은 뒤 결정하세요. 내용이나 action hash가 바뀌면 기존 승인은 재사용되지 않습니다.</p>
+      <div class="cp-approval-list">${cards}</div>
+    </section>`;
+  }
+
   function renderSummary(data, now) {
     const latest = time(data.latestAt);
     const stale = latest !== null && now - latest > STALE_SCAN_MS;
@@ -661,7 +771,7 @@
       </article>`).join('')}</div>
     </section>`).join('') : '<p class="us-empty">지원 상태 기록이 없습니다.</p>';
     return `<section class="cp-applications" aria-labelledby="cpApplicationsTitle">
-      <div class="cp-section-head"><div><p class="us-eyebrow">APPLICATIONS · VIEW ONLY</p><h2 id="cpApplicationsTitle" class="title-2">지원 상태 보드</h2></div><p>읽기 전용 · ${currentApplications.length}건</p></div>
+      <div class="cp-section-head"><div><p class="us-eyebrow">APPLICATIONS</p><h2 id="cpApplicationsTitle" class="title-2">지원 상태 보드</h2></div><p>승인은 최상단에서 처리 · ${currentApplications.length}건</p></div>
       <div class="cp-board" role="region" aria-label="지원 상태 보드 가로 목록" tabindex="0">${board}</div>
     </section>`;
   }
@@ -681,7 +791,7 @@
     const notices = data.partial
       ? `<div class="cp-notice" role="status"><strong>일부 결과만 표시합니다.</strong><span>${escapeHtml(data.errors[0] || '원본 장애, 수집 범위 제한 또는 웹 표시 상한이 있습니다. 원본별 확인 사유를 확인해 주세요.')}</span></div>`
       : '';
-    return `${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
+    return `${renderApprovalInbox(data.applications, data.candidates, now)}${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
   }
 
   function scrollApplicationBoard(board, key) {
@@ -718,6 +828,7 @@
     let data = null;
     let syncedAt = null;
     let refreshTimer = null;
+    let pendingDecision = null;
 
     function filters() {
       return {
@@ -791,6 +902,51 @@
       }
     }
 
+    async function decide(button) {
+      if (pendingDecision || typeof request !== 'function') return;
+      const requestId = text(button?.dataset?.requestId);
+      const actionSha256 = text(button?.dataset?.actionSha256).toLowerCase();
+      const decision = text(button?.dataset?.competitionApprovalDecision).toLowerCase();
+      if (!requestId || !/^[a-f0-9]{64}$/u.test(actionSha256)
+        || !['approved', 'held'].includes(decision)) return;
+      pendingDecision = requestId;
+      if (button) button.disabled = true;
+      if (elements.error) elements.error.textContent = '';
+      if (elements.refreshStatus) {
+        elements.refreshStatus.textContent = decision === 'approved'
+          ? '승인을 안전하게 저장하고 있습니다.'
+          : '보류 결정을 저장하고 있습니다.';
+      }
+      try {
+        const result = await request(
+          `/api/competitions/approvals/${encodeURIComponent(requestId)}/decision`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ decision, action_sha256: actionSha256 }),
+          },
+        );
+        for (const application of data?.applications || []) {
+          if (application.approval?.requestId !== requestId) continue;
+          application.approval.status = decision;
+          application.approval.decidedAt = result?.decided_at || new Date(now()).toISOString();
+          application.status = decision === 'approved' ? 'approved' : 'blocked';
+        }
+        render();
+        if (elements.refreshStatus) {
+          elements.refreshStatus.textContent = decision === 'approved'
+            ? '승인됨 · 자동화가 다음 단계에서 이 결정을 확인합니다.'
+            : '보류됨 · 새 승인 요청이 오기 전까지 진행하지 않습니다.';
+        }
+      } catch (error) {
+        if (elements.error) elements.error.textContent = error?.message || '승인 결정을 저장하지 못했습니다.';
+        if (elements.refreshStatus) elements.refreshStatus.textContent = '승인 결정을 저장하지 못했습니다.';
+      } finally {
+        pendingDecision = null;
+        if (button?.isConnected !== false) button.disabled = false;
+      }
+    }
+
     function clearFilters() {
       if (elements.search) elements.search.value = '';
       if (elements.status) elements.status.value = 'all';
@@ -805,6 +961,11 @@
     elements.filters?.addEventListener?.('input', render);
     elements.filters?.addEventListener?.('change', render);
     elements.body?.addEventListener?.('click', (event) => {
+      const approvalButton = event.target?.closest?.('[data-competition-approval-decision]');
+      if (approvalButton) {
+        void decide(approvalButton);
+        return;
+      }
       if (event.target?.closest?.('[data-competition-retry]')) void load({ announce: true });
       if (event.target?.closest?.('[data-competition-clear]')) clearFilters();
     });
@@ -828,7 +989,7 @@
       },
       load,
       render,
-      state: () => ({ active, loaded, inFlight, data, syncedAt }),
+      state: () => ({ active, loaded, inFlight, data, syncedAt, pendingDecision }),
     };
   }
 
@@ -837,6 +998,7 @@
     AUTO_REFRESH_MS,
     normalizePayload,
     filterCandidates,
+    renderApprovalInbox,
     renderDashboard,
     scrollApplicationBoard,
     createDashboard,

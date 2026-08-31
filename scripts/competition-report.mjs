@@ -10,8 +10,10 @@ const MAX_ACKNOWLEDGEMENT_BYTES = 65_536;
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+const APPROVAL_REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u;
 const CATEGORY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/u;
 const PROFILE_ID = /^hmac-sha256:[0-9a-f]{64}$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
 const OFFSET_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/u;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
@@ -59,6 +61,16 @@ const APPLICATION_NEXT_ACTIONS = new Set([
   'none', 'verify_official_source', 'verify_eligibility', 'review_rights',
   'review_submission', 'prepare_artifacts', 'draft_application', 'stage_form',
   'request_approval', 'manual_check', 'hold',
+]);
+const APPROVAL_KINDS = new Set([
+  'preparation', 'legal_consent', 'rights_acceptance', 'payment', 'final_submission',
+]);
+const APPROVAL_APPLICATION_STATES = new Map([
+  ['preparation', 'WAITING_RIGHTS_APPROVAL'],
+  ['legal_consent', 'WAITING_LEGAL_CONSENT'],
+  ['rights_acceptance', 'WAITING_RIGHTS_APPROVAL'],
+  ['payment', 'WAITING_FEE_APPROVAL'],
+  ['final_submission', 'WAITING_APPROVAL'],
 ]);
 
 export class CompetitionReportError extends Error {
@@ -508,6 +520,54 @@ function validateApplication(application, index, candidates) {
   if (candidate.status !== 'active') fail(`${label} must reference an active candidate`);
 }
 
+function validateApproval(approval, index, applications, observationTime) {
+  const label = `report.approvals[${index}]`;
+  exactKeys(approval, [
+    'request_id', 'contest_id', 'category', 'kind', 'action_sha256', 'requested_at',
+    'expires_at', 'read_summary', 'approval_text',
+  ], [], label);
+  string(approval.request_id, `${label}.request_id`, {
+    max: 160, pattern: APPROVAL_REQUEST_ID, privatePatterns: true,
+  });
+  string(approval.contest_id, `${label}.contest_id`, {
+    max: 160, pattern: IDENTIFIER, privatePatterns: true,
+  });
+  string(approval.category, `${label}.category`, {
+    max: 80, pattern: CATEGORY, privatePatterns: true,
+  });
+  oneOf(approval.kind, APPROVAL_KINDS, `${label}.kind`);
+  string(approval.action_sha256, `${label}.action_sha256`, { max: 64, pattern: SHA256 });
+  timestamp(approval.requested_at, `${label}.requested_at`);
+  timestamp(approval.expires_at, `${label}.expires_at`, { nullable: true });
+  string(approval.read_summary, `${label}.read_summary`, {
+    max: 2_000, maxBytes: 2_000, privatePatterns: true,
+  });
+  string(approval.approval_text, `${label}.approval_text`, {
+    max: 1_000, maxBytes: 1_000, privatePatterns: true,
+  });
+  const key = `${approval.contest_id}|${approval.category}`;
+  const application = applications.get(key);
+  if (!application || application.state !== APPROVAL_APPLICATION_STATES.get(approval.kind)) {
+    fail(`${label} does not match the reported application state`);
+  }
+  const requested = Date.parse(approval.requested_at);
+  if (requested < Date.parse(application.updated_at) || requested > observationTime) {
+    fail(`${label}.requested_at is outside the application observation window`);
+  }
+  if (approval.expires_at) {
+    const lifetime = Date.parse(approval.expires_at) - requested;
+    if (lifetime <= 0) fail(`${label}.expires_at must follow requested_at`);
+    if (approval.kind !== 'preparation' && lifetime > 15 * 60_000) {
+      fail(`${label}.expires_at exceeds the 15 minute sensitive-action window`);
+    }
+  } else if (approval.kind !== 'preparation') {
+    fail(`${label}.expires_at is required for sensitive action approval`);
+  }
+  if (approval.kind !== 'preparation' && Date.parse(approval.expires_at) <= observationTime) {
+    fail(`${label} is already expired at the report observation`);
+  }
+}
+
 function canonicalPublicHost(value) {
   return new URL(value).hostname.toLowerCase().replace(/\.+$/u, '').replace(/^www\d*\./u, '');
 }
@@ -520,7 +580,12 @@ function matchesListingHost(host, listingHosts) {
 
 export function validateCompetitionReport(report) {
   rejectForbiddenKeys(report);
-  exactKeys(report, ['version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications'], [], 'report');
+  exactKeys(
+    report,
+    ['version', 'idempotency_key', 'run', 'sources', 'candidates', 'applications'],
+    ['approvals'],
+    'report',
+  );
   if (report.version !== 1) fail('report.version must equal 1');
   string(report.idempotency_key, 'report.idempotency_key', { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   validateRun(report.run);
@@ -591,11 +656,13 @@ export function validateCompetitionReport(report) {
 
   const applications = boundedArray(report.applications, 'report.applications', 3);
   const applicationKeys = new Set();
+  const applicationByKey = new Map();
   applications.forEach((application, index) => {
     validateApplication(application, index, candidates);
     const key = `${application.contest_id}|${application.category}`;
     if (applicationKeys.has(key)) fail(`report.applications[${index}] is duplicated`);
     applicationKeys.add(key);
+    applicationByKey.set(key, application);
     const candidate = candidates.get(key);
     if (Date.parse(application.updated_at) > observationTime) {
       fail(`report.applications[${index}].updated_at follows the report observation`);
@@ -606,6 +673,18 @@ export function validateCompetitionReport(report) {
     if (Date.parse(candidate.deadline_at) <= observationTime) {
       fail(`report.applications[${index}] references a candidate whose deadline has passed`);
     }
+  });
+
+  const approvals = boundedArray(report.approvals || [], 'report.approvals', 3);
+  const approvalIds = new Set();
+  const approvalKeys = new Set();
+  approvals.forEach((approval, index) => {
+    validateApproval(approval, index, applicationByKey, observationTime);
+    const key = `${approval.contest_id}|${approval.category}`;
+    if (approvalIds.has(approval.request_id)) fail(`report.approvals[${index}].request_id is duplicated`);
+    if (approvalKeys.has(key)) fail(`report.approvals[${index}] duplicates a contest/category key`);
+    approvalIds.add(approval.request_id);
+    approvalKeys.add(key);
   });
 
   const serialized = JSON.stringify(report);

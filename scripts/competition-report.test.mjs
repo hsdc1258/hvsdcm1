@@ -166,6 +166,34 @@ test('an official source may verify a candidate on its own origin', () => {
   assert.equal(validateCompetitionReport(report), report);
 });
 
+test('approval requests bind redacted review wording and exact action to the matching application state', () => {
+  const report = validReport();
+  report.applications[0].state = 'WAITING_RIGHTS_APPROVAL';
+  report.applications[0].blocker = 'rights';
+  report.applications[0].next_action = 'review_rights';
+  report.approvals = [{
+    request_id: 'competition-preparation-example-image',
+    contest_id: report.candidates[0].contest_id,
+    category: report.candidates[0].category,
+    kind: 'preparation',
+    action_sha256: 'a'.repeat(64),
+    requested_at: report.applications[0].updated_at,
+    expires_at: null,
+    read_summary: '권리 이용 범위와 제출 규격을 공식 공고에서 확인했습니다.',
+    approval_text: '작품 초안과 비식별 서류 준비만 허용합니다.',
+  }];
+  assert.equal(validateCompetitionReport(report), report);
+
+  const privateCopy = structuredClone(report);
+  privateCopy.approvals[0].read_summary = '담당자 person@example.test';
+  assert.throws(() => validateCompetitionReport(privateCopy), CompetitionReportError);
+
+  const mismatched = structuredClone(report);
+  mismatched.approvals[0].kind = 'final_submission';
+  mismatched.approvals[0].expires_at = report.run.finished_at;
+  assert.throws(() => validateCompetitionReport(mismatched), CompetitionReportError);
+});
+
 test('run date is KST-bound and observation time allows no more than five minutes of future skew', () => {
   const wrongDate = validReport();
   wrongDate.run.date = '2026-08-30';

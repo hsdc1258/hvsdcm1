@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 15; number += 1) {
+  for (let number = 1; number <= 16; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3073,6 +3073,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0013': 'moderator_backfill_read',
       '0014': 'competitions',
       '0015': 'competition_candidate_capacity',
+      '0016': 'competition_approval_requests',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4425,6 +4426,12 @@ function setCompetitionTimeline(fixture, startedAt) {
   if (fixture.applications[0]) {
     fixture.applications[0].updated_at = new Date(start + 4 * 60_000).toISOString();
   }
+  if (fixture.approvals?.[0]) {
+    fixture.approvals[0].requested_at = new Date(start + 4 * 60_000).toISOString();
+    if (fixture.approvals[0].expires_at) {
+      fixture.approvals[0].expires_at = new Date(start + 14 * 60_000).toISOString();
+    }
+  }
   return fixture;
 }
 
@@ -4500,6 +4507,38 @@ function competitionRequest(env, { method = 'POST', token = 'competition-token',
     headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), env);
+}
+
+function competitionWithPreparationApproval() {
+  const fixture = competitionFixture();
+  fixture.applications[0].state = 'WAITING_RIGHTS_APPROVAL';
+  fixture.applications[0].blocker = 'rights';
+  fixture.applications[0].next_action = 'review_rights';
+  fixture.approvals = [{
+    request_id: 'competition-preparation-organizer-2026-image',
+    contest_id: fixture.candidates[0].contest_id,
+    category: fixture.candidates[0].category,
+    kind: 'preparation',
+    action_sha256: 'a'.repeat(64),
+    requested_at: fixture.applications[0].updated_at,
+    expires_at: null,
+    read_summary: '권리 이용 범위가 넓습니다. 공식 공고와 마감, 자격, 제출 규격을 확인했습니다.',
+    approval_text: '작품 초안과 비식별 서류 준비만 허용합니다. 개인정보, 서명, 동의, 전송은 포함하지 않습니다.',
+  }];
+  return fixture;
+}
+
+function competitionApprovalRequest(env, {
+  requestId = 'competition-preparation-organizer-2026-image',
+  token = 'owner-token',
+  body = { decision: 'approved', action_sha256: 'a'.repeat(64) },
+} = {}) {
+  const headers = { 'content-type': 'application/json' };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return worker.fetch(new Request(
+    `https://api.test/api/competitions/approvals/${requestId}/decision`,
+    { method: 'POST', headers, body: JSON.stringify(body) },
+  ), env);
 }
 
 async function competitionTestContext(t) {
@@ -4688,11 +4727,109 @@ test('competition report round-trips through normalized SQLite and exact replay 
     updated_at: fixture.applications[0].updated_at,
     blocker: 'artifacts',
     next_action: 'prepare_artifacts',
+    approval: null,
   }]);
   assert.throws(
     () => database.prepare("UPDATE competition_reports SET run_status = 'failed'").run(),
     /immutable/u,
   );
+});
+
+test('competition web approval is owner-only, action-bound, idempotent and durable', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionWithPreparationApproval();
+  const created = await competitionRequest(env, { body: fixture });
+  assert.equal(created.status, 201);
+
+  const before = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(before.status, 200);
+  const beforeBody = await before.json();
+  assert.equal(beforeBody.summary.today.awaiting_approval, 1);
+  assert.deepEqual(beforeBody.applications[0].approval, {
+    request_id: fixture.approvals[0].request_id,
+    kind: 'preparation',
+    action_sha256: 'a'.repeat(64),
+    requested_at: fixture.approvals[0].requested_at,
+    expires_at: null,
+    read_summary: fixture.approvals[0].read_summary,
+    approval_text: fixture.approvals[0].approval_text,
+    status: 'pending',
+    decided_at: null,
+  });
+
+  const anonymous = await competitionApprovalRequest(env, { token: '' });
+  assert.equal(anonymous.status, 401);
+  assertCompetitionNoStore(anonymous);
+  const nonOwner = await competitionApprovalRequest(env, { token: 'student-token' });
+  assert.equal(nonOwner.status, 404);
+  assertCompetitionNoStore(nonOwner);
+
+  const stale = await competitionApprovalRequest(env, {
+    body: { decision: 'approved', action_sha256: 'b'.repeat(64) },
+  });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: 'approval_stale' });
+
+  const approved = await competitionApprovalRequest(env);
+  assert.equal(approved.status, 201);
+  assertCompetitionNoStore(approved);
+  assert.equal((await approved.json()).replayed, false);
+  const replay = await competitionApprovalRequest(env);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replayed, true);
+  const conflict = await competitionApprovalRequest(env, {
+    body: { decision: 'held', action_sha256: 'a'.repeat(64) },
+  });
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await conflict.json(), { error: 'approval_conflict' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 1);
+
+  const after = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  assert.equal(after.status, 200);
+  const afterBody = await after.json();
+  assert.equal(afterBody.summary.today.awaiting_approval, 0);
+  assert.equal(afterBody.applications[0].approval.status, 'approved');
+  assert.ok(afterBody.applications[0].approval.decided_at);
+});
+
+test('competition approval report rejects state mismatch and stale sensitive windows', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+
+  const mismatched = competitionWithPreparationApproval();
+  mismatched.idempotency_key = 'competition-approval-state-mismatch';
+  mismatched.run.id = 'competition-approval-state-mismatch';
+  mismatched.applications[0].state = 'WAITING_ARTIFACTS';
+  const mismatchResponse = await competitionRequest(env, { body: mismatched });
+  assert.equal(mismatchResponse.status, 400);
+
+  const expired = competitionWithPreparationApproval();
+  expired.idempotency_key = 'competition-expired-final-approval';
+  expired.run.id = 'competition-expired-final-approval';
+  expired.applications[0].state = 'WAITING_APPROVAL';
+  expired.applications[0].blocker = 'user_approval';
+  expired.applications[0].next_action = 'request_approval';
+  expired.approvals[0].kind = 'final_submission';
+  expired.approvals[0].requested_at = new Date(
+    Date.parse(expired.run.finished_at) - 10 * 60_000,
+  ).toISOString();
+  expired.approvals[0].expires_at = new Date(
+    Date.parse(expired.run.finished_at) - 60_000,
+  ).toISOString();
+  const expiredResponse = await competitionRequest(env, { body: expired });
+  assert.equal(expiredResponse.status, 400);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_requests',
+  ).get().count), 0);
 });
 
 test('competition idempotency binds the key to one payload and concurrent conflict cannot mix children', async (t) => {

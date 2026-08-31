@@ -224,12 +224,16 @@
     });
   }
 
-  async function requestUsage(path, signal) {
+  async function requestUsage(path, signal, options = {}) {
     const separator = path.includes('?') ? '&' : '?';
     const response = await fetch(`${API_URL}${path}${separator}_=${Date.now()}`, {
+      ...options,
       cache: 'no-store',
       signal,
-      headers: { authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}` },
+      headers: {
+        ...options.headers,
+        authorization: `Bearer ${localStorage.getItem('hvsdcm.token') || ''}`,
+      },
     });
     if (response.status === 401) {
       localStorage.removeItem('hvsdcm.token');
@@ -245,10 +249,10 @@
     return data;
   }
 
-  function api(path) {
+  function api(path, options = {}) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     return withTimeout(
-      requestUsage(path, controller?.signal),
+      requestUsage(path, controller?.signal, options),
       REQUEST_TIMEOUT_MS,
       () => controller?.abort(),
     );
