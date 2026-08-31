@@ -676,6 +676,22 @@
     return value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : 'is-neutral';
   }
 
+  function newestFirst(items, timestampKey, sequenceKey) {
+    return items.map((item, index) => ({ item, index })).sort((left, right) => {
+      const leftSequence = Number(left.item[sequenceKey]);
+      const rightSequence = Number(right.item[sequenceKey]);
+      if (Number.isFinite(leftSequence) && Number.isFinite(rightSequence) && leftSequence !== rightSequence) {
+        return rightSequence - leftSequence;
+      }
+      const leftTime = Date.parse(left.item[timestampKey]);
+      const rightTime = Date.parse(right.item[timestampKey]);
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+      return right.index - left.index;
+    }).map(({ item }) => item);
+  }
+
   function renderExperimentArm(arm) {
     const card = document.createElement('article');
     card.className = 'panel abc-arm-card';
@@ -708,7 +724,7 @@
     const chart = renderEquityChart(arm);
     const details = document.createElement('details');
     details.className = 'abc-arm-details';
-    details.append(createText('summary', '', '전략 상세와 로그 보기'));
+    details.append(createText('summary', '', '전략 상세와 최신 기록 보기'));
     const detailsBody = document.createElement('div');
     detailsBody.className = 'abc-arm-details-body';
     const policy = document.createElement('section');
@@ -740,8 +756,8 @@
     position.append(positionGrid);
     const trades = document.createElement('section');
     trades.className = 'abc-arm-section';
-    trades.append(createText('h4', '', '최근 거래'));
-    trades.append(renderExperimentList(arm.recent_trades, '아직 종료 거래가 없습니다.', (trade) => {
+    trades.append(createText('h4', '', '최근 거래 · 최신순'));
+    trades.append(renderExperimentList(newestFirst(arm.recent_trades, 'closed_at', 'sequence'), '아직 종료 거래가 없습니다.', (trade) => {
       const row = document.createElement('li');
       row.append(createText('time', '', `${formatKoreanTime(trade.opened_at)} → ${formatKoreanTime(trade.closed_at)}`),
         createText('span', '', `${trade.symbol} · ${trade.direction} · ${formatUsdt(trade.net_pnl, true)}`),
@@ -750,8 +766,8 @@
     }));
     const decisions = document.createElement('section');
     decisions.className = 'abc-arm-section';
-    decisions.append(createText('h4', '', '최근 판단'));
-    decisions.append(renderExperimentList(arm.recent_decisions, '아직 판단이 없습니다.', (decision) => {
+    decisions.append(createText('h4', '', '최근 판단 · 최신순'));
+    decisions.append(renderExperimentList(newestFirst(arm.recent_decisions, 'observed_at', 'feed_sequence'), '아직 판단이 없습니다.', (decision) => {
       const row = document.createElement('li');
       row.append(createText('time', '', formatKoreanTime(decision.observed_at)),
         createText('span', '', `${decision.symbol} · ${decision.direction} · score ${paperValue(decision.score)}${decision.regime ? ` · ${decision.regime}` : ''}`),
@@ -762,8 +778,8 @@
     }));
     const logs = document.createElement('section');
     logs.className = 'abc-arm-section';
-    logs.append(createText('h4', '', '최근 로그'));
-    logs.append(renderExperimentList(arm.recent_logs, '아직 로그가 없습니다.', (log) => {
+    logs.append(createText('h4', '', '최근 로그 · 최신순'));
+    logs.append(renderExperimentList(newestFirst(arm.recent_logs, 'at', 'sequence'), '아직 로그가 없습니다.', (log) => {
       const row = document.createElement('li');
       row.append(createText('time', '', formatKoreanTime(log.at)), createText('span', '', log.message),
         createText('small', '', `#${log.sequence} · ${log.type}`));

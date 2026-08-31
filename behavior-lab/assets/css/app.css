@@ -1499,12 +1499,12 @@ html {
   text-align: right;
 }
 .abc-arm-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 .abc-arm-card {
-  padding: clamp(20px, 2.5vw, 28px);
-  gap: var(--space-5);
+  padding: clamp(18px, 2vw, 24px);
+  gap: var(--space-4);
 }
 .abc-arm-heading {
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1512,7 +1512,7 @@ html {
 }
 .abc-arm-heading h3 {
   margin: 0;
-  font-size: var(--fs-title-2);
+  font-size: var(--fs-title-3);
   line-height: var(--lh-title);
 }
 .abc-strategy-description {
@@ -1562,13 +1562,13 @@ html {
   color: var(--text);
 }
 .abc-equity-chart svg {
-  min-height: 190px;
+  min-height: 150px;
   border: 0;
   border-radius: var(--radius-m);
   background: var(--surface-2);
 }
 .abc-arm-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border-block: 1px solid var(--line-faint);
   border-radius: 0;
   background: transparent;
@@ -1579,6 +1579,13 @@ html {
 }
 .abc-arm-metrics > div + div {
   border-left: 1px solid var(--line-faint);
+}
+.abc-arm-metrics > div:nth-child(3) {
+  border-left: 0;
+  border-top: 1px solid var(--line-faint);
+}
+.abc-arm-metrics > div:nth-child(4) {
+  border-top: 1px solid var(--line-faint);
 }
 .abc-arm-metrics span {
   color: var(--text-2);
@@ -1633,7 +1640,12 @@ html {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 1040px) {
+@media (max-width: 1180px) {
+  .abc-arm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 820px) {
   .abc-arm-grid {
     grid-template-columns: 1fr;
   }

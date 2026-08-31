@@ -70,17 +70,28 @@ function multiExperiment(sequence = 10, status = 'active') {
       { sequence: 2, at: '2026-08-31T00:00:06.000Z', equity: 100.5 + index, net_pnl: .5 + index },
       { sequence, at: '2026-08-31T00:01:00.000Z', equity: 103 - index, net_pnl: 3 - index },
     ],
-    recent_trades: [{ id: `trade-${armId}`, symbol: 'BTCUSDT', direction: 'long',
+    recent_trades: [{ id: `trade-${armId}-old`, symbol: 'BTCUSDT', direction: 'long', sequence: 1,
       opened_at: '2026-08-31T00:00:10.000Z', closed_at: '2026-08-31T00:00:40.000Z',
       entry_price: 100, exit_price: 101, quantity: 1, notional: 100, net_pnl: 1,
-      return_pct: 1, fees: .1, slippage_cost: .1, reason: 'target' }],
+      return_pct: 1, fees: .1, slippage_cost: .1, reason: 'old-target' },
+    { id: `trade-${armId}-new`, symbol: 'ETHUSDT', direction: 'short', sequence: 2,
+      opened_at: '2026-08-31T00:01:10.000Z', closed_at: '2026-08-31T00:01:40.000Z',
+      entry_price: 100, exit_price: 99, quantity: 1, notional: 100, net_pnl: 1,
+      return_pct: 1, fees: .1, slippage_cost: .1, reason: 'new-target' }],
     recent_decisions: [{ symbol: 'BTCUSDT', signal_bar_at: '2026-08-31T00:00:00.000Z',
       observed_at: '2026-08-31T00:01:00.000Z', regime: 'range',
       direction: index === 2 ? 'stand-aside' : 'long', score: .5, confidence: 72, spread_bps: 1,
       feature_agreement: 3, target_distance_bps: 80, net_reward_risk: 1.6,
-      gate_reasons: index === 2 ? ['regime-mismatch'] : [], feed_sequence: sequence, feed_hash: HASH_A }],
+      gate_reasons: index === 2 ? ['regime-mismatch'] : [], feed_sequence: 1, feed_hash: HASH_A },
+    { symbol: 'ETHUSDT', signal_bar_at: '2026-08-31T00:01:00.000Z',
+      observed_at: '2026-08-31T00:02:00.000Z', regime: 'trend',
+      direction: 'short', score: .7, confidence: 81, spread_bps: 1,
+      feature_agreement: 4, target_distance_bps: 90, net_reward_risk: 1.8,
+      gate_reasons: [], feed_sequence: 2, feed_hash: HASH_B }],
     recent_logs: [{ sequence: 1, at: '2026-08-31T00:00:00.000Z', type: 'arm-started',
-      message: index === 0 ? '<img id="unsafe-abc" src=x onerror=alert(1)>' : 'Paper arm started.' }],
+      message: index === 0 ? '<img id="unsafe-abc" src=x onerror=alert(1)>' : 'Paper arm started.' },
+    { sequence: 2, at: '2026-08-31T00:02:00.000Z', type: 'cycle-complete',
+      message: 'Newest paper cycle.' }],
     last_cycle_at: '2026-08-31T00:01:00.000Z',
   }));
   return { schema: 'multi-paper-experiment-v2', experiment_id: 'multi-paper-20260831-v2', simulation: true,
@@ -174,7 +185,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v9',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v10',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -248,30 +259,34 @@ try {
     assert.equal(await page.locator('#experimentLeaderboard .paper-ranking-item').count(), 6);
     assert.equal(await page.locator('.abc-equity-chart svg').count(), 6);
     assert.equal(await page.locator('.abc-arm-details').count(), 6);
-    assert.equal(await page.getByText('전략 상세와 로그 보기').count(), 6);
+    assert.equal(await page.getByText('전략 상세와 최신 기록 보기').count(), 6);
     assert.match(await page.locator('#experimentLeaderName').textContent(), /A · 추세 지속/u);
     assert.match(await page.locator('#experimentAverageReturn').textContent(), /\+0\.50%/u);
     assert.match(await page.locator('#experimentOpenPositions').textContent(), /1 \/ 6/u);
     assert.match(await page.locator('#experimentTotalTrades').textContent(), /6회/u);
     assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
     assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 6);
     assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단 · 최신순' }).count(), 6);
+    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그 · 최신순' }).count(), 6);
     assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
     assert.equal(await page.locator('#stopPaper').isVisible(), true);
     await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
-    await assertGeometry(page, 2);
+    await assertGeometry(page, 3);
     assert.equal(await page.locator('.abc-arm-details[open]').count(), 0);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
       await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-desktop.png'), fullPage: true });
     }
     await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = true; });
+    const firstArmLists = page.locator('.abc-arm-card').first().locator('.abc-list');
+    assert.match(await firstArmLists.nth(0).locator('li').first().textContent(), /ETHUSDT.*new-target/u);
+    assert.match(await firstArmLists.nth(1).locator('li').first().textContent(), /ETHUSDT.*score 0\.7/u);
+    assert.match(await firstArmLists.nth(2).locator('li').first().textContent(), /Newest paper cycle.*#2/u);
 
     await advance(page, 5_000);
     await page.waitForFunction(() => window.__paperFetchCount === 2 && window.__paperHangs.length === 1);
