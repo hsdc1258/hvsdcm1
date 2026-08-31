@@ -2367,7 +2367,7 @@ html {
   margin-top: 14px;
   border-top: 1px solid var(--line-faint);
 }
-.paper-method summary, .abc-arm-details summary {
+.paper-method summary, .abc-arm-details summary, .live-model-details summary {
   min-height: 48px;
   display: flex;
   align-items: center;
@@ -2378,15 +2378,15 @@ html {
   cursor: pointer;
   list-style: none;
 }
-.paper-method summary::-webkit-details-marker, .abc-arm-details summary::-webkit-details-marker {
+.paper-method summary::-webkit-details-marker, .abc-arm-details summary::-webkit-details-marker, .live-model-details summary::-webkit-details-marker {
   display: none;
 }
-.paper-method summary::after, .abc-arm-details summary::after {
+.paper-method summary::after, .abc-arm-details summary::after, .live-model-details summary::after {
   content: "+";
   color: var(--text-3);
   font-size: 18px;
 }
-.paper-method[open] summary::after, .abc-arm-details[open] summary::after {
+.paper-method[open] summary::after, .abc-arm-details[open] summary::after, .live-model-details[open] summary::after {
   content: "−";
 }
 .adaptive-summary-grid {
@@ -2661,6 +2661,165 @@ html {
 .abc-chain {
   margin: 16px 0 0;
 }
+/* Live trading */
+.live-risk-banner {
+  min-height: 76px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid rgba(240, 68, 82, .28);
+  border-radius: var(--radius-m);
+  background: linear-gradient(120deg, rgba(240, 68, 82, .12), rgba(255, 184, 77, .06));
+}
+.live-risk-banner b {
+  color: #ff9aa3;
+}
+.live-risk-banner p {
+  margin: 3px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.live-risk-banner > span {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(240, 68, 82, .13);
+  color: #ff9aa3;
+  font-size: 12px;
+  font-weight: 800;
+}
+.live-trading-report {
+  display: grid;
+  gap: 24px;
+}
+.live-trading-report[data-freshness="stale"] {
+  opacity: .76;
+}
+.live-allocation {
+  display: grid;
+  grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr);
+  align-items: center;
+  gap: 24px;
+}
+.live-allocation-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.live-allocation-metrics > div {
+  min-height: 78px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.live-allocation-metrics span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.live-allocation-metrics b {
+  font-size: 15px;
+}
+.live-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.live-model-card {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+.live-model-card.is-beast {
+  border-color: rgba(240, 68, 82, .26);
+}
+.live-model-card.is-ddokdogi {
+  border-color: rgba(49, 130, 246, .28);
+}
+.live-model-head {
+  padding: 22px 22px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.live-model-head h2 {
+  margin: 5px 0 0;
+  font-size: 24px;
+}
+.live-model-state {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 800;
+}
+.live-model-state.is-open, .live-model-state.is-watching {
+  background: rgba(32, 201, 151, .12);
+  color: #7ce8c4;
+}
+.live-model-state.is-blocked, .live-model-state.is-error {
+  background: rgba(240, 68, 82, .11);
+  color: #ff9aa3;
+}
+.live-model-allocation {
+  margin: 20px 22px 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.live-model-allocation > div {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: grid;
+  gap: 5px;
+}
+.live-model-message {
+  margin: 16px 22px 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.live-position-card {
+  margin: 18px 22px;
+  padding: 16px;
+  border: 1px solid var(--line-faint);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.live-position-card h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.live-model-details {
+  border-top: 1px solid var(--line-faint);
+}
+.live-model-details > summary {
+  padding: 0 22px;
+}
+.live-model-details[open] > summary {
+  border-bottom: 1px solid var(--line-faint);
+}
+.live-warnings {
+  padding: 18px 20px;
+  border-radius: var(--radius-m);
+  background: var(--surface);
+}
+.live-warnings p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.live-warnings p + p {
+  margin-top: 5px;
+}
 /* Footer and interaction */
 .lab-footer {
   min-height: 100px;
@@ -2723,6 +2882,9 @@ html {
   .ticker-grid, .market-grid, .signal-grid, .risk-grid, .abc-overview {
     grid-template-columns: 1fr;
   }
+  .live-allocation, .live-model-grid {
+    grid-template-columns: 1fr;
+  }
   .overview-ink {
     border-right: 0;
     border-bottom: 1px solid var(--line-faint);
@@ -2750,7 +2912,7 @@ html {
   .lab-tabs {
     width: 100%;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
   .lab-tab {
     width: 100%;
@@ -2792,6 +2954,13 @@ html {
   }
   .ticker-grid, .abc-arm-grid, .scenario-row, .metrics-grid, .risk-fields, .evidence-columns {
     grid-template-columns: 1fr;
+  }
+  .live-risk-banner, .live-model-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .live-allocation-metrics, .live-model-allocation {
+    grid-template-columns: 1fr 1fr;
   }
   .ticker-grid {
     gap: 8px;
@@ -2871,13 +3040,14 @@ html {
       <div class="lab-topbar-inner">
         <a class="lab-brand" href="/" aria-label="hvsdcm 홈으로">
           <span class="lab-mark" aria-hidden="true">B</span>
-          <span><b>Behavior Lab</b><small>PAPER TRADING DASHBOARD</small></span>
+          <span><b>Behavior Lab</b><small>TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
           <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>시장</button>
           <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg>모델</button>
+          <button id="liveTab" class="lab-tab" type="button" data-tab="live" aria-selected="false" aria-controls="liveTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>실투</button>
         </nav>
-        <span class="read-only-mark"><i></i> PAPER ONLY</span>
+        <span class="read-only-mark"><i></i> OWNER ONLY</span>
       </div>
     </header>
 
@@ -2928,6 +3098,24 @@ html {
           </article>
           <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">RANKING</p><h2 id="paperRankingTitle">모델 순위</h2></div><p>수익률, 자산, 낙폭을 비교해요.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
           <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">DETAILS</p><h2 id="paperStrategyTitle">모델별 현황</h2></div><p>카드를 열면 판단과 로그를 최신순으로 확인할 수 있어요.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
+        </section>
+      </section>
+
+      <section id="liveTabPanel" class="tab-panel live-tab-panel" role="tabpanel" aria-labelledby="liveTab" hidden>
+        <header class="paper-heading">
+          <div class="paper-title-block"><p class="section-index">LIVE TRADING</p><h1>실투 대시보드</h1><p class="section-copy">모델별 3 USDT 격리 증거금과 거래소 보호 주문 상태를 확인해요.</p></div>
+          <div class="paper-command"><span id="liveTradingStatus" class="live-status is-loading"><i></i><span>실거래 보고 확인 중</span></span><button id="refreshLiveTrading" class="text-button" type="button">새로고침</button></div>
+        </header>
+        <div class="live-risk-banner" role="note"><div><b>실제 자금이 움직입니다.</b><p>야수의 심장과 똑도기는 각각 최대 3 USDT의 격리 증거금만 사용합니다.</p></div><span>총 배정 6 USDT</span></div>
+        <div id="liveTradingError" class="error-panel" role="alert" hidden><p id="liveTradingErrorText"></p></div>
+        <div id="liveTradingEmpty" class="empty-state paper-empty" hidden><strong>LIVE REPORT NOT READY</strong><p>실거래 실행기의 첫 보고를 기다리고 있습니다.</p></div>
+        <section id="liveTradingReport" class="live-trading-report" aria-busy="true" hidden>
+          <article class="live-allocation panel">
+            <div><p class="section-index">CAPITAL BOUNDARY</p><h2>고정 배정</h2><p id="liveTradingSummary" class="section-copy">—</p></div>
+            <div class="live-allocation-metrics"><div><span>모델당</span><b>3 USDT</b></div><div><span>전체</span><b>6 USDT</b></div><div><span>방식</span><b>격리 증거금</b></div><div><span>상품</span><b>USDT 선물</b></div></div>
+          </article>
+          <div id="liveModelGrid" class="live-model-grid"></div>
+          <div id="liveWarnings" class="live-warnings"></div>
         </section>
       </section>
     </main>

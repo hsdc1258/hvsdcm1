@@ -109,13 +109,52 @@ function multiExperiment(sequence = 10, status = 'active') {
     arms, limitations: ['All figures are simulated.'] };
 }
 
+function liveTradingReport() {
+  const model = (id, name, style, symbols, leverage, open = false) => ({ id, name, style, symbols,
+    allocation_usdt: 3, leverage_cap: leverage, status: open ? 'open' : 'watching',
+    status_message: open ? `${symbols[0]} 실포지션을 추적 중입니다.` : '70% 진입 조건을 감시합니다.',
+    last_decision: { at: '2026-08-31T00:01:00.000Z', symbol: symbols[0], direction: open ? 'long' : 'stand-aside',
+      score: open ? .66 : .48, estimated_win_probability: open ? .74 : .68,
+      confidence_gate: id === 'ddokdogi' ? .7 : null, spread_bps: 1.1, net_reward_risk: 1.8,
+      reasons: open ? ['all-entry-gates-passed'] : ['calibrated-probability-below-70'] },
+    open_order: open ? { order_id: 'order-redacted-1', client_oid: 'hdl-beast-123456', symbol: symbols[0],
+      direction: 'long', quantity: .0007, requested_at: '2026-08-31T00:00:30.000Z', average_price: 100000,
+      status: 'filled', stop_price: 99500, target_price: 101500, leverage: 25, estimated_margin_usdt: 2.8 } : null,
+    trade_count: 0, win_count: 0, loss_count: 0, realized_pnl: 0,
+    recent_decisions: [
+      { at: '2026-08-31T00:01:00.000Z', symbol: symbols[0], direction: open ? 'long' : 'stand-aside',
+        score: .66, estimated_win_probability: open ? .74 : .68, confidence_gate: id === 'ddokdogi' ? .7 : null,
+        spread_bps: 1.1, net_reward_risk: 1.8, reasons: open ? ['all-entry-gates-passed'] : ['calibrated-probability-below-70'] },
+      { at: '2026-08-31T00:00:00.000Z', symbol: symbols[1], direction: 'stand-aside', score: .2,
+        estimated_win_probability: .55, confidence_gate: id === 'ddokdogi' ? .7 : null,
+        spread_bps: 1.2, net_reward_risk: 1.3, reasons: ['score-below-threshold'] }],
+    recent_logs: [{ sequence: 2, at: '2026-08-31T00:01:01.000Z', level: 'info', message: 'Newest live log.' },
+      { sequence: 1, at: '2026-08-31T00:00:01.000Z', level: 'info', message: 'Older live log.' }] });
+  return { schema: 'dual-live-v1', experiment_id: 'dual-live-20260901-v1', live_trading: true,
+    generated_at: '2026-08-31T00:01:01.000Z', sequence: 2, status: 'active',
+    status_message: '실포지션을 거래소 보호 주문과 함께 추적 중입니다.',
+    exchange: { name: 'Bitget', product: 'USDT-FUTURES', api: 'uta-v3', hold_mode: 'one_way_mode' },
+    allocation: { per_model_usdt: 3, total_usdt: 6, mode: 'isolated-margin-hard-cap' },
+    models: [model('beast', '야수의 심장', '수수료 반영 공격형 추세·돌파, 고레버리지', ['BTCUSDT', 'SOLUSDT'], 25, true),
+      model('ddokdogi', '똑도기', '다중요인 합의와 보수적 확률 보정, 70% 문턱', ['ETHUSDT', 'XRPUSDT'], 6)],
+    warnings: ['실거래이며 원금 손실과 강제청산이 발생할 수 있습니다.'], fingerprint: HASH_A };
+}
+
 function browserHarness(responses) {
   localStorage.setItem('hvsdcm.token', 'owner-session');
-  window.__paperResponses = responses;
+  window.__paperResponses = responses.paper;
+  window.__liveReport = responses.live;
   window.__paperFetchCount = 0;
+  window.__liveFetchCount = 0;
   window.__paperStopRequests = [];
   window.__paperHangs = [];
   window.fetch = async (url, options = {}) => {
+    if (String(url).includes('/api/behavior-lab/live')) {
+      window.__liveFetchCount += 1;
+      return new Response(JSON.stringify({ report: window.__liveReport, received_at: '2026-08-31T00:01:02.000Z' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    }
     if (!String(url).includes('/api/behavior-lab/paper')) {
       return new Response(JSON.stringify({ error: 'dashboard omitted in paper UI fixture' }), {
         status: 500, headers: { 'content-type': 'application/json' },
@@ -186,12 +225,13 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v12',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v13',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'poll') {
-        body = Buffer.from(body.toString('utf8').replace('if (state.ownerVerified) void loadPaper();', 'if (state.ownerVerified) void 0;'));
+        body = Buffer.from(body.toString('utf8').replace('if (state.ownerVerified) { void loadPaper(); void loadLiveTrading(); }',
+          'if (state.ownerVerified) void 0;'));
       }
       const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
         '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }[extname(file)] || 'application/octet-stream';
@@ -210,7 +250,7 @@ async function openFixture(browser, url, responses, viewport = { width: 1280, he
   const page = await browser.newPage({ viewport });
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.addInitScript(browserHarness, responses);
+  await page.addInitScript(browserHarness, { paper: responses, live: liveTradingReport() });
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__paperFetchCount >= 1 && !document.getElementById('labShell').hidden);
   return { page, pageErrors };
@@ -269,14 +309,25 @@ try {
     assert.match(await page.locator('#experimentOpenPositions').textContent(), /1 \/ 6/u);
     assert.match(await page.locator('#experimentTotalTrades').textContent(), /6회/u);
     assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 판단 · 최신순' }).count(), 6);
-    assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그 · 최신순' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 판단 · 최신순' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 로그 · 최신순' }).count(), 6);
     assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
     assert.equal(await page.locator('#stopPaper').isVisible(), true);
+    await page.locator('#liveTab').click();
+    await page.waitForSelector('#liveTradingReport:not([hidden])');
+    assert.match(await page.locator('#liveTradingStatus').textContent(), /LIVE/u);
+    assert.equal(await page.locator('.live-model-card').count(), 2);
+    assert.match(await page.locator('.live-model-card').nth(0).textContent(), /야수의 심장.*3 USDT.*25×/u);
+    assert.match(await page.locator('.live-model-card').nth(1).textContent(), /똑도기.*3 USDT.*6×/u);
+    await page.locator('.live-model-details').nth(1).evaluate((details) => { details.open = true; });
+    const liveLists = page.locator('.live-model-card').nth(1).locator('.abc-list');
+    assert.match(await liveLists.nth(0).locator('li').first().textContent(), /ETHUSDT.*68\.0%/u);
+    assert.match(await liveLists.nth(1).locator('li').first().textContent(), /Newest live log.*#2/u);
+    await page.locator('#paperTab').click();
     await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));

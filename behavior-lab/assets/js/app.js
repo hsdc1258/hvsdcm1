@@ -12,7 +12,8 @@
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
     ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null,
-    stopSubmitting: false, stopRequested: false, activeTab: 'market',
+    stopSubmitting: false, stopRequested: false, activeTab: 'market', liveReport: null,
+    liveLoading: false, liveRequestId: 0, liveController: null,
   };
 
   const elements = {
@@ -51,6 +52,16 @@
     inSampleMetrics: document.getElementById('inSampleMetrics'),
     interestValue: document.getElementById('interestValue'),
     liveStatus: document.getElementById('liveStatus'),
+    liveTab: document.getElementById('liveTab'),
+    liveTabPanel: document.getElementById('liveTabPanel'),
+    liveTradingStatus: document.getElementById('liveTradingStatus'),
+    liveTradingError: document.getElementById('liveTradingError'),
+    liveTradingErrorText: document.getElementById('liveTradingErrorText'),
+    liveTradingEmpty: document.getElementById('liveTradingEmpty'),
+    liveTradingReport: document.getElementById('liveTradingReport'),
+    liveTradingSummary: document.getElementById('liveTradingSummary'),
+    liveModelGrid: document.getElementById('liveModelGrid'),
+    liveWarnings: document.getElementById('liveWarnings'),
     longRatioBar: document.getElementById('longRatioBar'),
     longShortValue: document.getElementById('longShortValue'),
     labShell: document.getElementById('labShell'),
@@ -78,6 +89,7 @@
     stopPaper: document.getElementById('stopPaper'),
     priceLine: document.getElementById('priceLine'),
     refreshPaper: document.getElementById('refreshPaper'),
+    refreshLiveTrading: document.getElementById('refreshLiveTrading'),
     retryDashboard: document.getElementById('retryDashboard'),
     retryOwnerGate: document.getElementById('retryOwnerGate'),
     riskLeverage: document.getElementById('riskLeverage'),
@@ -470,6 +482,11 @@
     state.experiment = null;
     state.stopSubmitting = false;
     state.stopRequested = false;
+    state.liveRequestId += 1;
+    state.liveController?.abort();
+    state.liveController = null;
+    state.liveLoading = false;
+    state.liveReport = null;
     elements.paperExperiment.hidden = true;
     elements.paperExperiment.dataset.freshness = 'stale';
     elements.paperExperiment.setAttribute('aria-busy', 'false');
@@ -479,6 +496,9 @@
     elements.stopPaper.hidden = true;
     elements.stopPaper.disabled = false;
     elements.stopPaper.textContent = '6개 실험 중단';
+    elements.liveTradingReport.hidden = true;
+    elements.liveTradingEmpty.hidden = true;
+    elements.liveTradingError.hidden = true;
     elements.labShell.hidden = true;
     elements.ownerGate.hidden = false;
     elements.retryOwnerGate.hidden = status === 401 || status === 404;
@@ -505,17 +525,22 @@
   }
 
   function switchTab(tab) {
-    const next = tab === 'paper' ? 'paper' : 'market';
+    const next = ['paper', 'live'].includes(tab) ? tab : 'market';
     state.activeTab = next;
     const paperActive = next === 'paper';
-    elements.marketTab.classList.toggle('is-active', !paperActive);
-    elements.marketTab.setAttribute('aria-selected', String(!paperActive));
+    const liveActive = next === 'live';
+    const marketActive = next === 'market';
+    elements.marketTab.classList.toggle('is-active', marketActive);
+    elements.marketTab.setAttribute('aria-selected', String(marketActive));
     elements.paperTab.classList.toggle('is-active', paperActive);
     elements.paperTab.setAttribute('aria-selected', String(paperActive));
-    elements.marketTabPanel.hidden = paperActive;
+    elements.liveTab.classList.toggle('is-active', liveActive);
+    elements.liveTab.setAttribute('aria-selected', String(liveActive));
+    elements.marketTabPanel.hidden = !marketActive;
     elements.paperTabPanel.hidden = !paperActive;
-    document.body.classList.toggle('is-paper-view', paperActive);
-    history.replaceState(null, '', paperActive ? '#paper' : '#market');
+    elements.liveTabPanel.hidden = !liveActive;
+    document.body.classList.toggle('is-paper-view', !marketActive);
+    history.replaceState(null, '', `#${next}`);
   }
 
   function paperStatus(status) {
@@ -989,6 +1014,143 @@
     }
   }
 
+  function validLiveTradingReport(report) {
+    const expected = [
+      ['beast', '야수의 심장', ['BTCUSDT', 'SOLUSDT'], 25],
+      ['ddokdogi', '똑도기', ['ETHUSDT', 'XRPUSDT'], 6],
+    ];
+    return Boolean(report && report.schema === 'dual-live-v1'
+      && report.experiment_id === 'dual-live-20260901-v1' && report.live_trading === true
+      && Number.isFinite(Date.parse(report.generated_at)) && Number.isInteger(report.sequence) && report.sequence >= 0
+      && ['blocked', 'armed', 'active', 'degraded', 'error'].includes(report.status)
+      && report.exchange?.name === 'Bitget' && report.exchange.product === 'USDT-FUTURES'
+      && report.exchange.api === 'uta-v3'
+      && JSON.stringify(report.allocation) === JSON.stringify({ per_model_usdt: 3, total_usdt: 6,
+        mode: 'isolated-margin-hard-cap' })
+      && Array.isArray(report.models) && report.models.length === 2
+      && report.models.every((model, index) => model.id === expected[index][0] && model.name === expected[index][1]
+        && JSON.stringify(model.symbols) === JSON.stringify(expected[index][2]) && model.allocation_usdt === 3
+        && model.leverage_cap === expected[index][3]
+        && ['blocked', 'watching', 'open', 'degraded', 'error'].includes(model.status)
+        && Number.isInteger(model.trade_count) && Number.isInteger(model.win_count) && Number.isInteger(model.loss_count)
+        && finite(model.realized_pnl) && Array.isArray(model.recent_decisions) && model.recent_decisions.length <= 30
+        && Array.isArray(model.recent_logs) && model.recent_logs.length <= 40
+        && (!model.open_order || (model.symbols.includes(model.open_order.symbol)
+          && model.open_order.estimated_margin_usdt > 0 && model.open_order.estimated_margin_usdt <= 3.00000001)))
+      && Array.isArray(report.warnings) && /^[a-f0-9]{64}$/u.test(report.fingerprint));
+  }
+
+  function liveTradingStatus(status, stale = false) {
+    const labels = { blocked: 'BLOCKED · API 키 필요', armed: 'ARMED · 조건 감시 중', active: 'LIVE · 실포지션 추적',
+      degraded: 'DEGRADED · 재시도 중', error: 'ERROR · 실행 중단' };
+    const effective = stale ? 'stale' : status;
+    elements.liveTradingStatus.className = `live-status ${['armed', 'active'].includes(effective) ? 'is-live'
+      : effective === 'blocked' ? 'is-loading' : 'is-error'}`;
+    elements.liveTradingStatus.querySelector('span').textContent = stale ? 'STALE · 이전 실투 보고' : labels[status] || '상태 미확인';
+  }
+
+  function liveModelCard(model) {
+    const card = document.createElement('article');
+    card.className = `panel live-model-card is-${model.id}`;
+    const header = document.createElement('div'); header.className = 'live-model-head';
+    const name = document.createElement('div');
+    name.append(createText('p', 'section-index', model.id === 'beast' ? 'MODEL 01 · AGGRESSIVE' : 'MODEL 02 · CONSERVATIVE'),
+      createText('h2', '', model.name), createText('p', 'section-copy', model.style));
+    header.append(name, createText('span', `live-model-state is-${model.status}`,
+      model.status === 'open' ? '실포지션 보유' : model.status === 'watching' ? '조건 감시' : model.status === 'blocked' ? '시작 차단' : '상태 점검'));
+    const allocation = document.createElement('div'); allocation.className = 'live-model-allocation';
+    allocation.append(detailCell('격리 배정', `${model.allocation_usdt} USDT`), detailCell('레버리지 상한', `${model.leverage_cap}×`),
+      detailCell('누적 거래', `${model.trade_count}회`), detailCell('실현 손익', formatUsdt(model.realized_pnl, true)));
+    const status = createText('p', 'live-model-message', model.status_message);
+    const position = document.createElement('section'); position.className = 'live-position-card';
+    position.append(createText('h3', '', '현재 실포지션'));
+    const positionGrid = document.createElement('div'); positionGrid.className = 'paper-kv';
+    if (!model.open_order) positionGrid.append(detailCell('상태', '열린 실포지션 없음'), detailCell('관찰 심볼', model.symbols.join(' · ')));
+    else positionGrid.append(detailCell('방향', `${model.open_order.symbol} · ${model.open_order.direction.toUpperCase()}`),
+      detailCell('수량', model.open_order.quantity), detailCell('체결가', model.open_order.average_price || '확인 중'),
+      detailCell('격리 증거금', `${model.open_order.estimated_margin_usdt.toFixed(4)} USDT`),
+      detailCell('손절', model.open_order.stop_price), detailCell('익절', model.open_order.target_price));
+    position.append(positionGrid);
+    const details = document.createElement('details'); details.className = 'live-model-details';
+    details.append(createText('summary', '', '최신 판단과 실행 로그 보기'));
+    const body = document.createElement('div'); body.className = 'abc-arm-details-body';
+    const decisions = document.createElement('section'); decisions.className = 'abc-arm-section';
+    decisions.append(createText('h4', '', '최근 판단 · 최신순'));
+    decisions.append(renderExperimentList(newestFirst(model.recent_decisions, 'at', 'sequence'), '아직 판단이 없습니다.', (decision) => {
+      const row = document.createElement('li');
+      const probability = decision.estimated_win_probability === null ? '추정 불가'
+        : `추정 ${(decision.estimated_win_probability * 100).toFixed(1)}%`;
+      row.append(createText('time', '', formatKoreanTime(decision.at)),
+        createText('span', '', `${decision.symbol} · ${decision.direction} · ${probability}`),
+        createText('small', '', `score ${decision.score} · spread ${decision.spread_bps} bps · net R:R ${decision.net_reward_risk} · ${decision.reasons.join(', ')}`));
+      return row;
+    }));
+    const logs = document.createElement('section'); logs.className = 'abc-arm-section';
+    logs.append(createText('h4', '', '실행 로그 · 최신순'));
+    logs.append(renderExperimentList(newestFirst(model.recent_logs, 'at', 'sequence'), '아직 로그가 없습니다.', (log) => {
+      const row = document.createElement('li');
+      row.append(createText('time', '', formatKoreanTime(log.at)), createText('span', '', log.message),
+        createText('small', '', `#${log.sequence} · ${log.level}`));
+      return row;
+    }));
+    body.append(decisions, logs); details.append(body);
+    card.append(header, allocation, status, position, details); return card;
+  }
+
+  function renderLiveTrading(report, receivedAt) {
+    state.liveReport = report;
+    const age = Date.now() - Math.max(Date.parse(report.generated_at), Date.parse(receivedAt));
+    const stale = Number.isFinite(age) && age > PAPER_STALE_MS;
+    liveTradingStatus(report.status, stale);
+    elements.liveTradingSummary.textContent = report.status_message;
+    patchRenderedChildren(elements.liveModelGrid, report.models.map(liveModelCard));
+    elements.liveWarnings.replaceChildren(...report.warnings.map((warning) => createText('p', '', warning)));
+    elements.liveTradingReport.dataset.freshness = stale ? 'stale' : 'fresh';
+    elements.liveTradingReport.hidden = false; elements.liveTradingEmpty.hidden = true;
+    elements.liveTradingReport.setAttribute('aria-busy', 'false');
+    if (stale) {
+      elements.liveTradingErrorText.textContent = '실투 보고가 2분 넘게 갱신되지 않았습니다. 이전 보고만 표시합니다.';
+      elements.liveTradingError.hidden = false;
+    } else elements.liveTradingError.hidden = true;
+  }
+
+  async function loadLiveTrading({ force = false } = {}) {
+    if (state.liveLoading && !force) return;
+    if (force) state.liveController?.abort();
+    const requestId = ++state.liveRequestId; const controller = new AbortController();
+    state.liveController = controller; state.liveLoading = true;
+    elements.liveTradingReport.setAttribute('aria-busy', 'true'); elements.refreshLiveTrading.disabled = true;
+    const timeoutId = window.setTimeout(() => controller.abort(), PAPER_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${API_URL}/api/behavior-lab/live`, { method: 'GET', credentials: 'omit', cache: 'no-store',
+        headers: { accept: 'application/json', authorization: `Bearer ${ownerToken()}` }, signal: controller.signal });
+      const payload = await response.json().catch(() => ({})); if (requestId !== state.liveRequestId) return;
+      if (response.status === 401 || response.status === 404) throw new OwnerAccessError(response.status);
+      if (!response.ok) throw new Error(payload.error || '실투 보고를 불러오지 못했습니다.');
+      if (!payload.report) {
+        state.liveReport = null; liveTradingStatus('blocked'); elements.liveTradingReport.hidden = true;
+        elements.liveTradingEmpty.hidden = false; elements.liveTradingError.hidden = true; return;
+      }
+      if (!validLiveTradingReport(payload.report)) throw new Error('검증되지 않은 실투 보고는 표시하지 않았습니다.');
+      renderLiveTrading(payload.report, payload.received_at);
+    } catch (error) {
+      if (requestId !== state.liveRequestId) return;
+      if (error instanceof OwnerAccessError) { showOwnerGate(error.status); return; }
+      const retained = Boolean(state.liveReport && !elements.liveTradingReport.hidden);
+      elements.liveTradingErrorText.textContent = retained
+        ? `${error?.message || '실투 보고를 갱신하지 못했습니다.'} 이전 보고를 표시합니다.`
+        : error?.message || '실투 보고를 불러오지 못했습니다.';
+      elements.liveTradingError.hidden = false;
+      if (retained) liveTradingStatus(state.liveReport.status, true);
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (requestId === state.liveRequestId) {
+        state.liveLoading = false; state.liveController = null; elements.refreshLiveTrading.disabled = false;
+        elements.liveTradingReport.setAttribute('aria-busy', 'false');
+      }
+    }
+  }
+
   async function requestPaperStop() {
     const experiment = state.experiment;
     if (state.stopSubmitting || state.stopRequested || experiment?.schema !== 'multi-paper-experiment-v3'
@@ -1032,7 +1194,8 @@
     elements.ownerGateMessage.textContent = '소유자 전용 보고 API로 세션을 확인하고 있습니다.';
     try {
       await loadPaper({ verifyOwner: true, force: true });
-      switchTab(location.hash === '#paper' ? 'paper' : 'market');
+      void loadLiveTrading({ force: true });
+      switchTab(location.hash === '#paper' ? 'paper' : location.hash === '#live' ? 'live' : 'market');
       void loadDashboard();
     } catch (error) {
       showOwnerGate(error instanceof OwnerAccessError ? error.status : 0);
@@ -1063,7 +1226,9 @@
   elements.copyDraft.addEventListener('click', () => void copyDraft());
   elements.marketTab.addEventListener('click', () => switchTab('market'));
   elements.paperTab.addEventListener('click', () => switchTab('paper'));
+  elements.liveTab.addEventListener('click', () => switchTab('live'));
   elements.refreshPaper.addEventListener('click', () => void loadPaper({ force: true }));
+  elements.refreshLiveTrading.addEventListener('click', () => void loadLiveTrading({ force: true }));
   elements.stopPaper.addEventListener('click', () => void requestPaperStop());
   elements.retryOwnerGate.addEventListener('click', () => void bootstrap());
   riskInputs.forEach((input) => input.addEventListener('input', () => {
@@ -1073,7 +1238,7 @@
 
   window.setInterval(refreshLiveClock, 1_000);
   window.setInterval(() => {
-    if (state.ownerVerified) void loadPaper();
+    if (state.ownerVerified) { void loadPaper(); void loadLiveTrading(); }
   }, PAPER_REFRESH_MS);
   void bootstrap();
 })();

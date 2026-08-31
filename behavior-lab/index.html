@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v2">
   <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260901-v11">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260901-v12" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260901-v13" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
@@ -32,13 +32,14 @@
       <div class="lab-topbar-inner">
         <a class="lab-brand" href="/" aria-label="hvsdcm 홈으로">
           <span class="lab-mark" aria-hidden="true">B</span>
-          <span><b>Behavior Lab</b><small>PAPER TRADING DASHBOARD</small></span>
+          <span><b>Behavior Lab</b><small>TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
           <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>시장</button>
           <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg>모델</button>
+          <button id="liveTab" class="lab-tab" type="button" data-tab="live" aria-selected="false" aria-controls="liveTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>실투</button>
         </nav>
-        <span class="read-only-mark"><i></i> PAPER ONLY</span>
+        <span class="read-only-mark"><i></i> OWNER ONLY</span>
       </div>
     </header>
 
@@ -89,6 +90,24 @@
           </article>
           <section class="paper-ranking-section" aria-labelledby="paperRankingTitle"><div class="paper-subheading"><div><p class="section-index">RANKING</p><h2 id="paperRankingTitle">모델 순위</h2></div><p>수익률, 자산, 낙폭을 비교해요.</p></div><ol id="experimentLeaderboard" class="paper-ranking" aria-label="모의실험 전략 순위"></ol></section>
           <section class="paper-strategy-section" aria-labelledby="paperStrategyTitle"><div class="paper-strategy-heading"><div><p class="section-index">DETAILS</p><h2 id="paperStrategyTitle">모델별 현황</h2></div><p>카드를 열면 판단과 로그를 최신순으로 확인할 수 있어요.</p></div><div id="experimentArms" class="abc-arm-grid"></div></section>
+        </section>
+      </section>
+
+      <section id="liveTabPanel" class="tab-panel live-tab-panel" role="tabpanel" aria-labelledby="liveTab" hidden>
+        <header class="paper-heading">
+          <div class="paper-title-block"><p class="section-index">LIVE TRADING</p><h1>실투 대시보드</h1><p class="section-copy">모델별 3 USDT 격리 증거금과 거래소 보호 주문 상태를 확인해요.</p></div>
+          <div class="paper-command"><span id="liveTradingStatus" class="live-status is-loading"><i></i><span>실거래 보고 확인 중</span></span><button id="refreshLiveTrading" class="text-button" type="button">새로고침</button></div>
+        </header>
+        <div class="live-risk-banner" role="note"><div><b>실제 자금이 움직입니다.</b><p>야수의 심장과 똑도기는 각각 최대 3 USDT의 격리 증거금만 사용합니다.</p></div><span>총 배정 6 USDT</span></div>
+        <div id="liveTradingError" class="error-panel" role="alert" hidden><p id="liveTradingErrorText"></p></div>
+        <div id="liveTradingEmpty" class="empty-state paper-empty" hidden><strong>LIVE REPORT NOT READY</strong><p>실거래 실행기의 첫 보고를 기다리고 있습니다.</p></div>
+        <section id="liveTradingReport" class="live-trading-report" aria-busy="true" hidden>
+          <article class="live-allocation panel">
+            <div><p class="section-index">CAPITAL BOUNDARY</p><h2>고정 배정</h2><p id="liveTradingSummary" class="section-copy">—</p></div>
+            <div class="live-allocation-metrics"><div><span>모델당</span><b>3 USDT</b></div><div><span>전체</span><b>6 USDT</b></div><div><span>방식</span><b>격리 증거금</b></div><div><span>상품</span><b>USDT 선물</b></div></div>
+          </article>
+          <div id="liveModelGrid" class="live-model-grid"></div>
+          <div id="liveWarnings" class="live-warnings"></div>
         </section>
       </section>
     </main>

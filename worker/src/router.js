@@ -42,6 +42,9 @@ export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIO
 export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260901-v3';
 export const BEHAVIOR_MULTI_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 export const BEHAVIOR_MULTI_CONTROL_SOURCE = `behavior-paper-control:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
+export const BEHAVIOR_LIVE_EXPERIMENT_ID = 'dual-live-20260901-v1';
+export const BEHAVIOR_LIVE_SNAPSHOT_SOURCE = `behavior-live:${BEHAVIOR_LIVE_EXPERIMENT_ID}`;
+const MAX_BEHAVIOR_LIVE_BYTES = 48_000;
 const ABC_ARM_IDS = ['A', 'B', 'C'];
 const ABC_STRATEGY_IDS = {
   A: 'abc-trend-momentum-v1', B: 'abc-breakout-volatility-v1', C: 'abc-mean-reversion-crowd-fade-v1',
@@ -2391,6 +2394,136 @@ async function getBehaviorPaper(request, env) {
     { 'cache-control': 'private, no-store' });
 }
 
+function normalizeLiveDecision(value) {
+  if (!exactPaperKeys(value, ['at', 'symbol', 'direction', 'score', 'estimated_win_probability',
+    'confidence_gate', 'spread_bps', 'net_reward_risk', 'reasons'])) return null;
+  const at = normalizePaperTimestamp(value.at);
+  if (!at || !['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].includes(value.symbol)
+    || !['long', 'short', 'stand-aside'].includes(value.direction)
+    || ![value.score, value.spread_bps, value.net_reward_risk].every(Number.isFinite)
+    || (value.estimated_win_probability !== null && (!Number.isFinite(value.estimated_win_probability)
+      || value.estimated_win_probability < 0 || value.estimated_win_probability > 1))
+    || (value.confidence_gate !== null && value.confidence_gate !== .7)
+    || !Array.isArray(value.reasons) || value.reasons.length < 1 || value.reasons.length > 16
+    || value.reasons.some((reason) => !boundedPaperText(reason, 80, true))) return null;
+  return { ...value, at, reasons: [...value.reasons] };
+}
+
+function normalizeLiveOrder(value, modelId, symbols) {
+  if (value === null) return null;
+  const keys = ['order_id', 'client_oid', 'symbol', 'direction', 'quantity', 'requested_at', 'average_price',
+    'status', 'stop_price', 'target_price', 'leverage', 'estimated_margin_usdt'];
+  if (!exactPaperKeys(value, keys) || !boundedPaperText(value.order_id, 80, true)
+    || !/^[.A-Z:/a-z0-9_-]{1,32}$/u.test(value.client_oid) || !symbols.includes(value.symbol)
+    || !['long', 'short'].includes(value.direction) || !normalizePaperTimestamp(value.requested_at)
+    || ![value.quantity, value.stop_price, value.target_price, value.leverage, value.estimated_margin_usdt]
+      .every((number) => Number.isFinite(number) && number > 0)
+    || value.estimated_margin_usdt > 3.00000001 || value.leverage > (modelId === 'beast' ? 25 : 6)
+    || (value.average_price !== null && (!Number.isFinite(value.average_price) || value.average_price <= 0))
+    || !boundedPaperText(value.status, 32, true)) return undefined;
+  return { ...value, requested_at: normalizePaperTimestamp(value.requested_at) };
+}
+
+function normalizeLiveModel(value, expected) {
+  const keys = ['id', 'name', 'style', 'symbols', 'allocation_usdt', 'leverage_cap', 'status', 'status_message',
+    'last_decision', 'open_order', 'trade_count', 'win_count', 'loss_count', 'realized_pnl',
+    'recent_decisions', 'recent_logs'];
+  if (!exactPaperKeys(value, keys) || value.id !== expected.id || value.name !== expected.name
+    || value.style !== expected.style || JSON.stringify(value.symbols) !== JSON.stringify(expected.symbols)
+    || value.allocation_usdt !== 3 || value.leverage_cap !== expected.leverage
+    || !['blocked', 'watching', 'open', 'degraded', 'error'].includes(value.status)
+    || !boundedPaperText(value.status_message, 240, true) || !Number.isSafeInteger(value.trade_count)
+    || !Number.isSafeInteger(value.win_count) || !Number.isSafeInteger(value.loss_count)
+    || value.trade_count < 0 || value.trade_count > 100_000 || value.win_count < 0 || value.loss_count < 0
+    || value.win_count + value.loss_count > value.trade_count || !Number.isFinite(value.realized_pnl)
+    || !Array.isArray(value.recent_decisions) || value.recent_decisions.length > 30
+    || !Array.isArray(value.recent_logs) || value.recent_logs.length > 40) return null;
+  const lastDecision = value.last_decision === null ? null : normalizeLiveDecision(value.last_decision);
+  const decisions = value.recent_decisions.map(normalizeLiveDecision);
+  const openOrder = normalizeLiveOrder(value.open_order, expected.id, expected.symbols);
+  const logs = value.recent_logs.map((log) => {
+    if (!exactPaperKeys(log, ['sequence', 'at', 'level', 'message']) || !Number.isSafeInteger(log.sequence)
+      || log.sequence < 1 || !normalizePaperTimestamp(log.at) || !['info', 'warn', 'error'].includes(log.level)
+      || !boundedPaperText(log.message, 240, true)) return null;
+    return { ...log, at: normalizePaperTimestamp(log.at) };
+  });
+  if ((value.last_decision !== null && !lastDecision) || decisions.some((item) => !item)
+    || openOrder === undefined || logs.some((item) => !item)) return null;
+  if (decisions.some((item, index) => index && Date.parse(item.at) > Date.parse(decisions[index - 1].at))
+    || logs.some((item, index) => index && item.sequence > logs[index - 1].sequence)) return null;
+  return { ...value, last_decision: lastDecision, open_order: openOrder, recent_decisions: decisions, recent_logs: logs };
+}
+
+export function normalizeBehaviorLiveReport(input) {
+  const keys = ['schema', 'experiment_id', 'live_trading', 'generated_at', 'sequence', 'status', 'status_message',
+    'exchange', 'allocation', 'models', 'warnings', 'fingerprint'];
+  if (!exactPaperKeys(input, keys) || input.schema !== 'dual-live-v1'
+    || input.experiment_id !== BEHAVIOR_LIVE_EXPERIMENT_ID || input.live_trading !== true
+    || !normalizePaperTimestamp(input.generated_at) || !Number.isSafeInteger(input.sequence)
+    || input.sequence < 0 || input.sequence > 1_000_000_000
+    || !['blocked', 'armed', 'active', 'degraded', 'error'].includes(input.status)
+    || !boundedPaperText(input.status_message, 240, true)
+    || !exactPaperKeys(input.exchange, ['name', 'product', 'api', 'hold_mode'])
+    || input.exchange.name !== 'Bitget' || input.exchange.product !== 'USDT-FUTURES'
+    || input.exchange.api !== 'uta-v3' || ![null, 'one_way_mode', 'hedge_mode'].includes(input.exchange.hold_mode)
+    || JSON.stringify(input.allocation) !== JSON.stringify({ per_model_usdt: 3, total_usdt: 6,
+      mode: 'isolated-margin-hard-cap' })
+    || !Array.isArray(input.models) || input.models.length !== 2 || !Array.isArray(input.warnings)
+    || input.warnings.length < 1 || input.warnings.length > 6
+    || input.warnings.some((warning) => !boundedPaperText(warning, 240, true))
+    || !/^[a-f0-9]{64}$/u.test(input.fingerprint)) return null;
+  const expected = [
+    { id: 'beast', name: '야수의 심장', style: '수수료 반영 공격형 추세·돌파, 고레버리지',
+      symbols: ['BTCUSDT', 'SOLUSDT'], leverage: 25 },
+    { id: 'ddokdogi', name: '똑도기', style: '다중요인 합의와 보수적 확률 보정, 70% 문턱',
+      symbols: ['ETHUSDT', 'XRPUSDT'], leverage: 6 },
+  ];
+  const models = input.models.map((model, index) => normalizeLiveModel(model, expected[index]));
+  if (models.some((model) => !model)) return null;
+  return { ...input, generated_at: normalizePaperTimestamp(input.generated_at), models };
+}
+
+function stableLiveJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableLiveJson).join(',')}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableLiveJson(value[key])}`).join(',')}}`;
+}
+
+async function reportBehaviorLive(request, env) {
+  if (!(await ingestTokenMatches(request, env.BEHAVIOR_PAPER_REPORT_TOKEN))) return json({ error: '인증이 필요합니다.' }, 401);
+  const body = await readBehaviorPaperJson(request);
+  if (body.error) return body.error;
+  if (!Number.isSafeInteger(body.size) || body.size < 1 || body.size > MAX_BEHAVIOR_LIVE_BYTES) {
+    return json({ error: '실투 보고가 너무 큽니다.' }, 413);
+  }
+  const report = normalizeBehaviorLiveReport(body.value);
+  if (!report) return json({ error: '잘못된 실투 보고입니다.' }, 400);
+  const { fingerprint, ...unsigned } = report;
+  if (await sha256(stableLiveJson(unsigned)) !== fingerprint) return json({ error: '실투 보고 지문이 일치하지 않습니다.' }, 400);
+  const capturedAt = new Date().toISOString();
+  const inserted = await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source) DO UPDATE SET captured_at = excluded.captured_at, payload = excluded.payload
+    WHERE CAST(json_extract(excluded.payload, '$.sequence') AS INTEGER)
+      > CAST(json_extract(usage_snapshots.payload, '$.sequence') AS INTEGER)
+      OR excluded.payload = usage_snapshots.payload
+  `).bind(BEHAVIOR_LIVE_SNAPSHOT_SOURCE, capturedAt, JSON.stringify(report)).run();
+  if (inserted?.meta?.changes !== 1) return json({ error: '더 최신인 실투 보고가 이미 저장되어 있습니다.' }, 409);
+  return json({ ok: true, experiment_id: report.experiment_id, sequence: report.sequence, fingerprint });
+}
+
+async function getBehaviorLive(request, env) {
+  const owner = await behaviorOwner(request, env); if (owner.response) return owner.response;
+  const row = await env.DB.prepare(`SELECT captured_at, payload FROM usage_snapshots WHERE source = ?1 LIMIT 1`)
+    .bind(BEHAVIOR_LIVE_SNAPSHOT_SOURCE).first();
+  if (!row) return json({ report: null, received_at: null }, 200, { 'cache-control': 'private, no-store' });
+  let report = null; try { report = normalizeBehaviorLiveReport(JSON.parse(row.payload)); } catch { report = null; }
+  if (!report) return json({ error: '실투 보고 데이터를 읽지 못했습니다.' }, 500,
+    { 'cache-control': 'private, no-store' });
+  return json({ report, received_at: row.captured_at }, 200, { 'cache-control': 'private, no-store' });
+}
+
 function completedTaskLimit(request) {
   const values = new URL(request.url).searchParams.getAll('completed_limit');
   if (values.length === 0) return { ok: true, value: null };
@@ -3878,6 +4011,8 @@ export async function route(request, env) {
   if (method === 'POST' && path === '/api/behavior-lab/paper/report') {
     return reportBehaviorPaper(request, env);
   }
+  if (method === 'GET' && path === '/api/behavior-lab/live') return getBehaviorLive(request, env);
+  if (method === 'POST' && path === '/api/behavior-lab/live/report') return reportBehaviorLive(request, env);
 
   if (method === 'GET' && path === '/api/me') {
     const session = await authenticate(request, env);
