@@ -4835,6 +4835,45 @@ test('competition approval rejects a stale report atomically and request ids can
   ).get().count), 1);
 });
 
+test('competition approval expiry is checked by the same SQLite clock that stores the decision', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionWithPreparationApproval();
+  fixture.idempotency_key = 'competition-expiry-at-write';
+  fixture.run.id = 'competition-expiry-at-write';
+  fixture.applications[0].state = 'WAITING_APPROVAL';
+  fixture.applications[0].blocker = 'user_approval';
+  fixture.applications[0].next_action = 'request_approval';
+  fixture.approvals[0].kind = 'final_submission';
+  fixture.approvals[0].expires_at = new Date(Date.now() + 500).toISOString();
+  assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+
+  const delayedDb = {
+    ...env.DB,
+    prepare(sql) {
+      const prepared = env.DB.prepare(sql);
+      if (!sql.includes('INSERT INTO competition_approval_decisions')) return prepared;
+      const delayRun = (statement) => ({
+        bind(...values) { return delayRun(statement.bind(...values)); },
+        first() { return statement.first(); },
+        all() { return statement.all(); },
+        async run() {
+          await new Promise((resolve) => setTimeout(resolve, 650));
+          return statement.run();
+        },
+      });
+      return delayRun(prepared);
+    },
+  };
+  const expired = await competitionApprovalRequest({ ...env, DB: delayedDb });
+  assert.equal(expired.status, 409);
+  assert.deepEqual(await expired.json(), { error: 'approval_expired' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 0);
+});
+
 test('competition approval report rejects state mismatch and stale sensitive windows', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;

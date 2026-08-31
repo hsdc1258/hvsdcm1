@@ -136,6 +136,13 @@
     payment: '결제 승인',
     final_submission: '최종 제출 승인',
   };
+  const APPROVAL_KIND_BOUNDARIES = {
+    preparation: '준비 승인은 개인정보 입력·서명·법적 동의·결제·전송·최종 제출을 포함하지 않습니다.',
+    legal_consent: '이 승인은 카드에 적힌 정확한 법적·개인정보 동의만 허용합니다. 문구, 계정 또는 action hash가 바뀌면 새 승인이 필요하며 서명·결제·전송·최종 제출은 포함하지 않습니다.',
+    rights_acceptance: '이 승인은 카드에 적힌 정확한 저작권·이용권 조건 수락만 허용합니다. 조건 또는 action hash가 바뀌면 새 승인이 필요하며 개인정보·서명·결제·최종 제출은 포함하지 않습니다.',
+    payment: '이 승인은 카드에 적힌 수취처·금액·통화의 결제 1회만 허용합니다. 어느 값이나 action hash가 바뀌거나 유효 시간이 지나면 새 승인이 필요하며 최종 제출은 포함하지 않습니다.',
+    final_submission: '이 승인은 카드 요약과 action hash에 묶인 계정·파일·입력 항목의 최종 제출 1회만 허용합니다. 내용, 대상 또는 파일이 바뀌거나 유효 시간이 지나면 새 승인이 필요합니다.',
+  };
   const APPROVAL_STATUS_LABELS = {
     pending: '승인 대기',
     approved: '승인됨',
@@ -605,7 +612,9 @@
       const approval = application.approval;
       const title = candidate?.title || application.title || application.id || '이름 없는 지원';
       const kind = APPROVAL_KIND_LABELS[approval.kind] || '승인 유형 미확인';
-      const controls = status === 'pending'
+      const boundary = APPROVAL_KIND_BOUNDARIES[approval.kind]
+        || '승인 유형을 확인할 수 없어 진행할 수 없습니다. 새 승인 요청이 필요합니다.';
+      const controls = status === 'pending' && Object.prototype.hasOwnProperty.call(APPROVAL_KIND_BOUNDARIES, approval.kind)
         ? `<div class="cp-approval-actions">
             <button class="btn btn-primary" type="button" data-competition-approval-decision="approved" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">${escapeHtml(kind)}</button>
             <button class="btn btn-secondary" type="button" data-competition-approval-decision="held" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">보류</button>
@@ -632,7 +641,7 @@
         <section class="cp-approval-copy is-decision" aria-label="승인하는 내용">
           <h4>승인하는 내용</h4>
           <p>${escapeHtml(approval.approvalText || '승인 범위가 없어 승인할 수 없습니다.')}</p>
-          <p class="cp-approval-boundary">준비 승인은 개인정보 입력·서명·법적 동의·결제·전송·최종 제출을 포함하지 않습니다.</p>
+          <p class="cp-approval-boundary">${escapeHtml(boundary)}</p>
         </section>
         <details class="cp-approval-hash"><summary>이 승인에 묶인 action hash</summary><code>${escapeHtml(approval.actionSha256)}</code></details>
         ${controls}

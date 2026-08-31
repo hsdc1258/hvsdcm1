@@ -369,6 +369,36 @@ test('approval controller posts the exact action once and updates the visible de
   assert.equal(controller.state().pendingDecision, null);
 });
 
+test('sensitive web approvals explain their exact action-time boundary and unknown kinds have no action', () => {
+  const { ui } = competitionContext();
+  const expected = new Map([
+    ['legal_consent', '정확한 법적·개인정보 동의만 허용합니다'],
+    ['rights_acceptance', '정확한 저작권·이용권 조건 수락만 허용합니다'],
+    ['payment', '수취처·금액·통화의 결제 1회만 허용합니다'],
+    ['final_submission', '계정·파일·입력 항목의 최종 제출 1회만 허용합니다'],
+  ]);
+  for (const [kind, wording] of expected) {
+    const payload = approvalFixture();
+    payload.applications[0].approval.kind = kind;
+    payload.applications[0].approval.expires_at = '2026-08-31T03:10:00+09:00';
+    const markup = ui.renderApprovalInbox(
+      ui.normalizePayload(payload).applications,
+      ui.normalizePayload(payload).candidates,
+      NOW,
+    );
+    assert.match(markup, new RegExp(wording, 'u'), kind);
+    assert.match(markup, /data-competition-approval-decision="approved"/u, kind);
+    assert.doesNotMatch(markup, /준비 승인은 개인정보 입력/u, kind);
+  }
+
+  const unknown = approvalFixture();
+  unknown.applications[0].approval.kind = 'new_sensitive_action';
+  const normalized = ui.normalizePayload(unknown);
+  const markup = ui.renderApprovalInbox(normalized.applications, normalized.candidates, NOW);
+  assert.match(markup, /승인 유형을 확인할 수 없어 진행할 수 없습니다/u);
+  assert.doesNotMatch(markup, /data-competition-approval-decision="approved"/u);
+});
+
 test('every exact backend application state maps without a broad waiting wildcard', () => {
   const { ui } = competitionContext();
   const states = [

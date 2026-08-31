@@ -1026,9 +1026,10 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     throw error;
   }
 
-  const decidedAt = new Date().toISOString();
   const inserted = await env.DB.prepare(`
-    WITH latest AS (
+    WITH clock AS (
+      SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS decided_at
+    ), latest AS (
       SELECT idempotency_key
       FROM competition_reports
       ORDER BY COALESCE(finished_at, started_at) DESC,
@@ -1036,25 +1037,31 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
       LIMIT 1
     )
     INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
-    SELECT request.request_id, ?2, ?3, ?4
+    SELECT request.request_id, ?2, ?3, clock.decided_at
     FROM competition_approval_requests AS request
     JOIN latest ON latest.idempotency_key = request.idempotency_key
+    CROSS JOIN clock
     WHERE request.request_id = ?1
       AND request.action_sha256 = ?2
-      AND (request.expires_at IS NULL OR request.expires_at > ?4)
+      AND (request.expires_at IS NULL OR request.expires_at > clock.decided_at)
       AND NOT EXISTS (
         SELECT 1 FROM competition_approval_decisions AS stored
         WHERE stored.request_id = request.request_id
-      )
+    )
     ON CONFLICT(request_id) DO NOTHING
-  `).bind(normalizedRequestId, actionSha256, decision, decidedAt).run();
+  `).bind(normalizedRequestId, actionSha256, decision).run();
   if (resultChanges(inserted) === 1) {
+    const stored = await env.DB.prepare(`
+      SELECT decided_at
+      FROM competition_approval_decisions
+      WHERE request_id = ?1
+    `).bind(normalizedRequestId).first();
     return competitionJson({
       ok: true,
       request_id: normalizedRequestId,
       action_sha256: actionSha256,
       decision,
-      decided_at: decidedAt,
+      decided_at: stored.decided_at,
       replayed: false,
     }, 201);
   }
