@@ -43,6 +43,8 @@ const OFFICIAL_VERIFICATION = new Set(['verified', 'unverified', 'not_found', 'f
 const ACCEPTANCE = new Set(['open', 'closed', 'unknown']);
 const ELIGIBILITY = new Set(['eligible', 'ineligible', 'unknown']);
 const RISK_STATES = new Set(['unknown', 'low', 'medium', 'high', 'blocked']);
+const FEE_STATUSES = new Set(['free', 'paid', 'unknown']);
+const PARTICIPATION_MODES = new Set(['none', 'online_only', 'offline_required', 'unknown']);
 const CANDIDATE_STATUSES = new Set([
   'discovered', 'verifying', 'active', 'deferred', 'rejected', 'archived',
 ]);
@@ -450,8 +452,8 @@ function validateCandidate(candidate, index, sourceIds) {
   exactKeys(candidate, [
     'contest_id', 'category', 'title', 'organizer', 'source_id', 'discovery_url', 'discovered_at',
     'recency', 'official_url', 'official_verification', 'official_verified_at', 'acceptance',
-    'deadline_at', 'eligibility', 'rights_risk', 'submission_risk', 'status', 'fit_score',
-    'effort_score',
+    'deadline_at', 'eligibility', 'fee_status', 'participation_mode', 'rights_risk',
+    'submission_risk', 'status', 'fit_score', 'effort_score',
   ], [], label);
   string(candidate.contest_id, `${label}.contest_id`, { max: 160, pattern: IDENTIFIER, privatePatterns: true });
   string(candidate.category, `${label}.category`, { max: 80, pattern: CATEGORY, privatePatterns: true });
@@ -468,6 +470,8 @@ function validateCandidate(candidate, index, sourceIds) {
   oneOf(candidate.acceptance, ACCEPTANCE, `${label}.acceptance`);
   timestamp(candidate.deadline_at, `${label}.deadline_at`, { nullable: true });
   oneOf(candidate.eligibility, ELIGIBILITY, `${label}.eligibility`);
+  oneOf(candidate.fee_status, FEE_STATUSES, `${label}.fee_status`);
+  oneOf(candidate.participation_mode, PARTICIPATION_MODES, `${label}.participation_mode`);
   oneOf(candidate.rights_risk, RISK_STATES, `${label}.rights_risk`);
   oneOf(candidate.submission_risk, RISK_STATES, `${label}.submission_risk`);
   oneOf(candidate.status, CANDIDATE_STATUSES, `${label}.status`);
@@ -487,6 +491,8 @@ function validateCandidate(candidate, index, sourceIds) {
   if (candidate.status === 'active' && (
     !verified
     || candidate.eligibility !== 'eligible'
+    || candidate.fee_status !== 'free'
+    || !['none', 'online_only'].includes(candidate.participation_mode)
     || candidate.acceptance !== 'open'
     || !candidate.deadline_at
     || candidate.rights_risk === 'blocked'
@@ -511,6 +517,8 @@ function validateApplication(application, index, candidates) {
   if (!candidate) fail(`${label} does not reference a reported candidate`);
   if (candidate.official_verification !== 'verified'
     || candidate.eligibility !== 'eligible'
+    || candidate.fee_status !== 'free'
+    || !['none', 'online_only'].includes(candidate.participation_mode)
     || candidate.acceptance !== 'open'
     || !candidate.deadline_at
     || candidate.rights_risk === 'blocked'
@@ -654,7 +662,7 @@ export function validateCompetitionReport(report) {
     }
   });
 
-  const applications = boundedArray(report.applications, 'report.applications', 3);
+  const applications = boundedArray(report.applications, 'report.applications', 10);
   const applicationKeys = new Set();
   const applicationByKey = new Map();
   applications.forEach((application, index) => {
@@ -675,7 +683,7 @@ export function validateCompetitionReport(report) {
     }
   });
 
-  const approvals = boundedArray(report.approvals || [], 'report.approvals', 3);
+  const approvals = boundedArray(report.approvals || [], 'report.approvals', 10);
   const approvalIds = new Set();
   const approvalKeys = new Set();
   approvals.forEach((approval, index) => {

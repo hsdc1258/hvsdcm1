@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 17; number += 1) {
+  for (let number = 1; number <= 18; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3075,6 +3075,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0015': 'competition_candidate_capacity',
       '0016': 'competition_approval_requests',
       '0017': 'competition_approval_report_links',
+      '0018': 'competition_preference_contract',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4478,6 +4479,8 @@ function competitionFixture() {
       acceptance: 'open',
       deadline_at: '2026-09-03T14:59:00Z',
       eligibility: 'eligible',
+      fee_status: 'free',
+      participation_mode: 'none',
       rights_risk: 'low',
       submission_risk: 'low',
       status: 'active',
@@ -4715,6 +4718,8 @@ test('competition report round-trips through normalized SQLite and exact replay 
     acceptance: 'open',
     deadline_at: fixture.candidates[0].deadline_at,
     eligibility: 'eligible',
+    fee_status: 'free',
+    participation_mode: 'none',
     status: 'active',
     rights_risk: 'low',
     submission_risk: 'low',
@@ -4799,6 +4804,82 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
   assert.equal(afterBody.summary.today.awaiting_approval, 0);
   assert.equal(afterBody.applications[0].approval.status, 'approved');
   assert.ok(afterBody.applications[0].approval.decided_at);
+});
+
+test('competition runtime fails closed for legacy unknown preferences and expired deadlines', async (t) => {
+  const legacyContext = await competitionTestContext(t);
+  if (!legacyContext) return;
+  const legacy = competitionWithPreparationApproval();
+  assert.equal((await competitionRequest(legacyContext.env, { body: legacy })).status, 201);
+
+  // Simulate an active row written before 0018: ALTER TABLE supplies unknown while the old row
+  // retains its legacy active/application/approval state.
+  legacyContext.database.exec('DROP TRIGGER competition_candidates_no_update');
+  legacyContext.database.prepare(`
+    UPDATE competition_candidates SET fee_status = 'unknown'
+    WHERE idempotency_key = ? AND contest_id = ? AND category = ?
+  `).run(legacy.idempotency_key, legacy.candidates[0].contest_id, legacy.candidates[0].category);
+
+  const lookup = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), legacyContext.env);
+  assert.equal(lookup.status, 200);
+  const payload = await lookup.json();
+  assert.equal(payload.candidates[0].status, 'deferred');
+  assert.equal(payload.applications[0].state, 'WAITING_CLARIFICATION');
+  assert.equal(payload.applications[0].approval, null);
+  assert.equal(payload.summary.today.ready, 0);
+  assert.equal(payload.summary.today.awaiting_approval, 0);
+  const staleDecision = await competitionApprovalRequest(legacyContext.env);
+  assert.equal(staleDecision.status, 409);
+  assert.deepEqual(await staleDecision.json(), { error: 'approval_stale' });
+  assert.equal(Number(legacyContext.database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 0);
+
+  const deadlineContext = await competitionTestContext(t);
+  if (!deadlineContext) return;
+  const expired = competitionWithPreparationApproval();
+  expired.idempotency_key = 'competition-action-deadline-expired';
+  expired.run.id = expired.idempotency_key;
+  expired.candidates[0].deadline_at = new Date(Date.now() - 1_000).toISOString();
+  assert.ok(Date.parse(expired.candidates[0].deadline_at) > Date.parse(expired.run.finished_at));
+  assert.equal((await competitionRequest(deadlineContext.env, { body: expired })).status, 201);
+  const expiredDecision = await competitionApprovalRequest(deadlineContext.env);
+  assert.equal(expiredDecision.status, 409);
+  assert.deepEqual(await expiredDecision.json(), { error: 'approval_stale' });
+});
+
+test('competition database rejects paid and offline active candidates before application insertion', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const fixture = competitionFixture();
+  fixture.applications = [];
+  assert.equal((await competitionRequest(context.env, { body: fixture })).status, 201);
+  const insert = context.database.prepare(`
+    INSERT INTO competition_candidates(
+      idempotency_key, contest_id, category, title, organizer, source_id,
+      discovery_url, discovered_at, recency, official_url, official_verification,
+      official_verified_at, acceptance, deadline_at, eligibility, fee_status,
+      participation_mode, rights_risk, submission_risk, status, fit_score, effort_score
+    ) VALUES (?, ?, 'image', 'Preference probe', 'Example Organizer', 'contest-listing',
+      'https://list.example/contests/probe', ?, 'new', 'https://organizer.example/rules/probe',
+      'verified', ?, 'open', ?, 'eligible', ?, ?, 'low', 'low', 'active', 80, 20)
+  `);
+  for (const [id, feeStatus, participationMode] of [
+    ['paid-active', 'paid', 'none'],
+    ['offline-active', 'free', 'offline_required'],
+  ]) {
+    assert.throws(() => insert.run(
+      fixture.idempotency_key,
+      id,
+      fixture.candidates[0].discovered_at,
+      fixture.candidates[0].official_verified_at,
+      fixture.candidates[0].deadline_at,
+      feeStatus,
+      participationMode,
+    ), /active competition requires free remote-compatible participation/u);
+  }
 });
 
 test('competition approval survives a newer snapshot while raw state regression and request rebinding fail', async (t) => {
@@ -5417,11 +5498,11 @@ test('competition migration rejects malformed timestamps in every normalized tab
     INSERT INTO competition_candidates(
       idempotency_key, contest_id, category, title, organizer, source_id,
       discovery_url, discovered_at, recency, official_url, official_verification,
-      official_verified_at, acceptance, deadline_at, eligibility, rights_risk,
-      submission_risk, status, fit_score, effort_score
+      official_verified_at, acceptance, deadline_at, eligibility, fee_status,
+      participation_mode, rights_risk, submission_risk, status, fit_score, effort_score
     ) VALUES ('timestamp-parent', ?, 'test', 'Public contest', 'Public organizer',
       'timestamp-source', 'https://public.example/contest', ?, 'new', ?, ?, ?, ?, ?, ?,
-      'low', 'low', ?, 50, 50)
+      'free', 'none', 'low', 'low', ?, 50, 50)
   `);
   const insertCandidate = ({
     id, discoveredAt = '2026-08-31T00:01:00.000Z', officialUrl = null,

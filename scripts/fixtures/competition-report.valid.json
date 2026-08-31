@@ -42,6 +42,8 @@
       "acceptance": "open",
       "deadline_at": "2026-09-03T15:00:00+09:00",
       "eligibility": "eligible",
+      "fee_status": "free",
+      "participation_mode": "none",
       "rights_risk": "low",
       "submission_risk": "low",
       "status": "active",

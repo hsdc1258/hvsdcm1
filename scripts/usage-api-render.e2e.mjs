@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import vm from 'node:vm';
 
 import worker from '../worker/src/index.js';
 import { sha256 } from '../worker/src/lib.js';
@@ -86,6 +87,7 @@ function createEnv() {
       OWNER_USERNAME: 'hvsdcm',
       HARNESS_INGEST_TOKEN: 'harness-token',
       USAGE_INGEST_TOKEN: 'usage-token',
+      COMPETITION_INGEST_TOKEN: 'competition-token',
       DB: d1(database),
     },
   };
@@ -267,5 +269,145 @@ assert.doesNotMatch(dashboard, /us-health is-breached/u);
 assert.match(dashboard, /24%/u);
 assert.match(dashboard, /35%/u);
 
+// ---- 공모전 TOP 10 실제 Worker → 실제 렌더러 E2E -------------------------
+
+const competitionReport = JSON.parse(readFileSync(
+  path.join(ROOT, 'scripts', 'fixtures', 'competition-report.valid.json'),
+  'utf8',
+));
+const observedAt = new Date(NOW - 60_000).toISOString();
+const startedAt = new Date(NOW - 5 * 60_000).toISOString();
+const discoveredAt = new Date(NOW - 4 * 60_000).toISOString();
+const verifiedAt = new Date(NOW - 3 * 60_000).toISOString();
+const updatedAt = new Date(NOW - 2 * 60_000).toISOString();
+const expiresAt = new Date(NOW + 10 * 60_000).toISOString();
+const kstDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date(NOW));
+competitionReport.idempotency_key = 'competition-top10-e2e';
+competitionReport.run = {
+  ...competitionReport.run,
+  id: competitionReport.idempotency_key,
+  date: kstDate,
+  started_at: startedAt,
+  finished_at: observedAt,
+};
+competitionReport.sources[0] = {
+  ...competitionReport.sources[0], checked_at: discoveredAt, candidate_count: 10,
+};
+const baseCandidate = competitionReport.candidates[0];
+const baseApplication = competitionReport.applications[0];
+competitionReport.candidates = Array.from({ length: 10 }, (_, index) => ({
+  ...baseCandidate,
+  contest_id: `top10-${index + 1}`,
+  title: `무료 비대면 공모전 ${index + 1}`,
+  discovered_at: discoveredAt,
+  official_url: `https://organizer.example/rules/${index + 1}`,
+  official_verified_at: verifiedAt,
+  deadline_at: new Date(NOW + (index + 2) * 86_400_000).toISOString(),
+  participation_mode: index < 5 ? 'none' : 'online_only',
+  fit_score: 90 - index,
+  effort_score: 10 + index,
+}));
+competitionReport.applications = competitionReport.candidates.map((candidate, index) => ({
+  ...baseApplication,
+  contest_id: candidate.contest_id,
+  state: index === 9 ? 'WAITING_APPROVAL' : 'WAITING_RIGHTS_APPROVAL',
+  blocker: index === 9 ? 'user_approval' : 'rights',
+  next_action: index === 9 ? 'request_approval' : 'review_rights',
+  updated_at: updatedAt,
+}));
+competitionReport.approvals = competitionReport.candidates.map((candidate, index) => ({
+  request_id: `top10-approval-${index + 1}`,
+  contest_id: candidate.contest_id,
+  category: candidate.category,
+  kind: index === 9 ? 'final_submission' : 'preparation',
+  action_sha256: index.toString(16).padStart(64, '0'),
+  requested_at: updatedAt,
+  expires_at: index === 9 ? expiresAt : null,
+  read_summary: `공식 공고, 무료 조건, 참여 방식과 제출본 ${index + 1}을 확인했습니다.`,
+  approval_text: index === 9
+    ? '표시된 계정, 파일, 입력 항목으로 최종 제출 1회를 허용합니다.'
+    : '작품 초안과 비식별 서류 준비만 허용합니다.',
+}));
+
+const competitionCreated = await post(
+  env, '/api/competitions/report', 'competition-token', competitionReport,
+);
+assert.equal(competitionCreated.status, 201);
+assert.equal((await competitionCreated.json()).counts.applications, 10);
+const competitionReplay = await post(
+  env, '/api/competitions/report', 'competition-token', structuredClone(competitionReport),
+);
+assert.equal(competitionReplay.status, 200);
+assert.equal((await competitionReplay.json()).counts.applications, 10);
+
+const competitionResponse = await worker.fetch(new Request('https://api.test/api/competitions', {
+  headers: { authorization: `Bearer ${OWNER_TOKEN}`, 'cf-connecting-ip': '198.51.100.1' },
+}), env);
+assert.equal(competitionResponse.status, 200);
+const competitionPayload = await competitionResponse.json();
+assert.equal(competitionPayload.candidates.length, 10);
+assert.equal(competitionPayload.applications.length, 10);
+assert.equal(competitionPayload.summary.today.ready, 10);
+assert.equal(competitionPayload.summary.today.awaiting_approval, 10);
+
+const competitionContext = {
+  document: { getElementById() { return null; } },
+  location: { href: 'https://hvsdcm1.xyz/usage/' },
+  setTimeout, clearTimeout, URL, Intl, console,
+};
+competitionContext.window = competitionContext;
+vm.createContext(competitionContext);
+vm.runInContext(
+  readFileSync(path.join(ROOT, 'usage', 'assets', 'js', 'competition.js'), 'utf8'),
+  competitionContext,
+  { filename: 'competition.js' },
+);
+const competitionUi = competitionContext.COMPETITION_UI;
+const normalizedCompetitions = competitionUi.normalizePayload(competitionPayload);
+const competitionMarkup = competitionUi.renderDashboard(
+  normalizedCompetitions,
+  { fee: 'free', participation: 'none', sort: 'priority' },
+  NOW,
+);
+assert.match(competitionMarkup, /지원 상태 보드[\s\S]*10건/u);
+assert.equal((competitionMarkup.match(/class="cp-approval-card is-pending"/gu) || []).length, 10);
+assert.equal((competitionMarkup.match(/승인 종류<\/dt><dd>최종 제출 승인/gu) || []).length, 1);
+assert.match(competitionMarkup, /지원 비용<\/dt><dd>무료/u);
+assert.match(competitionMarkup, /추가 참여<\/dt><dd>추가 일정 없음/u);
+assert.match(competitionMarkup, /후보 5개/u);
+const finalApproval = competitionReport.approvals[9];
+const wrongApproval = await post(
+  env,
+  `/api/competitions/approvals/${finalApproval.request_id}/decision`,
+  OWNER_TOKEN,
+  { decision: 'approved', action_sha256: 'f'.repeat(64) },
+);
+assert.equal(wrongApproval.status, 409);
+const exactApproval = await post(
+  env,
+  `/api/competitions/approvals/${finalApproval.request_id}/decision`,
+  OWNER_TOKEN,
+  { decision: 'approved', action_sha256: finalApproval.action_sha256 },
+);
+assert.equal(exactApproval.status, 201);
+const replayedApproval = await post(
+  env,
+  `/api/competitions/approvals/${finalApproval.request_id}/decision`,
+  OWNER_TOKEN,
+  { decision: 'approved', action_sha256: finalApproval.action_sha256 },
+);
+assert.equal(replayedApproval.status, 200);
+assert.equal(Number(database.prepare(
+  "SELECT COUNT(*) AS count FROM competition_applications WHERE idempotency_key = 'competition-top10-e2e'",
+).get().count), 10);
+assert.equal(Number(database.prepare(
+  "SELECT COUNT(*) AS count FROM competition_report_approval_requests WHERE idempotency_key = 'competition-top10-e2e'",
+).get().count), 10);
+assert.equal(Number(database.prepare(
+  'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+).get().count), 1);
+
 database.close();
-console.log('USAGE API → RENDER E2E: PASS');
+console.log('USAGE + COMPETITION TOP 10 API → RENDER E2E: PASS');

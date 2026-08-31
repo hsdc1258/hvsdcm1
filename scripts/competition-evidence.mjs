@@ -14,6 +14,8 @@ const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const ACCEPTANCE = new Set(['open', 'closed', 'unknown']);
 const ELIGIBILITY = new Set(['eligible', 'ineligible', 'unknown']);
 const RISK = new Set(['unknown', 'low', 'medium', 'high', 'blocked']);
+const FEE = new Set(['free', 'paid', 'unknown']);
+const PARTICIPATION = new Set(['none', 'online_only', 'offline_required', 'unknown']);
 const STATUS = new Set(['verifying', 'active', 'deferred', 'rejected', 'archived']);
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 
@@ -96,6 +98,8 @@ export function mergeCompetitionOfficialEvidence(report, evidence, options = {})
       'acceptance',
       'deadline_at',
       'eligibility',
+      'fee_status',
+      'participation_mode',
       'rights_risk',
       'submission_risk',
       'status',
@@ -129,6 +133,8 @@ export function mergeCompetitionOfficialEvidence(report, evidence, options = {})
         && candidate.acceptance === entry.acceptance
         && candidate.deadline_at === entry.deadline_at
         && candidate.eligibility === entry.eligibility
+        && candidate.fee_status === entry.fee_status
+        && candidate.participation_mode === entry.participation_mode
         && candidate.rights_risk === entry.rights_risk
         && candidate.submission_risk === entry.submission_risk
         && candidate.status === entry.status;
@@ -153,6 +159,12 @@ export function mergeCompetitionOfficialEvidence(report, evidence, options = {})
     candidate.acceptance = enumValue(entry.acceptance, ACCEPTANCE, label + '.acceptance');
     candidate.deadline_at = entry.deadline_at;
     candidate.eligibility = enumValue(entry.eligibility, ELIGIBILITY, label + '.eligibility');
+    candidate.fee_status = enumValue(entry.fee_status, FEE, label + '.fee_status');
+    candidate.participation_mode = enumValue(
+      entry.participation_mode,
+      PARTICIPATION,
+      label + '.participation_mode',
+    );
     candidate.rights_risk = enumValue(entry.rights_risk, RISK, label + '.rights_risk');
     candidate.submission_risk = enumValue(
       entry.submission_risk,
@@ -195,6 +207,8 @@ export function competitionEvidenceLedger(report) {
         acceptance: candidate.acceptance,
         deadline_at: candidate.deadline_at,
         eligibility: candidate.eligibility,
+        fee_status: candidate.fee_status,
+        participation_mode: candidate.participation_mode,
         rights_risk: candidate.rights_risk,
         submission_risk: candidate.submission_risk,
         status: candidate.status,

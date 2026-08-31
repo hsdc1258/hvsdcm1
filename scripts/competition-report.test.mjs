@@ -57,6 +57,73 @@ test('checked-in fixture is a strict redacted competition report and dry-runs wi
   });
 });
 
+test('owner preferences reject paid, fee-unknown, offline, and participation-unknown active work', () => {
+  for (const [field, value] of [
+    ['fee_status', 'paid'],
+    ['fee_status', 'unknown'],
+    ['participation_mode', 'offline_required'],
+    ['participation_mode', 'unknown'],
+  ]) {
+    const report = validReport();
+    report.candidates[0][field] = value;
+    assert.throws(
+      () => validateCompetitionReport(report, { now: Date.parse(report.run.finished_at) }),
+      CompetitionReportError,
+      `${field}=${value}`,
+    );
+  }
+});
+
+test('the strict report contract accepts ten applications and rejects an eleventh', () => {
+  const report = validReport();
+  const candidate = report.candidates[0];
+  const application = report.applications[0];
+  report.candidates = Array.from({ length: 10 }, (_, index) => ({
+    ...candidate,
+    contest_id: `top10-${index + 1}`,
+    title: `Top 10 Contest ${index + 1}`,
+    official_url: `https://organizer.example/rules/${index + 1}`,
+  }));
+  report.sources[0].candidate_count = 10;
+  report.applications = report.candidates.map((entry) => ({
+    ...application,
+    contest_id: entry.contest_id,
+  }));
+  assert.equal(
+    validateCompetitionReport(report, { now: Date.parse(report.run.finished_at) }).applications.length,
+    10,
+  );
+  const eleventh = structuredClone(report);
+  eleventh.candidates.push({
+    ...candidate,
+    contest_id: 'top10-11',
+    title: 'Top 10 Contest 11',
+    official_url: 'https://organizer.example/rules/11',
+  });
+  eleventh.sources[0].candidate_count = 11;
+  eleventh.applications.push({ ...application, contest_id: 'top10-11' });
+  assert.throws(
+    () => validateCompetitionReport(eleventh, { now: Date.parse(eleventh.run.finished_at) }),
+    CompetitionReportError,
+  );
+  const elevenApprovals = structuredClone(report);
+  elevenApprovals.approvals = Array.from({ length: 11 }, (_, index) => ({
+    request_id: `approval-${index + 1}`,
+    contest_id: report.candidates[index % 10].contest_id,
+    category: report.candidates[index % 10].category,
+    kind: 'preparation',
+    action_sha256: index.toString(16).padStart(64, '0'),
+    requested_at: report.applications[0].updated_at,
+    expires_at: null,
+    read_summary: '공식 조건과 제출 준비 범위를 확인했습니다.',
+    approval_text: '비식별 초안 준비만 허용합니다.',
+  }));
+  assert.throws(
+    () => validateCompetitionReport(elevenApprovals, { now: Date.parse(elevenApprovals.run.finished_at) }),
+    CompetitionReportError,
+  );
+});
+
 test('strict validation rejects private fields, extra fields, floating deadlines, and unsafe URLs', () => {
   for (const mutate of [
     (report) => { report.candidates[0].email = 'person@example.test'; },

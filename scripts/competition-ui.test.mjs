@@ -15,7 +15,7 @@ function element(id = '') {
     id,
     innerHTML: '',
     textContent: '',
-    value: id === 'competitionSort' ? 'deadline-asc' : (id.startsWith('competition') && id !== 'competitionSearch' ? 'all' : ''),
+    value: id === 'competitionSort' ? 'priority' : (id.startsWith('competition') && id !== 'competitionSearch' ? 'all' : ''),
     hidden: false,
     disabled: false,
     tabIndex: -1,
@@ -92,7 +92,8 @@ function approvalFixture({ status = 'pending', summary = '수상작 이용 범�
     contest_id: 'contest-1', category: 'design', title: '청소년 디자인 공모전', organizer: '예시 재단',
     source_id: 'official', discovery_url: 'https://discovery.example/item',
     official_url: 'https://organizer.example/rules', official_verification: 'verified',
-    deadline_at: '2026-09-05T14:59:00Z', eligibility: 'eligible', status: 'active',
+      deadline_at: '2026-09-05T14:59:00Z', eligibility: 'eligible', status: 'active',
+      fee_status: 'free', participation_mode: 'none',
     rights_risk: 'high', submission_risk: 'medium', recency: 'new',
   };
   payload.applications[0] = {
@@ -149,7 +150,7 @@ test('top-level canonical fields render human labels, safe source action, and bo
       official_url: 'https://organizer.example/rules', official_verification: 'unverified',
       official_verified_at: '2026-08-30T14:00:00Z',
       eligibility: 'eligible', acceptance: 'open', deadline_at: '2026-09-05', status: 'active', recency: 'new',
-      fit_score: 87, effort_score: 4,
+      fee_status: 'free', participation_mode: 'online_only', fit_score: 87, effort_score: 4,
     }],
     applications: [],
   });
@@ -160,6 +161,8 @@ test('top-level canonical fields render human labels, safe source action, and bo
   assert.equal(normalized.candidates[0].recency, '신규');
   assert.equal(normalized.candidates[0].fitScore, 87);
   assert.equal(normalized.candidates[0].effortScore, 4);
+  assert.equal(normalized.candidates[0].feeStatus, 'free');
+  assert.equal(normalized.candidates[0].participationMode, 'online_only');
   assert.equal(normalized.candidates[0].officialVerification, 'unverified');
   assert.equal(normalized.candidates[0].officialVerifiedAt, '2026-08-30T14:00:00Z');
   const markup = ui.renderDashboard(normalized, {}, NOW);
@@ -168,6 +171,8 @@ test('top-level canonical fields render human labels, safe source action, and bo
   assert.match(card, /최신성<\/dt><dd>신규/u);
   assert.match(card, /적합도 점수<\/dt><dd>87/u);
   assert.match(card, /작업량 점수<\/dt><dd>4/u);
+  assert.match(card, /지원 비용<\/dt><dd>무료/u);
+  assert.match(card, /추가 참여<\/dt><dd>온라인만/u);
   assert.match(card, />공고 링크<\/a>/u);
   assert.doesNotMatch(card, />주최기관 공식 공고<\/a>/u);
   assert.match(card, /공식 공고 검증<\/dt><dd><span[^>]*>미검증<\/span> · 확인 기록/u);
@@ -599,9 +604,9 @@ test('candidate search, status, eligibility, deadline and deadline sorting are d
   const { ui } = competitionContext();
   const normalized = ui.normalizePayload(fixture({
     candidates: [
-      { id: 'late', title: '후순위', organizer_name: '가', deadline: '2026-09-20', status: 'watching', eligibility_status: 'review' },
-      { id: 'soon', title: '청소년 우선', organizer_name: '나', deadline: '2026-09-02', status: 'ready', eligibility_status: 'eligible' },
-      { id: 'none', title: '마감 미정', organizer_name: '다', status: 'ready', eligibility_status: 'eligible' },
+      { id: 'late', title: '후순위', organizer_name: '가', deadline: '2026-09-20', status: 'watching', eligibility_status: 'review', fee_status: 'paid', participation_mode: 'offline_required', fit_score: 99, effort_score: 1 },
+      { id: 'soon', title: '청소년 우선', organizer_name: '나', deadline: '2026-09-02', status: 'ready', eligibility_status: 'eligible', fee_status: 'free', participation_mode: 'online_only', fit_score: 90, effort_score: 20 },
+      { id: 'none', title: '마감 미정', organizer_name: '다', status: 'ready', eligibility_status: 'eligible', fee_status: 'free', participation_mode: 'none', fit_score: 70, effort_score: 40 },
     ],
     applications: [],
     sources: [],
@@ -613,6 +618,16 @@ test('candidate search, status, eligibility, deadline and deadline sorting are d
   assert.deepEqual(
     Array.from(ui.filterCandidates(normalized.candidates, { sort: 'deadline-desc' }, NOW), (item) => item.id),
     ['late', 'soon', 'none'],
+  );
+  assert.deepEqual(
+    Array.from(ui.filterCandidates(normalized.candidates, { sort: 'priority' }, NOW), (item) => item.id),
+    ['none', 'soon', 'late'],
+  );
+  assert.deepEqual(
+    Array.from(ui.filterCandidates(normalized.candidates, {
+      fee: 'free', participation: 'online_only', sort: 'priority',
+    }, NOW), (item) => item.id),
+    ['soon'],
   );
 });
 

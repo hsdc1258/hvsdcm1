@@ -6,8 +6,8 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 const MAX_REPORT_BYTES = 1_000_000;
 const MAX_SOURCES = 32;
 const MAX_CANDIDATES = 500;
-const MAX_APPLICATIONS = 3;
-const MAX_APPROVALS = 3;
+const MAX_APPLICATIONS = 10;
+const MAX_APPROVALS = 10;
 const MAX_DECISION_BYTES = 4_096;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
@@ -43,6 +43,8 @@ const OFFICIAL_VERIFICATION_STATES = new Set(['verified', 'unverified', 'not_fou
 const ACCEPTANCE_STATES = new Set(['open', 'closed', 'unknown']);
 const ELIGIBILITY_STATES = new Set(['eligible', 'ineligible', 'unknown']);
 const RISK_STATES = new Set(['unknown', 'low', 'medium', 'high', 'blocked']);
+const FEE_STATUSES = new Set(['free', 'paid', 'unknown']);
+const PARTICIPATION_MODES = new Set(['none', 'online_only', 'offline_required', 'unknown']);
 const CANDIDATE_STATES = new Set([
   'discovered', 'verifying', 'active', 'deferred', 'rejected', 'archived',
 ]);
@@ -102,7 +104,8 @@ const SAFE_SCHEMA_FIELDS = new Set([
   'failure_code', 'manual_check', 'candidate_count', 'contest_id', 'category', 'title',
   'organizer', 'source_id', 'discovery_url', 'discovered_at', 'recency', 'official_url',
   'official_verification', 'official_verified_at', 'acceptance', 'deadline_at',
-  'eligibility', 'rights_risk', 'submission_risk', 'fit_score', 'effort_score',
+  'eligibility', 'fee_status', 'participation_mode', 'rights_risk', 'submission_risk',
+  'fit_score', 'effort_score',
   'profile_id', 'state', 'blocker', 'next_action', 'updated_at',
   'approvals', 'request_id', 'action_sha256', 'requested_at', 'expires_at',
   'read_summary', 'approval_text', 'decision',
@@ -527,8 +530,9 @@ function normalizeCandidate(input) {
   strictObject(input, [
     'contest_id', 'category', 'title', 'organizer', 'source_id', 'discovery_url',
     'discovered_at', 'recency', 'official_url', 'official_verification',
-    'official_verified_at', 'acceptance', 'deadline_at', 'eligibility', 'rights_risk',
-    'submission_risk', 'status', 'fit_score', 'effort_score',
+    'official_verified_at', 'acceptance', 'deadline_at', 'eligibility', 'fee_status',
+    'participation_mode', 'rights_risk', 'submission_risk', 'status', 'fit_score',
+    'effort_score',
   ]);
   const candidate = {
     contest_id: normalizedId(input.contest_id),
@@ -545,6 +549,8 @@ function normalizeCandidate(input) {
     acceptance: enumValue(input.acceptance, ACCEPTANCE_STATES),
     deadline_at: normalizedInstant(input.deadline_at, true),
     eligibility: enumValue(input.eligibility, ELIGIBILITY_STATES),
+    fee_status: enumValue(input.fee_status, FEE_STATUSES),
+    participation_mode: enumValue(input.participation_mode, PARTICIPATION_MODES),
     rights_risk: enumValue(input.rights_risk, RISK_STATES),
     submission_risk: enumValue(input.submission_risk, RISK_STATES),
     status: enumValue(input.status, CANDIDATE_STATES),
@@ -559,6 +565,8 @@ function normalizeCandidate(input) {
   if (candidate.status === 'active'
     && (!verified || candidate.eligibility !== 'eligible'
       || candidate.acceptance !== 'open' || !candidate.deadline_at
+      || candidate.fee_status !== 'free'
+      || !['none', 'online_only'].includes(candidate.participation_mode)
       || candidate.rights_risk === 'blocked' || candidate.submission_risk === 'blocked')) fail();
   return candidate;
 }
@@ -701,6 +709,8 @@ function normalizeReport(input) {
       || candidate.eligibility !== 'eligible'
       || candidate.acceptance !== 'open'
       || !candidate.deadline_at
+      || candidate.fee_status !== 'free'
+      || !['none', 'online_only'].includes(candidate.participation_mode)
       || candidate.rights_risk === 'blocked'
       || candidate.submission_risk === 'blocked'
       || candidate.status !== 'active'
@@ -803,7 +813,7 @@ function acceptedStoredResponse(row, replayed = true) {
     counts: {
       sources: Number(row.source_count),
       candidates: Number(row.candidate_count),
-      applications: Number(row.application_count),
+      applications: Number(row.application_count_v2 ?? row.application_count),
     },
   });
 }
@@ -830,7 +840,8 @@ async function reportCompetitionsInternal(request, env) {
   // report content into an acknowledged replay.
   const payloadHash = await sha256(canonicalRawJson(parsed.value));
   const existing = await env.DB.prepare(`
-    SELECT idempotency_key, payload_hash, run_id, source_count, candidate_count, application_count
+    SELECT idempotency_key, payload_hash, run_id, source_count, candidate_count,
+      application_count, application_count_v2
     FROM competition_reports
     WHERE idempotency_key = ?1
   `).bind(report.idempotency_key).first();
@@ -856,8 +867,8 @@ async function reportCompetitionsInternal(request, env) {
         idempotency_key, payload_hash, schema_version, received_at,
         run_id, run_date, run_status, started_at, finished_at,
         coverage_expected, coverage_checked, coverage_succeeded,
-        source_count, candidate_count, application_count
-      ) VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+        source_count, candidate_count, application_count, application_count_v2
+      ) VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
       ON CONFLICT(idempotency_key) DO NOTHING
     `).bind(
       report.idempotency_key,
@@ -873,6 +884,7 @@ async function reportCompetitionsInternal(request, env) {
       report.run.source_coverage.succeeded,
       report.sources.length,
       report.candidates.length,
+      Math.min(report.applications.length, 3),
       report.applications.length,
     ),
     env.DB.prepare(`
@@ -901,8 +913,8 @@ async function reportCompetitionsInternal(request, env) {
       INSERT INTO competition_candidates(
         idempotency_key, contest_id, category, title, organizer, source_id,
         discovery_url, discovered_at, recency, official_url, official_verification,
-        official_verified_at, acceptance, deadline_at, eligibility, rights_risk,
-        submission_risk, status, fit_score, effort_score
+        official_verified_at, acceptance, deadline_at, eligibility, fee_status,
+        participation_mode, rights_risk, submission_risk, status, fit_score, effort_score
       )
       SELECT ?1,
         json_extract(item.value, '$.contest_id'), json_extract(item.value, '$.category'),
@@ -913,7 +925,8 @@ async function reportCompetitionsInternal(request, env) {
         json_extract(item.value, '$.official_verification'),
         json_extract(item.value, '$.official_verified_at'),
         json_extract(item.value, '$.acceptance'), json_extract(item.value, '$.deadline_at'),
-        json_extract(item.value, '$.eligibility'), json_extract(item.value, '$.rights_risk'),
+        json_extract(item.value, '$.eligibility'), json_extract(item.value, '$.fee_status'),
+        json_extract(item.value, '$.participation_mode'), json_extract(item.value, '$.rights_risk'),
         json_extract(item.value, '$.submission_risk'), json_extract(item.value, '$.status'),
         json_extract(item.value, '$.fit_score'), json_extract(item.value, '$.effort_score')
       FROM json_each(?3) AS item
@@ -1001,9 +1014,10 @@ async function reportCompetitionsInternal(request, env) {
     `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
     env.DB.prepare(`
       INSERT INTO competition_report_guards(
-        idempotency_key, prior_idempotency_key, enforce_continuity, approval_count
+        idempotency_key, prior_idempotency_key, enforce_continuity,
+        approval_count, approval_count_v2
       )
-      SELECT ?1, ?3, ?4, ?5
+      SELECT ?1, ?3, ?4, ?5, ?6
       WHERE EXISTS (
         SELECT 1 FROM competition_reports
         WHERE idempotency_key = ?1 AND payload_hash = ?2
@@ -1016,6 +1030,7 @@ async function reportCompetitionsInternal(request, env) {
       payloadHash,
       prior?.idempotency_key || null,
       prior && Date.parse(observedAt) >= Date.parse(prior.observed_at) ? 1 : 0,
+      Math.min(report.approvals.length, 3),
       report.approvals.length,
     ),
   ];
@@ -1023,7 +1038,8 @@ async function reportCompetitionsInternal(request, env) {
   if (resultChanges(results[0]) === 1) return acceptedResponse(report, false, 201);
 
   const raced = await env.DB.prepare(`
-    SELECT idempotency_key, payload_hash, run_id, source_count, candidate_count, application_count
+    SELECT idempotency_key, payload_hash, run_id, source_count, candidate_count,
+      application_count, application_count_v2
     FROM competition_reports
     WHERE idempotency_key = ?1
   `).bind(report.idempotency_key).first();
@@ -1038,7 +1054,7 @@ export async function reportCompetitions(request, env) {
     if (/competition report prior changed/iu.test(String(error?.message || error))) {
       return competitionError('report_concurrent_conflict', 409);
     }
-    if (/competition report state regression/iu.test(String(error?.message || error))) {
+    if (/competition report (?:preference )?state regression/iu.test(String(error?.message || error))) {
       return competitionError('report_state_regression', 409);
     }
     if (/competition approval (?:report link does not match action|links incomplete)/iu.test(String(error?.message || error))) {
@@ -1106,9 +1122,23 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     FROM competition_report_approval_requests AS link
     JOIN latest ON latest.idempotency_key = link.idempotency_key
     JOIN competition_approval_requests AS request ON request.request_id = link.request_id
+    JOIN competition_candidates AS candidate
+      ON candidate.idempotency_key = link.idempotency_key
+     AND candidate.contest_id = link.contest_id
+     AND candidate.category = link.category
     CROSS JOIN clock
     WHERE request.request_id = ?1
       AND request.action_sha256 = ?2
+      AND candidate.official_verification = 'verified'
+      AND candidate.eligibility = 'eligible'
+      AND candidate.acceptance = 'open'
+      AND candidate.deadline_at IS NOT NULL
+      AND candidate.deadline_at > clock.decided_at
+      AND candidate.fee_status = 'free'
+      AND candidate.participation_mode IN ('none', 'online_only')
+      AND candidate.rights_risk != 'blocked'
+      AND candidate.submission_risk != 'blocked'
+      AND candidate.status = 'active'
       AND (request.expires_at IS NULL OR request.expires_at > clock.decided_at)
       AND NOT EXISTS (
         SELECT 1 FROM competition_approval_decisions AS stored
@@ -1147,8 +1177,22 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     FROM competition_report_approval_requests AS link
     JOIN latest ON latest.idempotency_key = link.idempotency_key
     JOIN competition_approval_requests AS request ON request.request_id = link.request_id
+    JOIN competition_candidates AS candidate
+      ON candidate.idempotency_key = link.idempotency_key
+     AND candidate.contest_id = link.contest_id
+     AND candidate.category = link.category
     LEFT JOIN competition_approval_decisions AS stored ON stored.request_id = request.request_id
     WHERE request.request_id = ?1
+      AND candidate.official_verification = 'verified'
+      AND candidate.eligibility = 'eligible'
+      AND candidate.acceptance = 'open'
+      AND candidate.deadline_at IS NOT NULL
+      AND candidate.deadline_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      AND candidate.fee_status = 'free'
+      AND candidate.participation_mode IN ('none', 'online_only')
+      AND candidate.rights_risk != 'blocked'
+      AND candidate.submission_risk != 'blocked'
+      AND candidate.status = 'active'
   `).bind(normalizedRequestId).first();
   if (!approval) return competitionError('approval_stale', 409);
   if (approval.action_sha256 !== actionSha256) return competitionError('approval_stale', 409);
@@ -1194,6 +1238,19 @@ function serializeRun(row) {
       succeeded: Number(row.coverage_succeeded),
     },
   };
+}
+
+function candidateMeetsOwnerPreferences(candidate) {
+  return candidate.official_verification === 'verified'
+    && candidate.eligibility === 'eligible'
+    && candidate.acceptance === 'open'
+    && candidate.deadline_at !== null
+    && Date.parse(candidate.deadline_at) > Date.now()
+    && candidate.fee_status === 'free'
+    && ['none', 'online_only'].includes(candidate.participation_mode)
+    && candidate.rights_risk !== 'blocked'
+    && candidate.submission_risk !== 'blocked'
+    && candidate.status === 'active';
 }
 
 function emptyCompetitionResponse() {
@@ -1261,9 +1318,23 @@ async function getCompetitionsInternal(request, env) {
         decision.decision, decision.decided_at
       FROM competition_report_approval_requests AS link
       JOIN competition_approval_requests AS request ON request.request_id = link.request_id
+      JOIN competition_candidates AS candidate
+        ON candidate.idempotency_key = link.idempotency_key
+       AND candidate.contest_id = link.contest_id
+       AND candidate.category = link.category
       LEFT JOIN competition_approval_decisions AS decision
         ON decision.request_id = request.request_id
       WHERE link.idempotency_key = ?1
+        AND candidate.official_verification = 'verified'
+        AND candidate.eligibility = 'eligible'
+        AND candidate.acceptance = 'open'
+        AND candidate.deadline_at IS NOT NULL
+        AND candidate.deadline_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        AND candidate.fee_status = 'free'
+        AND candidate.participation_mode IN ('none', 'online_only')
+        AND candidate.rights_risk != 'blocked'
+        AND candidate.submission_risk != 'blocked'
+        AND candidate.status = 'active'
       ORDER BY request.requested_at DESC, request.request_id
     `).bind(latest.idempotency_key).all(),
   ]);
@@ -1293,7 +1364,9 @@ async function getCompetitionsInternal(request, env) {
     acceptance: row.acceptance,
     deadline_at: row.deadline_at,
     eligibility: row.eligibility,
-    status: row.status,
+    fee_status: row.fee_status,
+    participation_mode: row.participation_mode,
+    status: candidateMeetsOwnerPreferences(row) ? row.status : (row.status === 'active' ? 'deferred' : row.status),
     rights_risk: row.rights_risk,
     submission_risk: row.submission_risk,
     fit_score: Number(row.fit_score),
@@ -1314,15 +1387,23 @@ async function getCompetitionsInternal(request, env) {
       decided_at: row.decided_at || null,
     }];
   }));
-  const applications = (applicationRows.results || []).map((row) => ({
-    contest_id: row.contest_id,
-    category: row.category,
-    state: row.state,
-    updated_at: row.updated_at,
-    blocker: row.blocker,
-    next_action: row.next_action,
-    approval: approvals.get(`${row.contest_id}|${row.category}`) || null,
-  }));
+  const candidatesByKey = new Map((candidateRows.results || []).map((row) => [
+    `${row.contest_id}|${row.category}`, row,
+  ]));
+  const applications = (applicationRows.results || []).map((row) => {
+    const preferenceEligible = candidateMeetsOwnerPreferences(
+      candidatesByKey.get(`${row.contest_id}|${row.category}`) || {},
+    );
+    return {
+      contest_id: row.contest_id,
+      category: row.category,
+      state: preferenceEligible ? row.state : 'WAITING_CLARIFICATION',
+      updated_at: row.updated_at,
+      blocker: preferenceEligible ? row.blocker : 'submission',
+      next_action: preferenceEligible ? row.next_action : 'manual_check',
+      approval: preferenceEligible ? (approvals.get(`${row.contest_id}|${row.category}`) || null) : null,
+    };
+  });
   const latestScanAt = latest.finished_at || latest.started_at;
   const latestScanTime = Date.parse(latestScanAt);
   const deadlineSoonLimit = latestScanTime + 7 * 86_400_000;
@@ -1331,10 +1412,9 @@ async function getCompetitionsInternal(request, env) {
     ? {
       discovered: (candidateRows.results || []).filter((row) => row.recency === 'new').length,
       verified: candidates.filter((candidate) => candidate.official_verification === 'verified').length,
-      ready: candidates.filter((candidate) => candidate.status === 'active').length,
+      ready: (candidateRows.results || []).filter(candidateMeetsOwnerPreferences).length,
       awaiting_approval: applications.filter((application) => (
         application.approval?.status === 'pending'
-        || (!application.approval && application.state === 'WAITING_APPROVAL')
       )).length,
       deadline_soon: candidates.filter((candidate) => {
         const deadline = Date.parse(candidate.deadline_at || '');

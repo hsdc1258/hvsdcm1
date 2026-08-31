@@ -536,6 +536,8 @@ export function buildCompetitionCrawlReport(results, times = {}) {
       acceptance: 'unknown',
       deadline_at: null,
       eligibility: 'unknown',
+      fee_status: 'unknown',
+      participation_mode: 'unknown',
       rights_risk: 'unknown',
       submission_risk: 'unknown',
       status: 'verifying',

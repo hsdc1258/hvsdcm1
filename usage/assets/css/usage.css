@@ -1483,7 +1483,7 @@
   }
 }
 /* ==========================================================================
-   공모전 — 후보 검토와 후속 자동화용 승인 기록을 분리하며 외부 제출은 실행하지 않는 owner 표면
+   공모전 — 후보 검토와 승인 기록을 분리하고 정확한 최종 승인 전 외부 제출을 막는 owner 표면
    ========================================================================== */
 .cp-body, .cp-approvals, .cp-approval-list, .cp-approval-card, .cp-overview, .cp-panel, .cp-applications, .cp-candidates, .cp-candidate-list, .cp-candidate, .cp-application {
   display: grid;
@@ -1494,7 +1494,7 @@
 }
 .cp-filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(132px, .8fr));
+  grid-template-columns: minmax(220px, 1.6fr) repeat(6, minmax(118px, .8fr));
   align-items: end;
   gap: var(--space-3);
   margin-bottom: var(--space-5);

@@ -82,6 +82,8 @@ function verificationQueue(crawl) {
       'deadline_timezone',
       'eligibility',
       'fee',
+      'participation_mode',
+      'interview_presentation',
       'rights',
       'privacy',
       'ai_policy',

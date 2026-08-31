@@ -21,6 +21,17 @@
     ineligible: '지원 불가', no: '지원 불가',
     unknown: '미확인',
   };
+  const FEE_LABELS = {
+    free: '무료',
+    paid: '유료',
+    unknown: '미확인',
+  };
+  const PARTICIPATION_LABELS = {
+    none: '추가 일정 없음',
+    online_only: '온라인만',
+    offline_required: '대면·현장 필수',
+    unknown: '미확인',
+  };
   const COVERAGE_LABELS = {
     success: '성공',
     failed: '실패', error: '실패',
@@ -385,6 +396,12 @@
       : '');
     const sourceName = sourcesById.get(text(source.source_id))?.name || '';
     const officialVerification = enumKey(source.official_verification, OFFICIAL_VERIFICATION_KEYS);
+    const rawFeeStatus = text(source.fee_status).toLowerCase();
+    const feeStatus = Object.prototype.hasOwnProperty.call(FEE_LABELS, rawFeeStatus) ? rawFeeStatus : 'unknown';
+    const rawParticipationMode = text(source.participation_mode).toLowerCase();
+    const participationMode = Object.prototype.hasOwnProperty.call(PARTICIPATION_LABELS, rawParticipationMode)
+      ? rawParticipationMode
+      : 'unknown';
     return {
       id,
       category,
@@ -401,6 +418,10 @@
       discoveryUrl: firstSafeUrl(discovery.url, source.discovery_url, source.source_url),
       eligibilityStatus,
       eligibility: eligibilityDescription,
+      feeStatus,
+      feeLabel: FEE_LABELS[feeStatus],
+      participationMode,
+      participationLabel: PARTICIPATION_LABELS[participationMode],
       deadline: first(source.deadline, source.deadline_at, source.closes_at, source.due_at, source.end_at, source.application_deadline),
       status,
       recency: codedLabel(source.recency, RECENCY_LABELS),
@@ -551,6 +572,8 @@
     const query = text(filters.search).toLocaleLowerCase('ko-KR');
     const status = text(filters.status) || 'all';
     const eligibility = text(filters.eligibility) || 'all';
+    const fee = text(filters.fee) || 'all';
+    const participation = text(filters.participation) || 'all';
     const deadline = text(filters.deadline) || 'all';
     const result = candidates.map((candidate) => candidateAtDeadline(candidate, now)).filter((candidate) => {
       const haystack = [candidate.title, candidate.organizer, candidate.eligibility, candidate.discoveryName]
@@ -558,8 +581,26 @@
       return (!query || haystack.includes(query))
         && (status === 'all' || candidate.status === status)
         && (eligibility === 'all' || candidate.eligibilityStatus === eligibility)
+        && (fee === 'all' || candidate.feeStatus === fee)
+        && (participation === 'all' || candidate.participationMode === participation)
         && (deadline === 'all' || deadlineBucket(candidate, now) === deadline);
     });
+    if (!filters.sort || filters.sort === 'priority') {
+      const participationRank = { none: 0, online_only: 1, offline_required: 2, unknown: 3 };
+      return result.sort((left, right) => {
+        const feeDifference = (left.feeStatus === 'free' ? 0 : 1) - (right.feeStatus === 'free' ? 0 : 1);
+        if (feeDifference) return feeDifference;
+        const modeDifference = participationRank[left.participationMode] - participationRank[right.participationMode];
+        if (modeDifference) return modeDifference;
+        const fitDifference = (right.fitScore ?? -1) - (left.fitScore ?? -1);
+        if (fitDifference) return fitDifference;
+        const effortDifference = (left.effortScore ?? 101) - (right.effortScore ?? 101);
+        if (effortDifference) return effortDifference;
+        const leftTime = time(left.deadline) ?? Number.POSITIVE_INFINITY;
+        const rightTime = time(right.deadline) ?? Number.POSITIVE_INFINITY;
+        return leftTime - rightTime || left.title.localeCompare(right.title, 'ko');
+      });
+    }
     const direction = filters.sort === 'deadline-desc' ? -1 : 1;
     return result.sort((left, right) => {
       const leftTime = time(left.deadline);
@@ -629,6 +670,8 @@
           <div><dt>승인 종류</dt><dd>${escapeHtml(kind)}</dd></div>
           <div><dt>마감</dt><dd>${escapeHtml(candidate?.deadline ? dateTime(candidate.deadline) : '미확인')}</dd></div>
           <div><dt>지원 자격</dt><dd>${escapeHtml(ELIGIBILITY_LABELS[candidate?.eligibilityStatus] || ELIGIBILITY_LABELS.unknown)}</dd></div>
+          <div><dt>지원 비용</dt><dd>${escapeHtml(candidate?.feeLabel || FEE_LABELS.unknown)}</dd></div>
+          <div><dt>추가 참여</dt><dd>${escapeHtml(candidate?.participationLabel || PARTICIPATION_LABELS.unknown)}</dd></div>
           <div><dt>권리 위험</dt><dd>${escapeHtml(candidate?.rightsRisk || '미확인')}</dd></div>
           <div><dt>제출 위험</dt><dd>${escapeHtml(candidate?.submissionRisk || '미확인')}</dd></div>
           <div><dt>유효 시간</dt><dd>${escapeHtml(approval.expiresAt ? dateTime(approval.expiresAt) : '준비 승인 · 만료 없음')}</dd></div>
@@ -746,6 +789,8 @@
         <div><dt>적합도 점수</dt><dd>${candidate.fitScore ?? '미확인'}</dd></div>
         <div><dt>작업량 점수</dt><dd>${candidate.effortScore ?? '미확인'}</dd></div>
         <div><dt>지원 자격</dt><dd><span class="cp-inline-state${tone(candidate.eligibilityStatus)}">${escapeHtml(ELIGIBILITY_LABELS[candidate.eligibilityStatus] || ELIGIBILITY_LABELS.unknown)}</span>${candidate.eligibility ? ` ${escapeHtml(candidate.eligibility)}` : ''}</dd></div>
+        <div><dt>지원 비용</dt><dd>${escapeHtml(candidate.feeLabel)}</dd></div>
+        <div><dt>추가 참여</dt><dd>${escapeHtml(candidate.participationLabel)}</dd></div>
         <div><dt>권리 위험</dt><dd>${escapeHtml(candidate.rightsRisk)}</dd></div>
         <div><dt>제출 위험</dt><dd>${escapeHtml(candidate.submissionRisk)}</dd></div>
       </dl>
@@ -829,6 +874,8 @@
       search: document.getElementById('competitionSearch'),
       status: document.getElementById('competitionStatus'),
       eligibility: document.getElementById('competitionEligibility'),
+      fee: document.getElementById('competitionFee'),
+      participation: document.getElementById('competitionParticipation'),
       deadline: document.getElementById('competitionDeadline'),
       sort: document.getElementById('competitionSort'),
     };
@@ -845,6 +892,8 @@
         search: elements.search?.value,
         status: elements.status?.value,
         eligibility: elements.eligibility?.value,
+        fee: elements.fee?.value,
+        participation: elements.participation?.value,
         deadline: elements.deadline?.value,
         sort: elements.sort?.value,
       };
@@ -964,8 +1013,10 @@
       if (elements.search) elements.search.value = '';
       if (elements.status) elements.status.value = 'all';
       if (elements.eligibility) elements.eligibility.value = 'all';
+      if (elements.fee) elements.fee.value = 'all';
+      if (elements.participation) elements.participation.value = 'all';
       if (elements.deadline) elements.deadline.value = 'all';
-      if (elements.sort) elements.sort.value = 'deadline-asc';
+      if (elements.sort) elements.sort.value = 'priority';
       render();
       elements.search?.focus?.();
     }

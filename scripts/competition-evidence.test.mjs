@@ -42,6 +42,8 @@ function evidence(overrides = {}) {
       acceptance: 'open',
       deadline_at: '2026-09-03T15:00:00+09:00',
       eligibility: 'unknown',
+      fee_status: 'free',
+      participation_mode: 'none',
       rights_risk: 'medium',
       submission_risk: 'medium',
       status: 'deferred',

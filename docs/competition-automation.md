@@ -1,7 +1,8 @@
 # Competition discovery reporting
 
-The daily competition heartbeat discovers and prepares opportunities, but it does not submit an
-application. The private local ledger and profile HMAC secret remain outside this repository. The
+The daily competition heartbeat discovers and prepares opportunities. This repository stores the
+redacted review and exact approval decision; the installed local competition skill performs the live
+browser submission only after that exact `final_submission` is approved. The private local ledger and profile HMAC secret remain outside this repository. The
 owner-only `/usage/?view=competition` dashboard receives only the redacted operational snapshot.
 
 ## Daily source coverage
@@ -25,8 +26,10 @@ blocked, timeout, and manual-check outcomes rather than treating access trouble 
 The last three sources are filtered to actual contests, competitions, and challenges. Grants, jobs,
 procurement, and sweepstakes are excluded. An aggregator listing is discovery evidence only. Before a
 candidate can become active, the cycle must resolve an organizer-controlled HTTPS rules page and the
-exact submission destination, then verify live acceptance, precise deadline, eligibility, fee, rights,
-privacy terms, AI policy, deliverables, and receipt mechanism from that official source.
+exact submission destination, then verify live acceptance, precise deadline, eligibility, zero fee,
+whether any interview/presentation/attendance is required, participation mode, rights, privacy terms,
+AI policy, deliverables, and receipt mechanism from that official source. Only `fee_status=free` and
+`participation_mode=none|online_only` may enter the selected portfolio. Unknown values fail closed.
 
 ## Crawler
 
@@ -173,8 +176,16 @@ metadata text, URL paths, or URL queries. The run date is bound to the start tim
 have only a five-minute clock-skew allowance; source checks, discovery, official verification, and
 application updates cannot claim evidence later than that run's observation. Source counts must equal their reported candidates;
 timeouts and HTTP 403 responses require manual follow-up and never prove closure. Active work remains
-capped at three and may refer only to an officially verified, eligible, currently open, unexpired
-`active` candidate with an offset-qualified deadline.
+capped at ten and may refer only to an officially verified, eligible, currently open, unexpired,
+zero-fee `active` candidate with an offset-qualified deadline and no offline attendance requirement.
+The owner view sorts the hard preference first (`none` before `online_only`), then fit, effort, and
+deadline. The local planner uses the same eligible-only ten-item ceiling; it never pads the portfolio
+with paid, offline, or unknown candidates.
+
+Migration `0018_competition_preference_contract.sql` must be applied before the new Worker. It adds
+fail-closed preference facts and dual-write count columns so old three-item snapshots remain readable
+while new reports can carry ten applications and ten approval links. Legacy active rows default to
+unknown and cannot be approved until a newer official verification supplies the two preference facts.
 
 ## Results-only Discord delivery
 
@@ -194,10 +205,13 @@ scheduled bot task, or revive Moder/session-feedback reporting.
 
 ## Human approval boundary
 
-Automation may discover, verify, score, deduplicate, draft, render, and stage. It must stop for exact
+Automation may discover, verify, score, deduplicate, draft, render, and stage ten eligible submissions. It must stop for exact
 action-time approval before transmitting PII, accepting privacy/originality/publicity/rights terms,
 signing, paying, or making the final representational submission. A previous schedule or broad approval
-does not authorize a later contest's changed terms.
+does not authorize a later contest's changed terms. Once the owner approves the exact, unexpired
+`final_submission` action hash, the local guard records `SUBMITTING` before transmission and executes
+that unchanged action once without asking the same question again. Changed or expired actions require
+a new approval; ambiguous results become `SUBMISSION_UNKNOWN` and are never retried blindly.
 
 Discord delivery, when enabled, is results-only: completed submissions or exact human-action gates may
 be reported, but crawl progress, raw logs, Moder traffic, and session feedback are not sent.
