@@ -35,12 +35,18 @@
     freshnessText: document.getElementById('freshnessText'),
     fundingValue: document.getElementById('fundingValue'),
     experimentArms: document.getElementById('experimentArms'),
+    experimentAverageReturn: document.getElementById('experimentAverageReturn'),
     experimentDeadline: document.getElementById('experimentDeadline'),
     experimentFeed: document.getElementById('experimentFeed'),
+    experimentLeaderName: document.getElementById('experimentLeaderName'),
+    experimentLeaderPnl: document.getElementById('experimentLeaderPnl'),
+    experimentLeaderReturn: document.getElementById('experimentLeaderReturn'),
     experimentLastPacket: document.getElementById('experimentLastPacket'),
     experimentLeaderboard: document.getElementById('experimentLeaderboard'),
+    experimentOpenPositions: document.getElementById('experimentOpenPositions'),
     experimentStarted: document.getElementById('experimentStarted'),
     experimentStatus: document.getElementById('experimentStatus'),
+    experimentTotalTrades: document.getElementById('experimentTotalTrades'),
     inSampleMetrics: document.getElementById('inSampleMetrics'),
     interestValue: document.getElementById('interestValue'),
     liveStatus: document.getElementById('liveStatus'),
@@ -507,6 +513,7 @@
     elements.paperTab.setAttribute('aria-selected', String(paperActive));
     elements.marketTabPanel.hidden = paperActive;
     elements.paperTabPanel.hidden = !paperActive;
+    document.body.classList.toggle('is-paper-view', paperActive);
     history.replaceState(null, '', paperActive ? '#paper' : '#market');
   }
 
@@ -653,25 +660,57 @@
     return figure;
   }
 
+  function strategyPresentation(strategyId, fallback) {
+    const presentations = {
+      'multi-trend-persistence-v2': ['추세 지속', '힘이 이어지는 방향을 따라가요.'],
+      'multi-breakout-confirmation-v2': ['돌파 확인', '가격이 범위를 벗어난 뒤 확인하고 따라가요.'],
+      'multi-range-reversion-v2': ['구간 회귀', '과하게 움직인 가격이 범위로 돌아오는 흐름을 봐요.'],
+      'multi-ofi-continuation-v2': ['체결 흐름', '매수와 매도 체결의 쏠림이 이어지는지 봐요.'],
+      'multi-overreaction-fade-v2': ['과민 반응 역추세', '군중의 과한 반응이 되돌아오는 구간을 찾아요.'],
+      'multi-consensus-conservative-v2': ['보수적 합의', '여러 신호가 같은 방향일 때만 움직여요.'],
+    };
+    return presentations[strategyId] || [fallback || strategyId, '고정된 규칙으로 공개 시장 데이터를 관찰해요.'];
+  }
+
+  function signedClass(value) {
+    return value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : 'is-neutral';
+  }
+
   function renderExperimentArm(arm) {
     const card = document.createElement('article');
     card.className = 'panel abc-arm-card';
+    card.dataset.armId = arm.arm_id;
+    card.dataset.outcome = signedClass(arm.net_pnl);
+    const [strategyName, strategyDescription] = strategyPresentation(arm.strategy.id, arm.strategy.label);
     const heading = document.createElement('div');
     heading.className = 'abc-arm-heading';
     heading.append(
       createText('span', 'abc-arm-id', arm.arm_id),
       createText('div', '', ''),
+      createText('span', `abc-position-state ${arm.open_position ? 'is-open' : ''}`,
+        arm.open_position ? `${String(arm.open_position.direction).toUpperCase()} 포지션` : arm.status === 'halted' ? '위험 한도 정지' : '포지션 대기'),
     );
-    heading.lastElementChild.append(createText('p', 'section-index', arm.strategy.label), createText('h3', '', arm.strategy.id));
+    heading.children[1].append(createText('h3', '', strategyName), createText('p', 'abc-strategy-description', strategyDescription),
+      createText('small', 'abc-strategy-id', arm.strategy.id));
+    const result = document.createElement('div');
+    result.className = 'abc-arm-result';
+    const returnValue = createText('strong', signedClass(arm.return_pct), formatPercent(arm.return_pct, true));
+    result.append(createText('span', '', '현재 수익률'), returnValue,
+      createText('small', '', `순손익 ${formatUsdt(arm.net_pnl, true)} · 자산 ${formatUsdt(arm.equity)}`));
     const metrics = document.createElement('div');
     metrics.className = 'abc-arm-metrics';
     metrics.append(
-      detailCell('자산', formatUsdt(arm.equity)), detailCell('순손익', formatUsdt(arm.net_pnl, true)),
-      detailCell('수익률', formatPercent(arm.return_pct, true)), detailCell('최대 낙폭', formatPercent(arm.max_drawdown_pct)),
-      detailCell('비용', `${formatUsdt(arm.fees + arm.slippage_cost)} · 수수료 ${formatUsdt(arm.fees)}`),
-      detailCell('거래', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
+      detailCell('최대 낙폭', formatPercent(arm.max_drawdown_pct)),
+      detailCell('전체 비용', formatUsdt(arm.fees + arm.slippage_cost)),
+      detailCell('거래 결과', `${arm.trade_count}회 · ${arm.win_count}승 ${arm.loss_count}패`),
+      detailCell('현재 상태', arm.open_position ? '포지션 보유' : arm.status === 'halted' ? '정지' : '관찰 중'),
     );
     const chart = renderEquityChart(arm);
+    const details = document.createElement('details');
+    details.className = 'abc-arm-details';
+    details.append(createText('summary', '', '전략 상세와 로그 보기'));
+    const detailsBody = document.createElement('div');
+    detailsBody.className = 'abc-arm-details-body';
     const policy = document.createElement('section');
     policy.className = 'abc-arm-section';
     policy.append(createText('h4', '', '진입 정책 / 위험'));
@@ -731,7 +770,9 @@
       return row;
     }));
     const chain = createText('p', 'abc-chain', `arm chain #${arm.chain.sequence} · ${arm.chain.hash.slice(0, 16)}… · ${arm.strategy.definition_hash.slice(0, 12)}…`);
-    card.append(heading, chart, metrics, policy, position, trades, decisions, logs, chain);
+    detailsBody.append(policy, position, trades, decisions, logs, chain);
+    details.append(detailsBody);
+    card.append(heading, result, chart, metrics, details);
     return card;
   }
 
@@ -746,7 +787,10 @@
       return;
     }
     if (current.nodeType !== Node.ELEMENT_NODE) return;
-    for (const name of current.getAttributeNames()) if (!next.hasAttribute(name)) current.removeAttribute(name);
+    for (const name of current.getAttributeNames()) {
+      if (current.tagName === 'DETAILS' && name === 'open') continue;
+      if (!next.hasAttribute(name)) current.removeAttribute(name);
+    }
     for (const name of next.getAttributeNames()) {
       const value = next.getAttribute(name);
       if (current.getAttribute(name) !== value) current.setAttribute(name, value);
@@ -792,13 +836,32 @@
     elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
     elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
     const overviewCopy = elements.paperExperiment.querySelector('[data-experiment-copy]');
-    if (overviewCopy) overviewCopy.textContent = `동일한 공개 Bitget feed와 비용 모델을 ${experiment.arms.length}개 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.`;
+    if (overviewCopy) overviewCopy.textContent = `같은 공개 시장 데이터와 비용 기준으로 ${experiment.arms.length}개 전략을 공정하게 비교해요.`;
+    const leader = experiment.leaderboard.find((entry) => entry.rank === 1) || experiment.leaderboard[0];
+    const leaderArm = experiment.arms.find((arm) => arm.arm_id === leader.arm_id);
+    const [leaderName] = strategyPresentation(leaderArm.strategy.id, leaderArm.strategy.label);
+    const averageReturn = experiment.arms.reduce((sum, arm) => sum + arm.return_pct, 0) / experiment.arms.length;
+    const openPositions = experiment.arms.filter((arm) => arm.open_position).length;
+    const totalTrades = experiment.arms.reduce((sum, arm) => sum + arm.trade_count, 0);
+    elements.experimentLeaderName.textContent = `${leader.arm_id} · ${leaderName}`;
+    elements.experimentLeaderReturn.textContent = formatPercent(leader.return_pct, true);
+    elements.experimentLeaderReturn.className = signedClass(leader.return_pct);
+    elements.experimentLeaderPnl.textContent = `순손익 ${formatUsdt(leader.net_pnl, true)} · 자산 ${formatUsdt(leader.equity)}`;
+    elements.experimentAverageReturn.textContent = formatPercent(averageReturn, true);
+    elements.experimentAverageReturn.className = signedClass(averageReturn);
+    elements.experimentOpenPositions.textContent = `${openPositions} / ${experiment.arms.length}`;
+    elements.experimentTotalTrades.textContent = `${totalTrades}회`;
     const leaderboard = experiment.leaderboard.map((entry) => {
       const arm = experiment.arms.find((item) => item.arm_id === entry.arm_id);
-      const row = document.createElement('tr');
-      row.replaceChildren(createText('td', '', String(entry.rank)), createText('td', '', `${entry.arm_id} · ${arm.strategy.label}`),
-        createText('td', '', formatUsdt(entry.equity)), createText('td', '', `${formatUsdt(entry.net_pnl, true)} / ${formatPercent(entry.return_pct, true)}`),
-        createText('td', '', formatPercent(entry.max_drawdown_pct)));
+      const [name] = strategyPresentation(arm.strategy.id, arm.strategy.label);
+      const row = document.createElement('li');
+      row.className = 'paper-ranking-item';
+      const identity = document.createElement('div');
+      identity.append(createText('b', '', `${entry.arm_id} · ${name}`), createText('span', '', `자산 ${formatUsdt(entry.equity)} · 낙폭 ${formatPercent(entry.max_drawdown_pct)}`));
+      const resultBlock = document.createElement('div');
+      resultBlock.append(createText('strong', signedClass(entry.return_pct), formatPercent(entry.return_pct, true)),
+        createText('small', '', formatUsdt(entry.net_pnl, true)));
+      row.append(createText('span', 'paper-rank-number', String(entry.rank)), identity, resultBlock);
       return row;
     });
     const arms = experiment.arms.map(renderExperimentArm);

@@ -174,7 +174,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v8',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v9',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -245,8 +245,14 @@ try {
     assert.equal(await page.getByText('실시간 엔진 · 재귀 개선 감사').count(), 0);
     assert.equal(await page.locator('#unsafe-abc').count(), 0);
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
-    assert.equal(await page.locator('#experimentLeaderboard tr').count(), 6);
+    assert.equal(await page.locator('#experimentLeaderboard .paper-ranking-item').count(), 6);
     assert.equal(await page.locator('.abc-equity-chart svg').count(), 6);
+    assert.equal(await page.locator('.abc-arm-details').count(), 6);
+    assert.equal(await page.getByText('전략 상세와 로그 보기').count(), 6);
+    assert.match(await page.locator('#experimentLeaderName').textContent(), /A · 추세 지속/u);
+    assert.match(await page.locator('#experimentAverageReturn').textContent(), /\+0\.50%/u);
+    assert.match(await page.locator('#experimentOpenPositions').textContent(), /1 \/ 6/u);
+    assert.match(await page.locator('#experimentTotalTrades').textContent(), /6회/u);
     assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
     assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
     assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 거래' }).count(), 6);
@@ -259,11 +265,13 @@ try {
     await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
-    await assertGeometry(page, 3);
+    await assertGeometry(page, 2);
+    assert.equal(await page.locator('.abc-arm-details[open]').count(), 0);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
       await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-desktop.png'), fullPage: true });
     }
+    await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = true; });
 
     await advance(page, 5_000);
     await page.waitForFunction(() => window.__paperFetchCount === 2 && window.__paperHangs.length === 1);
@@ -283,6 +291,7 @@ try {
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
     assert.equal(await page.evaluate(() => window.__initialArmNodes.every((node, index) =>
       node === document.querySelectorAll('.abc-arm-card')[index])), true);
+    assert.equal(await page.locator('.abc-arm-details').first().evaluate((details) => details.open), true);
     await page.locator('#stopPaper').click();
     await page.waitForFunction(() => window.__paperStopRequests.length === 1
       && document.getElementById('stopPaper').disabled
@@ -291,6 +300,10 @@ try {
       { experiment_id: 'multi-paper-20260831-v2' },
     ]);
     assert.match(await page.locator('#stopPaper').textContent(), /중단 요청됨/u);
+    await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = false; });
+    await page.setViewportSize({ width: 768, height: 900 });
+    await assertGeometry(page, 1);
+    if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-tablet.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGeometry(page, 1);
     if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });
@@ -312,7 +325,7 @@ try {
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
-  console.log('BEHAVIOR LAB UI E2E PASS · active-only six-arm v2 · 6 curves/policy details · refresh retention · finished hidden · mobile bounds');
+  console.log('BEHAVIOR LAB UI E2E PASS · scan-first summary · 6 collapsed strategy cards · open-state/refresh retention · finished hidden · responsive bounds');
 } finally {
   await browser.close();
   await new Promise((resolveClose) => server.close(resolveClose));

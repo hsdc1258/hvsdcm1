@@ -124,12 +124,14 @@ test('owner paper UI removes the completed legacy session surface and keeps boun
   assert.match(appSource, /\['starting', 'active'\]\.includes\(payload\.experiment\.status\)/u);
 });
 
-test('owner paper UI renders six detailed, accessible time-scaled cost-aware curves and hides finished experiments', () => {
+test('owner paper UI renders a scan-first six-strategy summary with accessible detailed curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
-  assert.match(htmlSource, /SIMULTANEOUS UNTIL STOP · SIX INDEPENDENT ARMS/u);
+  assert.match(htmlSource, /6개 전략을 한눈에 비교해요/u);
   assert.doesNotMatch(htmlSource, /SIMULTANEOUS 24H · SIX INDEPENDENT ARMS/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);
+  assert.match(htmlSource, /id="experimentLeaderReturn"/u);
+  assert.match(htmlSource, /실험 조건과 데이터 상태 보기/u);
   assert.match(appSource, /function validExperimentReport\(experiment\)/u);
   assert.match(appSource, /run_mode === 'until-stopped'/u);
   assert.match(appSource, /experiment\.deadline_at === null/u);
@@ -146,6 +148,8 @@ test('owner paper UI renders six detailed, accessible time-scaled cost-aware cur
   assert.match(appSource, /setAttribute\('role', 'img'\)/u);
   assert.match(appSource, /'최근 거래'/u);
   assert.match(appSource, /'진입 정책 \/ 위험'/u);
+  assert.match(appSource, /'전략 상세와 로그 보기'/u);
+  assert.match(appSource, /current\.tagName === 'DETAILS' && name === 'open'/u);
   assert.match(appSource, /elements\.experimentArms\.replaceChildren\(\)/u);
   assert.match(appSource, /state\.experiment = experiment;\s+paperStatus\(experiment\.status\)/u);
   assert.match(appSource, /renderExperiment\(activeExperiment\)/u);
