@@ -1026,7 +1026,7 @@ html {
   margin-bottom: var(--space-6);
 }
 .abc-experiment[aria-busy="true"] {
-  opacity: .72;
+  cursor: progress;
 }
 .abc-overview {
   gap: var(--space-5);
@@ -1041,6 +1041,18 @@ html {
   min-width: 0;
   align-content: start;
   gap: var(--space-4);
+}
+.text-button.is-danger {
+  border-color: rgba(255, 105, 120, .58);
+  color: #ffb5bd;
+}
+.text-button.is-danger:hover:not(:disabled) {
+  border-color: rgba(255, 105, 120, .9);
+  background: rgba(255, 80, 100, .1);
+}
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 .abc-arm-heading {
   display: grid;

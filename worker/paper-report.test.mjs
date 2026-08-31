@@ -6,6 +6,7 @@ import test from 'node:test';
 import worker from './src/index.js';
 import {
   BEHAVIOR_PAPER_DEADLINE,
+  BEHAVIOR_MULTI_CONTROL_SOURCE,
   BEHAVIOR_PAPER_SESSION_ID,
   BEHAVIOR_PAPER_SNAPSHOT_SOURCE,
   normalizeBehaviorPaperReport,
@@ -116,6 +117,7 @@ function memoryDb({ username = 'hvsdcm' } = {}) {
             return { token_hash: 'stored-hash', role: 'user', disabled: 0, username };
           }
           if (sql.includes('FROM usage_snapshots')) {
+            if (this.values[0] === BEHAVIOR_MULTI_CONTROL_SOURCE) return null;
             return reports[0] || null;
           }
           throw new Error(`Unexpected first SQL: ${sql}`);

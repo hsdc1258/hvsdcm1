@@ -10,7 +10,8 @@
   const core = window.BehaviorLabCore;
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
-    ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null, activeTab: 'market',
+    ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null,
+    stopSubmitting: false, stopRequested: false, activeTab: 'market',
   };
 
   const elements = {
@@ -67,6 +68,7 @@
     paperStatus: document.getElementById('paperStatus'),
     paperTab: document.getElementById('paperTab'),
     paperTabPanel: document.getElementById('paperTabPanel'),
+    stopPaper: document.getElementById('stopPaper'),
     priceLine: document.getElementById('priceLine'),
     refreshPaper: document.getElementById('refreshPaper'),
     retryDashboard: document.getElementById('retryDashboard'),
@@ -459,12 +461,17 @@
     state.paperLoading = false;
     state.ownerVerified = false;
     state.experiment = null;
+    state.stopSubmitting = false;
+    state.stopRequested = false;
     elements.paperExperiment.hidden = true;
     elements.paperExperiment.dataset.freshness = 'stale';
     elements.paperExperiment.setAttribute('aria-busy', 'false');
     elements.paperEmpty.hidden = true;
     elements.paperError.hidden = true;
     elements.refreshPaper.disabled = false;
+    elements.stopPaper.hidden = true;
+    elements.stopPaper.disabled = false;
+    elements.stopPaper.textContent = '6개 실험 중단';
     elements.labShell.hidden = true;
     elements.ownerGate.hidden = false;
     elements.retryOwnerGate.hidden = status === 401 || status === 404;
@@ -549,8 +556,13 @@
     const started = Date.parse(experiment?.started_at);
     const deadline = Date.parse(experiment?.deadline_at);
     const v2 = experiment?.schema === 'multi-paper-experiment-v2';
+    const continuous = v2 && experiment?.run_mode === 'until-stopped';
+    const stopped = experiment?.stopped_at === null ? null : Date.parse(experiment?.stopped_at);
+    const validTiming = continuous
+      ? experiment.deadline_at === null && (stopped === null || Number.isFinite(stopped))
+      : Number.isFinite(deadline) && deadline - started === 24 * 60 * 60_000;
     return Boolean(experiment && profile && experiment.experiment_id === profile.experimentId && experiment.simulation === true
-      && experiment.public_data_only === true && Number.isFinite(started) && deadline - started === 24 * 60 * 60_000
+      && experiment.public_data_only === true && Number.isFinite(started) && validTiming
       && ['starting', 'active', 'complete', 'error'].includes(experiment.status)
       && Number.isInteger(experiment.shared_feed?.sequence) && experiment.shared_feed.sequence > 0
       && hash(experiment.shared_feed.hash) && experiment.shared_feed.credential_used === false
@@ -561,7 +573,9 @@
       && experiment.leaderboard.length === profile.armIds.length && Array.isArray(experiment.arms)
       && experiment.arms.length === profile.armIds.length
       && (!v2 || (hash(experiment.strategy_set_hash) && experiment.assumptions.modeled_round_trip_cost_bps === 20
-        && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3))
+        && experiment.assumptions.risk_pct === 1.5 && experiment.assumptions.leverage_cap === 3
+        && (!continuous || (experiment.assumptions.entry_cutoff_at === null
+          && experiment.assumptions.terminal_close === 'owner-stop'))))
       && experiment.arms.every((arm, index) => arm.arm_id === profile.armIds[index]
         && arm.strategy?.id === profile.strategyIds[index]
         && hash(arm.strategy.definition_hash) && Number.isInteger(arm.chain?.sequence) && arm.chain.sequence > 0
@@ -721,27 +735,81 @@
     return card;
   }
 
+  function patchRenderedNode(current, next) {
+    if (current.nodeType !== next.nodeType
+      || (current.nodeType === Node.ELEMENT_NODE && current.nodeName !== next.nodeName)) {
+      current.replaceWith(next.cloneNode(true));
+      return;
+    }
+    if (current.nodeType === Node.TEXT_NODE) {
+      if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+      return;
+    }
+    if (current.nodeType !== Node.ELEMENT_NODE) return;
+    for (const name of current.getAttributeNames()) if (!next.hasAttribute(name)) current.removeAttribute(name);
+    for (const name of next.getAttributeNames()) {
+      const value = next.getAttribute(name);
+      if (current.getAttribute(name) !== value) current.setAttribute(name, value);
+    }
+    const desired = [...next.childNodes];
+    for (let index = 0; index < desired.length; index += 1) {
+      const existing = current.childNodes[index];
+      if (!existing) current.append(desired[index].cloneNode(true));
+      else patchRenderedNode(existing, desired[index]);
+    }
+    while (current.childNodes.length > desired.length) current.lastChild.remove();
+  }
+
+  function patchRenderedChildren(container, desired) {
+    for (let index = 0; index < desired.length; index += 1) {
+      const current = container.children[index];
+      if (!current) container.append(desired[index]);
+      else patchRenderedNode(current, desired[index]);
+    }
+    while (container.children.length > desired.length) container.lastElementChild.remove();
+  }
+
+  function syncStopButton(experiment) {
+    const canStop = experiment?.schema === 'multi-paper-experiment-v2'
+      && experiment.run_mode === 'until-stopped' && ['starting', 'active'].includes(experiment.status);
+    elements.stopPaper.hidden = !canStop;
+    elements.stopPaper.disabled = !canStop || state.stopSubmitting || state.stopRequested;
+    elements.stopPaper.textContent = state.stopSubmitting ? '중단 요청 전송 중'
+      : state.stopRequested ? '중단 요청됨' : '6개 실험 중단';
+  }
+
   function renderExperiment(experiment) {
+    const retained = Boolean(state.experiment && !elements.paperExperiment.hidden
+      && elements.experimentArms.children.length === experiment.arms.length);
     state.experiment = experiment;
     paperStatus(experiment.status);
     const labels = { starting: 'STARTING · 준비', active: 'ACTIVE · 동시 진행' };
     elements.experimentStatus.className = `adaptive-stream ${experiment.status === 'active' ? 'is-live' : 'is-connecting'}`;
     elements.experimentStatus.textContent = labels[experiment.status];
     elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
-    elements.experimentDeadline.textContent = formatKoreanTime(experiment.deadline_at);
+    elements.experimentDeadline.textContent = experiment.run_mode === 'until-stopped'
+      ? '중단 버튼을 누를 때까지' : formatKoreanTime(experiment.deadline_at);
     elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
     elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
     const overviewCopy = elements.paperExperiment.querySelector('[data-experiment-copy]');
     if (overviewCopy) overviewCopy.textContent = `동일한 공개 Bitget feed와 비용 모델을 ${experiment.arms.length}개 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.`;
-    elements.experimentLeaderboard.replaceChildren(...experiment.leaderboard.map((entry) => {
+    const leaderboard = experiment.leaderboard.map((entry) => {
       const arm = experiment.arms.find((item) => item.arm_id === entry.arm_id);
       const row = document.createElement('tr');
       row.replaceChildren(createText('td', '', String(entry.rank)), createText('td', '', `${entry.arm_id} · ${arm.strategy.label}`),
         createText('td', '', formatUsdt(entry.equity)), createText('td', '', `${formatUsdt(entry.net_pnl, true)} / ${formatPercent(entry.return_pct, true)}`),
         createText('td', '', formatPercent(entry.max_drawdown_pct)));
       return row;
-    }));
-    elements.experimentArms.replaceChildren(...experiment.arms.map(renderExperimentArm));
+    });
+    const arms = experiment.arms.map(renderExperimentArm);
+    if (retained) {
+      patchRenderedChildren(elements.experimentLeaderboard, leaderboard);
+      patchRenderedChildren(elements.experimentArms, arms);
+    } else {
+      elements.experimentLeaderboard.replaceChildren(...leaderboard);
+      elements.experimentArms.replaceChildren(...arms);
+    }
+    syncStopButton(experiment);
     elements.paperExperiment.hidden = false;
     elements.paperExperiment.setAttribute('aria-busy', 'false');
   }
@@ -791,15 +859,19 @@
         ? payload.experiment : null;
       if (!activeExperiment) {
         state.experiment = null;
+        state.stopRequested = false;
         paperStatus('starting');
         elements.paperExperiment.hidden = true;
         elements.experimentArms.replaceChildren();
         elements.experimentLeaderboard.replaceChildren();
         elements.paperEmpty.hidden = false;
         elements.paperError.hidden = true;
+        elements.stopPaper.hidden = true;
         return;
       }
       if (!validExperimentReport(activeExperiment)) throw new Error('검증되지 않은 모의실험 보고는 표시하지 않았습니다.');
+      state.stopRequested = payload.control?.experiment_id === activeExperiment.experiment_id
+        && payload.control.stop_requested === true;
       renderExperiment(activeExperiment);
       elements.paperExperiment.dataset.freshness = 'fresh';
       elements.paperError.hidden = true;
@@ -821,6 +893,38 @@
         elements.paperExperiment.setAttribute('aria-busy', 'false');
         elements.refreshPaper.disabled = false;
       }
+    }
+  }
+
+  async function requestPaperStop() {
+    const experiment = state.experiment;
+    if (state.stopSubmitting || state.stopRequested || experiment?.schema !== 'multi-paper-experiment-v2'
+      || experiment.run_mode !== 'until-stopped' || !['starting', 'active'].includes(experiment.status)) return;
+    state.stopSubmitting = true;
+    syncStopButton(experiment);
+    try {
+      const response = await fetch(`${API_URL}/api/behavior-lab/paper/stop`, {
+        method: 'POST', credentials: 'omit', cache: 'no-store',
+        headers: { accept: 'application/json', 'content-type': 'application/json',
+          authorization: `Bearer ${ownerToken()}` },
+        body: JSON.stringify({ experiment_id: experiment.experiment_id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 404) {
+        showOwnerGate(response.status);
+        return;
+      }
+      if (!response.ok || payload.stop_requested !== true) {
+        throw new Error(payload.error || '모의실험 중단 요청을 저장하지 못했습니다.');
+      }
+      state.stopRequested = true;
+      elements.paperError.hidden = true;
+    } catch (error) {
+      elements.paperErrorText.textContent = error?.message || '모의실험 중단 요청을 저장하지 못했습니다.';
+      elements.paperError.hidden = false;
+    } finally {
+      state.stopSubmitting = false;
+      if (state.ownerVerified) syncStopButton(state.experiment);
     }
   }
 
@@ -867,6 +971,7 @@
   elements.marketTab.addEventListener('click', () => switchTab('market'));
   elements.paperTab.addEventListener('click', () => switchTab('paper'));
   elements.refreshPaper.addEventListener('click', () => void loadPaper({ force: true }));
+  elements.stopPaper.addEventListener('click', () => void requestPaperStop());
   elements.retryOwnerGate.addEventListener('click', () => void bootstrap());
   riskInputs.forEach((input) => input.addEventListener('input', () => {
     clearDraft();

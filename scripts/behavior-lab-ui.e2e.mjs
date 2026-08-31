@@ -85,14 +85,14 @@ function multiExperiment(sequence = 10, status = 'active') {
   }));
   return { schema: 'multi-paper-experiment-v2', experiment_id: 'multi-paper-20260831-v2', simulation: true,
     public_data_only: true, generated_at: '2026-08-31T00:01:01.000Z', started_at: '2026-08-31T00:00:00.000Z',
-    deadline_at: '2026-09-01T00:00:00.000Z', status, strategy_set_hash: HASH_A,
+    run_mode: 'until-stopped', deadline_at: null, stopped_at: null, status, strategy_set_hash: HASH_A,
     shared_feed: { sequence, hash: HASH_A,
       last_packet_at: '2026-08-31T00:01:00.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
     assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
       modeled_round_trip_cost_bps: 20, risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
-      entry_cutoff_at: '2026-08-31T23:45:00.000Z',
-      terminal_close: 'deadline', max_positions_per_arm: 1, strategy_mutation: false },
+      entry_cutoff_at: null,
+      terminal_close: 'owner-stop', max_positions_per_arm: 1, strategy_mutation: false },
     leaderboard: arms.map((arm, index) => ({ rank: index + 1, arm_id: arm.arm_id, equity: arm.equity,
       net_pnl: arm.net_pnl, return_pct: arm.return_pct, max_drawdown_pct: arm.max_drawdown_pct })),
     arms, limitations: ['All figures are simulated.'] };
@@ -102,6 +102,7 @@ function browserHarness(responses) {
   localStorage.setItem('hvsdcm.token', 'owner-session');
   window.__paperResponses = responses;
   window.__paperFetchCount = 0;
+  window.__paperStopRequests = [];
   window.__paperHangs = [];
   window.fetch = async (url, options = {}) => {
     if (!String(url).includes('/api/behavior-lab/paper')) {
@@ -109,16 +110,23 @@ function browserHarness(responses) {
         status: 500, headers: { 'content-type': 'application/json' },
       });
     }
+    if (String(url).endsWith('/api/behavior-lab/paper/stop') && options.method === 'POST') {
+      window.__paperStopRequests.push(JSON.parse(options.body));
+      return new Response(JSON.stringify({ ok: true, experiment_id: 'multi-paper-20260831-v2',
+        stop_requested: true, stop_requested_at: '2026-08-31T00:03:00.000Z' }), {
+        status: 202, headers: { 'content-type': 'application/json' },
+      });
+    }
     window.__paperFetchCount += 1;
     const entry = window.__paperResponses.shift() || { status: 500, error: 'fixture exhausted' };
-    const response = () => new Response(JSON.stringify(entry.status === 200 ? { report: entry.report, experiment: entry.experiment } : { error: entry.error || 'scripted error' }), {
+    const response = () => new Response(JSON.stringify(entry.status === 200 ? { report: entry.report,
+      experiment: entry.experiment, control: entry.control || { experiment_id: 'multi-paper-20260831-v2',
+        stop_requested: false, stop_requested_at: null } } : { error: entry.error || 'scripted error' }), {
       status: entry.status, headers: { 'content-type': 'application/json' },
     });
     if (entry.type === 'hang') {
       return new Promise((resolveRequest) => {
-        window.__paperHangs.push(() => resolveRequest(new Response(JSON.stringify({ report: entry.lateReport }), {
-          status: 200, headers: { 'content-type': 'application/json' },
-        })));
+        window.__paperHangs.push(() => resolveRequest(response()));
       });
     }
     return response();
@@ -166,7 +174,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v7',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260831-v8',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -226,7 +234,7 @@ try {
   {
     const responses = [
       { status: 200, report: paperReport(9, 101), experiment: multiExperiment(10) },
-      { status: 500, error: 'temporary failure' },
+      { type: 'hang', status: 500, error: 'temporary failure' },
       { status: 200, report: paperReport(11, 103), experiment: multiExperiment(12) },
       { status: 200, report: paperReport(12, 104), experiment: multiExperiment(13, 'complete') },
     ];
@@ -247,6 +255,8 @@ try {
     assert.equal(await page.locator('.abc-arm-section h4').filter({ hasText: '최근 로그' }).count(), 6);
     assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
+    assert.equal(await page.locator('#stopPaper').isVisible(), true);
+    await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
     await assertGeometry(page, 3);
@@ -256,6 +266,11 @@ try {
     }
 
     await advance(page, 5_000);
+    await page.waitForFunction(() => window.__paperFetchCount === 2 && window.__paperHangs.length === 1);
+    assert.equal(await page.locator('#paperExperiment').evaluate((element) => getComputedStyle(element).opacity), '1');
+    assert.equal(await page.evaluate(() => window.__initialArmNodes.every((node, index) =>
+      node === document.querySelectorAll('.abc-arm-card')[index])), true);
+    await page.evaluate(() => window.__paperHangs.shift()());
     await page.waitForFunction(() => window.__paperFetchCount === 2 && !document.getElementById('paperError').hidden);
     assert.match(await page.locator('#paperStatus').textContent(), /STALE/u);
     assert.match(await page.locator('#paperErrorText').textContent(), /temporary failure.*이전 보고/u);
@@ -266,6 +281,16 @@ try {
     assert.match(await page.locator('#paperStatus').textContent(), /ACTIVE/u);
     assert.equal(await page.locator('#paperError').getAttribute('hidden'), '');
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 6);
+    assert.equal(await page.evaluate(() => window.__initialArmNodes.every((node, index) =>
+      node === document.querySelectorAll('.abc-arm-card')[index])), true);
+    await page.locator('#stopPaper').click();
+    await page.waitForFunction(() => window.__paperStopRequests.length === 1
+      && document.getElementById('stopPaper').disabled
+      && document.getElementById('stopPaper').textContent.includes('중단 요청됨'));
+    assert.deepEqual(await page.evaluate(() => window.__paperStopRequests), [
+      { experiment_id: 'multi-paper-20260831-v2' },
+    ]);
+    assert.match(await page.locator('#stopPaper').textContent(), /중단 요청됨/u);
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGeometry(page, 1);
     if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });

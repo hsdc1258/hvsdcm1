@@ -8,9 +8,9 @@
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="stylesheet" href="/assets/css/system.css">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v5">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260831-v6">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260831-v7" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260831-v8" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
@@ -170,12 +170,13 @@
       <div class="paper-heading section-heading-row">
         <div>
           <p class="section-index">ACTIVE SIX-ARM PAPER EXPERIMENT / 100 USDT EACH</p>
-          <h2>현재 진행 중인 24시간 6-arm 모의실험</h2>
+          <h2>중단할 때까지 진행하는 6-arm 모의실험</h2>
           <p class="section-copy">종료된 세션은 표시하지 않습니다. 실제 자금·계정·주문 없이 공개 시장 데이터와 비용을 반영한 고정 전략 여섯 개를 비교합니다.</p>
         </div>
         <div class="paper-actions">
           <span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span>
           <button id="refreshPaper" class="text-button" type="button">새로고침</button>
+          <button id="stopPaper" class="text-button is-danger" type="button" hidden>6개 실험 중단</button>
         </div>
       </div>
 
@@ -190,7 +191,7 @@
           <p class="section-copy" data-experiment-copy>동일한 공개 Bitget feed와 비용 모델을 여섯 독립 100 USDT arm에 적용합니다. 전략 정의는 실행 중 바뀌지 않습니다.</p>
           <div class="adaptive-summary-grid abc-summary-grid">
             <div><span>시작</span><b id="experimentStarted">—</b></div>
-            <div><span>정확한 24h 마감</span><b id="experimentDeadline">—</b></div>
+            <div><span>종료 방식</span><b id="experimentDeadline">—</b></div>
             <div><span>공유 feed 원장</span><b id="experimentFeed">—</b></div>
             <div><span>최근 공개 패킷</span><b id="experimentLastPacket">—</b></div>
           </div>

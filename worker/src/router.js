@@ -41,6 +41,7 @@ export const BEHAVIOR_ABC_EXPERIMENT_ID = 'abc-paper-20260831';
 export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_ABC_EXPERIMENT_ID}`;
 export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260831-v2';
 export const BEHAVIOR_MULTI_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
+export const BEHAVIOR_MULTI_CONTROL_SOURCE = `behavior-paper-control:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 const ABC_ARM_IDS = ['A', 'B', 'C'];
 const ABC_STRATEGY_IDS = {
   A: 'abc-trend-momentum-v1', B: 'abc-breakout-volatility-v1', C: 'abc-mean-reversion-crowd-fade-v1',
@@ -1817,7 +1818,7 @@ function normalizeMultiPosition(value, startedAtMs, latestAtMs) {
   return { id: result.id, symbol: result.symbol, direction: result.direction, opened_at: openedAt, ...numbers };
 }
 
-function normalizeMultiTrades(value, startedAtMs, latestAtMs) {
+function normalizeMultiTrades(value, startedAtMs, latestAtMs, terminalClose) {
   if (!Array.isArray(value) || value.length > 25) return null;
   const keys = ['id', 'symbol', 'direction', 'opened_at', 'closed_at', 'entry_price', 'exit_price', 'quantity',
     'notional', 'net_pnl', 'return_pct', 'fees', 'slippage_cost', 'reason'];
@@ -1847,7 +1848,7 @@ function normalizeMultiTrades(value, startedAtMs, latestAtMs) {
       || !closePaperNumber(numbers.net_pnl, (result.direction === 'long' ? 1 : -1)
         * numbers.quantity * (numbers.exit_price - numbers.entry_price) - numbers.fees)
       || !closePaperNumber(numbers.return_pct, numbers.net_pnl / numbers.notional * 100)
-      || !['stop', 'target', 'opposite-signal', 'max-hold', 'risk-halt', 'deadline'].includes(result.reason)) return null;
+      || !['stop', 'target', 'opposite-signal', 'max-hold', 'risk-halt', terminalClose].includes(result.reason)) return null;
     trades.push({ id: result.id, symbol: result.symbol, direction: result.direction,
       opened_at: openedAt, closed_at: closedAt, ...numbers, reason: result.reason });
   }
@@ -1913,7 +1914,7 @@ function normalizeMultiPolicy(value, armId) {
   return JSON.stringify(value) === JSON.stringify(facts) ? facts : null;
 }
 
-function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs) {
+function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs, terminalClose) {
   const keys = ['arm_id', 'strategy', 'risk', 'chain', 'status', 'seed_equity', 'equity', 'cash',
     'realized_pnl', 'unrealized_pnl', 'net_pnl', 'return_pct', 'max_drawdown_pct', 'fees',
     'slippage_cost', 'trade_count', 'win_count', 'loss_count', 'equity_curve', 'open_position',
@@ -1928,7 +1929,7 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
     || JSON.stringify(value.risk) !== JSON.stringify({ risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
       max_hold_minutes: 45, minimum_hold_before_opposite_minutes: 5 })
     || !exactPaperKeys(value.chain, ['sequence', 'hash'])) return null;
-  const chainSequence = boundedPaperNumber(value.chain.sequence, 1, 1_000_000, true);
+  const chainSequence = boundedPaperNumber(value.chain.sequence, 1, 1_000_000_000, true);
   const chainHash = normalizedExperimentHash(value.chain.hash);
   const status = boundedPaperText(value.status, 16, true);
   const numbers = {
@@ -1951,7 +1952,7 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
     || numbers.win_count + numbers.loss_count > numbers.trade_count) return null;
   const equityCurve = normalizeExperimentEquityCurve(value.equity_curve, chainSequence, numbers.equity);
   const openPosition = normalizeMultiPosition(value.open_position, startedAtMs, latestAtMs);
-  const trades = normalizeMultiTrades(value.recent_trades, startedAtMs, latestAtMs);
+  const trades = normalizeMultiTrades(value.recent_trades, startedAtMs, latestAtMs, terminalClose);
   const decisions = normalizeMultiDecisions(value.recent_decisions, sharedSequence, startedAtMs, latestAtMs);
   const logs = normalizeMultiLogs(value.recent_logs, startedAtMs, latestAtMs);
   const lastCycleAt = normalizePaperTimestamp(value.last_cycle_at, true);
@@ -1995,21 +1996,28 @@ function normalizeMultiArm(value, armId, sharedSequence, startedAtMs, latestAtMs
 }
 
 export function normalizeBehaviorMultiPaperExperimentReport(input) {
-  const keys = ['schema', 'experiment_id', 'simulation', 'public_data_only', 'generated_at', 'started_at',
+  const fixedKeys = ['schema', 'experiment_id', 'simulation', 'public_data_only', 'generated_at', 'started_at',
     'deadline_at', 'status', 'strategy_set_hash', 'shared_feed', 'assumptions', 'leaderboard', 'arms', 'limitations'];
-  if (!exactPaperKeys(input, keys) || input.schema !== 'multi-paper-experiment-v2'
+  const continuousKeys = [...fixedKeys, 'run_mode', 'stopped_at'];
+  const continuous = input?.run_mode === 'until-stopped';
+  if (!exactPaperKeys(input, continuous ? continuousKeys : fixedKeys) || input.schema !== 'multi-paper-experiment-v2'
     || input.experiment_id !== BEHAVIOR_MULTI_EXPERIMENT_ID || input.simulation !== true
     || input.public_data_only !== true || input.strategy_set_hash !== MULTI_STRATEGY_SET_HASH) return null;
   const generatedAt = normalizePaperTimestamp(input.generated_at);
   const startedAt = normalizePaperTimestamp(input.started_at);
-  const deadlineAt = normalizePaperTimestamp(input.deadline_at);
+  const deadlineAt = continuous && input.deadline_at === null ? null : normalizePaperTimestamp(input.deadline_at);
+  const stoppedAt = continuous ? normalizePaperTimestamp(input.stopped_at, true) : undefined;
   const status = boundedPaperText(input.status, 16, true);
-  if (!generatedAt || !startedAt || !deadlineAt || Date.parse(deadlineAt) - Date.parse(startedAt) !== DAY_MS
-    || Date.parse(generatedAt) < Date.parse(startedAt) || Date.parse(generatedAt) > Date.parse(deadlineAt) + 60 * 60_000
+  if (!generatedAt || !startedAt || (continuous ? (deadlineAt !== null || stoppedAt === undefined
+      || (status === 'complete') !== Boolean(stoppedAt)
+      || (stoppedAt && stoppedAt !== generatedAt))
+    : (!deadlineAt || Date.parse(deadlineAt) - Date.parse(startedAt) !== DAY_MS
+      || Date.parse(generatedAt) > Date.parse(deadlineAt) + 60 * 60_000))
+    || Date.parse(generatedAt) < Date.parse(startedAt)
     || !['starting', 'active', 'complete', 'error'].includes(status)) return null;
   const feedKeys = ['sequence', 'hash', 'last_packet_at', 'credential_used', 'symbols', 'channels'];
   if (!exactPaperKeys(input.shared_feed, feedKeys)) return null;
-  const sharedSequence = boundedPaperNumber(input.shared_feed.sequence, 1, 100_000_000, true);
+  const sharedSequence = boundedPaperNumber(input.shared_feed.sequence, 1, 1_000_000_000, true);
   const sharedHash = normalizedExperimentHash(input.shared_feed.hash);
   const lastPacketAt = normalizePaperTimestamp(input.shared_feed.last_packet_at, true);
   if (sharedSequence === null || !sharedHash || lastPacketAt === undefined || input.shared_feed.credential_used !== false
@@ -2018,15 +2026,16 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
     || (lastPacketAt && Date.parse(lastPacketAt) > Date.parse(generatedAt))) return null;
   const assumptions = { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
     modeled_round_trip_cost_bps: 20, risk_pct: 1.5, leverage_cap: 3, drawdown_halt_pct: 10,
-    entry_cutoff_at: new Date(Date.parse(deadlineAt) - 15 * 60_000).toISOString(), terminal_close: 'deadline',
+    entry_cutoff_at: continuous ? null : new Date(Date.parse(deadlineAt) - 15 * 60_000).toISOString(),
+    terminal_close: continuous ? 'owner-stop' : 'deadline',
     max_positions_per_arm: 1, strategy_mutation: false };
   if (!exactPaperKeys(input.assumptions, Object.keys(assumptions))
     || JSON.stringify(input.assumptions) !== JSON.stringify(assumptions)) return null;
   if (!Array.isArray(input.arms) || input.arms.length !== 6) return null;
   const startedAtMs = Date.parse(startedAt);
-  const latestAtMs = Math.min(Date.parse(generatedAt), Date.parse(deadlineAt));
+  const latestAtMs = continuous ? Date.parse(generatedAt) : Math.min(Date.parse(generatedAt), Date.parse(deadlineAt));
   const arms = input.arms.map((arm, index) => normalizeMultiArm(arm, MULTI_ARM_IDS[index], sharedSequence,
-    startedAtMs, latestAtMs));
+    startedAtMs, latestAtMs, assumptions.terminal_close));
   if (arms.some((arm) => !arm) || new Set(arms.map((arm) => arm.chain.hash)).size !== 6) return null;
   const armStatuses = arms.map((arm) => arm.status);
   const coherentStatus = status === 'starting' ? armStatuses.every((armStatus) => armStatus === 'starting')
@@ -2047,7 +2056,8 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
   if (leaderboard.some((row) => !row) || !limitations) return null;
   return { schema: 'multi-paper-experiment-v2', experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
     simulation: true, public_data_only: true, generated_at: generatedAt, started_at: startedAt,
-    deadline_at: deadlineAt, status, strategy_set_hash: MULTI_STRATEGY_SET_HASH,
+    ...(continuous ? { run_mode: 'until-stopped', deadline_at: null, stopped_at: stoppedAt }
+      : { deadline_at: deadlineAt }), status, strategy_set_hash: MULTI_STRATEGY_SET_HASH,
     shared_feed: { sequence: sharedSequence, hash: sharedHash, last_packet_at: lastPacketAt,
       credential_used: false, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'],
       channels: ['ticker', 'books5', 'trade', 'candle1m'] }, assumptions, leaderboard, arms, limitations };
@@ -2158,6 +2168,78 @@ async function reportBehaviorPaper(request, env) {
     return json({ error: '더 최신인 보고가 이미 저장되어 있습니다.' }, 409);
   }
   return json({ ok: true, session_id: report.session_id, sequence: report.sequence });
+}
+
+function normalizeBehaviorMultiStopControl(row) {
+  if (!row?.payload) return { experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID,
+    stop_requested: false, stop_requested_at: null };
+  try {
+    const value = JSON.parse(row.payload);
+    const stoppedAt = normalizePaperTimestamp(value.stop_requested_at);
+    if (!exactPaperKeys(value, ['experiment_id', 'stop_requested', 'stop_requested_at'])
+      || value.experiment_id !== BEHAVIOR_MULTI_EXPERIMENT_ID || value.stop_requested !== true || !stoppedAt) return null;
+    return { experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID, stop_requested: true, stop_requested_at: stoppedAt };
+  } catch { return null; }
+}
+
+async function getBehaviorMultiPaperControl(request, env) {
+  if (!(await ingestTokenMatches(request, env.BEHAVIOR_PAPER_REPORT_TOKEN))) {
+    return json({ error: '인증이 필요합니다.' }, 401);
+  }
+  const url = new URL(request.url);
+  if (url.searchParams.size !== 1 || url.searchParams.get('experiment_id') !== BEHAVIOR_MULTI_EXPERIMENT_ID) {
+    return json({ error: '잘못된 모의실험 제어 요청입니다.' }, 400, { 'cache-control': 'private, no-store' });
+  }
+  const row = await env.DB.prepare(`
+    SELECT payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_MULTI_CONTROL_SOURCE).first();
+  const control = normalizeBehaviorMultiStopControl(row);
+  if (!control) return json({ error: '모의실험 제어 상태를 읽지 못했습니다.' }, 500,
+    { 'cache-control': 'private, no-store' });
+  return json(control, 200, { 'cache-control': 'private, no-store' });
+}
+
+async function stopBehaviorMultiPaper(request, env) {
+  const owner = await behaviorOwner(request, env);
+  if (owner.response) return owner.response;
+  const input = await readJson(request);
+  if (!exactPaperKeys(input, ['experiment_id']) || input.experiment_id !== BEHAVIOR_MULTI_EXPERIMENT_ID) {
+    return json({ error: '잘못된 모의실험 중단 요청입니다.' }, 400, { 'cache-control': 'private, no-store' });
+  }
+  const activeRow = await env.DB.prepare(`
+    SELECT payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_MULTI_SNAPSHOT_SOURCE).first();
+  let active = null;
+  try { active = activeRow ? normalizeBehaviorMultiPaperExperimentReport(JSON.parse(activeRow.payload)) : null; }
+  catch { active = null; }
+  if (!active || !['starting', 'active'].includes(active.status) || active.run_mode !== 'until-stopped') {
+    return json({ error: '중단할 수 있는 6-arm 모의실험이 없습니다.' }, 409,
+      { 'cache-control': 'private, no-store' });
+  }
+  const stopRequestedAt = new Date().toISOString();
+  const control = { experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID, stop_requested: true,
+    stop_requested_at: stopRequestedAt };
+  await env.DB.prepare(`
+    INSERT INTO usage_snapshots(source, captured_at, payload)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(source) DO NOTHING
+  `).bind(BEHAVIOR_MULTI_CONTROL_SOURCE, stopRequestedAt, JSON.stringify(control)).run();
+  const stored = await env.DB.prepare(`
+    SELECT payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_MULTI_CONTROL_SOURCE).first();
+  const exact = normalizeBehaviorMultiStopControl(stored);
+  if (!exact?.stop_requested) return json({ error: '모의실험 중단 요청을 저장하지 못했습니다.' }, 500,
+    { 'cache-control': 'private, no-store' });
+  return json({ ok: true, ...exact }, 202, { 'cache-control': 'private, no-store' });
 }
 
 async function reportBehaviorPaperExperiment(value, env) {
@@ -2273,6 +2355,15 @@ async function getBehaviorPaper(request, env) {
     WHERE source = ?1
     LIMIT 1
   `).bind(BEHAVIOR_MULTI_SNAPSHOT_SOURCE).first();
+  const controlRow = await env.DB.prepare(`
+    SELECT payload
+    FROM usage_snapshots
+    WHERE source = ?1
+    LIMIT 1
+  `).bind(BEHAVIOR_MULTI_CONTROL_SOURCE).first();
+  const control = normalizeBehaviorMultiStopControl(controlRow);
+  if (!control) return json({ error: '6-arm 제어 데이터를 읽지 못했습니다.' }, 500,
+    { 'cache-control': 'private, no-store' });
   let v2Experiment = null;
   if (multiExperimentRow?.source === BEHAVIOR_MULTI_SNAPSHOT_SOURCE) {
     try { v2Experiment = normalizeBehaviorMultiPaperExperimentReport(JSON.parse(multiExperimentRow.payload)); }
@@ -2290,12 +2381,13 @@ async function getBehaviorPaper(request, env) {
   const experiment = v2Active || v1Experiment;
   const experimentReceivedAt = v2Active ? multiExperimentRow.captured_at : experimentRow?.captured_at ?? null;
   if (!row) return json({ session_id: BEHAVIOR_PAPER_SESSION_ID, deadline_at: BEHAVIOR_PAPER_DEADLINE,
-    report: null, experiment, experiment_received_at: experimentReceivedAt }, 200,
+    report: null, experiment, experiment_received_at: experimentReceivedAt, control }, 200,
   { 'cache-control': 'private, no-store' });
   let report;
   try { report = normalizeBehaviorPaperReport(JSON.parse(row.payload)); } catch { report = null; }
   if (!report) return json({ error: '보고 데이터를 읽지 못했습니다.' }, 500);
-  return json({ report, received_at: row.captured_at, experiment, experiment_received_at: experimentReceivedAt }, 200,
+  return json({ report, received_at: row.captured_at, experiment, experiment_received_at: experimentReceivedAt,
+    control }, 200,
     { 'cache-control': 'private, no-store' });
 }
 
@@ -3776,6 +3868,12 @@ export async function route(request, env) {
   }
   if (method === 'GET' && path === '/api/behavior-lab/paper') {
     return getBehaviorPaper(request, env);
+  }
+  if (method === 'GET' && path === '/api/behavior-lab/paper/control') {
+    return getBehaviorMultiPaperControl(request, env);
+  }
+  if (method === 'POST' && path === '/api/behavior-lab/paper/stop') {
+    return stopBehaviorMultiPaper(request, env);
   }
   if (method === 'POST' && path === '/api/behavior-lab/paper/report') {
     return reportBehaviorPaper(request, env);
