@@ -277,7 +277,7 @@ try {
     await page.evaluate(() => { window.__initialArmNodes = [...document.querySelectorAll('.abc-arm-card')]; });
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
-    await assertGeometry(page, 3);
+    await assertGeometry(page, 2);
     assert.equal(await page.locator('.abc-arm-details[open]').count(), 0);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
@@ -358,7 +358,7 @@ try {
     assert.deepEqual(pageErrors, []);
     await page.close();
   }
-  console.log('BEHAVIOR LAB UI E2E PASS · scan-first summary · 6 collapsed strategy cards · open-state/refresh retention · finished hidden · responsive bounds');
+  console.log('BEHAVIOR LAB UI E2E PASS · editorial workbench · 2-column research notes · open-state/refresh retention · finished hidden · responsive bounds');
 } finally {
   await browser.close();
   await new Promise((resolveClose) => server.close(resolveClose));
