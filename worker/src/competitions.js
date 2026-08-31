@@ -86,13 +86,16 @@ const SUBMISSION_TERMINAL_STATES = new Set(['succeeded', 'blocked', 'submission_
 const SUBMISSION_RESULT_CODES = new Map([
   ['succeeded', new Set(['submitted'])],
   ['blocked', new Set([
-    'unsupported_organizer_flow', 'private_config_missing', 'destination_mismatch',
+    'approval_expired', 'unsupported_organizer_flow', 'private_config_missing', 'destination_mismatch',
     'captcha_required', 'account_required', 'payment_required', 'terms_changed',
     'eligibility_unknown', 'manual_action_required', 'destination_unavailable',
   ])],
   ['submission_unknown', new Set([
     'timeout_after_send', 'connection_lost_after_send', 'ambiguous_response', 'lease_expired',
   ])],
+]);
+const ACTION_MANIFEST_RIGHTS_CLASSES = new Set([
+  'no_transfer', 'limited_license', 'exclusive_license', 'ownership_transfer',
 ]);
 const APPROVAL_APPLICATION_STATES = new Map([
   ['preparation', 'WAITING_RIGHTS_APPROVAL'],
@@ -121,7 +124,9 @@ const SAFE_SCHEMA_FIELDS = new Set([
   'eligibility', 'rights_risk', 'submission_risk', 'fit_score', 'effort_score',
   'profile_id', 'state', 'blocker', 'next_action', 'updated_at',
   'approvals', 'request_id', 'action_sha256', 'requested_at', 'expires_at',
-  'read_summary', 'approval_text', 'decision',
+  'submission_url', 'read_summary', 'approval_text', 'decision',
+  'action_manifest', 'submission_host', 'fee', 'required', 'amount_minor', 'currency',
+  'rights_class', 'consent_text_sha256', 'artifact_sha256', 'payload_sha256',
 ]);
 
 class ReportValidationError extends Error {
@@ -595,10 +600,50 @@ function normalizeApplication(input) {
   };
 }
 
+function normalizedManifestHashes(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16
+    || value.some((hash) => typeof hash !== 'string' || !SHA256_PATTERN.test(hash))) fail();
+  const hashes = [...value].sort();
+  if (new Set(hashes).size !== hashes.length) fail();
+  return hashes;
+}
+
+function normalizedActionManifest(input) {
+  const manifest = strictObject(input, [
+    'version', 'organizer', 'contest_id', 'category', 'submission_url', 'submission_host',
+    'fee', 'rights_class', 'consent_text_sha256', 'artifact_sha256', 'payload_sha256',
+  ]);
+  const fee = strictObject(manifest.fee, ['required', 'amount_minor', 'currency']);
+  const submissionUrl = normalizedPublicHttpsUrl(manifest.submission_url);
+  const submissionHost = new URL(submissionUrl).hostname.toLowerCase().replace(/\.+$/u, '');
+  if (manifest.version !== 1 || manifest.submission_host !== submissionHost
+    || typeof fee.required !== 'boolean') fail();
+  const amountMinor = integerInRange(fee.amount_minor, 0, 1_000_000_000_000);
+  if (typeof fee.currency !== 'string'
+    || !/^(?:NONE|[A-Z]{3})$/u.test(fee.currency)
+    || (fee.required && (amountMinor < 1 || fee.currency === 'NONE'))
+    || (!fee.required && (amountMinor !== 0 || fee.currency !== 'NONE'))) fail();
+  if (typeof manifest.payload_sha256 !== 'string'
+    || !SHA256_PATTERN.test(manifest.payload_sha256)) fail();
+  return {
+    version: 1,
+    organizer: normalizedText(manifest.organizer, 160, { privatePatterns: true }),
+    contest_id: normalizedId(manifest.contest_id),
+    category: normalizedId(manifest.category, CATEGORY_PATTERN),
+    submission_url: submissionUrl,
+    submission_host: submissionHost,
+    fee: { required: fee.required, amount_minor: amountMinor, currency: fee.currency },
+    rights_class: enumValue(manifest.rights_class, ACTION_MANIFEST_RIGHTS_CLASSES),
+    consent_text_sha256: normalizedManifestHashes(manifest.consent_text_sha256),
+    artifact_sha256: normalizedManifestHashes(manifest.artifact_sha256),
+    payload_sha256: manifest.payload_sha256,
+  };
+}
+
 function normalizeApproval(input) {
   strictObject(input, [
     'request_id', 'contest_id', 'category', 'kind', 'action_sha256', 'requested_at',
-    'expires_at', 'read_summary', 'approval_text',
+    'expires_at', 'submission_url', 'action_manifest', 'read_summary', 'approval_text',
   ]);
   if (typeof input.action_sha256 !== 'string' || !SHA256_PATTERN.test(input.action_sha256)) fail();
   const approval = {
@@ -609,6 +654,10 @@ function normalizeApproval(input) {
     action_sha256: input.action_sha256,
     requested_at: normalizedInstant(input.requested_at),
     expires_at: normalizedInstant(input.expires_at, true),
+    submission_url: input.submission_url === undefined || input.submission_url === null
+      ? null : normalizedPublicHttpsUrl(input.submission_url),
+    action_manifest: input.action_manifest === undefined || input.action_manifest === null
+      ? null : normalizedActionManifest(input.action_manifest),
     read_summary: normalizedText(input.read_summary, 2_000, { privatePatterns: true }),
     approval_text: normalizedText(input.approval_text, 1_000, { privatePatterns: true }),
   };
@@ -617,6 +666,9 @@ function normalizeApproval(input) {
     if (!approval.expires_at
       || Date.parse(approval.expires_at) - Date.parse(approval.requested_at) > 15 * 60_000) fail();
   }
+  if (approval.kind === 'final_submission') {
+    if (!approval.submission_url || !approval.action_manifest) fail();
+  } else if (approval.submission_url || approval.action_manifest) fail();
   return approval;
 }
 
@@ -731,6 +783,12 @@ function normalizeReport(input) {
     approvalIds.add(approval.request_id);
     approvalKeys.add(key);
     if (application.state !== APPROVAL_APPLICATION_STATES.get(approval.kind)) fail();
+    const candidate = candidates.get(key);
+    if (approval.kind === 'final_submission'
+      && (approval.action_manifest.organizer !== candidate.organizer
+        || approval.action_manifest.contest_id !== approval.contest_id
+        || approval.action_manifest.category !== approval.category
+        || approval.action_manifest.submission_url !== approval.submission_url)) fail();
     if (Date.parse(approval.requested_at) < Date.parse(application.updated_at)
       || Date.parse(approval.requested_at) > observationTime) fail();
     if (approval.kind !== 'preparation'
@@ -837,6 +895,10 @@ async function reportCompetitionsInternal(request, env) {
   let report;
   try {
     report = normalizeReport(parsed.value);
+    for (const approval of report.approvals) {
+      if (approval.kind === 'final_submission'
+        && await sha256(canonicalRawJson(approval.action_manifest)) !== approval.action_sha256) fail();
+    }
   } catch (error) {
     if (error instanceof ReportValidationError) return competitionError(error.code);
     throw error;
@@ -857,6 +919,11 @@ async function reportCompetitionsInternal(request, env) {
   }
 
   const receivedAt = new Date().toISOString();
+  const storedApprovals = report.approvals.map((approval) => ({
+    ...approval,
+    action_manifest_json: approval.action_manifest
+      ? canonicalRawJson(approval.action_manifest) : null,
+  }));
   const statements = [
     env.DB.prepare(`
       INSERT INTO competition_reports(
@@ -960,13 +1027,15 @@ async function reportCompetitionsInternal(request, env) {
     env.DB.prepare(`
       INSERT INTO competition_approval_requests(
         request_id, idempotency_key, contest_id, category, kind, action_sha256,
-        requested_at, expires_at, read_summary, approval_text
+        requested_at, expires_at, submission_url, action_manifest_json, read_summary, approval_text
       )
       SELECT
         json_extract(item.value, '$.request_id'), ?1,
         json_extract(item.value, '$.contest_id'), json_extract(item.value, '$.category'),
         json_extract(item.value, '$.kind'), json_extract(item.value, '$.action_sha256'),
         json_extract(item.value, '$.requested_at'), json_extract(item.value, '$.expires_at'),
+        json_extract(item.value, '$.submission_url'),
+        json_extract(item.value, '$.action_manifest_json'),
         json_extract(item.value, '$.read_summary'), json_extract(item.value, '$.approval_text')
       FROM json_each(?3) AS item
       WHERE EXISTS (
@@ -977,7 +1046,7 @@ async function reportCompetitionsInternal(request, env) {
         WHERE stored.request_id = json_extract(item.value, '$.request_id')
           AND stored.idempotency_key = ?1
       )
-    `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
+    `).bind(report.idempotency_key, payloadHash, JSON.stringify(storedApprovals)),
   ];
   const results = await env.DB.batch(statements);
   if (resultChanges(results[0]) === 1) return acceptedResponse(report, false, 201);
@@ -1017,14 +1086,22 @@ async function readApprovalDecisionJson(request) {
   try { return { value: JSON.parse(raw) }; } catch { return { response: competitionError('invalid_json') }; }
 }
 
-function submissionTimestamp() {
-  return new Date().toISOString();
+async function submissionTimestamp(env) {
+  const clock = await env.DB.prepare(`
+    SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS timestamp
+  `).first();
+  if (!clock?.timestamp) throw new Error('competition submission clock unavailable');
+  return clock.timestamp;
 }
 
 function submissionLeaseId() {
   const random = new Uint8Array(16);
   crypto.getRandomValues(random);
   return `lease-${[...random].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function parsedActionManifest(value) {
+  try { return value ? JSON.parse(value) : null; } catch { return null; }
 }
 
 function serializeSubmissionJob(row, { includeLease = false } = {}) {
@@ -1036,6 +1113,9 @@ function serializeSubmissionJob(row, { includeLease = false } = {}) {
     contest_id: row.contest_id,
     category: row.category,
     official_url: row.official_url,
+    submission_url: row.submission_url,
+    action_manifest: parsedActionManifest(row.action_manifest_json),
+    approval_expires_at: row.approval_expires_at,
     status: row.status,
     queued_at: row.queued_at,
     claimed_at: row.claimed_at || null,
@@ -1070,6 +1150,16 @@ async function expireSubmissionLeases(env, timestamp) {
         completed_at = ?1, updated_at = ?1, result_code = 'lease_expired'
     WHERE status IN ('claimed', 'running')
       AND julianday(lease_until) <= julianday(?1)
+  `).bind(timestamp).run();
+}
+
+async function expireSubmissionApprovals(env, timestamp) {
+  await env.DB.prepare(`
+    UPDATE competition_submission_jobs
+    SET status = 'blocked', lease_until = NULL,
+        completed_at = ?1, updated_at = ?1, result_code = 'approval_expired'
+    WHERE status IN ('queued', 'claimed')
+      AND julianday(approval_expires_at) <= julianday(?1)
   `).bind(timestamp).run();
 }
 
@@ -1139,11 +1229,14 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     env.DB.prepare(`
       INSERT INTO competition_submission_jobs(
         job_id, request_id, action_sha256, idempotency_key, contest_id, category,
-        official_url, status, attempt_count, queued_at, updated_at
+        official_url, submission_url, action_manifest_json, approval_expires_at,
+        status, attempt_count, queued_at, updated_at
       )
       SELECT request.request_id, request.request_id, request.action_sha256,
         request.idempotency_key, request.contest_id, request.category,
-        candidate.official_url, 'queued', 0, stored.decided_at, stored.decided_at
+        candidate.official_url, request.submission_url, request.action_manifest_json,
+        request.expires_at,
+        'queued', 0, stored.decided_at, stored.decided_at
       FROM competition_approval_requests AS request
       JOIN competition_approval_decisions AS stored
         ON stored.request_id = request.request_id
@@ -1251,7 +1344,8 @@ export async function claimCompetitionSubmission(request, env) {
     if (!(await submissionTokenAuthorized(request, env))) {
       return competitionJson({ error: 'submission_unauthorized' }, 401);
     }
-    const timestamp = submissionTimestamp();
+    const timestamp = await submissionTimestamp(env);
+    await expireSubmissionApprovals(env, timestamp);
     await expireSubmissionLeases(env, timestamp);
     const leaseId = submissionLeaseId();
     const leaseUntil = new Date(Date.parse(timestamp) + SUBMISSION_LEASE_MS).toISOString();
@@ -1260,6 +1354,7 @@ export async function claimCompetitionSubmission(request, env) {
         SELECT job_id
         FROM competition_submission_jobs
         WHERE status = 'queued' AND attempt_count = 0
+          AND julianday(approval_expires_at) > julianday(?1)
         ORDER BY queued_at ASC, job_id ASC
         LIMIT 1
       )
@@ -1268,6 +1363,7 @@ export async function claimCompetitionSubmission(request, env) {
           claimed_at = ?1, updated_at = ?1
       WHERE job_id = (SELECT job_id FROM next_job)
         AND status = 'queued' AND attempt_count = 0
+        AND julianday(approval_expires_at) > julianday(?1)
       RETURNING *
     `).bind(timestamp, leaseId, leaseUntil).first();
     return competitionJson({ job: serializeSubmissionJob(job, { includeLease: true }) });
@@ -1312,7 +1408,8 @@ async function updateCompetitionSubmissionStateInternal(request, env, jobId) {
     throw error;
   }
 
-  const timestamp = submissionTimestamp();
+  const timestamp = await submissionTimestamp(env);
+  await expireSubmissionApprovals(env, timestamp);
   await expireSubmissionLeases(env, timestamp);
   let updated;
   if (state.state === 'running') {
@@ -1323,6 +1420,7 @@ async function updateCompetitionSubmissionStateInternal(request, env, jobId) {
           started_at = COALESCE(started_at, ?2), updated_at = ?2
       WHERE job_id = ?1 AND status IN ('claimed', 'running')
         AND lease_id = ?4 AND julianday(lease_until) > julianday(?2)
+        AND julianday(approval_expires_at) > julianday(?2)
       RETURNING *
     `).bind(normalizedJobId, timestamp, leaseUntil, state.leaseId).first();
   } else {
@@ -1506,6 +1604,8 @@ async function getCompetitionsInternal(request, env) {
       action_sha256: row.action_sha256,
       requested_at: row.requested_at,
       expires_at: row.expires_at,
+      submission_url: row.submission_url || null,
+      action_manifest: parsedActionManifest(row.action_manifest_json),
       read_summary: row.read_summary,
       approval_text: row.approval_text,
       status,

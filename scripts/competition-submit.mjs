@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { competitionActionSha256, isCompetitionPublicUrlSafe } from './competition-report.mjs';
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const REPOSITORY_ROOT = path.resolve(path.dirname(SCRIPT_FILE), '..');
@@ -17,7 +18,7 @@ const JOB_STATUSES = new Set([
 const RESULT_CODES = new Map([
   ['succeeded', new Set(['submitted'])],
   ['blocked', new Set([
-    'unsupported_organizer_flow', 'private_config_missing', 'destination_mismatch',
+    'approval_expired', 'unsupported_organizer_flow', 'private_config_missing', 'destination_mismatch',
     'captcha_required', 'account_required', 'payment_required', 'terms_changed',
     'eligibility_unknown', 'manual_action_required', 'destination_unavailable',
   ])],
@@ -46,11 +47,15 @@ function exactObject(value, keys, label, code = 'invalid_config') {
 }
 
 function normalizedHttpsUrl(value, label, code = 'invalid_config') {
+  if (!isCompetitionPublicUrlSafe(value)) {
+    fail(`${label} must be a public HTTPS URL without private data`, code);
+  }
   let url;
   try { url = new URL(value); } catch { fail(`${label} must be a valid HTTPS URL`, code); }
   if (url.protocol !== 'https:' || url.username || url.password || url.hash) {
     fail(`${label} must be a valid HTTPS URL`, code);
   }
+  if (!url.hostname.includes(':')) url.hostname = url.hostname.replace(/\.+$/u, '');
   return url.href;
 }
 
@@ -97,7 +102,11 @@ export function readCompetitionSubmissionConfig(configPath, fsImpl = fs) {
   const actions = {};
   for (const [actionSha256, rawAction] of Object.entries(parsed.actions)) {
     if (!SHA256.test(actionSha256)) fail('competition submission action hash is invalid', 'invalid_config');
-    const action = exactObject(rawAction, ['request_id', 'official_url', 'adapter'], 'competition submission action');
+    const action = exactObject(
+      rawAction,
+      ['request_id', 'official_url', 'submission_url', 'adapter'],
+      'competition submission action',
+    );
     if (typeof action.request_id !== 'string' || !ID.test(action.request_id)) {
       fail('competition submission request id is invalid', 'invalid_config');
     }
@@ -107,6 +116,7 @@ export function readCompetitionSubmissionConfig(configPath, fsImpl = fs) {
     actions[actionSha256] = {
       request_id: action.request_id,
       official_url: normalizedHttpsUrl(action.official_url, 'official_url'),
+      submission_url: normalizedHttpsUrl(action.submission_url, 'submission_url'),
       adapter: action.adapter,
     };
   }
@@ -202,6 +212,37 @@ function optionalTimestamp(value, label) {
   return value;
 }
 
+function validateActionManifest(value) {
+  exactObject(value, [
+    'version', 'organizer', 'contest_id', 'category', 'submission_url', 'submission_host',
+    'fee', 'rights_class', 'consent_text_sha256', 'artifact_sha256', 'payload_sha256',
+  ], 'competition action manifest', 'invalid_response');
+  exactObject(value.fee, ['required', 'amount_minor', 'currency'], 'competition action fee', 'invalid_response');
+  const submissionUrl = normalizedHttpsUrl(
+    value.submission_url, 'action_manifest.submission_url', 'invalid_response',
+  );
+  const submissionHost = new URL(submissionUrl).hostname.toLowerCase().replace(/\.+$/u, '');
+  const validHashes = (hashes) => Array.isArray(hashes) && hashes.length >= 1 && hashes.length <= 16
+    && hashes.every((hash) => typeof hash === 'string' && SHA256.test(hash))
+    && new Set(hashes).size === hashes.length;
+  if (value.version !== 1 || typeof value.organizer !== 'string' || !value.organizer
+    || typeof value.contest_id !== 'string' || !value.contest_id
+    || typeof value.category !== 'string' || !value.category
+    || value.submission_host !== submissionHost
+    || typeof value.fee.required !== 'boolean'
+    || !Number.isSafeInteger(value.fee.amount_minor) || value.fee.amount_minor < 0
+    || value.fee.amount_minor > 1_000_000_000_000
+    || typeof value.fee.currency !== 'string' || !/^(?:NONE|[A-Z]{3})$/u.test(value.fee.currency)
+    || (value.fee.required && (value.fee.amount_minor < 1 || value.fee.currency === 'NONE'))
+    || (!value.fee.required && (value.fee.amount_minor !== 0 || value.fee.currency !== 'NONE'))
+    || !['no_transfer', 'limited_license', 'exclusive_license', 'ownership_transfer'].includes(value.rights_class)
+    || !validHashes(value.consent_text_sha256) || !validHashes(value.artifact_sha256)
+    || typeof value.payload_sha256 !== 'string' || !SHA256.test(value.payload_sha256)) {
+    fail('competition action manifest is invalid', 'invalid_response');
+  }
+  return { ...value, submission_url: submissionUrl };
+}
+
 function validateSubmissionJobState(value) {
   const hasLiveLease = typeof value.lease_id === 'string' && value.lease_until !== null;
   const hasClaim = value.claimed_at !== null;
@@ -231,6 +272,7 @@ export function validateClaimedSubmissionJob(value) {
   if (value === null) return null;
   exactObject(value, [
     'job_id', 'request_id', 'action_sha256', 'contest_id', 'category', 'official_url',
+    'submission_url', 'action_manifest', 'approval_expires_at',
     'status', 'queued_at', 'claimed_at', 'started_at', 'completed_at', 'result_code',
     'receipt_reference', 'lease_id', 'lease_until',
   ], 'competition submission job', 'invalid_response');
@@ -239,6 +281,15 @@ export function validateClaimedSubmissionJob(value) {
     || typeof value.category !== 'string' || value.category.length < 1 || value.category.length > 80
     || !JOB_STATUSES.has(value.status)) fail('competition submission job is invalid', 'invalid_response');
   const officialUrl = normalizedHttpsUrl(value.official_url, 'official_url', 'invalid_response');
+  const submissionUrl = normalizedHttpsUrl(value.submission_url, 'submission_url', 'invalid_response');
+  const actionManifest = validateActionManifest(value.action_manifest);
+  let manifestSha256;
+  try { manifestSha256 = competitionActionSha256(actionManifest); }
+  catch { fail('competition action manifest binding is invalid', 'invalid_response'); }
+  if (actionManifest.contest_id !== value.contest_id || actionManifest.category !== value.category
+    || actionManifest.submission_url !== submissionUrl || manifestSha256 !== value.action_sha256) {
+    fail('competition action manifest binding is invalid', 'invalid_response');
+  }
   const leaseId = value.lease_id === null ? null : value.lease_id;
   if (leaseId !== null && (typeof leaseId !== 'string' || !LEASE_ID.test(leaseId))) {
     fail('competition submission lease is invalid', 'invalid_response');
@@ -250,13 +301,16 @@ export function validateClaimedSubmissionJob(value) {
   const job = {
     ...value,
     official_url: officialUrl,
+    submission_url: submissionUrl,
+    action_manifest: actionManifest,
+    approval_expires_at: optionalTimestamp(value.approval_expires_at, 'approval_expires_at'),
     queued_at: optionalTimestamp(value.queued_at, 'queued_at'),
     claimed_at: optionalTimestamp(value.claimed_at, 'claimed_at'),
     started_at: optionalTimestamp(value.started_at, 'started_at'),
     completed_at: optionalTimestamp(value.completed_at, 'completed_at'),
     lease_until: optionalTimestamp(value.lease_until, 'lease_until'),
   };
-  if (job.queued_at === null || !validateSubmissionJobState(job)) {
+  if (job.queued_at === null || job.approval_expires_at === null || !validateSubmissionJobState(job)) {
     fail('competition submission job state is invalid', 'invalid_response');
   }
   return job;
@@ -278,6 +332,44 @@ function validateStateResponse(value, expectedState) {
     fail('competition submission state response is invalid', 'invalid_response');
   }
   return job;
+}
+
+function submissionRequestOptions({
+  token,
+  fetchImpl = fetch,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+}) {
+  if (typeof token !== 'string' || token.length < 43 || /\s/u.test(token)) {
+    fail('competition submission token is invalid', 'invalid_config');
+  }
+  return { token, fetchImpl, timeoutMs, setTimer, clearTimer };
+}
+
+export async function claimCompetitionSubmissionJob({ apiUrl, ...options } = {}) {
+  const base = normalizedHttpsUrl(apiUrl, 'api_url').replace(/\/+$/u, '');
+  return validateClaimResponse(await requestJson(
+    `${base}/api/competitions/submissions/claim`,
+    submissionRequestOptions(options),
+  ));
+}
+
+export async function updateCompetitionSubmissionJobState({
+  apiUrl,
+  jobId,
+  state,
+  ...options
+} = {}) {
+  if (typeof jobId !== 'string' || !ID.test(jobId)) {
+    fail('competition submission job id is invalid', 'invalid_config');
+  }
+  exactObject(state, ['state', 'lease_id', 'result_code', 'receipt_reference'], 'state update', 'invalid_config');
+  const base = normalizedHttpsUrl(apiUrl, 'api_url').replace(/\/+$/u, '');
+  return validateStateResponse(await requestJson(
+    `${base}/api/competitions/submissions/${encodeURIComponent(jobId)}/state`,
+    { ...submissionRequestOptions(options), body: state },
+  ), state.state);
 }
 
 function validateExecutorResult(result) {
@@ -334,42 +426,55 @@ export async function runCompetitionSubmissionOnce({
   executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT_MS,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  now = Date.now,
 } = {}) {
   if (!configPath) fail('competition submission config path is required', 'invalid_config');
   const config = readCompetitionSubmissionConfig(configPath, fsImpl);
   const requestOptions = {
     token: config.token, fetchImpl, timeoutMs: requestTimeoutMs, setTimer, clearTimer,
   };
-  const claimed = validateClaimResponse(await requestJson(
-    `${config.apiUrl}/api/competitions/submissions/claim`, requestOptions,
-  ));
+  const claimed = await claimCompetitionSubmissionJob({
+    apiUrl: config.apiUrl,
+    ...requestOptions,
+  });
   if (!claimed) return { ok: true, status: 'idle' };
 
-  const stateUrl = `${config.apiUrl}/api/competitions/submissions/${encodeURIComponent(claimed.job_id)}/state`;
-  const postState = async (body) => validateStateResponse(await requestJson(stateUrl, {
-    ...requestOptions, body,
-  }), body.state);
+  const postState = (state) => updateCompetitionSubmissionJobState({
+    apiUrl: config.apiUrl,
+    jobId: claimed.job_id,
+    state,
+    ...requestOptions,
+  });
   const configured = config.actions[claimed.action_sha256];
   let terminal;
-  if (!configured) {
+  if (Date.parse(claimed.approval_expires_at) <= now()) {
+    terminal = { state: 'blocked', result_code: 'approval_expired', receipt_reference: null };
+  } else if (!configured) {
     terminal = { state: 'blocked', result_code: 'private_config_missing', receipt_reference: null };
   } else if (configured.request_id !== claimed.request_id
-    || configured.official_url !== claimed.official_url) {
+    || configured.official_url !== claimed.official_url
+    || configured.submission_url !== claimed.submission_url) {
     terminal = { state: 'blocked', result_code: 'destination_mismatch', receipt_reference: null };
   } else if (configured.adapter === 'unsupported') {
     terminal = { state: 'blocked', result_code: 'unsupported_organizer_flow', receipt_reference: null };
+  } else if (Date.parse(claimed.approval_expires_at) <= now()) {
+    terminal = { state: 'blocked', result_code: 'approval_expired', receipt_reference: null };
   } else {
     await postState({ state: 'running', lease_id: claimed.lease_id });
-    const executed = await executeOnce(
-      executeAction,
-      { job: claimed, action: configured },
-      executionTimeoutMs,
-      setTimer,
-      clearTimer,
-    );
-    try { terminal = validateExecutorResult(executed); }
-    catch {
-      terminal = { state: 'submission_unknown', result_code: 'ambiguous_response', receipt_reference: null };
+    if (Date.parse(claimed.approval_expires_at) <= now()) {
+      terminal = { state: 'blocked', result_code: 'approval_expired', receipt_reference: null };
+    } else {
+      const executed = await executeOnce(
+        executeAction,
+        { job: claimed, action: configured },
+        executionTimeoutMs,
+        setTimer,
+        clearTimer,
+      );
+      try { terminal = validateExecutorResult(executed); }
+      catch {
+        terminal = { state: 'submission_unknown', result_code: 'ambiguous_response', receipt_reference: null };
+      }
     }
   }
   const finalJob = await postState({

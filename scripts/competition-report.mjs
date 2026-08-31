@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const MAX_REPORT_BYTES = 1_000_000;
@@ -72,6 +73,10 @@ const APPROVAL_APPLICATION_STATES = new Map([
   ['payment', 'WAITING_FEE_APPROVAL'],
   ['final_submission', 'WAITING_APPROVAL'],
 ]);
+const ACTION_MANIFEST_RIGHTS_CLASSES = new Set([
+  'no_transfer', 'limited_license', 'exclusive_license', 'ownership_transfer',
+]);
+const SAFE_PRIVATE_SHAPED_KEYS = new Set(['consent_text_sha256']);
 
 export class CompetitionReportError extends Error {
   constructor(message, { code = 'invalid_report', status = null } = {}) {
@@ -317,7 +322,12 @@ function publicHttpsUrl(value, label, { nullable = false } = {}) {
   if (url.protocol !== 'https:' || url.username || url.password || url.hash || !url.hostname) {
     fail(`${label} must be an absolute public HTTPS URL`);
   }
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, '').replace(/\.+$/u, '');
+  let host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, '');
+  if (!host.includes(':')) {
+    host = host.replace(/\.+$/u, '');
+    if (!host) fail(`${label} must be an absolute public HTTPS URL`);
+    url.hostname = host;
+  }
   const octets = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host) ? host.split('.').map(Number) : null;
   const nonPublicIpv4 = octets?.length === 4 && octets.every((part) => part >= 0 && part <= 255)
     && (octets[0] === 0 || octets[0] === 10 || octets[0] === 127
@@ -388,7 +398,9 @@ function rejectForbiddenKeys(value, label = 'report') {
   }
   if (!record(value)) return;
   for (const [key, child] of Object.entries(value)) {
-    if (FORBIDDEN_KEYS.test(key)) fail(`${label}.${key} is private and must not be reported`);
+    if (FORBIDDEN_KEYS.test(key) && !SAFE_PRIVATE_SHAPED_KEYS.has(key)) {
+      fail(`${label}.${key} is private and must not be reported`);
+    }
     rejectForbiddenKeys(child, `${label}.${key}`);
   }
 }
@@ -520,12 +532,92 @@ function validateApplication(application, index, candidates) {
   if (candidate.status !== 'active') fail(`${label} must reference an active candidate`);
 }
 
-function validateApproval(approval, index, applications, observationTime) {
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (record(value)) {
+    return `{${Object.keys(value).sort().map((key) => (
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+    )).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizedManifestHashes(value, label) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16) {
+    fail(`${label} must contain from one to sixteen SHA-256 values`);
+  }
+  const hashes = value.map((hash, index) => string(hash, `${label}[${index}]`, {
+    max: 64, pattern: SHA256,
+  })).sort();
+  if (new Set(hashes).size !== hashes.length) fail(`${label} contains a duplicate hash`);
+  return hashes;
+}
+
+export function normalizeCompetitionActionManifest(manifest, label = 'action_manifest') {
+  exactKeys(manifest, [
+    'version', 'organizer', 'contest_id', 'category', 'submission_url', 'submission_host',
+    'fee', 'rights_class', 'consent_text_sha256', 'artifact_sha256', 'payload_sha256',
+  ], [], label);
+  exactKeys(manifest.fee, ['required', 'amount_minor', 'currency'], [], `${label}.fee`);
+  const submissionUrl = publicHttpsUrl(manifest.submission_url, `${label}.submission_url`);
+  const submissionHost = new URL(submissionUrl).hostname.toLowerCase().replace(/\.+$/u, '');
+  if (manifest.version !== 1) fail(`${label}.version must equal 1`);
+  string(manifest.organizer, `${label}.organizer`, { max: 160, maxBytes: 160, privatePatterns: true });
+  string(manifest.contest_id, `${label}.contest_id`, {
+    max: 160, pattern: IDENTIFIER, privatePatterns: true,
+  });
+  string(manifest.category, `${label}.category`, {
+    max: 80, pattern: CATEGORY, privatePatterns: true,
+  });
+  if (manifest.submission_host !== submissionHost) {
+    fail(`${label}.submission_host must exactly match the canonical destination host`);
+  }
+  if (typeof manifest.fee.required !== 'boolean') fail(`${label}.fee.required must be boolean`);
+  const amountMinor = integer(manifest.fee.amount_minor, `${label}.fee.amount_minor`, {
+    min: 0, max: 1_000_000_000_000,
+  });
+  string(manifest.fee.currency, `${label}.fee.currency`, { max: 4, pattern: /^(?:NONE|[A-Z]{3})$/u });
+  if ((manifest.fee.required && (amountMinor < 1 || manifest.fee.currency === 'NONE'))
+    || (!manifest.fee.required && (amountMinor !== 0 || manifest.fee.currency !== 'NONE'))) {
+    fail(`${label}.fee facts are inconsistent`);
+  }
+  oneOf(manifest.rights_class, ACTION_MANIFEST_RIGHTS_CLASSES, `${label}.rights_class`);
+  string(manifest.payload_sha256, `${label}.payload_sha256`, { max: 64, pattern: SHA256 });
+  return {
+    version: 1,
+    organizer: manifest.organizer.normalize('NFKC').replace(/\s+/gu, ' ').trim(),
+    contest_id: manifest.contest_id,
+    category: manifest.category,
+    submission_url: submissionUrl,
+    submission_host: submissionHost,
+    fee: {
+      required: manifest.fee.required,
+      amount_minor: amountMinor,
+      currency: manifest.fee.currency,
+    },
+    rights_class: manifest.rights_class,
+    consent_text_sha256: normalizedManifestHashes(
+      manifest.consent_text_sha256, `${label}.consent_text_sha256`,
+    ),
+    artifact_sha256: normalizedManifestHashes(
+      manifest.artifact_sha256, `${label}.artifact_sha256`,
+    ),
+    payload_sha256: manifest.payload_sha256,
+  };
+}
+
+export function competitionActionSha256(manifest) {
+  return createHash('sha256')
+    .update(canonicalJson(normalizeCompetitionActionManifest(manifest)))
+    .digest('hex');
+}
+
+function validateApproval(approval, index, applications, candidates, observationTime) {
   const label = `report.approvals[${index}]`;
   exactKeys(approval, [
     'request_id', 'contest_id', 'category', 'kind', 'action_sha256', 'requested_at',
     'expires_at', 'read_summary', 'approval_text',
-  ], [], label);
+  ], ['submission_url', 'action_manifest'], label);
   string(approval.request_id, `${label}.request_id`, {
     max: 160, pattern: APPROVAL_REQUEST_ID, privatePatterns: true,
   });
@@ -547,6 +639,7 @@ function validateApproval(approval, index, applications, observationTime) {
   });
   const key = `${approval.contest_id}|${approval.category}`;
   const application = applications.get(key);
+  const candidate = candidates.get(key);
   if (!application || application.state !== APPROVAL_APPLICATION_STATES.get(approval.kind)) {
     fail(`${label} does not match the reported application state`);
   }
@@ -565,6 +658,22 @@ function validateApproval(approval, index, applications, observationTime) {
   }
   if (approval.kind !== 'preparation' && Date.parse(approval.expires_at) <= observationTime) {
     fail(`${label} is already expired at the report observation`);
+  }
+  if (approval.kind === 'final_submission') {
+    const submissionUrl = publicHttpsUrl(approval.submission_url, `${label}.submission_url`);
+    const manifest = normalizeCompetitionActionManifest(approval.action_manifest, `${label}.action_manifest`);
+    if (manifest.organizer !== candidate.organizer
+      || manifest.contest_id !== approval.contest_id
+      || manifest.category !== approval.category
+      || manifest.submission_url !== submissionUrl) {
+      fail(`${label}.action_manifest does not exactly bind the candidate and destination`);
+    }
+    if (competitionActionSha256(manifest) !== approval.action_sha256) {
+      fail(`${label}.action_sha256 does not match the canonical action manifest`);
+    }
+  } else if ((approval.submission_url !== undefined && approval.submission_url !== null)
+    || (approval.action_manifest !== undefined && approval.action_manifest !== null)) {
+    fail(`${label} must not carry a final submission destination or manifest`);
   }
 }
 
@@ -679,7 +788,7 @@ export function validateCompetitionReport(report) {
   const approvalIds = new Set();
   const approvalKeys = new Set();
   approvals.forEach((approval, index) => {
-    validateApproval(approval, index, applicationByKey, observationTime);
+    validateApproval(approval, index, applicationByKey, candidates, observationTime);
     const key = `${approval.contest_id}|${approval.category}`;
     if (approvalIds.has(approval.request_id)) fail(`report.approvals[${index}].request_id is duplicated`);
     if (approvalKeys.has(key)) fail(`report.approvals[${index}] duplicates a contest/category key`);

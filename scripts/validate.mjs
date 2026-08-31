@@ -541,6 +541,11 @@ function validateMigrations() {
     && submissionMigration.includes("decision.decision = 'approved'")
     && submissionMigration.includes('competition_submission_jobs_forward_only'),
   'worker: migration 0017 must bind queued jobs to latest final approval and forward-only states');
+  check(submissionMigration.includes('ADD COLUMN submission_url')
+    && submissionMigration.includes('ADD COLUMN action_manifest_json')
+    && submissionMigration.includes('approval_expires_at TEXT NOT NULL')
+    && submissionMigration.includes("result_code = 'approval_expired'"),
+  'worker: migration 0017 must bind submission destination, canonical manifest, and approval expiry');
 
   const packageJson = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   for (const testFile of [
@@ -557,9 +562,23 @@ function validateMigrations() {
   'worker/src/router.js: competition submission claim/state routes are incomplete');
   const submissionClient = readFileSync(path.join(ROOT, 'scripts/competition-submit.mjs'), 'utf8');
   check(submissionClient.includes('competition_submission_token')
+    && submissionClient.includes('export async function claimCompetitionSubmissionJob')
+    && submissionClient.includes('export async function updateCompetitionSubmissionJobState')
+    && submissionClient.includes('claimed.approval_expires_at')
+    && submissionClient.includes('configured.submission_url !== claimed.submission_url')
     && submissionClient.includes("adapter === 'unsupported'")
     && submissionClient.includes("result_code: 'timeout_after_send'"),
-  'scripts/competition-submit.mjs: dedicated secret, fail-closed adapter, or unknown-result boundary is missing');
+  'scripts/competition-submit.mjs: exact destination, expiry, exported helper, or fail-closed boundary is missing');
+  const competitionSource = readFileSync(path.join(ROOT, 'worker/src/competitions.js'), 'utf8');
+  check(competitionSource.includes('canonicalRawJson(approval.action_manifest)')
+    && competitionSource.includes('expireSubmissionApprovals')
+    && competitionSource.includes('expireSubmissionLeases'),
+  'worker/src/competitions.js: manifest hash or terminal expiry enforcement is missing');
+  const competitionUi = readFileSync(path.join(ROOT, 'usage/assets/js/competition.js'), 'utf8');
+  check(competitionUi.includes('동의문 SHA-256')
+    && competitionUi.includes('제출 파일 SHA-256')
+    && competitionUi.includes('최종 제출 대상'),
+  'usage competition UI: exact manifest and distinct submission destination are missing');
   const wrangler = readFileSync(path.join(ROOT, 'worker/wrangler.toml'), 'utf8');
   check(wrangler.includes('wrangler secret put COMPETITION_SUBMISSION_TOKEN'),
     'worker/wrangler.toml: dedicated competition submission secret setup is undocumented');

@@ -4,15 +4,36 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { competitionActionSha256 } from './competition-report.mjs';
 import {
   CompetitionSubmissionError,
+  claimCompetitionSubmissionJob,
   readCompetitionSubmissionConfig,
   runCompetitionSubmissionOnce,
+  updateCompetitionSubmissionJobState,
 } from './competition-submit.mjs';
 
 const TOKEN = 's'.repeat(64);
-const ACTION = 'a'.repeat(64);
 const NOW = '2026-08-31T12:00:00.000Z';
+const SUBMISSION_URL = 'https://submit.organizer.example/apply';
+
+function actionManifest() {
+  return {
+    version: 1,
+    organizer: 'Example Organizer',
+    contest_id: 'contest',
+    category: 'image',
+    submission_url: SUBMISSION_URL,
+    submission_host: 'submit.organizer.example',
+    fee: { required: false, amount_minor: 0, currency: 'NONE' },
+    rights_class: 'limited_license',
+    consent_text_sha256: ['1'.repeat(64)],
+    artifact_sha256: ['2'.repeat(64)],
+    payload_sha256: '3'.repeat(64),
+  };
+}
+
+const ACTION = competitionActionSha256(actionManifest());
 
 function withConfig(t, {
   actions = {}, token = TOKEN,
@@ -35,7 +56,10 @@ function job(overrides = {}) {
     action_sha256: ACTION,
     contest_id: 'contest',
     category: 'image',
-    official_url: 'https://organizer.example/submit',
+    official_url: 'https://organizer.example/rules',
+    submission_url: SUBMISSION_URL,
+    action_manifest: actionManifest(),
+    approval_expires_at: '2099-08-31T12:10:00.000Z',
     status: 'claimed',
     queued_at: NOW,
     claimed_at: NOW,
@@ -72,12 +96,39 @@ test('submission client treats an empty claim as idle and never returns the toke
   assert.doesNotMatch(JSON.stringify(result), new RegExp(TOKEN, 'u'));
 });
 
+test('exported claim and state helpers carry the dedicated token and strict lease body', async () => {
+  const requests = [];
+  const fetchImpl = async (url, options) => {
+    requests.push({ url, options });
+    if (url.endsWith('/claim')) return jsonResponse({ job: job() });
+    return jsonResponse({ job: job({ status: 'running', started_at: NOW }), replayed: false });
+  };
+  const claimed = await claimCompetitionSubmissionJob({
+    apiUrl: 'https://api.test', token: TOKEN, fetchImpl,
+  });
+  const running = await updateCompetitionSubmissionJobState({
+    apiUrl: 'https://api.test', token: TOKEN, fetchImpl,
+    jobId: claimed.job_id,
+    state: { state: 'running', lease_id: claimed.lease_id },
+  });
+  assert.equal(running.status, 'running');
+  assert.deepEqual(requests.map((entry) => entry.url), [
+    'https://api.test/api/competitions/submissions/claim',
+    'https://api.test/api/competitions/submissions/competition-final-contest-image/state',
+  ]);
+  assert.ok(requests.every((entry) => entry.options.headers.authorization === `Bearer ${TOKEN}`));
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    state: 'running', lease_id: 'lease-123',
+  });
+});
+
 test('submission client records running before one adapter call and reports a bounded receipt', async (t) => {
   const configPath = withConfig(t, {
     actions: {
       [ACTION]: {
         request_id: 'competition-final-contest-image',
-        official_url: 'https://organizer.example/submit',
+        official_url: 'https://organizer.example/rules',
+        submission_url: SUBMISSION_URL,
         adapter: 'organizer_example_v1',
       },
     },
@@ -130,7 +181,8 @@ test('adapter timeout becomes terminal submission_unknown without a second exter
     actions: {
       [ACTION]: {
         request_id: 'competition-final-contest-image',
-        official_url: 'https://organizer.example/submit',
+        official_url: 'https://organizer.example/rules',
+        submission_url: SUBMISSION_URL,
         adapter: 'organizer_example_v1',
       },
     },
@@ -170,20 +222,85 @@ test('adapter timeout becomes terminal submission_unknown without a second exter
   assert.equal(result.result_code, 'timeout_after_send');
 });
 
+test('approval expiry is checked at claim handling, before running and immediately before adapter call', async (t) => {
+  const configPath = withConfig(t, {
+    actions: {
+      [ACTION]: {
+        request_id: 'competition-final-contest-image',
+        official_url: 'https://organizer.example/rules',
+        submission_url: SUBMISSION_URL,
+        adapter: 'organizer_example_v1',
+      },
+    },
+  });
+  const expiry = Date.parse('2026-08-31T12:00:01.000Z');
+  for (const [name, clock, expectedStates] of [
+    ['expired claim', [expiry], ['blocked']],
+    ['expires before running', [expiry - 1, expiry], ['blocked']],
+    ['expires before adapter', [expiry - 1, expiry - 1, expiry], ['running', 'blocked']],
+  ]) {
+    await t.test(name, async () => {
+      const ticks = [...clock];
+      const states = [];
+      let adapterCalls = 0;
+      const result = await runCompetitionSubmissionOnce({
+        configPath,
+        now: () => ticks.shift() ?? expiry,
+        fetchImpl: async (url, options) => {
+          if (url.endsWith('/claim')) {
+            return jsonResponse({ job: job({
+              approval_expires_at: '2026-08-31T12:00:01.000Z',
+            }) });
+          }
+          const body = JSON.parse(options.body);
+          states.push(body.state);
+          if (body.state === 'running') {
+            return jsonResponse({
+              job: job({
+                approval_expires_at: '2026-08-31T12:00:01.000Z',
+                status: 'running', started_at: NOW,
+              }),
+              replayed: false,
+            });
+          }
+          return jsonResponse({
+            job: job({
+              approval_expires_at: '2026-08-31T12:00:01.000Z',
+              status: 'blocked', started_at: states.includes('running') ? NOW : null,
+              completed_at: NOW, lease_until: null, result_code: 'approval_expired',
+            }),
+            replayed: false,
+          });
+        },
+        executeAction: async () => {
+          adapterCalls += 1;
+          return { state: 'succeeded', result_code: 'submitted' };
+        },
+      });
+      assert.deepEqual(states, expectedStates);
+      assert.equal(adapterCalls, 0);
+      assert.equal(result.status, 'blocked');
+      assert.equal(result.result_code, 'approval_expired');
+    });
+  }
+});
+
 test('generic and mismatched organizer configurations fail closed without entering running', async (t) => {
   for (const [name, actions, expected] of [
     ['missing', {}, 'private_config_missing'],
     ['mismatch', {
       [ACTION]: {
         request_id: 'competition-final-contest-image',
-        official_url: 'https://other.example/submit',
+        official_url: 'https://organizer.example/rules',
+        submission_url: 'https://other.example/submit',
         adapter: 'organizer_example_v1',
       },
     }, 'destination_mismatch'],
     ['unsupported', {
       [ACTION]: {
         request_id: 'competition-final-contest-image',
-        official_url: 'https://organizer.example/submit',
+        official_url: 'https://organizer.example/rules',
+        submission_url: SUBMISSION_URL,
         adapter: 'unsupported',
       },
     }, 'unsupported_organizer_flow'],
@@ -250,6 +367,15 @@ test('client redacts a token from rejection text and rejects malformed or oversi
   await assert.rejects(
     runCompetitionSubmissionOnce({
       configPath,
+      fetchImpl: async () => jsonResponse({
+        job: job({ action_manifest: { ...actionManifest(), rights_class: 'ownership_transfer' } }),
+      }),
+    }),
+    (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_response',
+  );
+  await assert.rejects(
+    runCompetitionSubmissionOnce({
+      configPath,
       fetchImpl: async () => new Response('x'.repeat(64_001), { status: 200 }),
     }),
     (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_response',
@@ -279,7 +405,8 @@ test('request timeout is bounded and private config rejects unknown sensitive-sh
     actions: {
       [ACTION]: {
         request_id: 'competition-final-contest-image',
-        official_url: 'https://organizer.example/submit',
+        official_url: 'https://organizer.example/rules',
+        submission_url: SUBMISSION_URL,
         adapter: 'organizer_example_v1',
         answers: ['forbidden'],
       },
@@ -289,6 +416,29 @@ test('request timeout is bounded and private config rejects unknown sensitive-sh
     () => readCompetitionSubmissionConfig(unsafe),
     (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_config',
   );
+  for (const submissionUrl of [
+    'https://localhost./apply',
+    'https://submit.organizer.example/apply?token=privatevalue123',
+    'https://submit.organizer.example/apply?contact=owner%40example.com',
+  ]) {
+    fs.writeFileSync(unsafe, JSON.stringify({
+      api_url: 'https://api.test',
+      competition_submission_token: TOKEN,
+      actions: {
+        [ACTION]: {
+          request_id: 'competition-final-contest-image',
+          official_url: 'https://organizer.example/rules',
+          submission_url: submissionUrl,
+          adapter: 'organizer_example_v1',
+        },
+      },
+    }));
+    assert.throws(
+      () => readCompetitionSubmissionConfig(unsafe),
+      (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_config',
+      submissionUrl,
+    );
+  }
   assert.throws(
     () => readCompetitionSubmissionConfig(path.join(process.cwd(), 'private-submission.json')),
     (error) => error instanceof CompetitionSubmissionError && error.code === 'invalid_config',

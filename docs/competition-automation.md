@@ -186,6 +186,15 @@ written in the same D1 batch. Exact repeat clicks return the existing decision/j
 stale reports and expired or different action hashes fail. Preparation, legal-consent, rights, payment,
 and held decisions create no submission job.
 
+A final request has a public HTTPS `submission_url` separate from the candidate's official rules URL.
+It also has a canonical action manifest with `version`, organizer, contest/category, submission URL and
+host, exact fee facts, one rights class, consent-text hashes, artifact hashes, and a redacted payload
+hash. `action_sha256` is SHA-256 over the recursively key-sorted JSON form of that manifest; both the
+reporter and Worker recompute it, and the Worker rejects any mismatch before storing the report. The
+owner card shows every manifest fact and hash before enabling approval. D1 stores only this canonical
+manifest, public destinations, hashes, and the immutable approval expiry—never consent text, artifact
+contents, answers, PII, or a raw receipt.
+
 The executor uses only `COMPETITION_SUBMISSION_TOKEN`:
 
 - `POST /api/competitions/submissions/claim` conditionally leases one oldest queued job.
@@ -193,6 +202,9 @@ The executor uses only `COMPETITION_SUBMISSION_TOKEN`:
   or `submission_unknown` under that live lease.
 - A claim is attempted once. An expired claimed/running lease becomes `submission_unknown` with
   `lease_expired`; it is never returned to the queue.
+- The approval expiry travels with the job. The SQLite clock terminally blocks an expired queued or
+  claimed job as `approval_expired`, the running transition rechecks it, and the local client checks it
+  again immediately before an injected organizer action. No expired job is requeued.
 - Results are fixed codes plus an optional 96-character ASCII receipt reference. There is no free-form
   result/receipt body in D1, and the owner GET omits lease identifiers.
 
@@ -218,7 +230,8 @@ The created file contains only the API URL, dedicated token, and public/action-b
   "actions": {
     "64-character-action-sha256": {
       "request_id": "exact-final-approval-request-id",
-      "official_url": "https://organizer.example/submit",
+      "official_url": "https://organizer.example/rules",
+      "submission_url": "https://submit.organizer.example/apply",
       "adapter": "organizer_specific_v1"
     }
   }
@@ -232,13 +245,25 @@ node scripts/competition-submit.mjs `
   --config C:\Users\won\.config\hvsdcm1\competition-submission.json
 ```
 
-The client never prints the token. It compares the claim's request id, action hash, and official URL to
-the private config, records `running` before calling an adapter, and reports one bounded terminal state.
+The client never prints the token. It compares the claim's request id, action hash, official rules URL,
+and exact submission URL to the private config, records `running` before calling an adapter, and reports
+one bounded terminal state. Both config and claim URLs must pass the same public-HTTPS, local/private
+host, private-query, PII, and trailing-dot defenses as report ingestion.
 The checked-in generic executor deliberately supports no organizer form: missing, mismatched, or
 `unsupported` flows become visible `blocked` jobs. A supported organizer needs a separately reviewed
 specific adapter; PII, answers, cookies, passwords, consent bodies and raw receipts must come from a
 separate guarded local source at action time and must never be added to this config, Git, D1, logs,
 prompts, or Discord.
+
+For an active five-minute executor heartbeat, import the exported
+`claimCompetitionSubmissionJob`/`updateCompetitionSubmissionJobState` helpers or call
+`runCompetitionSubmissionOnce` with an injected `executeAction({ job, action, signal })`. The injected
+function may drive the organizer-specific Browser flow only after comparing the visible form host and
+destination with `job.submission_url` and the immutable manifest; it returns only an allowed terminal
+code and optional bounded receipt reference. One heartbeat handles at most one job. Keep the CLI
+unchanged as the fail-closed `unsupported_organizer_flow` default—there is no generic form submitter and
+no blind retry. Scheduling that heartbeat and providing an organizer adapter are separate operational
+steps and are not created by this repository change.
 
 ## Results-only Discord delivery
 

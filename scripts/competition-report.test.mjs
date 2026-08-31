@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CompetitionReportError,
+  competitionActionSha256,
   readCompetitionReport,
   runCompetitionReporter,
   sendCompetitionReport,
@@ -17,6 +18,40 @@ const FIXTURE = path.join(ROOT, 'fixtures', 'competition-report.valid.json');
 
 function validReport() {
   return JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
+}
+
+function finalApprovalReport() {
+  const report = validReport();
+  report.applications[0].state = 'WAITING_APPROVAL';
+  report.applications[0].blocker = 'user_approval';
+  report.applications[0].next_action = 'request_approval';
+  const actionManifest = {
+    version: 1,
+    organizer: report.candidates[0].organizer,
+    contest_id: report.candidates[0].contest_id,
+    category: report.candidates[0].category,
+    submission_url: 'https://submit.organizer.example/apply',
+    submission_host: 'submit.organizer.example',
+    fee: { required: false, amount_minor: 0, currency: 'NONE' },
+    rights_class: 'limited_license',
+    consent_text_sha256: ['1'.repeat(64)],
+    artifact_sha256: ['2'.repeat(64)],
+    payload_sha256: '3'.repeat(64),
+  };
+  report.approvals = [{
+    request_id: 'competition-final-example-image',
+    contest_id: report.candidates[0].contest_id,
+    category: report.candidates[0].category,
+    kind: 'final_submission',
+    action_sha256: competitionActionSha256(actionManifest),
+    requested_at: report.applications[0].updated_at,
+    expires_at: '2026-08-31T01:20:00+09:00',
+    submission_url: actionManifest.submission_url,
+    action_manifest: actionManifest,
+    read_summary: '공식 제출 목적지와 비식별 manifest의 해시를 마지막으로 확인했습니다.',
+    approval_text: '표시된 목적지와 action manifest를 한 번만 최종 제출합니다.',
+  }];
+  return report;
 }
 
 function acknowledgement(report, replayed = false) {
@@ -192,6 +227,48 @@ test('approval requests bind redacted review wording and exact action to the mat
   mismatched.approvals[0].kind = 'final_submission';
   mismatched.approvals[0].expires_at = report.run.finished_at;
   assert.throws(() => validateCompetitionReport(mismatched), CompetitionReportError);
+});
+
+test('final approval binds a distinct rules URL and canonical submission action manifest', () => {
+  const report = finalApprovalReport();
+  assert.notEqual(report.candidates[0].official_url, report.approvals[0].submission_url);
+  assert.equal(validateCompetitionReport(report), report);
+
+  const mutations = [
+    (approval) => { approval.action_manifest.version = 2; },
+    (approval) => { approval.action_manifest.organizer = 'Different Organizer'; },
+    (approval) => { approval.action_manifest.contest_id = 'different-contest'; },
+    (approval) => { approval.action_manifest.category = 'different-category'; },
+    (approval) => {
+      approval.submission_url = 'https://other.organizer.example/apply';
+      approval.action_manifest.submission_url = approval.submission_url;
+      approval.action_manifest.submission_host = 'other.organizer.example';
+    },
+    (approval) => { approval.action_manifest.submission_host = 'other.organizer.example'; },
+    (approval) => { approval.action_manifest.fee = { required: true, amount_minor: 1000, currency: 'KRW' }; },
+    (approval) => { approval.action_manifest.rights_class = 'ownership_transfer'; },
+    (approval) => { approval.action_manifest.consent_text_sha256 = ['4'.repeat(64)]; },
+    (approval) => { approval.action_manifest.artifact_sha256 = ['5'.repeat(64)]; },
+    (approval) => { approval.action_manifest.payload_sha256 = '6'.repeat(64); },
+  ];
+  for (const mutate of mutations) {
+    const changed = finalApprovalReport();
+    const originalHash = changed.approvals[0].action_sha256;
+    mutate(changed.approvals[0]);
+    assert.equal(changed.approvals[0].action_sha256, originalHash);
+    assert.throws(() => validateCompetitionReport(changed), CompetitionReportError);
+  }
+
+  for (const submissionUrl of [
+    'http://organizer.example/apply',
+    'https://localhost./apply',
+    'https://organizer.example/apply?token=privatevalue123',
+  ]) {
+    const unsafe = finalApprovalReport();
+    unsafe.approvals[0].submission_url = submissionUrl;
+    unsafe.approvals[0].action_manifest.submission_url = submissionUrl;
+    assert.throws(() => validateCompetitionReport(unsafe), CompetitionReportError);
+  }
 });
 
 test('run date is KST-bound and observation time allows no more than five minutes of future skew', () => {

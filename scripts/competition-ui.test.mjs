@@ -109,6 +109,22 @@ function approvalFixture({ status = 'pending', summary = '수상작 이용 범�
   return payload;
 }
 
+function finalActionManifest() {
+  return {
+    version: 1,
+    organizer: '예시 재단',
+    contest_id: 'contest-1',
+    category: 'design',
+    submission_url: 'https://submit.organizer.example/apply',
+    submission_host: 'submit.organizer.example',
+    fee: { required: false, amount_minor: 0, currency: 'NONE' },
+    rights_class: 'limited_license',
+    consent_text_sha256: ['1'.repeat(64)],
+    artifact_sha256: ['2'.repeat(64)],
+    payload_sha256: '3'.repeat(64),
+  };
+}
+
 test('the adapter accepts wrapped object maps and canonicalizes variants', () => {
   const { ui } = competitionContext();
   const normalized = ui.normalizePayload({
@@ -375,6 +391,8 @@ test('final approval immediately renders the atomically queued submission job', 
   payload.applications[0].approval.kind = 'final_submission';
   payload.applications[0].approval.request_id = 'competition-final-contest-1';
   payload.applications[0].approval.expires_at = '2026-08-31T03:10:00+09:00';
+  payload.applications[0].approval.submission_url = 'https://submit.organizer.example/apply';
+  payload.applications[0].approval.action_manifest = finalActionManifest();
   const controller = shell.ui.createDashboard({
     request: async (_path, options) => {
       if (!options) return payload;
@@ -385,7 +403,10 @@ test('final approval immediately renders the atomically queued submission job', 
         submission: {
           job_id: 'competition-final-contest-1', request_id: 'competition-final-contest-1',
           action_sha256: 'a'.repeat(64), contest_id: 'contest-1', category: 'design',
-          official_url: 'https://organizer.example/submit', status: 'queued',
+          official_url: 'https://organizer.example/rules',
+          submission_url: 'https://submit.organizer.example/apply',
+          action_manifest: finalActionManifest(),
+          approval_expires_at: '2026-08-31T03:10:00+09:00', status: 'queued',
           queued_at: '2026-08-31T03:01:00+09:00', claimed_at: null, started_at: null,
           completed_at: null, result_code: null, receipt_reference: null,
         },
@@ -395,6 +416,20 @@ test('final approval immediately renders the atomically queued submission job', 
   });
   controller.activate();
   await flush();
+  const beforeApproval = shell.store.get('competitionApprovalInbox').innerHTML;
+  assert.match(beforeApproval, /예시 재단/u);
+  assert.match(beforeApproval, /contest-1 · design/u);
+  assert.match(beforeApproval, /승인 대상 제출 페이지 열기/u);
+  assert.match(beforeApproval, /submit\.organizer\.example/u);
+  assert.match(beforeApproval, /무료 · 결제 없음/u);
+  assert.match(beforeApproval, /제한적 이용허락/u);
+  assert.match(beforeApproval, /동의문 SHA-256/u);
+  assert.match(beforeApproval, new RegExp('1'.repeat(64), 'u'));
+  assert.match(beforeApproval, /제출 파일 SHA-256/u);
+  assert.match(beforeApproval, new RegExp('2'.repeat(64), 'u'));
+  assert.match(beforeApproval, /제출 payload SHA-256/u);
+  assert.match(beforeApproval, new RegExp('3'.repeat(64), 'u'));
+  assert.match(beforeApproval, /data-competition-approval-decision="approved"/u);
   const button = {
     dataset: {
       requestId: 'competition-final-contest-1',
@@ -411,6 +446,9 @@ test('final approval immediately renders the atomically queued submission job', 
   assert.equal(controller.state().data.applications[0].status, 'queued');
   assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /제출 대기/u);
   assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /주최기관 제출 페이지 열기/u);
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /submit\.organizer\.example/u);
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /동의문 SHA-256/u);
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, new RegExp('1'.repeat(64), 'u'));
   assert.equal(
     shell.store.get('competitionRefreshStatus').textContent,
     '승인됨 · 최종 제출 작업 1건이 대기열에 안전하게 추가되었습니다.',
@@ -429,10 +467,15 @@ test('queued, running, succeeded, blocked and unknown submission states render w
   for (const [status, resultCode, receiptReference, expectedStatus, label] of cases) {
     const payload = approvalFixture({ status: 'approved' });
     payload.applications[0].approval.kind = 'final_submission';
+    payload.applications[0].approval.submission_url = 'https://submit.organizer.example/apply';
+    payload.applications[0].approval.action_manifest = finalActionManifest();
     payload.applications[0].submission = {
       job_id: 'competition-final-contest-1', request_id: 'competition-final-contest-1',
       action_sha256: 'a'.repeat(64), contest_id: 'contest-1', category: 'design',
-      official_url: 'https://organizer.example/submit', status,
+      official_url: 'https://organizer.example/rules',
+      submission_url: 'https://submit.organizer.example/apply',
+      action_manifest: finalActionManifest(),
+      approval_expires_at: '2026-08-31T03:10:00+09:00', status,
       queued_at: '2026-08-31T02:58:00+09:00',
       claimed_at: status === 'queued' ? null : '2026-08-31T02:59:00+09:00',
       started_at: ['running', 'succeeded'].includes(status) ? '2026-08-31T03:00:00+09:00' : null,
@@ -463,6 +506,10 @@ test('sensitive web approvals explain their exact action-time boundary and unkno
     const payload = approvalFixture();
     payload.applications[0].approval.kind = kind;
     payload.applications[0].approval.expires_at = '2026-08-31T03:10:00+09:00';
+    if (kind === 'final_submission') {
+      payload.applications[0].approval.submission_url = 'https://submit.organizer.example/apply';
+      payload.applications[0].approval.action_manifest = finalActionManifest();
+    }
     const markup = ui.renderApprovalInbox(
       ui.normalizePayload(payload).applications,
       ui.normalizePayload(payload).candidates,
@@ -471,6 +518,23 @@ test('sensitive web approvals explain their exact action-time boundary and unkno
     assert.match(markup, new RegExp(wording, 'u'), kind);
     assert.match(markup, /data-competition-approval-decision="approved"/u, kind);
     assert.doesNotMatch(markup, /준비 승인은 개인정보 입력/u, kind);
+  }
+
+  for (const mutate of [
+    (approval) => { approval.action_manifest.organizer = '다른 주최기관'; },
+    (approval) => { approval.action_manifest.submission_url = 'https://other.example/apply'; },
+  ]) {
+    const mismatched = approvalFixture();
+    mismatched.applications[0].approval.kind = 'final_submission';
+    mismatched.applications[0].approval.expires_at = '2026-08-31T03:10:00+09:00';
+    mismatched.applications[0].approval.submission_url = 'https://submit.organizer.example/apply';
+    mismatched.applications[0].approval.action_manifest = finalActionManifest();
+    mutate(mismatched.applications[0].approval);
+    const mismatchedNormalized = ui.normalizePayload(mismatched);
+    const mismatchedMarkup = ui.renderApprovalInbox(
+      mismatchedNormalized.applications, mismatchedNormalized.candidates, NOW,
+    );
+    assert.doesNotMatch(mismatchedMarkup, /data-competition-approval-decision="approved"/u);
   }
 
   const unknown = approvalFixture();

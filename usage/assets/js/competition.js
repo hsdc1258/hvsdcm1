@@ -165,6 +165,7 @@
   };
   const SUBMISSION_RESULT_LABELS = {
     submitted: '주최기관 응답으로 제출 완료를 확인함',
+    approval_expired: '최종 승인 유효 시간이 지나 제출하지 않음',
     unsupported_organizer_flow: '지원되지 않는 주최기관 제출 방식',
     private_config_missing: '로컬 비공개 제출 설정 없음',
     destination_mismatch: '승인 대상과 로컬 제출 대상 불일치',
@@ -179,6 +180,12 @@
     connection_lost_after_send: '전송 뒤 연결이 끊겨 결과 미확인',
     ambiguous_response: '주최기관 응답이 모호해 결과 미확인',
     lease_expired: '작업 lease가 만료되어 결과 미확인',
+  };
+  const ACTION_RIGHTS_LABELS = {
+    no_transfer: '권리 이전 없음',
+    limited_license: '제한적 이용허락',
+    exclusive_license: '독점적 이용허락',
+    ownership_transfer: '소유권 이전',
   };
 
   const escapeHtml = (value) => String(value ?? '').replace(
@@ -317,16 +324,64 @@
     if (!requestId || !/^[a-f0-9]{64}$/u.test(actionSha256)) return null;
     const rawKind = text(source.kind).toLowerCase();
     const rawStatus = text(source.status).toLowerCase();
+    const submissionUrl = firstSafeUrl(source.submission_url);
+    const normalizedManifest = normalizeActionManifest(source.action_manifest);
+    const actionManifest = normalizedManifest?.submissionUrl === submissionUrl
+      ? normalizedManifest : null;
     return {
       requestId,
       kind: Object.prototype.hasOwnProperty.call(APPROVAL_KIND_LABELS, rawKind) ? rawKind : 'unknown',
       actionSha256,
       requestedAt: source.requested_at,
       expiresAt: source.expires_at,
+      submissionUrl,
+      actionManifest,
       readSummary: text(source.read_summary),
       approvalText: text(source.approval_text),
       status: Object.prototype.hasOwnProperty.call(APPROVAL_STATUS_LABELS, rawStatus) ? rawStatus : 'expired',
       decidedAt: source.decided_at,
+    };
+  }
+
+  function normalizeActionManifest(entry) {
+    const source = object(entry);
+    const fee = object(source.fee);
+    const submissionUrl = firstSafeUrl(source.submission_url);
+    const submissionHost = text(source.submission_host).toLowerCase();
+    const rawConsentHashes = Array.isArray(source.consent_text_sha256)
+      ? source.consent_text_sha256 : [];
+    const rawArtifactHashes = Array.isArray(source.artifact_sha256)
+      ? source.artifact_sha256 : [];
+    const consentHashes = rawConsentHashes.map(text)
+      .filter((hash) => /^[a-f0-9]{64}$/u.test(hash));
+    const artifactHashes = rawArtifactHashes.map(text)
+      .filter((hash) => /^[a-f0-9]{64}$/u.test(hash));
+    if (source.version !== 1 || !text(source.organizer) || !text(source.contest_id)
+      || !text(source.category) || !submissionUrl || !submissionHost
+      || new URL(submissionUrl).hostname.toLowerCase().replace(/\.+$/u, '') !== submissionHost
+      || typeof fee.required !== 'boolean' || !Number.isSafeInteger(fee.amount_minor)
+      || typeof fee.currency !== 'string' || !/^(?:NONE|[A-Z]{3})$/u.test(fee.currency)
+      || (fee.required && (fee.amount_minor < 1 || fee.currency === 'NONE'))
+      || (!fee.required && (fee.amount_minor !== 0 || fee.currency !== 'NONE'))
+      || !Object.prototype.hasOwnProperty.call(ACTION_RIGHTS_LABELS, text(source.rights_class))
+      || consentHashes.length !== rawConsentHashes.length || consentHashes.length < 1
+      || consentHashes.length > 16 || new Set(consentHashes).size !== consentHashes.length
+      || artifactHashes.length !== rawArtifactHashes.length || artifactHashes.length < 1
+      || artifactHashes.length > 16 || new Set(artifactHashes).size !== artifactHashes.length
+      || !/^[a-f0-9]{64}$/u.test(text(source.payload_sha256))) return null;
+    return {
+      organizer: text(source.organizer),
+      contestId: text(source.contest_id),
+      category: text(source.category),
+      submissionUrl,
+      submissionHost,
+      feeRequired: fee.required,
+      feeAmountMinor: fee.amount_minor,
+      feeCurrency: fee.currency,
+      rightsClass: text(source.rights_class),
+      consentHashes,
+      artifactHashes,
+      payloadHash: text(source.payload_sha256),
     };
   }
 
@@ -344,6 +399,9 @@
       requestId,
       actionSha256,
       officialUrl: firstSafeUrl(source.official_url),
+      submissionUrl: firstSafeUrl(source.submission_url),
+      actionManifest: normalizeActionManifest(source.action_manifest),
+      approvalExpiresAt: source.approval_expires_at,
       status,
       queuedAt: source.queued_at,
       claimedAt: source.claimed_at,
@@ -668,12 +726,38 @@
       : submission.status === 'submission_unknown' ? 'submission-unknown'
         : submission.status;
     const officialUrl = submission.officialUrl || candidate?.officialUrl || '';
+    const submissionUrl = submission.submissionUrl || '';
     return `<section class="cp-application cp-submission" aria-label="최종 제출 처리 상태">
       <div><strong>제출 처리</strong><span class="cp-inline-state${tone(statusTone)}">${escapeHtml(statusLabel)}</span></div>
-      <div><strong>공식 제출 대상</strong>${link(officialUrl, '주최기관 제출 페이지 열기 ↗', 'cp-official-link')}</div>
+      <div><strong>공식 공고</strong>${link(officialUrl, '주최기관 공식 공고 열기 ↗', 'cp-official-link')}</div>
+      <div><strong>최종 제출 대상</strong>${link(submissionUrl, '주최기관 제출 페이지 열기 ↗', 'cp-official-link')}</div>
+      <div><strong>승인 만료</strong><span>${escapeHtml(dateTime(submission.approvalExpiresAt))}</span></div>
       <div><strong>작업 시각</strong><span>${escapeHtml(dateTime(first(submission.completedAt, submission.startedAt, submission.claimedAt, submission.queuedAt)))}</span></div>
       <div><strong>처리 결과</strong><span>${escapeHtml(resultLabel)}</span></div>
       ${submission.receiptReference ? `<div><strong>접수 확인 번호</strong><code>${escapeHtml(submission.receiptReference)}</code></div>` : ''}
+    </section>`;
+  }
+
+  function renderActionManifest(approval) {
+    const manifest = approval?.actionManifest;
+    if (!manifest) return '';
+    const fee = manifest.feeRequired
+      ? `${manifest.feeAmountMinor} ${manifest.feeCurrency} (최소 화폐단위)`
+      : '무료 · 결제 없음';
+    const hashes = (values) => values.map((hash) => `<code>${escapeHtml(hash)}</code>`).join('<br>');
+    return `<section class="cp-approval-copy cp-action-manifest" aria-label="최종 제출 action manifest">
+      <h4>최종 제출에 묶인 정확한 사실</h4>
+      <dl class="cp-approval-facts">
+        <div><dt>주최기관</dt><dd>${escapeHtml(manifest.organizer)}</dd></div>
+        <div><dt>공모전·분야</dt><dd>${escapeHtml(`${manifest.contestId} · ${manifest.category}`)}</dd></div>
+        <div><dt>제출 host</dt><dd><code>${escapeHtml(manifest.submissionHost)}</code></dd></div>
+        <div><dt>참가비</dt><dd>${escapeHtml(fee)}</dd></div>
+        <div><dt>권리 분류</dt><dd>${escapeHtml(ACTION_RIGHTS_LABELS[manifest.rightsClass])}</dd></div>
+      </dl>
+      <p><strong>동의문 SHA-256</strong><br>${hashes(manifest.consentHashes)}</p>
+      <p><strong>제출 파일 SHA-256</strong><br>${hashes(manifest.artifactHashes)}</p>
+      <p><strong>제출 payload SHA-256</strong><br><code>${escapeHtml(manifest.payloadHash)}</code></p>
+      ${link(approval.submissionUrl, '승인 대상 제출 페이지 열기 ↗', 'cp-official-link')}
     </section>`;
   }
 
@@ -700,7 +784,13 @@
       const kind = APPROVAL_KIND_LABELS[approval.kind] || '승인 유형 미확인';
       const boundary = APPROVAL_KIND_BOUNDARIES[approval.kind]
         || '승인 유형을 확인할 수 없어 진행할 수 없습니다. 새 승인 요청이 필요합니다.';
-      const controls = status === 'pending' && Object.prototype.hasOwnProperty.call(APPROVAL_KIND_BOUNDARIES, approval.kind)
+      const exactFinalAction = approval.kind !== 'final_submission'
+        || (approval.submissionUrl && approval.actionManifest
+          && approval.actionManifest.organizer === candidate?.organizer
+          && approval.actionManifest.contestId === application.id
+          && approval.actionManifest.category === application.category);
+      const controls = status === 'pending' && exactFinalAction
+        && Object.prototype.hasOwnProperty.call(APPROVAL_KIND_BOUNDARIES, approval.kind)
         ? `<div class="cp-approval-actions">
             <button class="btn btn-primary" type="button" data-competition-approval-decision="approved" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">${escapeHtml(kind)}</button>
             <button class="btn btn-secondary" type="button" data-competition-approval-decision="held" data-request-id="${escapeHtml(approval.requestId)}" data-action-sha256="${escapeHtml(approval.actionSha256)}">보류</button>
@@ -729,6 +819,7 @@
           <p>${escapeHtml(approval.approvalText || '승인 범위가 없어 승인할 수 없습니다.')}</p>
           <p class="cp-approval-boundary">${escapeHtml(boundary)}</p>
         </section>
+        ${renderActionManifest(approval)}
         <details class="cp-approval-hash"><summary>이 승인에 묶인 action hash</summary><code>${escapeHtml(approval.actionSha256)}</code></details>
         ${renderSubmission(application, candidate)}
         ${controls}

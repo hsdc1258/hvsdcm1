@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -4537,12 +4538,36 @@ function competitionWithFinalApproval({
   fixture.applications[0].state = 'WAITING_APPROVAL';
   fixture.applications[0].blocker = 'user_approval';
   fixture.applications[0].next_action = 'request_approval';
+  const actionManifest = {
+    version: 1,
+    organizer: fixture.candidates[0].organizer,
+    contest_id: fixture.candidates[0].contest_id,
+    category: fixture.candidates[0].category,
+    submission_url: 'https://submit.organizer.example/apply',
+    submission_host: 'submit.organizer.example',
+    fee: { required: false, amount_minor: 0, currency: 'NONE' },
+    rights_class: 'limited_license',
+    consent_text_sha256: ['1'.repeat(64)],
+    artifact_sha256: ['2'.repeat(64)],
+    payload_sha256: actionSha256,
+  };
+  const canonicalJson = (value) => {
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => (
+        `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+      )).join(',')}}`;
+    }
+    return JSON.stringify(value);
+  };
   fixture.approvals[0] = {
     ...fixture.approvals[0],
     request_id: requestId,
     kind: 'final_submission',
-    action_sha256: actionSha256,
+    action_sha256: createHash('sha256').update(canonicalJson(actionManifest)).digest('hex'),
     expires_at: new Date(Date.parse(fixture.approvals[0].requested_at) + 10 * 60_000).toISOString(),
+    submission_url: actionManifest.submission_url,
+    action_manifest: actionManifest,
     read_summary: '공식 제출 대상, 비식별 입력·파일 해시와 정확한 권리 문구를 마지막으로 확인했습니다.',
     approval_text: '이 action hash에 묶인 공식 대상과 파일을 한 번만 최종 제출합니다.',
   };
@@ -4799,6 +4824,8 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
     action_sha256: 'a'.repeat(64),
     requested_at: fixture.approvals[0].requested_at,
     expires_at: null,
+    submission_url: null,
+    action_manifest: null,
     read_summary: fixture.approvals[0].read_summary,
     approval_text: fixture.approvals[0].approval_text,
     status: 'pending',
@@ -4874,8 +4901,45 @@ test('latest unexpired final approval atomically queues exactly one submission j
   assert.equal(queued.request_id, fixture.approvals[0].request_id);
   assert.equal(queued.action_sha256, fixture.approvals[0].action_sha256);
   assert.equal(queued.official_url, fixture.candidates[0].official_url);
+  assert.equal(queued.submission_url, fixture.approvals[0].submission_url);
+  assert.equal(queued.approval_expires_at, fixture.approvals[0].expires_at);
+  assert.deepEqual(JSON.parse(queued.action_manifest_json), fixture.approvals[0].action_manifest);
+  assert.notEqual(queued.official_url, queued.submission_url);
   assert.equal(queued.attempt_count, 0);
   assert.equal(queued.status, 'queued');
+});
+
+test('final action manifest fields and destination require a fresh action hash', async (t) => {
+  const mutations = [
+    (approval) => { approval.action_manifest.version = 2; },
+    (approval) => { approval.action_manifest.organizer = 'Different Organizer'; },
+    (approval) => { approval.action_manifest.contest_id = 'different-contest'; },
+    (approval) => { approval.action_manifest.category = 'different-category'; },
+    (approval) => {
+      approval.submission_url = 'https://other.organizer.example/apply';
+      approval.action_manifest.submission_url = approval.submission_url;
+      approval.action_manifest.submission_host = 'other.organizer.example';
+    },
+    (approval) => { approval.action_manifest.submission_host = 'other.organizer.example'; },
+    (approval) => { approval.action_manifest.fee = { required: true, amount_minor: 1000, currency: 'KRW' }; },
+    (approval) => { approval.action_manifest.rights_class = 'ownership_transfer'; },
+    (approval) => { approval.action_manifest.consent_text_sha256 = ['4'.repeat(64)]; },
+    (approval) => { approval.action_manifest.artifact_sha256 = ['5'.repeat(64)]; },
+    (approval) => { approval.action_manifest.payload_sha256 = '6'.repeat(64); },
+  ];
+  for (const mutate of mutations) {
+    const context = await competitionTestContext(t);
+    if (!context) return;
+    const fixture = competitionWithFinalApproval();
+    const originalHash = fixture.approvals[0].action_sha256;
+    mutate(fixture.approvals[0]);
+    assert.equal(fixture.approvals[0].action_sha256, originalHash);
+    const response = await competitionRequest(context.env, { body: fixture });
+    assert.equal(response.status, 400);
+    assert.equal(Number(context.database.prepare(
+      'SELECT COUNT(*) AS count FROM competition_approval_requests',
+    ).get().count), 0);
+  }
 });
 
 test('wrong-owner and stale final approvals cannot create submission jobs', async (t) => {
@@ -4913,6 +4977,74 @@ test('wrong-owner and stale final approvals cannot create submission jobs', asyn
   ).get().count), 0);
 });
 
+test('competition submission approval expiry terminally blocks queued claims and claimed jobs before running', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+
+  const queuedFixture = competitionWithFinalApproval({
+    requestId: 'competition-final-expired-before-claim', actionSha256: '7'.repeat(64),
+  });
+  queuedFixture.approvals[0].expires_at = new Date(Date.now() + 250).toISOString();
+  assert.equal((await competitionRequest(env, { body: queuedFixture })).status, 201);
+  assert.equal((await competitionApprovalRequest(env, {
+    requestId: queuedFixture.approvals[0].request_id,
+    body: {
+      decision: 'approved', action_sha256: queuedFixture.approvals[0].action_sha256,
+    },
+  })).status, 201);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  const expiredClaim = await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim',
+  );
+  assert.deepEqual(await expiredClaim.json(), { job: null });
+  const queuedExpired = database.prepare(`
+    SELECT status, attempt_count, result_code FROM competition_submission_jobs
+    WHERE request_id = ?1
+  `).get(queuedFixture.approvals[0].request_id);
+  assert.deepEqual({ ...queuedExpired }, {
+    status: 'blocked', attempt_count: 0, result_code: 'approval_expired',
+  });
+  assert.deepEqual(await (await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim',
+  )).json(), { job: null });
+
+  const claimedFixture = competitionWithFinalApproval({
+    requestId: 'competition-final-expired-before-running', actionSha256: '8'.repeat(64),
+  });
+  setCompetitionTimeline(claimedFixture, Date.parse(queuedFixture.run.started_at) + 1_000);
+  claimedFixture.idempotency_key = 'competition-expired-before-running';
+  claimedFixture.run.id = claimedFixture.idempotency_key;
+  claimedFixture.approvals[0].expires_at = new Date(Date.now() + 250).toISOString();
+  assert.equal((await competitionRequest(env, { body: claimedFixture })).status, 201);
+  assert.equal((await competitionApprovalRequest(env, {
+    requestId: claimedFixture.approvals[0].request_id,
+    body: {
+      decision: 'approved', action_sha256: claimedFixture.approvals[0].action_sha256,
+    },
+  })).status, 201);
+  const claimed = (await (await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim',
+  )).json()).job;
+  assert.equal(claimed.approval_expires_at, claimedFixture.approvals[0].expires_at);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  const running = await competitionSubmissionRequest(
+    env, `/api/competitions/submissions/${claimed.job_id}/state`, {
+      body: { state: 'running', lease_id: claimed.lease_id },
+    },
+  );
+  assert.equal(running.status, 409);
+  assert.deepEqual({ ...database.prepare(`
+    SELECT status, attempt_count, result_code FROM competition_submission_jobs
+    WHERE request_id = ?1
+  `).get(claimedFixture.approvals[0].request_id) }, {
+    status: 'blocked', attempt_count: 1, result_code: 'approval_expired',
+  });
+  assert.deepEqual(await (await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim',
+  )).json(), { job: null });
+});
+
 test('submission claim is exclusive and live-lease state is forward-only and replay-safe', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;
@@ -4942,6 +5074,10 @@ test('submission claim is exclusive and live-lease state is forward-only and rep
   assert.equal(claimed.job_id, fixture.approvals[0].request_id);
   assert.equal(claimed.action_sha256, fixture.approvals[0].action_sha256);
   assert.equal(claimed.official_url, fixture.candidates[0].official_url);
+  assert.equal(claimed.submission_url, fixture.approvals[0].submission_url);
+  assert.equal(claimed.approval_expires_at, fixture.approvals[0].expires_at);
+  assert.deepEqual(claimed.action_manifest, fixture.approvals[0].action_manifest);
+  assert.notEqual(claimed.official_url, claimed.submission_url);
   assert.match(claimed.lease_id, /^lease-[a-f0-9]{32}$/u);
 
   const statePath = `/api/competitions/submissions/${claimed.job_id}/state`;
@@ -4985,6 +5121,107 @@ test('submission claim is exclusive and live-lease state is forward-only and rep
   assert.equal(Object.prototype.hasOwnProperty.call(submission, 'lease_until'), false);
 });
 
+test('competition submission claimed and running lease expiry is terminal unknown and cannot be requeued', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const expiredLeaseAt = '2000-01-01T00:00:00.000Z';
+  const forceExpiredLease = (sqlMarker) => ({
+    ...env,
+    DB: {
+      ...env.DB,
+      prepare(sql) {
+        const prepared = env.DB.prepare(sql);
+        if (!sql.includes(sqlMarker)) return prepared;
+        return {
+          bind(...values) {
+            values[2] = expiredLeaseAt;
+            return prepared.bind(...values);
+          },
+        };
+      },
+    },
+  });
+  const enqueue = async ({ requestId, idempotencyKey, payloadHash, offset = 0 }) => {
+    const fixture = competitionWithFinalApproval({ requestId, actionSha256: payloadHash });
+    setCompetitionTimeline(fixture, Date.parse(fixture.run.started_at) + offset);
+    fixture.idempotency_key = idempotencyKey;
+    fixture.run.id = idempotencyKey;
+    assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+    assert.equal((await competitionApprovalRequest(env, {
+      requestId,
+      body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+    })).status, 201);
+    return fixture;
+  };
+  const assertExpiredTerminal = async (job, staleBody) => {
+    const expire = await competitionSubmissionRequest(
+      env, '/api/competitions/submissions/claim',
+    );
+    assert.deepEqual(await expire.json(), { job: null });
+    assert.deepEqual({ ...database.prepare(`
+      SELECT status, attempt_count, lease_until, result_code
+      FROM competition_submission_jobs WHERE job_id = ?1
+    `).get(job.job_id) }, {
+      status: 'submission_unknown', attempt_count: 1,
+      lease_until: null, result_code: 'lease_expired',
+    });
+    const statePath = `/api/competitions/submissions/${job.job_id}/state`;
+    const stale = await competitionSubmissionRequest(env, statePath, { body: staleBody });
+    assert.equal(stale.status, 409);
+    const stolen = await competitionSubmissionRequest(env, statePath, { body: {
+      state: 'submission_unknown', lease_id: 'lease-stolen', result_code: 'lease_expired',
+    } });
+    assert.equal(stolen.status, 409);
+    const exactReplay = await competitionSubmissionRequest(env, statePath, { body: {
+      state: 'submission_unknown', lease_id: job.lease_id, result_code: 'lease_expired',
+    } });
+    assert.equal(exactReplay.status, 200);
+    assert.equal((await exactReplay.json()).replayed, true);
+    assert.deepEqual(await (await competitionSubmissionRequest(
+      env, '/api/competitions/submissions/claim',
+    )).json(), { job: null });
+  };
+
+  await enqueue({
+    requestId: 'competition-final-expired-claimed-lease',
+    idempotencyKey: 'competition-expired-claimed-lease',
+    payloadHash: '4'.repeat(64),
+  });
+  const claimed = (await (await competitionSubmissionRequest(
+    forceExpiredLease("SET status = 'claimed'"),
+    '/api/competitions/submissions/claim',
+  )).json()).job;
+  assert.equal(claimed.status, 'claimed');
+  assert.equal(claimed.lease_until, expiredLeaseAt);
+  await assertExpiredTerminal(claimed, {
+    state: 'running', lease_id: claimed.lease_id,
+  });
+
+  await enqueue({
+    requestId: 'competition-final-expired-running-lease',
+    idempotencyKey: 'competition-expired-running-lease',
+    payloadHash: '5'.repeat(64),
+    offset: 1_000,
+  });
+  const runningClaim = (await (await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim',
+  )).json()).job;
+  const runningResponse = await competitionSubmissionRequest(
+    forceExpiredLease("SET status = 'running'"),
+    `/api/competitions/submissions/${runningClaim.job_id}/state`,
+    { body: { state: 'running', lease_id: runningClaim.lease_id } },
+  );
+  assert.equal(runningResponse.status, 200);
+  const running = (await runningResponse.json()).job;
+  assert.equal(running.status, 'running');
+  assert.equal(running.lease_until, expiredLeaseAt);
+  await assertExpiredTerminal(running, {
+    state: 'blocked', lease_id: running.lease_id,
+    result_code: 'unsupported_organizer_flow',
+  });
+});
+
 test('held final action queues nothing while blocked and unknown results stay terminal', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;
@@ -5010,7 +5247,7 @@ test('held final action queues nothing while blocked and unknown results stay te
     assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
     assert.equal((await competitionApprovalRequest(env, {
       requestId,
-      body: { decision: 'approved', action_sha256: actionSha256 },
+      body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
     })).status, 201);
     const response = await competitionSubmissionRequest(env, '/api/competitions/submissions/claim');
     return { fixture, job: (await response.json()).job };
@@ -5097,13 +5334,11 @@ test('competition approval expiry is checked by the same SQLite clock that store
   const context = await competitionTestContext(t);
   if (!context) return;
   const { database, env } = context;
-  const fixture = competitionWithPreparationApproval();
+  const fixture = competitionWithFinalApproval({
+    requestId: 'competition-final-expiry-at-write',
+  });
   fixture.idempotency_key = 'competition-expiry-at-write';
   fixture.run.id = 'competition-expiry-at-write';
-  fixture.applications[0].state = 'WAITING_APPROVAL';
-  fixture.applications[0].blocker = 'user_approval';
-  fixture.applications[0].next_action = 'request_approval';
-  fixture.approvals[0].kind = 'final_submission';
   fixture.approvals[0].expires_at = new Date(Date.now() + 500).toISOString();
   assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
 
@@ -5124,7 +5359,10 @@ test('competition approval expiry is checked by the same SQLite clock that store
       return delayRun(prepared);
     },
   };
-  const expired = await competitionApprovalRequest({ ...env, DB: delayedDb });
+  const expired = await competitionApprovalRequest({ ...env, DB: delayedDb }, {
+    requestId: fixture.approvals[0].request_id,
+    body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+  });
   assert.equal(expired.status, 409);
   assert.deepEqual(await expired.json(), { error: 'approval_expired' });
   assert.equal(Number(database.prepare(
