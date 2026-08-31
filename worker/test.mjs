@@ -4800,6 +4800,41 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
   assert.ok(afterBody.applications[0].approval.decided_at);
 });
 
+test('competition approval rejects a stale report atomically and request ids cannot be rebound', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionWithPreparationApproval();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const newer = competitionFixture();
+  setCompetitionTimeline(newer, Date.parse(first.run.started_at) + 1_000);
+  newer.idempotency_key = 'competition-newer-without-old-approval';
+  newer.run.id = 'competition-newer-without-old-approval';
+  assert.equal((await competitionRequest(env, { body: newer })).status, 201);
+  const stale = await competitionApprovalRequest(env);
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: 'approval_stale' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 0);
+
+  const rebound = competitionWithPreparationApproval();
+  setCompetitionTimeline(rebound, Date.parse(newer.run.started_at) + 1_000);
+  rebound.idempotency_key = 'competition-rebound-approval-request';
+  rebound.run.id = 'competition-rebound-approval-request';
+  rebound.approvals[0].action_sha256 = 'b'.repeat(64);
+  const collision = await competitionRequest(env, { body: rebound });
+  assert.equal(collision.status, 409);
+  assert.deepEqual(await collision.json(), { error: 'approval_request_conflict' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_reports',
+  ).get().count), 2, 'the conflicting report batch rolls back');
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_requests',
+  ).get().count), 1);
+});
+
 test('competition approval report rejects state mismatch and stale sensitive windows', async (t) => {
   const context = await competitionTestContext(t);
   if (!context) return;

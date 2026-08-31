@@ -787,11 +787,11 @@
     </section>`;
   }
 
-  function renderDashboard(data, filters = {}, now = Date.now()) {
+  function renderDashboard(data, filters = {}, now = Date.now(), includeApprovals = true) {
     const notices = data.partial
       ? `<div class="cp-notice" role="status"><strong>일부 결과만 표시합니다.</strong><span>${escapeHtml(data.errors[0] || '원본 장애, 수집 범위 제한 또는 웹 표시 상한이 있습니다. 원본별 확인 사유를 확인해 주세요.')}</span></div>`
       : '';
-    return `${renderApprovalInbox(data.applications, data.candidates, now)}${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
+    return `${includeApprovals ? renderApprovalInbox(data.applications, data.candidates, now) : ''}${notices}${renderSummary(data, now)}<div class="cp-pair">${renderTimeline(data.runs)}${renderCoverage(data.sources, now)}</div>${renderApplicationBoard(data.applications, data.candidates, now)}${renderCandidates(data, filters, now)}`;
   }
 
   function scrollApplicationBoard(board, key) {
@@ -810,6 +810,7 @@
 
   function createDashboard({ request, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
     const elements = {
+      approvals: document.getElementById('competitionApprovalInbox'),
       body: document.getElementById('competitionBody'),
       error: document.getElementById('competitionError'),
       refreshStatus: document.getElementById('competitionRefreshStatus'),
@@ -842,7 +843,10 @@
 
     function render() {
       if (!data || !elements.body) return;
-      elements.body.innerHTML = renderDashboard(data, filters(), now());
+      if (elements.approvals) {
+        elements.approvals.innerHTML = renderApprovalInbox(data.applications, data.candidates, now());
+      }
+      elements.body.innerHTML = renderDashboard(data, filters(), now(), false);
       elements.body.setAttribute?.('aria-busy', 'false');
     }
 
@@ -960,7 +964,7 @@
     elements.reload?.addEventListener?.('click', () => { void load({ announce: true }); });
     elements.filters?.addEventListener?.('input', render);
     elements.filters?.addEventListener?.('change', render);
-    elements.body?.addEventListener?.('click', (event) => {
+    function handleClick(event) {
       const approvalButton = event.target?.closest?.('[data-competition-approval-decision]');
       if (approvalButton) {
         void decide(approvalButton);
@@ -968,7 +972,9 @@
       }
       if (event.target?.closest?.('[data-competition-retry]')) void load({ announce: true });
       if (event.target?.closest?.('[data-competition-clear]')) clearFilters();
-    });
+    }
+    elements.approvals?.addEventListener?.('click', handleClick);
+    elements.body?.addEventListener?.('click', handleClick);
     elements.body?.addEventListener?.('keydown', (event) => {
       const board = event.target?.closest?.('.cp-board');
       if (board && scrollApplicationBoard(board, event.key)) event.preventDefault?.();

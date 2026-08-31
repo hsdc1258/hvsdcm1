@@ -308,6 +308,7 @@ test('approval inbox is first and attaches review, approval scope, official sour
     summary: '<img src=x onerror=alert(1)> 권리 조건을 읽어야 합니다.',
   }));
   const markup = ui.renderDashboard(normalized, {}, NOW);
+  assert.ok(HTML.indexOf('id="competitionApprovalInbox"') < HTML.indexOf('id="competitionFilters"'));
   assert.ok(markup.indexOf('승인해야 하는 목록') < markup.indexOf('스캔 현황'));
   assert.match(markup, /대기 1건 · 항상 최상단/u);
   assert.match(markup, /읽어야 하는 내용/u);
@@ -341,6 +342,8 @@ test('approval controller posts the exact action once and updates the visible de
   });
   controller.activate();
   await flush();
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /승인해야 하는 목록/u);
+  assert.doesNotMatch(shell.store.get('competitionBody').innerHTML, /승인해야 하는 목록/u);
   const button = {
     dataset: {
       requestId: 'competition-preparation-contest-1',
@@ -350,7 +353,7 @@ test('approval controller posts the exact action once and updates the visible de
     disabled: false,
     isConnected: true,
   };
-  shell.store.get('competitionBody').listeners.click({
+  shell.store.get('competitionApprovalInbox').listeners.click({
     target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
   });
   await flush();
@@ -360,8 +363,8 @@ test('approval controller posts the exact action once and updates the visible de
   assert.deepEqual(JSON.parse(calls[1].options.body), {
     decision: 'approved', action_sha256: 'a'.repeat(64),
   });
-  assert.match(shell.store.get('competitionBody').innerHTML, /승인됨/u);
-  assert.doesNotMatch(shell.store.get('competitionBody').innerHTML, /data-competition-approval-decision="approved"/u);
+  assert.match(shell.store.get('competitionApprovalInbox').innerHTML, /승인됨/u);
+  assert.doesNotMatch(shell.store.get('competitionApprovalInbox').innerHTML, /data-competition-approval-decision="approved"/u);
   assert.equal(shell.store.get('competitionRefreshStatus').textContent, '승인됨 · 자동화가 다음 단계에서 이 결정을 확인합니다.');
   assert.equal(controller.state().pendingDecision, null);
 });
@@ -783,7 +786,7 @@ test('the owner shell sends web approval with bearer JSON through the shared tim
     disabled: false,
     isConnected: true,
   };
-  shell.store.get('competitionBody').listeners.click({
+  shell.store.get('competitionApprovalInbox').listeners.click({
     target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
   });
   await flush();

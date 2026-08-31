@@ -959,8 +959,8 @@ async function reportCompetitionsInternal(request, env) {
       ) AND NOT EXISTS (
         SELECT 1 FROM competition_approval_requests AS stored
         WHERE stored.request_id = json_extract(item.value, '$.request_id')
+          AND stored.idempotency_key = ?1
       )
-      ON CONFLICT(request_id) DO NOTHING
     `).bind(report.idempotency_key, payloadHash, JSON.stringify(report.approvals)),
   ];
   const results = await env.DB.batch(statements);
@@ -979,6 +979,9 @@ export async function reportCompetitions(request, env) {
   try {
     return await reportCompetitionsInternal(request, env);
   } catch (error) {
+    if (/UNIQUE constraint failed:\s*competition_approval_requests\.request_id/iu.test(String(error?.message || error))) {
+      return competitionError('approval_request_conflict', 409);
+    }
     console.error('competition_request_error', error);
     return competitionJson({ error: '서버 오류' }, 500);
   }
@@ -1023,6 +1026,39 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     throw error;
   }
 
+  const decidedAt = new Date().toISOString();
+  const inserted = await env.DB.prepare(`
+    WITH latest AS (
+      SELECT idempotency_key
+      FROM competition_reports
+      ORDER BY COALESCE(finished_at, started_at) DESC,
+        received_at DESC, idempotency_key DESC
+      LIMIT 1
+    )
+    INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
+    SELECT request.request_id, ?2, ?3, ?4
+    FROM competition_approval_requests AS request
+    JOIN latest ON latest.idempotency_key = request.idempotency_key
+    WHERE request.request_id = ?1
+      AND request.action_sha256 = ?2
+      AND (request.expires_at IS NULL OR request.expires_at > ?4)
+      AND NOT EXISTS (
+        SELECT 1 FROM competition_approval_decisions AS stored
+        WHERE stored.request_id = request.request_id
+      )
+    ON CONFLICT(request_id) DO NOTHING
+  `).bind(normalizedRequestId, actionSha256, decision, decidedAt).run();
+  if (resultChanges(inserted) === 1) {
+    return competitionJson({
+      ok: true,
+      request_id: normalizedRequestId,
+      action_sha256: actionSha256,
+      decision,
+      decided_at: decidedAt,
+      replayed: false,
+    }, 201);
+  }
+
   const approval = await env.DB.prepare(`
     WITH latest AS (
       SELECT idempotency_key
@@ -1059,37 +1095,6 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     });
   }
 
-  const decidedAt = new Date().toISOString();
-  const inserted = await env.DB.prepare(`
-    INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
-    VALUES (?1, ?2, ?3, ?4)
-    ON CONFLICT(request_id) DO NOTHING
-  `).bind(approval.request_id, actionSha256, decision, decidedAt).run();
-  if (resultChanges(inserted) === 1) {
-    return competitionJson({
-      ok: true,
-      request_id: approval.request_id,
-      action_sha256: actionSha256,
-      decision,
-      decided_at: decidedAt,
-      replayed: false,
-    }, 201);
-  }
-  const raced = await env.DB.prepare(`
-    SELECT action_sha256, decision, decided_at
-    FROM competition_approval_decisions
-    WHERE request_id = ?1
-  `).bind(approval.request_id).first();
-  if (raced?.action_sha256 === actionSha256 && raced?.decision === decision) {
-    return competitionJson({
-      ok: true,
-      request_id: approval.request_id,
-      action_sha256: actionSha256,
-      decision,
-      decided_at: raced.decided_at,
-      replayed: true,
-    });
-  }
   return competitionError('approval_conflict', 409);
 }
 
