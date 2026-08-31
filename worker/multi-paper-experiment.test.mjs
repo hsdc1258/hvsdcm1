@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import worker from './src/index.js';
 import {
@@ -14,6 +15,7 @@ const HASHES = ['a', 'b', 'c', 'd', 'e', 'f', '9'].map((letter) => letter.repeat
 const SET_HASH = '26c95bb151fcca3cc3a869e4e6a3e8f47ad31eef5d2b75702fa1b698b9390941';
 const FEE_RATE = 6 / 10_000;
 const ADVERSE_SLIPPAGE_RATE = 4 / 10_000;
+const OWNER_SESSION_HASH = createHash('sha256').update('owner-session').digest('hex');
 const STRATEGIES = [
   { id: 'multi-trend-persistence-v2', label: 'Trend persistence',
     definition_hash: 'f7b99ba12e2daaa0545663c7b59944baa810641d366e7657b60fa530bab8b9e1',
@@ -114,12 +116,13 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
       : ['All figures are simulated.', 'One day is not statistical evidence.'] };
 }
 
-function experimentDb() {
+function experimentDb(username = 'hvsdcm') {
   const rows = new Map();
   return { rows, prepare(sql) {
     return { values: [], bind(...values) { this.values = values; return this; },
       async first() {
-        if (sql.includes('SELECT s.*, u.username')) return { token_hash: 'stored-hash', role: 'user', disabled: 0, username: 'hvsdcm' };
+        if (sql.includes('SELECT s.*, u.username')) return this.values[0] === OWNER_SESSION_HASH
+          ? { token_hash: OWNER_SESSION_HASH, role: 'user', disabled: 0, username } : null;
         if (sql.includes('FROM usage_snapshots')) return rows.get(this.values[0]) || null;
         throw new Error(`Unexpected first SQL: ${sql}`);
       },
@@ -148,9 +151,9 @@ function experimentDb() {
   } };
 }
 
-function envFor(db) {
+function envFor(db, overrides = {}) {
   return { ALLOWED_ORIGIN: 'https://hvsdcm1.xyz', OWNER_USERNAME: 'hvsdcm,claude-test',
-    BEHAVIOR_OWNER_USERNAME: 'hvsdcm', BEHAVIOR_PAPER_REPORT_TOKEN: 'paper-secret', DB: db };
+    BEHAVIOR_OWNER_USERNAME: 'hvsdcm', BEHAVIOR_PAPER_REPORT_TOKEN: 'paper-secret', DB: db, ...overrides };
 }
 function post(report, env) {
   return worker.fetch(new Request('https://api.test/api/behavior-lab/paper/report', { method: 'POST',
@@ -243,6 +246,32 @@ test('exact owner can request one idempotent stop and only the ingest reporter c
     stop_requested: true, stop_requested_at: firstBody.stop_requested_at });
   const unauthorized = await worker.fetch(new Request(`https://api.test/api/behavior-lab/paper/control?experiment_id=${BEHAVIOR_MULTI_EXPERIMENT_ID}`), env);
   assert.equal(unauthorized.status, 401);
+  const ownerBearerOnControl = await worker.fetch(new Request(`https://api.test/api/behavior-lab/paper/control?experiment_id=${BEHAVIOR_MULTI_EXPERIMENT_ID}`, {
+    headers: { authorization: 'Bearer owner-session' },
+  }), env);
+  assert.equal(ownerBearerOnControl.status, 401);
+  const nonOwner = envFor(experimentDb('claude-test'));
+  nonOwner.DB.rows.set(BEHAVIOR_MULTI_SNAPSHOT_SOURCE, db.rows.get(BEHAVIOR_MULTI_SNAPSHOT_SOURCE));
+  const nonOwnerStop = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), nonOwner);
+  assert.equal(nonOwnerStop.status, 404);
+  const reportBearerStop = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer paper-secret', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), env);
+  assert.equal(reportBearerStop.status, 401);
+  const wrongExperiment = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: 'multi-paper-wrong' }),
+  }), env);
+  assert.equal(wrongExperiment.status, 400);
+  const missingOwnerConfig = await worker.fetch(new Request('https://api.test/api/behavior-lab/paper/stop', {
+    method: 'POST', headers: { authorization: 'Bearer owner-session', 'content-type': 'application/json' },
+    body: JSON.stringify({ experiment_id: BEHAVIOR_MULTI_EXPERIMENT_ID }),
+  }), envFor(experimentDb(), { BEHAVIOR_OWNER_USERNAME: '' }));
+  assert.equal(missingOwnerConfig.status, 404);
 });
 
 test('six-arm v2 rejects cross-schema/id/hash/source-like downgrade and malformed private data', () => {

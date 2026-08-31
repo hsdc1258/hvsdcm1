@@ -126,6 +126,8 @@ test('owner paper UI removes the completed legacy session surface and keeps boun
 
 test('owner paper UI renders six detailed, accessible time-scaled cost-aware curves and hides finished experiments', () => {
   assert.match(htmlSource, /id="paperExperiment"[^>]*\bhidden\b/u);
+  assert.match(htmlSource, /SIMULTANEOUS UNTIL STOP · SIX INDEPENDENT ARMS/u);
+  assert.doesNotMatch(htmlSource, /SIMULTANEOUS 24H · SIX INDEPENDENT ARMS/u);
   assert.match(htmlSource, /id="experimentLeaderboard"/u);
   assert.match(htmlSource, /id="experimentArms"/u);
   assert.match(appSource, /function validExperimentReport\(experiment\)/u);
