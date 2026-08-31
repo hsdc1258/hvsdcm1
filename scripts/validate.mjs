@@ -2490,6 +2490,15 @@ function validateLandingGating() {
     'index.html: the usage entry must live inside <template data-owner> — it is owner-only data (review WP1 M-5)');
   check(!studyOnlyMarkup.includes('href="/usage/"'),
     'index.html: the usage entry must not sit in <template data-study> — that template mounts for every logged-in account');
+  const configuredOwners = /(?:^|\n)OWNER_USERNAME\s*=\s*"([^"]*)"/u
+    .exec(readFileSync(path.join(ROOT, 'worker/wrangler.toml'), 'utf8'))?.[1]
+    ?.split(',').map((name) => name.trim().toLowerCase()).filter(Boolean) || [];
+  const renderedOwnerLiteral = /const OWNER_USERNAMES = \[([^\]]*)\];/u.exec(homeJs)?.[1] || '';
+  const renderedOwners = [...renderedOwnerLiteral.matchAll(/'([^']+)'/gu)]
+    .map((match) => match[1].trim().toLowerCase()).filter(Boolean);
+  check(configuredOwners.length === 1 && configuredOwners[0] === 'hvsdcm'
+    && JSON.stringify(renderedOwners) === JSON.stringify(configuredOwners),
+  'owner boundary: Worker and landing UI must expose owner controls to the sole human owner only');
   const behaviorOwnerTemplate = /<template data-behavior-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
   check(behaviorOwnerTemplate.includes('href="/behavior-lab/#paper"'),
     'index.html: the owner landing template must link directly to the Behavior Lab paper tab');
