@@ -527,6 +527,42 @@ function validateMigrations() {
       .test(loginLimitsMigration),
     'worker: migration 0008 must define hashed login attempt and lockout counters',
   );
+  const submissionMigration = readFileSync(
+    path.join(migrationDirectory, '0017_competition_submission_jobs.sql'),
+    'utf8',
+  );
+  check(
+    /CREATE TABLE competition_submission_jobs[\s\S]*request_id TEXT NOT NULL UNIQUE[\s\S]*status TEXT NOT NULL[\s\S]*attempt_count INTEGER NOT NULL DEFAULT 0[\s\S]*receipt_reference TEXT/u
+      .test(submissionMigration),
+    'worker: migration 0017 must define the one-attempt competition submission queue',
+  );
+  check(submissionMigration.includes('competition_submission_jobs_require_final_approval')
+    && submissionMigration.includes("request.kind = 'final_submission'")
+    && submissionMigration.includes("decision.decision = 'approved'")
+    && submissionMigration.includes('competition_submission_jobs_forward_only'),
+  'worker: migration 0017 must bind queued jobs to latest final approval and forward-only states');
+
+  const packageJson = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  for (const testFile of [
+    'scripts/competition-fast-lane.test.mjs',
+    'scripts/competition-submission-secret.test.mjs',
+    'scripts/competition-submit.test.mjs',
+  ]) {
+    check(String(packageJson.scripts?.test || '').includes(testFile),
+      `package.json: npm test must include ${testFile}`);
+  }
+  const router = readFileSync(path.join(ROOT, 'worker/src/router.js'), 'utf8');
+  check(router.includes('/api/competitions/submissions/claim')
+    && router.includes('/api/competitions/submissions/'),
+  'worker/src/router.js: competition submission claim/state routes are incomplete');
+  const submissionClient = readFileSync(path.join(ROOT, 'scripts/competition-submit.mjs'), 'utf8');
+  check(submissionClient.includes('competition_submission_token')
+    && submissionClient.includes("adapter === 'unsupported'")
+    && submissionClient.includes("result_code: 'timeout_after_send'"),
+  'scripts/competition-submit.mjs: dedicated secret, fail-closed adapter, or unknown-result boundary is missing');
+  const wrangler = readFileSync(path.join(ROOT, 'worker/wrangler.toml'), 'utf8');
+  check(wrangler.includes('wrangler secret put COMPETITION_SUBMISSION_TOKEN'),
+    'worker/wrangler.toml: dedicated competition submission secret setup is undocumented');
 }
 
 function validateGichulBackend() {
@@ -2157,7 +2193,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260831-competition-v5', '/usage/assets/js/usage.js?v=20260831-competition-v5'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260831-competition-v6', '/usage/assets/js/usage.js?v=20260831-competition-v6'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
@@ -2183,7 +2219,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'smstudy/index.html': ['/assets/css/system.css', 'assets/css/style.css'],
     'admin/index.html': ['/assets/css/system.css', '/admin/assets/css/admin.css'],
-    'usage/index.html': ['/assets/css/system.css?v=20260831-competition-v5', '/usage/assets/css/usage.css?v=20260831-competition-v5'],
+    'usage/index.html': ['/assets/css/system.css?v=20260831-competition-v6', '/usage/assets/css/usage.css?v=20260831-competition-v6'],
     'gichul/index.html': ['/assets/css/system.css', '/gichul/gichul.css?v=20260829-n4'],
     'behavior-lab/index.html': ['/assets/css/system.css', '/behavior-lab/assets/css/app.css?v=20260831-v5'],
   };

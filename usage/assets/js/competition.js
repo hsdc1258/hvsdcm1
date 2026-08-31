@@ -10,6 +10,10 @@
     preparing: '지원 준비',
     'awaiting-approval': '승인 대기',
     approved: '승인됨',
+    queued: '제출 대기',
+    running: '제출 중',
+    succeeded: '제출 완료',
+    'submission-unknown': '제출 결과 미확인',
     applied: '지원 완료',
     blocked: '막힘',
     closed: '종료',
@@ -42,10 +46,12 @@
     'waiting-legal-consent': 'blocked', 'waiting-rights-approval': 'blocked',
     'waiting-fee-approval': 'blocked',
     approved: 'approved', accepted: 'approved', authorized: 'approved',
+    queued: 'queued', claimed: 'running', running: 'running',
+    succeeded: 'succeeded',
     applied: 'applied', submitted: 'applied', complete: 'applied', completed: 'applied',
     submitting: 'preparing',
     blocked: 'blocked', paused: 'blocked', deferred: 'blocked', needsaction: 'blocked',
-    'needs-action': 'blocked', 'submission-unknown': 'blocked',
+    'needs-action': 'blocked', 'submission-unknown': 'submission-unknown',
     closed: 'closed', archived: 'closed', expired: 'closed', rejected: 'closed',
     unknown: 'unknown',
   };
@@ -148,6 +154,31 @@
     approved: '승인됨',
     held: '보류됨',
     expired: '만료됨',
+  };
+  const SUBMISSION_STATUS_LABELS = {
+    queued: '제출 대기',
+    claimed: '작업 확보',
+    running: '제출 중',
+    succeeded: '제출 완료',
+    blocked: '제출 차단',
+    submission_unknown: '제출 결과 미확인',
+  };
+  const SUBMISSION_RESULT_LABELS = {
+    submitted: '주최기관 응답으로 제출 완료를 확인함',
+    unsupported_organizer_flow: '지원되지 않는 주최기관 제출 방식',
+    private_config_missing: '로컬 비공개 제출 설정 없음',
+    destination_mismatch: '승인 대상과 로컬 제출 대상 불일치',
+    captcha_required: 'CAPTCHA 수동 처리 필요',
+    account_required: '주최기관 계정 필요',
+    payment_required: '결제 필요',
+    terms_changed: '승인 뒤 약관 변경 감지',
+    eligibility_unknown: '지원 자격 재확인 필요',
+    manual_action_required: '사람의 직접 처리 필요',
+    destination_unavailable: '공식 제출 대상에 연결할 수 없음',
+    timeout_after_send: '전송 뒤 시간 초과로 결과 미확인',
+    connection_lost_after_send: '전송 뒤 연결이 끊겨 결과 미확인',
+    ambiguous_response: '주최기관 응답이 모호해 결과 미확인',
+    lease_expired: '작업 lease가 만료되어 결과 미확인',
   };
 
   const escapeHtml = (value) => String(value ?? '').replace(
@@ -299,17 +330,51 @@
     };
   }
 
+  function normalizeSubmission(entry) {
+    const source = object(entry);
+    const jobId = text(source.job_id);
+    const requestId = text(source.request_id);
+    const actionSha256 = text(source.action_sha256).toLowerCase();
+    const status = text(source.status).toLowerCase();
+    if (!jobId || !requestId || !/^[a-f0-9]{64}$/u.test(actionSha256)
+      || !Object.prototype.hasOwnProperty.call(SUBMISSION_STATUS_LABELS, status)) return null;
+    const receiptReference = text(source.receipt_reference);
+    return {
+      jobId,
+      requestId,
+      actionSha256,
+      officialUrl: firstSafeUrl(source.official_url),
+      status,
+      queuedAt: source.queued_at,
+      claimedAt: source.claimed_at,
+      startedAt: source.started_at,
+      completedAt: source.completed_at,
+      resultCode: text(source.result_code),
+      receiptReference: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(receiptReference)
+        ? receiptReference : '',
+    };
+  }
+
+  function submissionDisplayStatus(submission) {
+    if (submission?.status === 'claimed') return 'running';
+    if (submission?.status === 'submission_unknown') return 'submission-unknown';
+    return submission?.status || '';
+  }
+
   function normalizeApplication(entry, fallbackId = '') {
     const source = object(entry);
     const approval = normalizeApproval(source.approval);
+    const submission = normalizeSubmission(source.submission);
     const reportedStatus = enumKey(first(source.state, source.status, source.stage), STATUS_KEYS);
-    const status = approval?.status === 'pending'
+    const submissionStatus = submissionDisplayStatus(submission);
+    const status = submissionStatus
+      || (approval?.status === 'pending'
       ? 'awaiting-approval'
       : approval?.status === 'approved'
         ? 'approved'
         : approval?.status === 'held' || approval?.status === 'expired'
           ? 'blocked'
-          : reportedStatus;
+          : reportedStatus);
     const blockerFields = ['blockers', 'blocker', 'missing', 'issues'];
     const nextAction = first(source.next_action, source.next, source.action);
     return {
@@ -321,6 +386,7 @@
       nextAction: nextAction ? codedLabel(nextAction, NEXT_ACTION_LABELS) : '',
       updatedAt: first(source.updated_at, source.changed_at, source.at),
       approval,
+      submission,
     };
   }
 
@@ -517,7 +583,8 @@
   }
 
   function applicationAtDeadline(application, deadline, now) {
-    if (!deadlineExpired(deadline, now) || ['applied', 'closed'].includes(application.status)) {
+    if (application.submission || !deadlineExpired(deadline, now)
+      || ['applied', 'closed'].includes(application.status)) {
       return application;
     }
     return {
@@ -572,9 +639,9 @@
   }
 
   function tone(key) {
-    if (['failed', 'ineligible', 'closed', 'overdue', 'blocked'].includes(key)) return ' is-danger';
-    if (['partial', 'review', 'watching', 'verifying', 'awaiting-approval', 'unverified', 'not-found', 'unknown'].includes(key)) return ' is-warn';
-    if (['success', 'eligible', 'preparing', 'approved', 'applied'].includes(key)) return ' is-good';
+    if (['failed', 'ineligible', 'closed', 'overdue', 'blocked', 'submission-unknown'].includes(key)) return ' is-danger';
+    if (['partial', 'review', 'watching', 'verifying', 'awaiting-approval', 'queued', 'running', 'unverified', 'not-found', 'unknown'].includes(key)) return ' is-warn';
+    if (['success', 'eligible', 'preparing', 'approved', 'applied', 'succeeded'].includes(key)) return ' is-good';
     return '';
   }
 
@@ -589,6 +656,25 @@
     if (approval.status !== 'pending') return approval.status;
     const expiresAt = time(approval.expiresAt);
     return expiresAt !== null && expiresAt <= now ? 'expired' : 'pending';
+  }
+
+  function renderSubmission(application, candidate) {
+    const submission = application?.submission;
+    if (!submission) return '';
+    const statusLabel = SUBMISSION_STATUS_LABELS[submission.status] || '제출 상태 미확인';
+    const resultLabel = SUBMISSION_RESULT_LABELS[submission.resultCode]
+      || (submission.resultCode ? '처리 결과 코드 미확인' : '아직 결과 없음');
+    const statusTone = submission.status === 'claimed' ? 'running'
+      : submission.status === 'submission_unknown' ? 'submission-unknown'
+        : submission.status;
+    const officialUrl = submission.officialUrl || candidate?.officialUrl || '';
+    return `<section class="cp-application cp-submission" aria-label="최종 제출 처리 상태">
+      <div><strong>제출 처리</strong><span class="cp-inline-state${tone(statusTone)}">${escapeHtml(statusLabel)}</span></div>
+      <div><strong>공식 제출 대상</strong>${link(officialUrl, '주최기관 제출 페이지 열기 ↗', 'cp-official-link')}</div>
+      <div><strong>작업 시각</strong><span>${escapeHtml(dateTime(first(submission.completedAt, submission.startedAt, submission.claimedAt, submission.queuedAt)))}</span></div>
+      <div><strong>처리 결과</strong><span>${escapeHtml(resultLabel)}</span></div>
+      ${submission.receiptReference ? `<div><strong>접수 확인 번호</strong><code>${escapeHtml(submission.receiptReference)}</code></div>` : ''}
+    </section>`;
   }
 
   function renderApprovalInbox(applications, candidates, now) {
@@ -644,6 +730,7 @@
           <p class="cp-approval-boundary">${escapeHtml(boundary)}</p>
         </section>
         <details class="cp-approval-hash"><summary>이 승인에 묶인 action hash</summary><code>${escapeHtml(approval.actionSha256)}</code></details>
+        ${renderSubmission(application, candidate)}
         ${controls}
       </article>`;
     }).join('') : '<p class="us-empty">현재 웹 승인 요청이 없습니다.</p>';
@@ -754,6 +841,7 @@
         <div><strong>차단 요인</strong>${blockers}</div>
         <div><strong>다음 행동</strong><p>${escapeHtml(application.nextAction || '다음 행동 미확인')}</p></div>
       </section>
+      ${renderSubmission(application, candidate)}
     </article>`;
   }
 
@@ -766,7 +854,10 @@
         || candidates.find((entry) => entry.id === application.id);
       return applicationAtDeadline(application, candidate?.deadline, now);
     });
-    const order = ['verifying', 'preparing', 'awaiting-approval', 'approved', 'applied', 'blocked', 'watching', 'closed', 'unknown'];
+    const order = [
+      'verifying', 'preparing', 'awaiting-approval', 'approved', 'queued', 'running',
+      'succeeded', 'applied', 'submission-unknown', 'blocked', 'watching', 'closed', 'unknown',
+    ];
     const groups = order.map((status) => ({
       status,
       rows: currentApplications.filter((application) => application.status === status),
@@ -777,6 +868,8 @@
         <strong>${escapeHtml(application.title || application.id || '이름 없는 지원')}</strong>
         <p><b>다음 행동</b> ${escapeHtml(application.nextAction || '미확인')}</p>
         <p><b>차단 요인</b> ${escapeHtml(application.blockers.join(', ') || (application.blockersKnown ? '기록된 차단 요인 없음' : '미확인'))}</p>
+        ${application.submission ? `<p><b>제출 처리</b> ${escapeHtml(SUBMISSION_STATUS_LABELS[application.submission.status] || '미확인')}</p>` : ''}
+        ${application.submission?.receiptReference ? `<p><b>접수 확인 번호</b> ${escapeHtml(application.submission.receiptReference)}</p>` : ''}
       </article>`).join('')}</div>
     </section>`).join('') : '<p class="us-empty">지원 상태 기록이 없습니다.</p>';
     return `<section class="cp-applications" aria-labelledby="cpApplicationsTitle">
@@ -943,12 +1036,16 @@
           if (application.approval?.requestId !== requestId) continue;
           application.approval.status = decision;
           application.approval.decidedAt = result?.decided_at || new Date(now()).toISOString();
-          application.status = decision === 'approved' ? 'approved' : 'blocked';
+          application.submission = normalizeSubmission(result?.submission);
+          application.status = submissionDisplayStatus(application.submission)
+            || (decision === 'approved' ? 'approved' : 'blocked');
         }
         render();
         if (elements.refreshStatus) {
           elements.refreshStatus.textContent = decision === 'approved'
-            ? '승인됨 · 자동화가 다음 단계에서 이 결정을 확인합니다.'
+            ? result?.submission?.status === 'queued'
+              ? '승인됨 · 최종 제출 작업 1건이 대기열에 안전하게 추가되었습니다.'
+              : '승인됨 · 자동화가 다음 단계에서 이 결정을 확인합니다.'
             : '보류됨 · 새 승인 요청이 오기 전까지 진행하지 않습니다.';
         }
       } catch (error) {

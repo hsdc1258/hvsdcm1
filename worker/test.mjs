@@ -3055,7 +3055,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 16; number += 1) {
+  for (let number = 1; number <= 17; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -3074,6 +3074,7 @@ async function moderatorTestContext(t, { beforeReadStateMigration } = {}) {
       '0014': 'competitions',
       '0015': 'competition_candidate_capacity',
       '0016': 'competition_approval_requests',
+      '0017': 'competition_submission_jobs',
     };
     if (prefix === '0012' && beforeReadStateMigration) beforeReadStateMigration(database);
     const sql = readFileSync(
@@ -4528,6 +4529,26 @@ function competitionWithPreparationApproval() {
   return fixture;
 }
 
+function competitionWithFinalApproval({
+  requestId = 'competition-final-organizer-2026-image',
+  actionSha256 = 'f'.repeat(64),
+} = {}) {
+  const fixture = competitionWithPreparationApproval();
+  fixture.applications[0].state = 'WAITING_APPROVAL';
+  fixture.applications[0].blocker = 'user_approval';
+  fixture.applications[0].next_action = 'request_approval';
+  fixture.approvals[0] = {
+    ...fixture.approvals[0],
+    request_id: requestId,
+    kind: 'final_submission',
+    action_sha256: actionSha256,
+    expires_at: new Date(Date.parse(fixture.approvals[0].requested_at) + 10 * 60_000).toISOString(),
+    read_summary: '공식 제출 대상, 비식별 입력·파일 해시와 정확한 권리 문구를 마지막으로 확인했습니다.',
+    approval_text: '이 action hash에 묶인 공식 대상과 파일을 한 번만 최종 제출합니다.',
+  };
+  return fixture;
+}
+
 function competitionApprovalRequest(env, {
   requestId = 'competition-preparation-organizer-2026-image',
   token = 'owner-token',
@@ -4545,7 +4566,21 @@ async function competitionTestContext(t) {
   const context = await moderatorTestContext(t);
   if (!context) return null;
   context.env.COMPETITION_INGEST_TOKEN = 'competition-token';
+  context.env.COMPETITION_SUBMISSION_TOKEN = 'submission-token';
   return context;
+}
+
+function competitionSubmissionRequest(env, path, {
+  token = 'submission-token', body,
+} = {}) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  return worker.fetch(new Request(`https://api.test${path}`, {
+    method: 'POST',
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), env);
 }
 
 test('competition routes fail closed at the owner and dedicated-ingest-token boundaries', async () => {
@@ -4572,6 +4607,14 @@ test('competition routes fail closed at the owner and dedicated-ingest-token bou
   }, { body: competitionFixture() });
   assert.equal(unrelatedToken.status, 401);
   assertCompetitionNoStore(unrelatedToken);
+
+  const reusedSubmissionToken = await competitionSubmissionRequest({
+    COMPETITION_SUBMISSION_TOKEN: 'shared-token',
+    COMPETITION_INGEST_TOKEN: 'shared-token',
+    DB: noDatabase,
+  }, '/api/competitions/submissions/claim', { token: 'shared-token' });
+  assert.equal(reusedSubmissionToken.status, 401);
+  assert.deepEqual(await reusedSubmissionToken.json(), { error: 'submission_unauthorized' });
 
   const anonymous = await worker.fetch(new Request('https://api.test/api/competitions'), {
     ALLOWED_ORIGIN: 'https://example.test',
@@ -4728,6 +4771,7 @@ test('competition report round-trips through normalized SQLite and exact replay 
     blocker: 'artifacts',
     next_action: 'prepare_artifacts',
     approval: null,
+    submission: null,
   }]);
   assert.throws(
     () => database.prepare("UPDATE competition_reports SET run_status = 'failed'").run(),
@@ -4789,6 +4833,9 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
   assert.equal(Number(database.prepare(
     'SELECT COUNT(*) AS count FROM competition_approval_decisions',
   ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
+  ).get().count), 0, 'preparation approval must never enqueue a final submission');
 
   const after = await worker.fetch(new Request('https://api.test/api/competitions', {
     headers: { authorization: 'Bearer owner-token' },
@@ -4798,6 +4845,217 @@ test('competition web approval is owner-only, action-bound, idempotent and durab
   assert.equal(afterBody.summary.today.awaiting_approval, 0);
   assert.equal(afterBody.applications[0].approval.status, 'approved');
   assert.ok(afterBody.applications[0].approval.decided_at);
+});
+
+test('latest unexpired final approval atomically queues exactly one submission job', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionWithFinalApproval();
+  assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+
+  const decide = () => competitionApprovalRequest(env, {
+    requestId: fixture.approvals[0].request_id,
+    body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+  });
+  const decisions = await Promise.all([decide(), decide()]);
+  assert.deepEqual(decisions.map((response) => response.status).sort(), [200, 201]);
+  const bodies = await Promise.all(decisions.map((response) => response.json()));
+  assert.equal(bodies.filter((body) => body.replayed === false).length, 1);
+  assert.ok(bodies.every((body) => body.submission?.status === 'queued'));
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 1);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
+  ).get().count), 1);
+  const queued = database.prepare('SELECT * FROM competition_submission_jobs').get();
+  assert.equal(queued.job_id, fixture.approvals[0].request_id);
+  assert.equal(queued.request_id, fixture.approvals[0].request_id);
+  assert.equal(queued.action_sha256, fixture.approvals[0].action_sha256);
+  assert.equal(queued.official_url, fixture.candidates[0].official_url);
+  assert.equal(queued.attempt_count, 0);
+  assert.equal(queued.status, 'queued');
+});
+
+test('wrong-owner and stale final approvals cannot create submission jobs', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionWithFinalApproval({
+    requestId: 'competition-final-guarded-organizer-2026-image',
+    actionSha256: '9'.repeat(64),
+  });
+  assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+  const wrongOwner = await competitionApprovalRequest(env, {
+    requestId: fixture.approvals[0].request_id,
+    token: 'student-token',
+    body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+  });
+  assert.equal(wrongOwner.status, 404);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
+  ).get().count), 0);
+
+  const newer = competitionFixture();
+  setCompetitionTimeline(newer, Date.parse(fixture.run.started_at) + 1_000);
+  newer.idempotency_key = 'competition-newer-before-final-approval';
+  newer.run.id = 'competition-newer-before-final-approval';
+  assert.equal((await competitionRequest(env, { body: newer })).status, 201);
+  const stale = await competitionApprovalRequest(env, {
+    requestId: fixture.approvals[0].request_id,
+    body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+  });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: 'approval_stale' });
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
+  ).get().count), 0);
+});
+
+test('submission claim is exclusive and live-lease state is forward-only and replay-safe', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const fixture = competitionWithFinalApproval();
+  assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+  assert.equal((await competitionApprovalRequest(env, {
+    requestId: fixture.approvals[0].request_id,
+    body: { decision: 'approved', action_sha256: fixture.approvals[0].action_sha256 },
+  })).status, 201);
+
+  const unauthorized = await competitionSubmissionRequest(
+    env, '/api/competitions/submissions/claim', { token: 'competition-token' },
+  );
+  assert.equal(unauthorized.status, 401);
+  assert.deepEqual(await unauthorized.json(), { error: 'submission_unauthorized' });
+  assert.equal(database.prepare('SELECT status FROM competition_submission_jobs').get().status, 'queued');
+
+  const claims = await Promise.all([
+    competitionSubmissionRequest(env, '/api/competitions/submissions/claim'),
+    competitionSubmissionRequest(env, '/api/competitions/submissions/claim'),
+  ]);
+  const claimBodies = await Promise.all(claims.map((response) => response.json()));
+  const claimed = claimBodies.find((body) => body.job)?.job;
+  assert.ok(claimed);
+  assert.equal(claimBodies.filter((body) => body.job === null).length, 1);
+  assert.equal(claimed.job_id, fixture.approvals[0].request_id);
+  assert.equal(claimed.action_sha256, fixture.approvals[0].action_sha256);
+  assert.equal(claimed.official_url, fixture.candidates[0].official_url);
+  assert.match(claimed.lease_id, /^lease-[a-f0-9]{32}$/u);
+
+  const statePath = `/api/competitions/submissions/${claimed.job_id}/state`;
+  const wrongLease = await competitionSubmissionRequest(env, statePath, {
+    body: { state: 'running', lease_id: 'lease-wrong' },
+  });
+  assert.equal(wrongLease.status, 409);
+  const prematureSuccess = await competitionSubmissionRequest(env, statePath, {
+    body: { state: 'succeeded', lease_id: claimed.lease_id, result_code: 'submitted' },
+  });
+  assert.equal(prematureSuccess.status, 409, 'success requires a recorded running state');
+
+  const running = await competitionSubmissionRequest(env, statePath, {
+    body: { state: 'running', lease_id: claimed.lease_id },
+  });
+  assert.equal(running.status, 200);
+  assert.equal((await running.json()).job.status, 'running');
+  const terminalBody = {
+    state: 'succeeded', lease_id: claimed.lease_id,
+    result_code: 'submitted', receipt_reference: 'CONFIRM-123',
+  };
+  const terminal = await competitionSubmissionRequest(env, statePath, { body: terminalBody });
+  assert.equal(terminal.status, 200);
+  assert.equal((await terminal.json()).replayed, false);
+  const replay = await competitionSubmissionRequest(env, statePath, { body: terminalBody });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replayed, true);
+  const changed = await competitionSubmissionRequest(env, statePath, {
+    body: { ...terminalBody, receipt_reference: 'CONFIRM-OTHER' },
+  });
+  assert.equal(changed.status, 409);
+
+  const owner = await worker.fetch(new Request('https://api.test/api/competitions', {
+    headers: { authorization: 'Bearer owner-token' },
+  }), env);
+  const ownerBody = await owner.json();
+  const submission = ownerBody.applications[0].submission;
+  assert.equal(submission.status, 'succeeded');
+  assert.equal(submission.receipt_reference, 'CONFIRM-123');
+  assert.equal(Object.prototype.hasOwnProperty.call(submission, 'lease_id'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(submission, 'lease_until'), false);
+});
+
+test('held final action queues nothing while blocked and unknown results stay terminal', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const heldFixture = competitionWithFinalApproval({
+    requestId: 'competition-final-held-organizer-2026-image',
+    actionSha256: 'd'.repeat(64),
+  });
+  assert.equal((await competitionRequest(env, { body: heldFixture })).status, 201);
+  assert.equal((await competitionApprovalRequest(env, {
+    requestId: heldFixture.approvals[0].request_id,
+    body: { decision: 'held', action_sha256: heldFixture.approvals[0].action_sha256 },
+  })).status, 201);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
+  ).get().count), 0);
+
+  async function queueAndClaim({ idempotencyKey, requestId, actionSha256, startOffset }) {
+    const fixture = competitionWithFinalApproval({ requestId, actionSha256 });
+    setCompetitionTimeline(fixture, Date.parse(heldFixture.run.started_at) + startOffset);
+    fixture.idempotency_key = idempotencyKey;
+    fixture.run.id = idempotencyKey;
+    assert.equal((await competitionRequest(env, { body: fixture })).status, 201);
+    assert.equal((await competitionApprovalRequest(env, {
+      requestId,
+      body: { decision: 'approved', action_sha256: actionSha256 },
+    })).status, 201);
+    const response = await competitionSubmissionRequest(env, '/api/competitions/submissions/claim');
+    return { fixture, job: (await response.json()).job };
+  }
+
+  const blocked = await queueAndClaim({
+    idempotencyKey: 'competition-final-blocked',
+    requestId: 'competition-final-blocked-organizer-2026-image',
+    actionSha256: 'e'.repeat(64),
+    startOffset: 1_000,
+  });
+  const blockedResponse = await competitionSubmissionRequest(
+    env,
+    `/api/competitions/submissions/${blocked.job.job_id}/state`,
+    { body: {
+      state: 'blocked', lease_id: blocked.job.lease_id,
+      result_code: 'unsupported_organizer_flow',
+    } },
+  );
+  assert.equal(blockedResponse.status, 200);
+  assert.equal((await blockedResponse.json()).job.status, 'blocked');
+
+  const unknown = await queueAndClaim({
+    idempotencyKey: 'competition-final-unknown',
+    requestId: 'competition-final-unknown-organizer-2026-image',
+    actionSha256: 'c'.repeat(64),
+    startOffset: 2_000,
+  });
+  const unknownResponse = await competitionSubmissionRequest(
+    env,
+    `/api/competitions/submissions/${unknown.job.job_id}/state`,
+    { body: {
+      state: 'submission_unknown', lease_id: unknown.job.lease_id,
+      result_code: 'ambiguous_response', receipt_reference: 'MAYBE-123',
+    } },
+  );
+  assert.equal(unknownResponse.status, 200);
+  const unknownBody = await unknownResponse.json();
+  assert.equal(unknownBody.job.status, 'submission_unknown');
+  assert.equal(unknownBody.job.receipt_reference, 'MAYBE-123');
+  const noRetry = await competitionSubmissionRequest(env, '/api/competitions/submissions/claim');
+  assert.deepEqual(await noRetry.json(), { job: null });
+  assert.equal(Number(database.prepare(
+    "SELECT COUNT(*) AS count FROM competition_submission_jobs WHERE attempt_count = 1",
+  ).get().count), 2);
 });
 
 test('competition approval rejects a stale report atomically and request ids cannot be rebound', async (t) => {
@@ -4871,6 +5129,9 @@ test('competition approval expiry is checked by the same SQLite clock that store
   assert.deepEqual(await expired.json(), { error: 'approval_expired' });
   assert.equal(Number(database.prepare(
     'SELECT COUNT(*) AS count FROM competition_approval_decisions',
+  ).get().count), 0);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_submission_jobs',
   ).get().count), 0);
 });
 

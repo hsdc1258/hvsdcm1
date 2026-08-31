@@ -14,9 +14,11 @@ import {
   sha256,
 } from './lib.js';
 import {
+  claimCompetitionSubmission,
   decideCompetitionApproval,
   getCompetitions,
   reportCompetitions,
+  updateCompetitionSubmissionState,
 } from './competitions.js';
 import { BehaviorLabRequestError, getBehaviorLabDashboard } from './behavior-lab.js';
 
@@ -3799,6 +3801,15 @@ export async function route(request, env) {
   );
   if (method === 'POST' && competitionApprovalMatch) {
     return decideCompetitionApproval(request, env, competitionApprovalMatch[1]);
+  }
+  if (method === 'POST' && path === '/api/competitions/submissions/claim') {
+    return claimCompetitionSubmission(request, env);
+  }
+  const competitionSubmissionStateMatch = path.match(
+    /^\/api\/competitions\/submissions\/([A-Za-z0-9][A-Za-z0-9._-]{0,159})\/state$/u,
+  );
+  if (method === 'POST' && competitionSubmissionStateMatch) {
+    return updateCompetitionSubmissionState(request, env, competitionSubmissionStateMatch[1]);
   }
   if (method === 'GET' && path === '/api/competitions') return getCompetitions(request, env);
   if (method === 'GET' && path === '/api/usage') return usage(request, env);

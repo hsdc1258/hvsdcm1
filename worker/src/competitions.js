@@ -9,10 +9,14 @@ const MAX_CANDIDATES = 500;
 const MAX_APPLICATIONS = 3;
 const MAX_APPROVALS = 3;
 const MAX_DECISION_BYTES = 4_096;
+const MAX_SUBMISSION_STATE_BYTES = 4_096;
+const SUBMISSION_LEASE_MS = 5 * 60_000;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1_000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 const APPROVAL_REQUEST_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u;
+const SUBMISSION_LEASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+const RECEIPT_REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u;
 const CATEGORY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/u;
 const PROFILE_PATTERN = /^hmac-sha256:[a-f0-9]{64}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
@@ -78,6 +82,18 @@ const APPROVAL_KINDS = new Set([
   'preparation', 'legal_consent', 'rights_acceptance', 'payment', 'final_submission',
 ]);
 const APPROVAL_DECISIONS = new Set(['approved', 'held']);
+const SUBMISSION_TERMINAL_STATES = new Set(['succeeded', 'blocked', 'submission_unknown']);
+const SUBMISSION_RESULT_CODES = new Map([
+  ['succeeded', new Set(['submitted'])],
+  ['blocked', new Set([
+    'unsupported_organizer_flow', 'private_config_missing', 'destination_mismatch',
+    'captcha_required', 'account_required', 'payment_required', 'terms_changed',
+    'eligibility_unknown', 'manual_action_required', 'destination_unavailable',
+  ])],
+  ['submission_unknown', new Set([
+    'timeout_after_send', 'connection_lost_after_send', 'ambiguous_response', 'lease_expired',
+  ])],
+]);
 const APPROVAL_APPLICATION_STATES = new Map([
   ['preparation', 'WAITING_RIGHTS_APPROVAL'],
   ['legal_consent', 'WAITING_LEGAL_CONSENT'],
@@ -1001,6 +1017,75 @@ async function readApprovalDecisionJson(request) {
   try { return { value: JSON.parse(raw) }; } catch { return { response: competitionError('invalid_json') }; }
 }
 
+function submissionTimestamp() {
+  return new Date().toISOString();
+}
+
+function submissionLeaseId() {
+  const random = new Uint8Array(16);
+  crypto.getRandomValues(random);
+  return `lease-${[...random].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function serializeSubmissionJob(row, { includeLease = false } = {}) {
+  if (!row) return null;
+  const serialized = {
+    job_id: row.job_id,
+    request_id: row.request_id,
+    action_sha256: row.action_sha256,
+    contest_id: row.contest_id,
+    category: row.category,
+    official_url: row.official_url,
+    status: row.status,
+    queued_at: row.queued_at,
+    claimed_at: row.claimed_at || null,
+    started_at: row.started_at || null,
+    completed_at: row.completed_at || null,
+    result_code: row.result_code || null,
+    receipt_reference: row.receipt_reference || null,
+  };
+  if (includeLease) {
+    serialized.lease_id = row.lease_id || null;
+    serialized.lease_until = row.lease_until || null;
+  }
+  return serialized;
+}
+
+async function submissionJobByRequest(env, requestId) {
+  return env.DB.prepare(`
+    SELECT * FROM competition_submission_jobs WHERE request_id = ?1
+  `).bind(requestId).first();
+}
+
+async function submissionJobById(env, jobId) {
+  return env.DB.prepare(`
+    SELECT * FROM competition_submission_jobs WHERE job_id = ?1
+  `).bind(jobId).first();
+}
+
+async function expireSubmissionLeases(env, timestamp) {
+  await env.DB.prepare(`
+    UPDATE competition_submission_jobs
+    SET status = 'submission_unknown', lease_until = NULL,
+        completed_at = ?1, updated_at = ?1, result_code = 'lease_expired'
+    WHERE status IN ('claimed', 'running')
+      AND julianday(lease_until) <= julianday(?1)
+  `).bind(timestamp).run();
+}
+
+async function submissionTokenAuthorized(request, env) {
+  const dedicated = String(env.COMPETITION_SUBMISSION_TOKEN || '').trim();
+  const otherSecrets = [
+    env.COMPETITION_INGEST_TOKEN,
+    env.USAGE_INGEST_TOKEN,
+    env.HARNESS_INGEST_TOKEN,
+    env.MODERATOR_DAEMON_TOKEN,
+    env.BEHAVIOR_PAPER_REPORT_TOKEN,
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  if (!dedicated || otherSecrets.includes(dedicated)) return false;
+  return tokenMatches(request, dedicated);
+}
+
 async function decideCompetitionApprovalInternal(request, env, requestId) {
   const session = await authenticate(request, env);
   if (!session) return competitionJson({ error: '로그인이 필요합니다.' }, 401);
@@ -1026,36 +1111,67 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
     throw error;
   }
 
-  const inserted = await env.DB.prepare(`
-    WITH clock AS (
-      SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS decided_at
-    ), latest AS (
-      SELECT idempotency_key
-      FROM competition_reports
-      ORDER BY COALESCE(finished_at, started_at) DESC,
-        received_at DESC, idempotency_key DESC
-      LIMIT 1
-    )
-    INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
-    SELECT request.request_id, ?2, ?3, clock.decided_at
-    FROM competition_approval_requests AS request
-    JOIN latest ON latest.idempotency_key = request.idempotency_key
-    CROSS JOIN clock
-    WHERE request.request_id = ?1
-      AND request.action_sha256 = ?2
-      AND (request.expires_at IS NULL OR request.expires_at > clock.decided_at)
-      AND NOT EXISTS (
-        SELECT 1 FROM competition_approval_decisions AS stored
-        WHERE stored.request_id = request.request_id
-    )
-    ON CONFLICT(request_id) DO NOTHING
-  `).bind(normalizedRequestId, actionSha256, decision).run();
-  if (resultChanges(inserted) === 1) {
+  const results = await env.DB.batch([
+    env.DB.prepare(`
+      WITH clock AS (
+        SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS decided_at
+      ), latest AS (
+        SELECT idempotency_key
+        FROM competition_reports
+        ORDER BY COALESCE(finished_at, started_at) DESC,
+          received_at DESC, idempotency_key DESC
+        LIMIT 1
+      )
+      INSERT INTO competition_approval_decisions(request_id, action_sha256, decision, decided_at)
+      SELECT request.request_id, ?2, ?3, clock.decided_at
+      FROM competition_approval_requests AS request
+      JOIN latest ON latest.idempotency_key = request.idempotency_key
+      CROSS JOIN clock
+      WHERE request.request_id = ?1
+        AND request.action_sha256 = ?2
+        AND (request.expires_at IS NULL OR request.expires_at > clock.decided_at)
+        AND NOT EXISTS (
+          SELECT 1 FROM competition_approval_decisions AS stored
+          WHERE stored.request_id = request.request_id
+        )
+      ON CONFLICT(request_id) DO NOTHING
+    `).bind(normalizedRequestId, actionSha256, decision),
+    env.DB.prepare(`
+      INSERT INTO competition_submission_jobs(
+        job_id, request_id, action_sha256, idempotency_key, contest_id, category,
+        official_url, status, attempt_count, queued_at, updated_at
+      )
+      SELECT request.request_id, request.request_id, request.action_sha256,
+        request.idempotency_key, request.contest_id, request.category,
+        candidate.official_url, 'queued', 0, stored.decided_at, stored.decided_at
+      FROM competition_approval_requests AS request
+      JOIN competition_approval_decisions AS stored
+        ON stored.request_id = request.request_id
+       AND stored.action_sha256 = request.action_sha256
+      JOIN competition_candidates AS candidate
+        ON candidate.idempotency_key = request.idempotency_key
+       AND candidate.contest_id = request.contest_id
+       AND candidate.category = request.category
+      WHERE request.request_id = ?1
+        AND request.action_sha256 = ?2
+        AND request.kind = 'final_submission'
+        AND stored.decision = 'approved'
+        AND ?3 = 'approved'
+        AND changes() > 0
+      ON CONFLICT(request_id) DO NOTHING
+    `).bind(normalizedRequestId, actionSha256, decision),
+  ]);
+  if (resultChanges(results[0]) === 1) {
     const stored = await env.DB.prepare(`
-      SELECT decided_at
-      FROM competition_approval_decisions
-      WHERE request_id = ?1
+      SELECT decided_at FROM competition_approval_decisions WHERE request_id = ?1
     `).bind(normalizedRequestId).first();
+    const submission = await submissionJobByRequest(env, normalizedRequestId);
+    if (decision === 'approved' && submission === null) {
+      const approvedRequest = await env.DB.prepare(`
+        SELECT kind FROM competition_approval_requests WHERE request_id = ?1
+      `).bind(normalizedRequestId).first();
+      if (approvedRequest?.kind === 'final_submission') throw new Error('final approval did not queue submission');
+    }
     return competitionJson({
       ok: true,
       request_id: normalizedRequestId,
@@ -1063,6 +1179,7 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
       decision,
       decided_at: stored.decided_at,
       replayed: false,
+      submission: serializeSubmissionJob(submission),
     }, 201);
   }
 
@@ -1099,6 +1216,7 @@ async function decideCompetitionApprovalInternal(request, env, requestId) {
       decision,
       decided_at: approval.stored_decided_at,
       replayed: true,
+      submission: serializeSubmissionJob(await submissionJobByRequest(env, approval.request_id)),
     });
   }
 
@@ -1110,6 +1228,149 @@ export async function decideCompetitionApproval(request, env, requestId) {
     return await decideCompetitionApprovalInternal(request, env, requestId);
   } catch (error) {
     console.error('competition_approval_error', error);
+    return competitionJson({ error: '서버 오류' }, 500);
+  }
+}
+
+async function readSubmissionStateJson(request) {
+  if (!/^application\/json(?:\s*;|$)/iu.test(request.headers.get('content-type') || '')) {
+    return { response: competitionError('content_type_required', 415) };
+  }
+  const contentLength = Number(request.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_SUBMISSION_STATE_BYTES) {
+    return { response: competitionError('payload_too_large', 413) };
+  }
+  let raw;
+  try { raw = await request.text(); } catch { return { response: competitionError('invalid_json') }; }
+  if (bytes(raw) > MAX_SUBMISSION_STATE_BYTES) return { response: competitionError('payload_too_large', 413) };
+  try { return { value: JSON.parse(raw) }; } catch { return { response: competitionError('invalid_json') }; }
+}
+
+export async function claimCompetitionSubmission(request, env) {
+  try {
+    if (!(await submissionTokenAuthorized(request, env))) {
+      return competitionJson({ error: 'submission_unauthorized' }, 401);
+    }
+    const timestamp = submissionTimestamp();
+    await expireSubmissionLeases(env, timestamp);
+    const leaseId = submissionLeaseId();
+    const leaseUntil = new Date(Date.parse(timestamp) + SUBMISSION_LEASE_MS).toISOString();
+    const job = await env.DB.prepare(`
+      WITH next_job AS (
+        SELECT job_id
+        FROM competition_submission_jobs
+        WHERE status = 'queued' AND attempt_count = 0
+        ORDER BY queued_at ASC, job_id ASC
+        LIMIT 1
+      )
+      UPDATE competition_submission_jobs
+      SET status = 'claimed', attempt_count = 1, lease_id = ?2, lease_until = ?3,
+          claimed_at = ?1, updated_at = ?1
+      WHERE job_id = (SELECT job_id FROM next_job)
+        AND status = 'queued' AND attempt_count = 0
+      RETURNING *
+    `).bind(timestamp, leaseId, leaseUntil).first();
+    return competitionJson({ job: serializeSubmissionJob(job, { includeLease: true }) });
+  } catch (error) {
+    console.error('competition_submission_claim_error', error);
+    return competitionJson({ error: '서버 오류' }, 500);
+  }
+}
+
+function normalizeSubmissionState(input) {
+  strictObject(input, ['lease_id', 'state', 'result_code', 'receipt_reference']);
+  const leaseId = normalizedId(input.lease_id, SUBMISSION_LEASE_PATTERN);
+  const state = typeof input.state === 'string' ? input.state : '';
+  if (state === 'running') {
+    if (input.result_code !== undefined || input.receipt_reference !== undefined) fail('invalid_submission_state');
+    return { leaseId, state, resultCode: null, receiptReference: null };
+  }
+  if (!SUBMISSION_TERMINAL_STATES.has(state)) fail('invalid_submission_state');
+  if (typeof input.result_code !== 'string'
+    || !SUBMISSION_RESULT_CODES.get(state)?.has(input.result_code)) fail('invalid_submission_state');
+  let receiptReference = null;
+  if (input.receipt_reference !== undefined && input.receipt_reference !== null) {
+    receiptReference = normalizedId(input.receipt_reference, RECEIPT_REFERENCE_PATTERN);
+  }
+  if (receiptReference && state === 'blocked') fail('invalid_submission_state');
+  return { leaseId, state, resultCode: input.result_code, receiptReference };
+}
+
+async function updateCompetitionSubmissionStateInternal(request, env, jobId) {
+  if (!(await submissionTokenAuthorized(request, env))) {
+    return competitionJson({ error: 'submission_unauthorized' }, 401);
+  }
+  let normalizedJobId;
+  try { normalizedJobId = normalizedId(jobId, APPROVAL_REQUEST_PATTERN); }
+  catch { return competitionError('invalid_submission_job'); }
+  const parsed = await readSubmissionStateJson(request);
+  if (parsed.response) return parsed.response;
+  let state;
+  try { state = normalizeSubmissionState(parsed.value); }
+  catch (error) {
+    if (error instanceof ReportValidationError) return competitionError(error.code);
+    throw error;
+  }
+
+  const timestamp = submissionTimestamp();
+  await expireSubmissionLeases(env, timestamp);
+  let updated;
+  if (state.state === 'running') {
+    const leaseUntil = new Date(Date.parse(timestamp) + SUBMISSION_LEASE_MS).toISOString();
+    updated = await env.DB.prepare(`
+      UPDATE competition_submission_jobs
+      SET status = 'running', lease_until = ?3,
+          started_at = COALESCE(started_at, ?2), updated_at = ?2
+      WHERE job_id = ?1 AND status IN ('claimed', 'running')
+        AND lease_id = ?4 AND julianday(lease_until) > julianday(?2)
+      RETURNING *
+    `).bind(normalizedJobId, timestamp, leaseUntil, state.leaseId).first();
+  } else {
+    const allowedPrevious = state.state === 'succeeded'
+      ? "status = 'running'"
+      : "status IN ('claimed', 'running')";
+    updated = await env.DB.prepare(`
+      UPDATE competition_submission_jobs
+      SET status = ?2, lease_until = NULL, completed_at = ?3, updated_at = ?3,
+          result_code = ?4, receipt_reference = ?5
+      WHERE job_id = ?1 AND ${allowedPrevious}
+        AND lease_id = ?6 AND julianday(lease_until) > julianday(?3)
+      RETURNING *
+    `).bind(
+      normalizedJobId,
+      state.state,
+      timestamp,
+      state.resultCode,
+      state.receiptReference,
+      state.leaseId,
+    ).first();
+  }
+  if (updated) {
+    return competitionJson({
+      job: serializeSubmissionJob(updated, { includeLease: true }),
+      replayed: false,
+    });
+  }
+
+  const existing = await submissionJobById(env, normalizedJobId);
+  if (existing && SUBMISSION_TERMINAL_STATES.has(existing.status)
+    && existing.lease_id === state.leaseId
+    && existing.status === state.state
+    && existing.result_code === state.resultCode
+    && (existing.receipt_reference || null) === state.receiptReference) {
+    return competitionJson({
+      job: serializeSubmissionJob(existing, { includeLease: true }),
+      replayed: true,
+    });
+  }
+  return competitionError('invalid_transition_or_lease', 409);
+}
+
+export async function updateCompetitionSubmissionState(request, env, jobId) {
+  try {
+    return await updateCompetitionSubmissionStateInternal(request, env, jobId);
+  } catch (error) {
+    console.error('competition_submission_state_error', error);
     return competitionJson({ error: '서버 오류' }, 500);
   }
 }
@@ -1173,7 +1434,7 @@ async function getCompetitionsInternal(request, env) {
   const reports = reportRows.results || [];
   if (reports.length === 0) return competitionJson(emptyCompetitionResponse());
   const latest = reports[0];
-  const [sourceRows, candidateRows, applicationRows, approvalRows] = await Promise.all([
+  const [sourceRows, candidateRows, applicationRows, approvalRows, submissionRows] = await Promise.all([
     env.DB.prepare(`
       SELECT * FROM competition_sources
       WHERE idempotency_key = ?1
@@ -1197,6 +1458,11 @@ async function getCompetitionsInternal(request, env) {
         ON decision.request_id = request.request_id
       WHERE request.idempotency_key = ?1
       ORDER BY request.requested_at DESC, request.request_id
+    `).bind(latest.idempotency_key).all(),
+    env.DB.prepare(`
+      SELECT * FROM competition_submission_jobs
+      WHERE idempotency_key = ?1
+      ORDER BY queued_at DESC, job_id
     `).bind(latest.idempotency_key).all(),
   ]);
   const sources = (sourceRows.results || []).map((row) => ({
@@ -1246,6 +1512,10 @@ async function getCompetitionsInternal(request, env) {
       decided_at: row.decided_at || null,
     }];
   }));
+  const submissions = new Map((submissionRows.results || []).map((row) => [
+    `${row.contest_id}|${row.category}`,
+    serializeSubmissionJob(row),
+  ]));
   const applications = (applicationRows.results || []).map((row) => ({
     contest_id: row.contest_id,
     category: row.category,
@@ -1254,6 +1524,7 @@ async function getCompetitionsInternal(request, env) {
     blocker: row.blocker,
     next_action: row.next_action,
     approval: approvals.get(`${row.contest_id}|${row.category}`) || null,
+    submission: submissions.get(`${row.contest_id}|${row.category}`) || null,
   }));
   const latestScanAt = latest.finished_at || latest.started_at;
   const latestScanTime = Date.parse(latestScanAt);

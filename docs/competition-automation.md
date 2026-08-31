@@ -1,8 +1,9 @@
 # Competition discovery reporting
 
-The daily competition heartbeat discovers and prepares opportunities, but it does not submit an
-application. The private local ledger and profile HMAC secret remain outside this repository. The
-owner-only `/usage/?view=competition` dashboard receives only the redacted operational snapshot.
+The daily competition heartbeat discovers and prepares opportunities. It cannot submit an application
+on its own: only the latest unexpired owner approval for the exact `final_submission` action may create
+one single-attempt job. The private local ledger and profile HMAC secret remain outside this repository.
+The owner-only `/usage/?view=competition` dashboard receives only the redacted operational snapshot.
 
 ## Daily source coverage
 
@@ -160,6 +161,85 @@ timeouts and HTTP 403 responses require manual follow-up and never prove closure
 capped at three and may refer only to an officially verified, eligible, currently open, unexpired
 `active` candidate with an offset-qualified deadline.
 
+## Deterministic fast lane
+
+Before filling an available WIP slot, run the local selector over verified candidate facts:
+
+```powershell
+node scripts/competition-fast-lane.mjs --input C:\path\outside-git\fast-lane-input.json
+```
+
+The selector accepts at most three total WIP entries, removes `contest_id + category` duplicates, and
+admits only verified/open/eligible/active candidates with a future deadline. It deterministically ranks
+free fully-online asynchronous work before remote-live obligations, paid entries, on-site entries, and
+unknown burden. Within one burden tier, a newly verified candidate comes before the older backlog, then
+lower effort, higher fit, earlier deadline, and stable candidate key break ties. A paid, interview/live,
+presentation, or on-site candidate therefore cannot consume a slot while an otherwise valid free
+asynchronous candidate is waiting. The input-only `fee` and `participation` facts remain local planning
+metadata and are not added to the redacted report schema.
+
+## Final approval submission queue
+
+Migration `0017_competition_submission_jobs.sql` must be applied before the Worker code that reads it.
+When the owner approves the latest unexpired `final_submission` card, the decision row and one job are
+written in the same D1 batch. Exact repeat clicks return the existing decision/job; changed decisions,
+stale reports and expired or different action hashes fail. Preparation, legal-consent, rights, payment,
+and held decisions create no submission job.
+
+The executor uses only `COMPETITION_SUBMISSION_TOKEN`:
+
+- `POST /api/competitions/submissions/claim` conditionally leases one oldest queued job.
+- `POST /api/competitions/submissions/:jobId/state` records `running`, then one of `succeeded`, `blocked`,
+  or `submission_unknown` under that live lease.
+- A claim is attempted once. An expired claimed/running lease becomes `submission_unknown` with
+  `lease_expired`; it is never returned to the queue.
+- Results are fixed codes plus an optional 96-character ASCII receipt reference. There is no free-form
+  result/receipt body in D1, and the owner GET omits lease identifiers.
+
+Create the private executor config and dedicated Worker secret without putting the token on the command
+line or in Git:
+
+```powershell
+node scripts/competition-submission-secret.mjs init `
+  --config C:\Users\won\.config\hvsdcm1\competition-submission.json `
+  --api-url https://hvsdcm-api.hvsdcm1.workers.dev
+
+node scripts/competition-submission-secret.mjs put `
+  --config C:\Users\won\.config\hvsdcm1\competition-submission.json `
+  --worker-config worker\wrangler.toml
+```
+
+The created file contains only the API URL, dedicated token, and public/action-bound adapter metadata:
+
+```json
+{
+  "api_url": "https://hvsdcm-api.hvsdcm1.workers.dev",
+  "competition_submission_token": "stored-outside-git",
+  "actions": {
+    "64-character-action-sha256": {
+      "request_id": "exact-final-approval-request-id",
+      "official_url": "https://organizer.example/submit",
+      "adapter": "organizer_specific_v1"
+    }
+  }
+}
+```
+
+Run one bounded poll with:
+
+```powershell
+node scripts/competition-submit.mjs `
+  --config C:\Users\won\.config\hvsdcm1\competition-submission.json
+```
+
+The client never prints the token. It compares the claim's request id, action hash, and official URL to
+the private config, records `running` before calling an adapter, and reports one bounded terminal state.
+The checked-in generic executor deliberately supports no organizer form: missing, mismatched, or
+`unsupported` flows become visible `blocked` jobs. A supported organizer needs a separately reviewed
+specific adapter; PII, answers, cookies, passwords, consent bodies and raw receipts must come from a
+separate guarded local source at action time and must never be added to this config, Git, D1, logs,
+prompts, or Discord.
+
 ## Results-only Discord delivery
 
 The Discord helper creates or reuses exactly one text channel named 공모전-지원-결과 under the 기본
@@ -180,8 +260,9 @@ scheduled bot task, or revive Moder/session-feedback reporting.
 
 Automation may discover, verify, score, deduplicate, draft, render, and stage. It must stop for exact
 action-time approval before transmitting PII, accepting privacy/originality/publicity/rights terms,
-signing, paying, or making the final representational submission. A previous schedule or broad approval
-does not authorize a later contest's changed terms.
+signing, paying, or making the final representational submission. Only an exact final approval queues
+the one-attempt executor; a previous schedule, preparation approval, or broad approval does not
+authorize a later contest's changed terms.
 
 Discord delivery, when enabled, is results-only: completed submissions or exact human-action gates may
 be reported, but crawl progress, raw logs, Moder traffic, and session feedback are not sent.

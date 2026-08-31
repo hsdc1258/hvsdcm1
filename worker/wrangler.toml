@@ -16,6 +16,8 @@ bucket_name = "hvsdcm-gichul"
 #   npx wrangler secret put HARNESS_INGEST_TOKEN
 #   npx wrangler secret put MODERATOR_DAEMON_TOKEN
 #   npx wrangler secret put BEHAVIOR_PAPER_REPORT_TOKEN
+#   npx wrangler secret put COMPETITION_SUBMISSION_TOKEN
+# Prefer scripts/competition-submission-secret.mjs so this value is supplied only on stdin.
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"
 # GET /api/usage를 볼 수 있는 계정 목록(쉼표 구분). 이 값이 소유자 판정의 단일 원본이며,
