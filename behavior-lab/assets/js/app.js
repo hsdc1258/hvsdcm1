@@ -1024,8 +1024,8 @@
       && report.experiment_id === 'dual-live-20260901-v1' && report.live_trading === true
       && Number.isFinite(Date.parse(report.generated_at)) && Number.isInteger(report.sequence) && report.sequence >= 0
       && ['blocked', 'armed', 'active', 'degraded', 'error'].includes(report.status)
-      && report.exchange?.name === 'Bitget' && report.exchange.product === 'USDT-FUTURES'
-      && report.exchange.api === 'classic-v2'
+      && report.exchange?.name === 'Binance' && report.exchange.product === 'USD-M-FUTURES'
+      && report.exchange.api === 'fapi-v1'
       && JSON.stringify(report.allocation) === JSON.stringify({ per_model_usdt: 3, total_usdt: 6,
         mode: 'isolated-margin-hard-cap' })
       && Array.isArray(report.models) && report.models.length === 2
@@ -1129,6 +1129,10 @@
       if (response.status === 401 || response.status === 404) throw new OwnerAccessError(response.status);
       if (!response.ok) throw new Error(payload.error || '실투 보고를 불러오지 못했습니다.');
       if (!payload.report) {
+        state.liveReport = null; liveTradingStatus('blocked'); elements.liveTradingReport.hidden = true;
+        elements.liveTradingEmpty.hidden = false; elements.liveTradingError.hidden = true; return;
+      }
+      if (payload.report.exchange?.name !== 'Binance') {
         state.liveReport = null; liveTradingStatus('blocked'); elements.liveTradingReport.hidden = true;
         elements.liveTradingEmpty.hidden = false; elements.liveTradingError.hidden = true; return;
       }
