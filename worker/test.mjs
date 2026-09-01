@@ -485,6 +485,7 @@ test('learning content and images reject anonymous requests before reading R2', 
   for (const path of [
     '/api/learning/wordmaster',
     '/api/learning/smstudy',
+    '/api/learning/plstudy',
     '/api/learning/smstudy/image/2026-csat-01.webp',
   ]) {
     const response = await worker.fetch(new Request(`https://api.test${path}`), env);
@@ -498,6 +499,7 @@ test('authenticated learning routes stream only fixed R2 keys', async () => {
   const objects = new Map([
     ['learning/wordmaster.json', JSON.stringify({ words: [{ id: 'fixture' }], emoji: {} })],
     ['learning/smstudy.json', JSON.stringify({ data: {}, notebook: {}, explanations: {} })],
+    ['learning/plstudy.json', JSON.stringify({ data: { UNITS: [], QUESTIONS: [] } })],
     ['learning/smstudy/kice/2026-csat-01.webp', new Uint8Array([82, 73, 70, 70])],
   ]);
   const env = createGichulEnv({ learningObjects: objects });
@@ -509,15 +511,19 @@ test('authenticated learning routes stream only fixed R2 keys', async () => {
   assert.equal(words.headers.get('cache-control'), 'no-store');
   assert.equal((await words.json()).words[0].id, 'fixture');
 
+  const politics = await worker.fetch(new Request('https://api.test/api/learning/plstudy', { headers }), env);
+  assert.equal(politics.status, 200);
+  assert.deepEqual((await politics.json()).data.UNITS, []);
+
   const image = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/2026-csat-01.webp', { headers }), env);
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('content-type'), 'image/webp');
   assert.equal(image.headers.get('cache-control'), 'no-store');
-  assert.deepEqual(env.r2Reads, ['learning/wordmaster.json', 'learning/smstudy/kice/2026-csat-01.webp']);
+  assert.deepEqual(env.r2Reads, ['learning/wordmaster.json', 'learning/plstudy.json', 'learning/smstudy/kice/2026-csat-01.webp']);
 
   const invalid = await worker.fetch(new Request('https://api.test/api/learning/smstudy/image/not-a-webp.txt', { headers }), env);
   assert.equal(invalid.status, 404);
-  assert.equal(env.r2Reads.length, 2);
+  assert.equal(env.r2Reads.length, 3);
 });
 
 test('authenticated gichul routes stream only manifest-mapped PDFs with no-store CORS', async () => {

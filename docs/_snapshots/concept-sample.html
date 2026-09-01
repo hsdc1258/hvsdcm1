@@ -37,37 +37,36 @@
    --text-2       8.16    7.64    7.03    6.54      5.42      4.41   surface-4에서 4.41 → 캡션·비활성 라벨만
    --text-3       5.80    5.43    4.99    4.65      3.85      3.13   surface-3/4 금지 (캡션 하한 미달)
    --text-4       4.14    3.88    3.57    3.32      2.75      2.24   비활성 전용 — 살아있는 텍스트 금지
-   --accent       6.96    6.52    6.00    5.58      4.62      3.76   surface-4 위 링크 금지
-   --green       10.39    9.73    8.94    8.32      6.89      5.61
-   --red          6.16    5.77    5.31    4.94      4.09      3.33   surface-3/4 금지
-   --red-bright   7.45    6.97    6.41    5.97      4.94      4.02   surface-4 금지
-   --orange      10.22    9.57    8.80    8.19      6.78      5.52
+   --accent      19.29   18.06   16.61   15.46     12.80     10.42
+   --green       14.47   13.55   12.46   11.60      9.60      7.82
+   --red         16.69   15.63   14.38   13.38     11.08      9.02
+   --red-bright  18.62   17.43   16.03   14.92     12.35     10.06
+   --orange      12.45   11.66   10.72    9.98      8.26      6.73
 
    -soft 뱃지(알파 .14를 부모 배경과 합성한 실효 배경 위 전경):
-   --accent-soft + --accent      bg 6.11 / bg-alt 5.56 / surface 4.97 / surface-2 4.58
-                                 / surface-3 3.80 ✗ / surface-4 3.16 ✗
-   --green-soft  + --green       bg 8.71 / bg-alt 7.86 / surface 6.97 / surface-2 6.41
-                                 / surface-3 5.29 / surface-4 4.39 ✗
-   --red-soft    + --red-bright  bg 6.65 / bg-alt 6.12 / surface 5.52 / surface-2 5.11
-                                 / surface-3 4.27 ✗ / surface-4 3.56 ✗
-   --orange-soft + --orange      bg 8.58 / bg-alt 7.73 / surface 6.85 / surface-2 6.30
-                                 / surface-3 5.19 / surface-4 4.30 ✗
-   → 뱃지는 --surface-2까지의 배경 위에만 놓는다. .badge 기본형(중립)은 --surface-3
-     배경에 --text-2(5.42:1)라 캡션 하한을 넘는다.
+   --accent-soft + --accent      bg 15.21 / bg-alt 13.47 / surface 11.77 / surface-2 10.73
+                                 / surface-3 8.74 / surface-4 7.20
+   --green-soft  + --green       bg 11.49 / bg-alt 10.22 / surface 8.97 / surface-2 8.20
+                                 / surface-3 6.72 / surface-4 5.56
+   --red-soft    + --red-bright  bg 14.43 / bg-alt 12.78 / surface 11.19 / surface-2 10.22
+                                 / surface-3 8.36 / surface-4 6.92
+   --orange-soft + --orange      bg 10.12 / bg-alt 9.03 / surface 7.95 / surface-2 7.28
+                                 / surface-3 5.97 / surface-4 4.94
+   → 단색 뱃지는 모든 시스템 표면에서 본문 대비 하한을 넘는다.
 
    위험 버튼(.btn-danger — 14px semibold라 본문 하한 4.5 적용). 면이 불투명이라
    부모 표면과 무관하게 값이 고정된다:
-   --red-bright on --red-fill       = 5.49  (normal)
-   --red-bright on --red-fill-hover = 4.93  (hover)
+   --red-bright on --red-fill       = 13.74  (normal)
+   --red-bright on --red-fill-hover = 11.66  (hover)
    → 이전 구현(--red 전경 + 알파 면)은 surface 위 hover 3.94, 표 행 hover 위 4.23이었다.
      :disabled는 opacity .45라 실효 대비가 더 내려가지만 WCAG 1.4.3의 비활성 컨트롤
      예외 대상이다(대비 하한을 적용하지 않는다).
 
-   채움 버튼: #fff on --accent-strong #0071e3 = 4.70 (사용)
-              --text on --accent-strong      = 4.31 ✗ (금지 — 흰색만)
-              #fff on --accent #2997ff       = 3.02 ✗ (--accent를 채움색으로 쓰지 않는다)
-   선택 영역: --text on (--accent .35 over bg)      = 11.54
-              --text on (--accent .35 over surface) = 9.37
+   채움 버튼: #000 on --accent-strong #ffffff = 21.00 (사용)
+              --text on --accent-strong       = 1.09 ✗ (금지 — 검정만)
+              #fff on --accent #f5f5f7        = 1.09 ✗ (--accent 위 흰 글자 금지)
+   선택 영역: --text on (--accent .35 over bg)      = 6.76
+              --text on (--accent .35 over surface) = 5.42
    헤어라인(장식 구획선, 그래픽 3:1 요건 대상 아님 — 컨트롤 경계로 쓰지 않는다):
      --line 1.27~1.46 / --line-strong 1.79~2.05 / --line-faint 1.10~1.20
      → 컨트롤의 유일한 시각 경계로 쓰지 말 것. 컨트롤은 표면 단차로 구분한다.
@@ -97,24 +96,24 @@
   --text-4: #6e6e73;
   /* 비활성 전용. 살아있는 텍스트에 쓰지 않는다 */
   /* ---- 색: 기능 (강조 1색 + 상태 3색) ---- */
-  --accent: #2997ff;
-  --accent-strong: #0071e3;
+  --accent: #f5f5f7;
+  --accent-strong: #ffffff;
   /* 채움 버튼 배경. 라벨은 #fff 고정(4.70:1) */
-  --accent-soft: rgba(41,151,255,.14);
-  --green: #30d158;
-  --green-soft: rgba(48,209,88,.14);
-  --red: #ff453a;
-  --red-soft: rgba(255,69,58,.14);
+  --accent-soft: rgba(255,255,255,.12);
+  --green: #d6d6d8;
+  --green-soft: rgba(214,214,216,.14);
+  --red: #e5e5e7;
+  --red-soft: rgba(229,229,231,.14);
   /* 위험 버튼 면. 알파가 아니라 불투명값이다 — 알파면 부모 표면(행 hover 등)에 따라
      대비가 흔들린다(실측: 표 행 hover 위에서 4.23까지 내려갔다). 전경 --red-bright 고정. */
-  --red-fill: #371d1c;
+  --red-fill: #242426;
   /* --red .14 over --surface를 구운 값. 5.49:1 */
-  --red-fill-hover: #49201f;
+  --red-fill-hover: #303033;
   /* 같은 방식 .22. 4.93:1 */
-  --red-bright: #ff6961;
+  --red-bright: #f1f1f3;
   /* -soft 배경 위 전경 전용 */
-  --orange: #ff9f0a;
-  --orange-soft: rgba(255,159,10,.14);
+  --orange: #c7c7ca;
+  --orange-soft: rgba(199,199,202,.14);
   /* ---- 그래픽: 셀렉트 셰브런 ----
      그라디언트로 삼각형을 그리는 것은 DESIGN.md §3의 금지 대상이고, 외부 아이콘 파일은
      정적 사이트의 자산 계약을 늘린다. 인라인 SVG data URI 하나를 단일 원본으로 둔다.
@@ -651,10 +650,10 @@ hr {
 }
 .btn-primary {
   background: var(--accent-strong);
-  color: #fff;
+  color: #000;
 }
 .btn-primary:hover {
-  background: #0077ed;
+  background: #d8d8da;
 }
 .btn-secondary {
   background: var(--surface-3);
@@ -2217,6 +2216,21 @@ ul.sm-deep-points li::marker {
 }
 .sm-question {
   gap: var(--space-5);
+  padding: clamp(20px, 3.2vw, 36px);
+}
+.sm-practice-question {
+  display: grid;
+  gap: var(--space-3);
+  padding: clamp(20px, 4vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--bg-alt);
+}
+.sm-practice-question h2 {
+  max-width: 34ch;
+  margin: 0;
+  font-size: clamp(1.35rem, 3vw, 2.25rem);
+  line-height: 1.35;
 }
 .sm-media {
   display: grid;
@@ -2286,6 +2300,32 @@ ul.sm-deep-points li::marker {
   font-weight: 700;
   transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
+.sm-choices.has-copy {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sm-choices.has-copy .sm-choice {
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  place-items: center start;
+  min-height: 54px;
+  padding: 10px 14px;
+  font-size: var(--fs-body);
+  text-align: left;
+}
+.sm-choices.has-copy .sm-choice > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  place-items: center;
+  font-size: var(--fs-caption);
+}
+.sm-choices.has-copy .sm-choice small {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.5;
+}
 .sm-choice:hover:not(:disabled) {
   background: var(--surface-3);
   border-color: var(--line-strong);
@@ -2306,7 +2346,7 @@ ul.sm-deep-points li::marker {
 .sm-choice.is-wrong {
   background: var(--red);
   border-color: var(--red);
-  color: #fff;
+  color: #000;
   opacity: 1;
 }
 /* ---- 채점 피드백 ---- */
@@ -2977,7 +3017,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
       <nav class="toolbar toolbar-sticky sm-concept-nav" aria-label="중단원 이동">
         <button id="prevConcept" class="btn btn-secondary btn-sm" type="button" aria-label="이전 중단원" >←</button>
         <label class="sm-jump-label" for="jumpConcept">중단원</label>
-        <select id="jumpConcept" class="field-input sm-jump"><optgroup label="I · 사회·문화 현상의 탐구"><option value="I-01" >I-01 · 탐구 대상으로서의 사회·문화 현상</option><option value="I-02" >I-02 · 사회·문화 현상의 탐구 방법</option><option value="I-03" >I-03 · 사회·문화 현상의 탐구와 연구 윤리</option></optgroup><optgroup label="II · 개인과 사회 구조"><option value="II-01" >II-01 · 사회화와 사회적 상호 작용</option><option value="II-02" >II-02 · 사회 구조와 개인의 삶</option><option value="II-03" >II-03 · 사회 집단과 사회 조직의 이해</option><option value="II-04" >II-04 · 일탈 행동의 원인과 해결 방안</option></optgroup><optgroup label="III · 문화와 사회"><option value="III-01" selected>III-01 · 문화의 이해</option><option value="III-02" >III-02 · 다양한 하위문화와 현대의 대중문화</option><option value="III-03" >III-03 · 문화의 변동과 한국 문화의 세계화</option></optgroup><optgroup label="IV · 사회 계층과 불평등"><option value="IV-01" >IV-01 · 사회 계층화 현상의 이해</option><option value="IV-02" >IV-02 · 다양한 사회적 불평등과 해결 방안</option><option value="IV-03" >IV-03 · 불평등 해소를 위한 사회 복지 제도</option></optgroup></select>
+        <select id="jumpConcept" class="field-input sm-jump"><optgroup label="I · 사회·문화 현상의 탐구"><option value="I-01" >I-01 · 탐구 대상으로서의 사회·문화 현상</option><option value="I-02" >I-02 · 사회·문화 현상의 탐구 방법</option><option value="I-03" >I-03 · 사회·문화 현상의 탐구와 연구 윤리</option></optgroup><optgroup label="II · 개인과 사회 구조"><option value="II-01" >II-01 · 사회화와 사회적 상호 작용</option><option value="II-02" >II-02 · 사회 구조와 개인의 삶</option><option value="II-03" >II-03 · 사회 집단과 사회 조직의 이해</option><option value="II-04" >II-04 · 일탈 행동의 원인과 해결 방안</option></optgroup><optgroup label="III · 문화와 사회"><option value="III-01" selected>III-01 · 문화의 이해</option><option value="III-02" >III-02 · 다양한 하위문화와 현대의 대중문화</option><option value="III-03" >III-03 · 문화의 변동과 한국 문화의 세계화</option></optgroup><optgroup label="IV · 사회 계층과 불평등"><option value="IV-01" >IV-01 · 사회 계층화 현상의 이해</option><option value="IV-02" >IV-02 · 다양한 사회적 불평등과 해결 방안</option><option value="IV-03" >IV-03 · 불평등 해소를 위한 사회 복지 제도</option></optgroup><optgroup label="V · 현대의 사회 변동"><option value="V-01" >V-01 · 사회 변동과 사회 운동</option><option value="V-02" >V-02 · 세계화와 정보 사회</option><option value="V-03" >V-03 · 저출산·고령화와 다문화 사회</option><option value="V-04" >V-04 · 전 지구적 문제와 지속 가능한 사회</option></optgroup></select>
         <button id="nextConcept" class="btn btn-secondary btn-sm" type="button" aria-label="다음 중단원" >→</button>
         <div class="toolbar-spacer"></div>
         <button id="conceptHome" class="btn btn-ghost btn-sm" type="button">단원 목록</button>
@@ -3196,7 +3236,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         <div class="toolbar-spacer"></div>
         <button id="nextConceptFoot" class="btn btn-ghost btn-sm" type="button" >다음 중단원 →</button>
       </div>
-      <p class="sm-source">개념 검토는 2027 불후의 명강과 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 수록 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p></div></section>
+      <p class="sm-source">개념 검토는 2027 학습 범위를 따랐습니다. 빈출 표시는 평가원 기출 78문항의 자동 집계이며 5단원에는 개념 연습 20문항을 더했습니다. 기출 문항 저작권은 한국교육과정평가원에 있습니다.</p></div></section>
 </div>
 </body>
 </html>

@@ -2,151 +2,45 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="hvsdcm의 개인 웹사이트.">
+  <meta name="description" content="HVSDCM1">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="hvsdcm">
-  <meta property="og:description" content="hvsdcm의 개인 웹사이트.">
+  <meta property="og:title" content="HVSDCM1">
+  <meta property="og:description" content="HVSDCM1">
   <meta property="og:url" content="https://hvsdcm1.xyz/">
   <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="hvsdcm">
-  <meta name="twitter:description" content="hvsdcm의 개인 웹사이트.">
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <title>hvsdcm</title>
+  <title>HVSDCM1</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
-  <link rel="stylesheet" href="/assets/css/home.css?v=20260901-dark-workspace-v2">
-  <script src="/assets/js/home.js?v=20260901-dark-workspace-v2" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260902-monochrome-v1">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260902-wordmark-v1">
+  <script src="/assets/js/home.js?v=20260902-wordmark-v1" defer></script>
 </head>
 <body class="home-page">
-  <svg class="icon-sprite" aria-hidden="true" focusable="false">
-    <symbol id="icon-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
-    <symbol id="icon-book-open" viewBox="0 0 24 24"><path d="M2 4.5A3.5 3.5 0 0 1 5.5 1H11v18H5.5A3.5 3.5 0 0 0 2 22.5zM22 4.5A3.5 3.5 0 0 0 18.5 1H13v18h5.5a3.5 3.5 0 0 1 3.5 3.5z"/></symbol>
-    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-4 3 3 6-7"/></symbol>
-    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5"/></symbol>
-    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/></symbol>
-    <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
-    <symbol id="icon-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
-    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3z"/></symbol>
-    <symbol id="icon-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3 1.5-5A7 7 0 0 1 3 12V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></symbol>
-    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></symbol>
-    <symbol id="icon-signal" viewBox="0 0 24 24"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/></symbol>
-    <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22a8 8 0 0 1 16 0"/></symbol>
-  </svg>
-
-  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
-  <header class="topbar home-topbar">
-    <nav class="topbar-inner container-wide" aria-label="전역 내비게이션">
-      <div class="topbar-start">
-        <button id="menuButton" class="menu-button" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer"><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
-        <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
-      </div>
-      <div class="topbar-nav">
-        <a class="topbar-anchor" href="#contact">Contact</a>
-        <button class="btn btn-secondary btn-sm topbar-login" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>로그인</button>
-      </div>
-    </nav>
-  </header>
-
-  <div id="shade" class="shade" aria-hidden="true"></div>
-  <aside id="drawer" class="drawer" aria-label="주 메뉴">
-    <div class="drawer-head"><span class="brand"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</span><span class="drawer-state"><i aria-hidden="true"></i>PRIVATE SPACE</span></div>
-    <div class="drawer-public">
-      <p class="list-group-head">메뉴</p>
-      <nav class="list-group" aria-label="공개 메뉴">
-        <a class="list-row list-row-nav" href="#main"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-home"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">Overview</span><span class="list-row-sub">워크스페이스 소개</span></span></a>
-        <a class="list-row list-row-nav" href="#contact"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-message"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">Contact</span><span class="list-row-sub">연락 채널</span></span></a>
-      </nav>
-      <button class="btn btn-primary drawer-login" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>워크스페이스 열기</button>
-    </div>
-    <template data-study>
-      <div class="drawer-study">
-        <p class="list-group-head">학습</p>
-        <nav class="list-group" aria-label="학습 도구">
-          <a class="list-row list-row-nav" href="/WordMaster/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-book-open"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">WordMaster</span><span class="list-row-sub">DAY 1–50 · 2,000단어</span></span></a>
-          <a class="list-row list-row-nav" href="/smstudy/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사회·문화</span><span class="list-row-sub">13중단원 · 기출 78문항</span></span></a>
-          <a class="list-row list-row-nav" href="/gichul/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-file"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">기출</span><span class="list-row-sub">평가원 6월 · 9월 · 수능 문제지</span></span></a>
-        </nav>
-      </div>
-    </template>
-    <template data-owner>
-      <div class="drawer-owner">
-        <p class="list-group-head">계정</p>
-        <nav class="list-group" aria-label="계정 도구">
-          <span id="behaviorDrawerMount" class="drawer-exact-owner-slot"></span>
-          <a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">사용량</span><span class="list-row-sub">Codex · AI 하네스</span></span></a>
-          <a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">관리자</span><span class="list-row-sub">계정 · 접속 · 학습 데이터</span></span></a>
-        </nav>
-      </div>
-    </template>
-    <template data-behavior-drawer>
-      <a class="list-row list-row-nav" href="/behavior-lab/#live"><span class="list-row-lead"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg></span></span><span class="list-row-body"><span class="list-row-title">코인매매</span><span class="list-row-sub">Behavior Lab · 실투 현황</span></span></a>
-    </template>
-    <div class="drawer-bottom">
-      <div class="drawer-social">
-        <a class="icon-link" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener" aria-label="Discord — hvsdcm (새 창)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5l-.7 1.2a18.3 18.3 0 0 0-5.5 0l-.6-1.2a19.7 19.7 0 0 0-4.9 1.5C.5 9-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a13.1 13.1 0 0 1-1.9-.9l.4-.3c3.9 1.8 8.2 1.8 12.1 0l.4.3a12.3 12.3 0 0 1-1.9.9l1.2 2a19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.4-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg></a>
-        <a class="icon-link" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener" aria-label="Instagram — hvsdcm.exe (새 창)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg></a>
-      </div>
-      <button id="drawerLogout" class="sidebar-item drawer-logout" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-log-out"></use></svg>로그아웃</button>
-    </div>
-  </aside>
-
-  <main id="main" tabindex="-1">
-    <section class="hero" aria-labelledby="welcomeTitle">
-      <div class="container-wide hero-grid">
-        <div class="hero-copy-block">
-          <p class="hero-kicker"><span class="kicker-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg></span>PRIVATE DIGITAL SPACE</p>
-          <h1 id="welcomeTitle" class="display-xl hero-title">Built for focus.<br><span>Nothing else.</span></h1>
-          <p class="hero-copy">필요한 것만 빠르게 열고, 나머지는 조용히 숨겨 둡니다. 단순하고 안전한 개인 워크스페이스.</p>
-          <div id="account" class="account hero-actions">
-            <button id="loginBtn" class="btn btn-primary btn-lg" type="button" data-login-trigger><svg class="ui-icon" aria-hidden="true"><use href="#icon-user"></use></svg>워크스페이스 열기</button>
-            <a class="text-link" href="#contact">연락처 보기 <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
-          </div>
-          <ul class="hero-trust" aria-label="워크스페이스 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg>Private first</li><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg>Dark only</li><li><svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>One workspace</li></ul>
-        </div>
-        <aside class="workspace-card" aria-label="워크스페이스 상태">
-          <div class="workspace-card-head"><span>WORKSPACE / 01</span><span class="live-chip"><i aria-hidden="true"></i>READY</span></div>
-          <div class="workspace-visual" aria-hidden="true"><img src="/assets/logo.svg" alt=""><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span></div>
-          <div class="workspace-card-title"><p>Personal command center</p><strong>hvsdcm</strong></div>
-          <dl class="workspace-stats"><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg>ACCESS</dt><dd>Private</dd></div><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-signal"></use></svg>STATUS</dt><dd>Online</dd></div><div><dt><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg>THEME</dt><dd>Dark</dd></div></dl>
-        </aside>
-      </div>
-    </section>
-
-    <template data-behavior-owner>
-      <section id="behaviorLabEntry" class="owner-section reveal" aria-labelledby="behaviorLabEntryTitle">
-        <div class="container-wide">
-          <header class="section-heading"><div><p class="eyebrow">OWNER TOOL</p><h2 id="behaviorLabEntryTitle">내 도구</h2></div><span class="section-number">01</span></header>
-          <a class="owner-card" href="/behavior-lab/#paper"><span class="owner-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chart"></use></svg></span><span class="owner-card-body"><small>LIVE PAPER MODELS</small><strong>Behavior Lab</strong><span>$100 모의투자 모델과 실시간 판단을 한 화면에서 비교합니다.</span></span><span class="owner-card-meta"><span>PAPER ONLY</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></span></a>
-        </div>
-      </section>
-    </template>
-    <div id="behaviorOwnerMount"></div>
-
-    <section id="contact" class="contact-section reveal" aria-labelledby="contactTitle">
-      <div class="container-wide">
-        <header class="section-heading"><div><p class="eyebrow">CONTACT</p><h2 id="contactTitle">필요할 때 연결하세요.</h2></div><span class="section-number">02</span></header>
-        <div class="contact-grid">
-          <a class="contact-card" href="https://discord.com/users/hvsdcm" target="_blank" rel="noopener"><span class="contact-icon discord-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4a19.8 19.8 0 0 0-4.9-1.5l-.7 1.2a18.3 18.3 0 0 0-5.5 0l-.6-1.2a19.7 19.7 0 0 0-4.9 1.5C.5 9-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a13.1 13.1 0 0 1-1.9-.9l.4-.3c3.9 1.8 8.2 1.8 12.1 0l.4.3a12.3 12.3 0 0 1-1.9.9l1.2 2a19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.4-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg></span><span><small>FASTEST</small><strong>Discord</strong><span>@hvsdcm</span></span><svg class="ui-icon card-arrow" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
-          <a class="contact-card" href="https://instagram.com/hvsdcm.exe" target="_blank" rel="noopener"><span class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg></span><span><small>UPDATES</small><strong>Instagram</strong><span>@hvsdcm.exe</span></span><svg class="ui-icon card-arrow" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
-        </div>
-      </div>
-    </section>
+  <main id="main">
+    <button id="wordmark" class="wordmark" type="button" data-login-trigger aria-label="HVSDCM1 열기"><span aria-hidden="true">HVSDCM1</span></button>
   </main>
 
-  <footer class="footer"><div class="container-wide footer-inner"><span class="brand footer-brand"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</span><span class="footer-note">PERSONAL SPACE · SEOUL</span><span class="footer-copy">© 2026</span></div></footer>
+  <div id="shade" class="shade" aria-hidden="true"></div>
+  <aside id="drawer" class="drawer" aria-label="개인 메뉴" aria-hidden="true">
+    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기">×</button></header>
+    <nav class="drawer-links" aria-label="바로가기">
+      <span id="studyLinks"></span>
+      <span id="ownerLinks"></span>
+    </nav>
+    <button id="drawerLogout" class="drawer-logout" type="button">로그아웃</button>
+  </aside>
 
   <div id="loginModal" class="sheet-backdrop" aria-hidden="true">
     <form id="loginForm" class="sheet login-sheet" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-      <div class="sheet-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-lock"></use></svg></div>
-      <div><p class="eyebrow">PRIVATE ACCESS</p><h2 id="loginTitle" class="sheet-title">워크스페이스 로그인</h2><p class="sheet-sub">계정 정보를 입력하면 원래 보던 화면으로 이어집니다.</p></div>
-      <div class="field"><label class="field-label" for="username">아이디</label><input class="field-input" id="username" autocomplete="username" placeholder="아이디" required></div>
-      <div class="field"><label class="field-label" for="password">비밀번호</label><input class="field-input" id="password" type="password" autocomplete="current-password" placeholder="비밀번호" required></div>
+      <div><h1 id="loginTitle" class="sheet-title">로그인</h1></div>
+      <div class="field"><label class="field-label" for="username">아이디</label><input class="field-input" id="username" autocomplete="username" required></div>
+      <div class="field"><label class="field-label" for="password">비밀번호</label><input class="field-input" id="password" type="password" autocomplete="current-password" required></div>
       <div id="loginError" class="field-error" role="alert"></div>
-      <div class="sheet-actions"><button class="btn btn-primary btn-lg login-submit" type="submit">계속</button><button class="btn btn-ghost" type="button" id="closeLogin">닫기</button></div>
+      <div class="sheet-actions"><button class="btn btn-primary btn-lg" type="submit">계속</button><button class="btn btn-ghost" type="button" id="closeLogin">닫기</button></div>
     </form>
   </div>
 </body>

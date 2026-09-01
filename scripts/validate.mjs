@@ -112,7 +112,7 @@ function loginGateOf(htmlFile, source) {
 }
 
 // 미로그인 방문자에게 학습 내용을 노출하지 않는다는 계약을 **게시되는 모든 HTML**에 건다
-// (plan.md §3). 랜딩은 <template data-study>로, 나머지 화면은 자기 게이트 스크립트로
+// (plan.md §3). 랜딩은 로그인 뒤 JS가 링크를 만들고, 나머지 화면은 자기 게이트 스크립트로
 // 가려진다. 그 어느 쪽도 아닌 게시 HTML은 학습 문구를 담고 있으면 안 된다.
 const STUDY_KEYWORDS = ['학습', 'WordMaster', 'smstudy', 'Study'];
 function validateStudyExposure() {
@@ -124,10 +124,13 @@ function validateStudyExposure() {
   check(!existsSync(path.join(ROOT, 'smstudy/assets/kice')), 'learning content: public smstudy/assets/kice must stay absent');
   const wordLoader = readFileSync(path.join(ROOT, 'WordMaster/assets/js/words.js'), 'utf8');
   const smstudyLoader = readFileSync(path.join(ROOT, 'smstudy/assets/js/data.js'), 'utf8');
+  const plstudyLoader = readFileSync(path.join(ROOT, 'plstudy/assets/js/data.js'), 'utf8');
   check(wordLoader.includes('/api/learning/wordmaster') && !wordLoader.includes('d01-01'),
     'learning content: public WordMaster loader must contain only the authenticated API bootstrap');
   check(smstudyLoader.includes('/api/learning/smstudy') && !smstudyLoader.includes('QUESTION_ROWS'),
     'learning content: public smstudy loader must contain only the authenticated API bootstrap');
+  check(plstudyLoader.includes('/api/learning/plstudy') && !plstudyLoader.includes('PLSTUDY_DATA'),
+    'learning content: public plstudy loader must contain only the authenticated API bootstrap');
   for (const file of walk(path.join(ROOT, '_learning'), () => true)) {
     check(isJekyllHidden(relative(file)), `${relative(file)}: protected source escaped the Jekyll-hidden _learning boundary`);
   }
@@ -224,47 +227,25 @@ function validateUiContracts() {
   const usageCss = readFileSync(path.join(ROOT, 'usage/assets/css/usage.css'), 'utf8');
   const usageJs = readFileSync(path.join(ROOT, 'usage/assets/js/usage.js'), 'utf8');
 
-  // 조건을 includes 두 개로 나누면 서로 다른 요소를 봐도 통과한다 — 한 태그 안에서 매칭한다 (review-3a M-6).
-  // 학습 드로어는 미로그인 문서에 렌더되면 안 된다 — <template data-study> 안에만 존재한다 (사이클 #3 게이팅).
-  check(/<template data-study>[^]*?class="drawer-study"/u.test(homeHtml), 'home: STUDY drawer must live inside a <template data-study> (login-gated)');
+  // 랜딩의 본문은 워드마크 하나뿐이고, 로그인한 경우에만 빈 드로어에 링크를 조립한다.
+  check(/<main id="main">\s*<button id="wordmark"[^]*?HVSDCM1[^]*?<\/button>\s*<\/main>/u.test(homeHtml),
+    'home: visible landing must contain only the HVSDCM1 wordmark');
+  check(homeHtml.includes('id="studyLinks"') && homeHtml.includes('id="ownerLinks"'),
+    'home: signed-in navigation mount points are missing');
   // 대화상자 의미는 백드롭이 아니라 시트 본체(form.sheet)에 붙는다 (review-3a N-7).
   check(/id="loginForm"[^>]*class="[^"]*\bsheet\b[^"]*"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="loginTitle"/u.test(homeHtml),
     'home: login sheet itself must carry role="dialog" aria-modal="true" aria-labelledby="loginTitle"');
   check(!/id="loginModal"[^>]*(?:role="dialog"|aria-modal=)/u.test(homeHtml),
     'home: sheet backdrop must not carry dialog semantics — they belong on the .sheet form');
   check(/id="loginTitle"/u.test(homeHtml), 'home: login dialog label target #loginTitle is missing');
-  // 랜딩 3곳(상단바·드로어·푸터)은 같은 외부 SVG 자산을 사용한다. 로고 기하를 HTML에
-  // 복제하지 않아야 파비콘·내부 화면과 한 번에 바뀐다.
-  const logoSvg = readFileSync(path.join(ROOT, 'assets/logo.svg'), 'utf8');
-  const logoPaths = [...logoSvg.matchAll(/<path\b[^>]*\/>/gu)];
-  check(logoPaths.length === 3, `assets/logo.svg: expected exactly 3 path shapes but found ${logoPaths.length}`);
-  const brandContainers = [...homeHtml.matchAll(/<(a|span)\b[^>]*\sclass="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/gu)]
-    .filter(([, , classValue]) => classValue.split(/\s+/u).includes('brand'));
-  check(brandContainers.length === 3,
-    `home: expected exactly 3 .brand containers (topbar·drawer·footer) but found ${brandContainers.length}`);
-  const intactBrandMarks = brandContainers.filter(([, , , inner]) => {
-    return /^<img\b[^>]*class="brand-mark"[^>]*src="\/assets\/logo\.svg"[^>]*alt=""[^>]*>hvsdcm$/u.test(inner.trim());
-  }).length;
-  check(intactBrandMarks === brandContainers.length,
-    `home: ${brandContainers.length - intactBrandMarks} of ${brandContainers.length} .brand containers do not use /assets/logo.svg directly before "hvsdcm"`);
   check(homeHtml.includes('data-login-trigger'), 'home: login trigger hook is missing');
-  check(homeHtml.includes('class="skip-link"'), 'home: skip navigation link is missing');
-  check(/class="[^"]*\breveal\b/u.test(homeHtml), 'home: scroll-reveal sections are missing');
-  check(/id="menuButton"[^>]*aria-expanded="false"[^>]*aria-controls="drawer"/u.test(homeHtml), 'home: menu button accessibility wiring is missing');
-  check(homeCss.includes('.drawer.logged .drawer-study'), 'home: STUDY drawer must depend on logged-in state');
-  check(homeCss.includes('.drawer.logged .drawer-owner'), 'home: owner-only drawer group must depend on logged-in state');
-  check(homeCss.includes('.account.logged'), 'home: CTA switch must depend on logged-in state');
-  check(homeCss.includes('.hero-title[data-user]'), 'home: personalized title responsive rule is missing');
-  // 주입은 로그인 판정 분기 안에서만 일어나야 한다 — 무조건 mount하면 게이팅이 무너진다.
-  check(/if \(savedUsername && token\) \{[^]*?mountDrawerTemplates\(/u.test(homeJs),
-    'home: mountDrawerTemplates() must run only inside the logged-in branch');
-  check(homeJs.includes("selector: 'template[data-study]'"), 'home: study template mount routine is missing');
-  check(homeJs.includes('prefers-reduced-motion'), 'home: scroll reveal must respect reduced-motion preference');
-  check(homeJs.includes('setLoginBackgroundInert(true)') && homeJs.includes('setLoginBackgroundInert(false)'),
+  check(/if \(signedIn\) mountSignedInLinks\(\)/u.test(homeJs),
+    'home: signed-in navigation must mount only inside the authenticated branch');
+  check(homeJs.includes('setBackgroundInert(true)') && homeJs.includes('setBackgroundInert(false)'),
     'home: the modal must make page siblings inert only while it is open');
-  check(homeJs.includes("event.key === 'Tab'") && homeJs.includes('loginFocusables()'),
+  check(homeJs.includes("event.key !== 'Tab'") && homeJs.includes('trapLoginFocus(event)'),
     'home: the login dialog must trap Tab and Shift+Tab focus');
-  check(homeJs.includes('target?.focus()'),
+  check(homeJs.includes('opener?.focus()'),
     'home: closing the login dialog must restore focus to its opener');
 
   check(wordMasterJs.includes('wrongVisible: 50')
@@ -276,32 +257,16 @@ function validateUiContracts() {
     && smstudyJs.includes('bindMistakeDisclosures'),
   'smstudy: wrong-answer detail cards must render lazily inside disclosures');
 
-  // ---- 랜딩 학습 은닉 완결 (plan.md §1-1) ----
-  // 로그인해도 **본문**에는 학습이 없다. 진입은 좌상단 드로어 하나뿐이다.
-  // 두 조건이 함께 있어야 계약이 닫힌다: (1) 로그인-후 템플릿이 드로어 안에만 있고,
-  // (2) 주입 루틴이 드로어만 훑는다. 하나만 걸면 나머지 한쪽으로 학습이 본문에 돌아온다.
-  //
-  // 이 검사가 **못 보는 것**: 본문에 학습 문구를 *정적으로* 적는 경우는 여기가 아니라
-  // validateLandingGating()의 키워드·경로 검사가 잡는다. 그리고 home.js 밖에서
-  // (다른 스크립트가) DOM을 조립해 넣는 경로는 정적으로 볼 수 없다.
+  // 앱 진입은 모두 드로어의 두 빈 마운트 지점으로만 들어간다.
   const drawerMarkup = /<aside id="drawer"[^]*?<\/aside>/u.exec(homeHtml)?.[0] ?? '';
   check(drawerMarkup.length > 0,
     'home: the drawer landmark could not be located — the drawer-only study contract cannot be checked');
-  // 템플릿 종류(data-study / data-owner)를 손으로 적지 않는다 — 문서에 있는 것을 센다.
-  const templateTag = /<template data-(study|owner)>/gu;
-  const studyTemplateCount = (homeHtml.match(templateTag) || []).length;
-  const drawerTemplateCount = (drawerMarkup.match(templateTag) || []).length;
-  check(studyTemplateCount > 0 && studyTemplateCount === drawerTemplateCount,
-    `home: ${studyTemplateCount - drawerTemplateCount} of ${studyTemplateCount} login-gated <template> blocks live outside the drawer — gated entry points belong to the drawer only (plan.md §1-1)`);
-  check(/elements\.drawer\.querySelectorAll\(selector\)/u.test(homeJs),
-    'home: mountDrawerTemplates() must scope its query to the drawer so a template placed in the body can never mount (plan.md §1-1)');
-  // 소유자 전용 템플릿은 소유자 판정에서만 복제된다 (review WP1 M-5).
-  // 이 검사가 **못 보는 것**: 판정 자체가 옳은지(소유자 이름의 정오)와 서버의 강제 여부.
-  // 서버 쪽은 worker/test.mjs가 본다 — 두 검사가 함께 있어야 계약이 닫힌다.
-  check(/\{ selector: 'template\[data-owner\]', ownerOnly: true \}/u.test(homeJs),
-    'home: the owner-only drawer template must be declared with ownerOnly: true (review WP1 M-5)');
-  check(/if \(ownerOnly && !owner\) continue;/u.test(homeJs),
-    'home: an ownerOnly template must never be cloned for a non-owner — hiding it with CSS is not gating (LESSONS)');
+  check(drawerMarkup.includes('id="studyLinks"') && drawerMarkup.includes('id="ownerLinks"'),
+    'home: navigation may mount only inside the drawer');
+  check(homeJs.includes('appendLinks(elements.studyLinks') && homeJs.includes('appendLinks(elements.ownerLinks'),
+    'home: signed-in and owner-only entries must target their scoped drawer mounts');
+  check(homeJs.includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;"),
+    'home: owner-only links must never be created for a non-owner');
 
   // ---- 사용량 화면 (plan.md §1-2 / §3.2) ----
   // 여기서 보는 것은 **마크업 구조 계약**뿐이다. 렌더 로직(버킷 키 도출, 모르는 키 폴백,
@@ -1181,16 +1146,17 @@ function validateSmStudyData() {
 
   const subunits = data.UNITS.flatMap((unit) => unit.subs);
   const subunitIds = new Set(subunits.map((subunit) => subunit.id));
-  const questionIds = new Set(data.QUESTION_ROWS.map((question) => question.id));
-  check(data.UNITS.length === 4, `smstudy: expected 4 units, found ${data.UNITS.length}`);
-  check(subunits.length === 13, `smstudy: expected 13 subunits, found ${subunits.length}`);
+  const questionIds = new Set(data.QUESTIONS.map((question) => question.id));
+  check(data.UNITS.length === 5, `smstudy: expected 5 units, found ${data.UNITS.length}`);
+  check(subunits.length === 17, `smstudy: expected 17 subunits, found ${subunits.length}`);
   check(subunitIds.size === subunits.length, 'smstudy: subunit IDs must be unique');
   check(data.QUESTION_ROWS.length === 78, `smstudy: expected 78 questions, found ${data.QUESTION_ROWS.length}`);
-  check(questionIds.size === data.QUESTION_ROWS.length, 'smstudy: question IDs must be unique');
-  check(data.QUESTIONS.length === data.QUESTION_ROWS.length, 'smstudy: derived question count mismatch');
+  check(data.PRACTICE_ROWS.length === 20, `smstudy: expected 20 concept practice questions, found ${data.PRACTICE_ROWS.length}`);
+  check(data.QUESTIONS.length === 98, `smstudy: expected 98 total questions, found ${data.QUESTIONS.length}`);
+  check(questionIds.size === data.QUESTIONS.length, 'smstudy: question IDs must be unique');
   check(data.CHOICE_MARKS.join('') === '12345', 'smstudy: answer choices must use plain 1-5 labels');
   const notebookIds = Object.keys(notebookData.NOTEBOOKS || {});
-  check(notebookIds.length === 13, `smstudy: expected 13 concept notebooks, found ${notebookIds.length}`);
+  check(notebookIds.length === 17, `smstudy: expected 17 concept notebooks, found ${notebookIds.length}`);
   check(notebookData.LEARNING_DESIGN?.steps?.length === 4, 'smstudy: learning design must contain four study steps');
   check(notebookData.LEARNING_DESIGN?.evidence?.length >= 3, 'smstudy: learning design evidence is incomplete');
 
@@ -1418,7 +1384,7 @@ function validateSmStudyData() {
   // "쓴 형식이 렌더러에 존재하는가"뿐이다 (아래 단원별 kind 검사).
 
   for (const subunit of subunits) {
-    const questions = data.QUESTION_ROWS.filter((question) => question.sub === subunit.id);
+    const questions = data.QUESTIONS.filter((question) => question.sub === subunit.id);
     const notebook = notebookData.NOTEBOOKS?.[subunit.id];
     const explanation = explanationData.GUIDES?.[subunit.id];
     // 3a에서 sub 오분류 5건을 정정해 단원별 문항 수가 2~10으로 갈라졌다 (kice-analysis.md §3).
@@ -1495,13 +1461,13 @@ function validateSmStudyData() {
   for (const notebookId of notebookIds) check(subunitIds.has(notebookId), `smstudy: notebook ${notebookId} references unknown subunit`);
   // 콘텐츠 문자열 하드코딩 검사는 전부 구조 계약으로 대체했다 (plan.md R7, review M-7).
   // 기준선 2c49cb5에 있던 7건(NOTEBOOKS 5건 + explanation-data 2건)이 모두 사라졌다.
-  check(Object.keys(explanationData.GUIDES || {}).length === 13, 'smstudy: expected 13 explanation guides');
+  check(Object.keys(explanationData.GUIDES || {}).length === 17, 'smstudy: expected 17 explanation guides');
   check(Boolean(explanationData.EBS_PAST_EXAMS?.startsWith('https://www.ebsi.co.kr/')), 'smstudy: EBS explanation source link is missing');
 
   // 태그 양방향 정합 — 문항의 태그는 전부 그 단원의 exam.tags 안에 있어야 하고,
   // 역으로 exam.tags는 전부 최소 1문항에 쓰여야 한다 (죽은 태그 금지, plan.md §5).
   const tagUsage = new Set();
-  for (const question of data.QUESTION_ROWS) {
+  for (const question of data.QUESTIONS) {
     const declared = notebookData.NOTEBOOKS?.[question.sub]?.exam?.tags || [];
     check(Array.isArray(question.tags) && question.tags.length >= 1 && question.tags.length <= 3,
       `smstudy: ${question.id} must carry 1-3 concept tags`);
@@ -1535,10 +1501,43 @@ function validateSmStudyData() {
     referencedImages.add(path.basename(question.image));
   }
 
+  for (const question of data.PRACTICE_ROWS) {
+    check(subunitIds.has(question.sub), `smstudy: ${question.id} references unknown subunit ${question.sub}`);
+    check(Array.isArray(question.choices) && question.choices.length === 5, `smstudy: ${question.id} must have five choices`);
+    check(Number.isInteger(question.answerNumber) && question.answerNumber >= 1 && question.answerNumber <= 5, `smstudy: ${question.id} has invalid answer`);
+    check(typeof question.stem === 'string' && question.stem.length >= 10, `smstudy: ${question.id} stem is incomplete`);
+  }
+
   const imageDirectory = path.join(ROOT, '_learning/smstudy/kice');
   const imageFiles = readdirSync(imageDirectory).filter((file) => file.endsWith('.webp'));
   check(imageFiles.length === 78, `smstudy: expected 78 WebP images, found ${imageFiles.length}`);
   check(imageFiles.every((file) => referencedImages.has(file)), 'smstudy: unreferenced WebP images exist');
+}
+
+function validatePlStudyData() {
+  const data = evaluateBrowserData('_learning/plstudy/data.js', 'PLSTUDY_DATA');
+  check(Boolean(data), 'plstudy: PLSTUDY_DATA export is missing');
+  if (!data) return;
+  const subunits = data.UNITS?.flatMap((unit) => unit.subs || []) || [];
+  const subunitIds = new Set(subunits.map((subunit) => subunit.id));
+  check(data.UNITS?.length === 6, `plstudy: expected 6 units, found ${data.UNITS?.length || 0}`);
+  check(subunits.length === 18, `plstudy: expected 18 subunits, found ${subunits.length}`);
+  check(subunitIds.size === 18, 'plstudy: subunit IDs must be unique');
+  check(data.QUESTIONS?.length === 90, `plstudy: expected 90 questions, found ${data.QUESTIONS?.length || 0}`);
+  const questionIds = new Set();
+  const coverage = new Map([...subunitIds].map((id) => [id, 0]));
+  for (const question of data.QUESTIONS || []) {
+    check(typeof question.id === 'string' && !questionIds.has(question.id), `plstudy: duplicate or empty question id ${question.id}`);
+    questionIds.add(question.id);
+    check(subunitIds.has(question.sub), `plstudy: ${question.id} points to unknown subunit ${question.sub}`);
+    if (coverage.has(question.sub)) coverage.set(question.sub, coverage.get(question.sub) + 1);
+    check(typeof question.prompt === 'string' && question.prompt.trim().length >= 8, `plstudy: ${question.id} prompt is incomplete`);
+    check(Array.isArray(question.choices) && question.choices.length === 5, `plstudy: ${question.id} must have five choices`);
+    check(new Set(question.choices || []).size === 5, `plstudy: ${question.id} choices must be distinct`);
+    check(Number.isInteger(question.answer) && question.answer >= 0 && question.answer < 5, `plstudy: ${question.id} answer index is invalid`);
+    check(typeof question.explanation === 'string' && question.explanation.trim().length >= 12, `plstudy: ${question.id} explanation is incomplete`);
+  }
+  for (const [subunit, count] of coverage) check(count === 5, `plstudy: ${subunit} must have exactly five questions, found ${count}`);
 }
 
 // CSS를 중괄호 깊이로 훑어 커스텀 프로퍼티 *정의*를 셀렉터·at-rule 맥락과 함께 모은다.
@@ -1613,9 +1612,9 @@ function validateDesignTokens() {
     '--text': '#f5f5f7',
     '--text-2': '#a1a1a6',
     '--line': 'rgba(255,255,255,.12)',
-    '--green': '#30d158',
-    '--red': '#ff453a',
-    '--accent': '#2997ff',
+    '--green': '#d6d6d8',
+    '--red': '#e5e5e7',
+    '--accent': '#f5f5f7',
   };
   const systemRoot = systemRoots[0]?.[1] ?? '';
   for (const [name, expectedValue] of Object.entries(canonical)) {
@@ -1926,17 +1925,12 @@ function validateEmojiSystem() {
       check(count <= 1,
         `${file}: a .list-row produces ${count} emoji — one emoji per row (DESIGN.md §5)`);
     }
-    if (file === 'index.html') {
-      check(rows >= 3, `${file}: only ${rows} .list-row elements were sliced — the per-row emoji check is inert`);
-    }
   }
 
   // 정적 셸은 OS 의존 이모지를 제거하고 하나의 선형 SVG 아이콘 세트를 쓴다. 과목 내부의
   // 기존 데이터 이모지는 아래 앱별 매핑 검사가 계속 잠근다.
   const landingHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  check(!landingHtml.includes('data-emoji='), 'index.html: static navigation must use vector icons, not emoji slots');
-  check((landingHtml.match(/class="ui-icon(?:\s[^"]*)?"/gu) || []).length >= 12,
-    'index.html: the vector icon system looks truncated');
+  check(!landingHtml.includes('data-emoji='), 'index.html: minimal landing must not include emoji slots');
 }
 
 // smstudy의 단원 이모지는 마크업이 아니라 데이터 매핑(SMSTUDY_DATA.EMOJI)에서 나온다.
@@ -2104,15 +2098,14 @@ function validateEmojiCrossMaps() {
 }
 
 function validateBrandName() {
-  // C-5: 브랜드는 소문자 "hvsdcm" 한 덩어리 (plan.md R-5). 분리 표기 전면 금지.
-  const separated = /HVS[\s\-_]?DCM|hvs[\s\-_]dcm/u;
+  // 브랜드는 hvsdcm 또는 새 워드마크 HVSDCM1 한 덩어리로만 쓴다.
+  const separated = /(?:HVS|hvs)[\s\-_]+(?:DCM|dcm)/u;
   for (const file of [...publishedHtml(), ...walk(ROOT, (item) => item.endsWith('.css'))]) {
-    check(!separated.test(readFileSync(file, 'utf8')), `${relative(file)}: separated brand name found (use "hvsdcm" in one piece)`);
+    check(!separated.test(readFileSync(file, 'utf8')), `${relative(file)}: separated brand name found`);
   }
 
-  // 슬래시·가운뎃점·마침표 분리와 대문자 변형은 전 표면에서 금지 (3b에서 확대).
+  // 슬래시·가운뎃점·마침표 분리만 금지한다. 랜딩 워드마크는 의도적으로 HVSDCM1이다.
   const separator = /hvs\s*[/·.]\s*dcm/iu;
-  const casing = /HVSDCM|HvsDcm|Hvsdcm|hvsDcm|HVSdcm|hvsDCM/u;
   const brandSurfaces = [
     ...[...publishedHtml(), ...walk(ROOT, (item) => item.endsWith('.css'))].map(relative),
     ...publishedScripts(),
@@ -2120,8 +2113,9 @@ function validateBrandName() {
   for (const file of brandSurfaces) {
     const source = readFileSync(path.join(ROOT, file), 'utf8');
     check(!separator.test(source), `${file}: brand must not be split (use "hvsdcm" in one piece)`);
-    check(!casing.test(source), `${file}: brand must appear only as lowercase "hvsdcm"`);
   }
+  check(/id="wordmark"[^>]*>[^]*?HVSDCM1[^]*?<\/button>/u.test(readFileSync(path.join(ROOT, 'index.html'), 'utf8')),
+    'index.html: the landing wordmark must be exactly HVSDCM1');
 
   // R-5의 "자간 분해 금지"는 문자열 스캔으로 잡히지 않는다 — .brand 규칙의 letter-spacing을 직접 본다
   // (review-3a N-8). h v s d c m 처럼 벌어진 워드마크는 문자열상 "hvsdcm"이라 통과해 버린다.
@@ -2147,9 +2141,10 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/home.js?v=20260901-dark-workspace-v2'],
+    'index.html': ['/assets/js/home.js?v=20260902-wordmark-v1'],
     'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260901-dark-workspace-v3'],
     'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
+    'plstudy/index.html': ['/account.js', 'assets/js/data.js', 'assets/js/app.js'],
     'admin/index.html': ['/admin/assets/js/admin.js'],
     'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-competition-review-v1', '/usage/assets/js/usage.js?v=20260901-competition-review-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
@@ -2173,9 +2168,10 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/assets/css/home.css?v=20260901-dark-workspace-v2'],
+    'index.html': ['/assets/css/system.css?v=20260902-monochrome-v1', '/assets/css/home.css?v=20260902-wordmark-v1'],
     'WordMaster/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css?v=20260901-dark-workspace-v3'],
     'smstudy/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css'],
+    'plstudy/index.html': ['/assets/css/system.css?v=20260902-monochrome-v1', 'assets/css/style.css?v=20260902-v1'],
     'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
     'usage/index.html': ['/assets/css/system.css?v=20260901-competition-review-v1', '/usage/assets/css/usage.css?v=20260901-competition-review-v1'],
     'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/gichul/gichul.css?v=20260829-n4'],
@@ -2202,6 +2198,7 @@ function validateGlobalsAndOrder() {
     'index.html: home.js must load with defer');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-app="wordmaster"'), 'WordMaster: account.js must declare data-app="wordmaster"');
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-app="smstudy"'), 'smstudy: account.js must declare data-app="smstudy"');
+  check(readFileSync(path.join(ROOT, 'plstudy/index.html'), 'utf8').includes('data-app="plstudy"'), 'plstudy: account.js must declare data-app="plstudy"');
   // 기출은 계정에 저장할 진도가 없다 — account.js를 게이트 전용 모드(data-key 없음)로 싣는다.
   // data-key가 붙는 순간 없는 진도를 /api/progress/gichul에 밀고, Worker의 VALID_APPS에
   // 없는 앱이라 매 방문이 404가 된다.
@@ -2222,6 +2219,7 @@ function validateGlobalsAndOrder() {
   check(readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8').includes('hvsdcm.admin'), 'admin.js: admin session key is missing');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-key="wordmaster2000.quiz.v1"'), 'WordMaster: study DB key is missing');
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-key="samun2027.study.v1"'), 'smstudy: study DB key is missing');
+  check(readFileSync(path.join(ROOT, 'plstudy/index.html'), 'utf8').includes('data-key="politicslaw2027.study.v1"'), 'plstudy: study DB key is missing');
 }
 
 function validateOgImageLock() {
@@ -2230,12 +2228,11 @@ function validateOgImageLock() {
   // 브랜드 표기를 바꾸는 커밋은 (1) 아래 brand가 어긋나 즉시 실패하고,
   // (2) 잠금을 갱신하려면 og.png를 실제로 재생성해 sha256을 다시 계산해야 한다.
   const OG_LOCK = {
-    brand: 'hvsdcm',
     sha256: '4d702de6f212f303c88a51d99eb63344ed0503bce69bb255ddb490fe61dcf6ad',
   };
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  check(new RegExp(`class="brand"[^>]*><img\\b[^>]*class="brand-mark"[^>]*src="\\/assets\\/logo\\.svg"[^>]*>${OG_LOCK.brand}<`, 'u').test(homeHtml),
-    'og lock: index.html wordmark != OG_LOCK.brand — regenerate assets/og.png with the new brand, then update OG_LOCK (brand + sha256) together');
+  check(/id="wordmark"[^>]*>[^]*?HVSDCM1[^]*?<\/button>/u.test(homeHtml),
+    'og lock: index.html must preserve the HVSDCM1 wordmark');
   check(/property="og:image"[^>]*assets\/og\.png/u.test(homeHtml) && /name="twitter:image"[^>]*assets\/og\.png/u.test(homeHtml),
     'og lock: index.html og:image/twitter:image must reference assets/og.png');
   check(createHash('sha256').update(readFileSync(path.join(ROOT, 'assets/og.png'))).digest('hex') === OG_LOCK.sha256,
@@ -2437,80 +2434,51 @@ function validateContrastTable() {
 }
 
 function validateLandingGating() {
-  // 사이클 #3 게이팅 잠금 (plan.md D7 철회) — 미로그인 랜딩은 "개인 웹사이트"여야 한다.
-  // 사이클5에서 계약이 한 단계 더 좁아졌다: 로그인해도 본문은 학습을 말하지 않고,
-  // 학습·사용량 진입은 드로어 템플릿에만 있다 (plan.md §1-1 / §3.3).
-  //
-  // 이 검사가 **못 보는 것**: 런타임에 조립돼 삽입되는 링크·문구, 그리고 Worker가 같은
-  // 규칙을 강제하는지. 정적으로 볼 수 있는 것은 문서에 무엇이 적혀 있는가까지다.
+  // 미로그인 랜딩은 HVSDCM1 워드마크 하나만 보인다. 앱 링크는 HTML에 두지 않고
+  // 로그인 상태를 확인한 뒤 home.js가 드로어에 생성한다.
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const homeJs = readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8');
-  const templatePattern = /<template data-(?:study|owner|behavior-owner|behavior-drawer)>[^]*?<\/template>/gu;
-  const gatedTemplates = homeHtml.match(templatePattern) || [];
-  const staticMarkup = homeHtml.replace(templatePattern, '');
-  const templateMarkup = gatedTemplates.join('\n');
-
-  // 로그인-후 진입 경로 목록을 손으로 적지 않는다 — 템플릿 자신에서 도출한다.
-  // 드로어에 항목을 추가하면 그 경로가 자동으로 "정적 마크업 금지" 대상이 된다.
-  // '/admin/'만 예외로 더한다: 템플릿에는 없지만(진입은 로그인 후 타이틀 링크가 만든다)
-  // 미로그인 문서에 노출돼선 안 되는 경로다.
-  const templateTargets = [...new Set(
-    [...templateMarkup.matchAll(/href="(\/[\w./-]*\/)(?:[?#][^"]*)?"/gu)].map(([, href]) => href),
+  const dynamicTargets = [...new Set(
+    [...homeJs.matchAll(/\['(\/[\w./-]+\/?(?:#[\w-]+)?)',\s*'[^']+'/gu)].map(([, href]) => href),
   )];
-  check(templateTargets.length >= 3,
-    `index.html: only ${templateTargets.length} gated entry paths were derived from <template data-study> — this check is inert`);
+  check(dynamicTargets.length >= 7,
+    `home.js: only ${dynamicTargets.length} signed-in entries were derived — this check is inert`);
 
-  // 1) 미로그인 상태로 렌더되는 정적 마크업에 로그인-후 진입 경로가 있으면 실패.
-  for (const appPath of [...new Set([...templateTargets, '/admin/'])]) {
-    check(!new RegExp(`(?:href|src|action)=["']${appPath.replaceAll('/', '\\/')}`, 'u').test(staticMarkup),
+  for (const target of dynamicTargets) {
+    const appPath = target.split('#')[0];
+    check(!new RegExp(`(?:href|src|action)=["']${appPath.replaceAll('/', '\\/')}`, 'u').test(homeHtml),
       `index.html: logged-out static markup must not link to gated path ${appPath}`);
   }
-  // 2) 학습을 드러내는 문구도 정적 마크업에 남으면 안 된다 (메타/OG 포함 전체 소스 기준).
   for (const keyword of STUDY_KEYWORDS) {
-    check(!staticMarkup.includes(keyword),
+    check(!homeHtml.includes(keyword),
       `index.html: logged-out static markup must not contain study keyword "${keyword}"`);
   }
-  // 3) 복원 계약 — 로그인 시 주입될 템플릿 안에 두 학습 앱과 사용량 링크가 있어야 한다.
-  check(gatedTemplates.some((block) => block.startsWith('<template data-study>')),
-    'index.html: <template data-study> blocks are missing');
-  check(templateMarkup.includes('href="/WordMaster/"'), 'index.html: study templates must restore the /WordMaster/ link on login');
-  check(templateMarkup.includes('href="/smstudy/"'), 'index.html: study templates must restore the /smstudy/ link on login');
-  // 사용량은 소유자 개인 데이터다 — 항목은 소유자 전용 템플릿에만 있어야 한다 (review WP1 M-5).
-  const ownerTemplate = /<template data-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
-  const studyOnlyMarkup = gatedTemplates.filter((block) => block.startsWith('<template data-study>')).join('\n');
-  check(ownerTemplate.includes('href="/usage/"'),
-    'index.html: the usage entry must live inside <template data-owner> — it is owner-only data (review WP1 M-5)');
-  check(!studyOnlyMarkup.includes('href="/usage/"'),
-    'index.html: the usage entry must not sit in <template data-study> — that template mounts for every logged-in account');
+  check(!/Contact|Workspace|Private first|Personal command center|서브타이틀/iu.test(homeHtml),
+    'index.html: removed landing clutter returned');
+  check(/<main id="main">\s*<button id="wordmark"[^]*?HVSDCM1[^]*?<\/button>\s*<\/main>/u.test(homeHtml),
+    'index.html: the visible landing main must contain only the HVSDCM1 wordmark button');
+  for (const required of ['/WordMaster/', '/smstudy/', '/plstudy/', '/gichul/', '/usage/', '/admin/']) {
+    check(dynamicTargets.some((target) => target.startsWith(required)),
+      `home.js: signed-in navigation must restore ${required}`);
+  }
+  check(homeJs.includes('if (signedIn) mountSignedInLinks()'),
+    'home.js: signed-in entries must mount only after a local session is present');
+
   const configuredOwners = /(?:^|\n)OWNER_USERNAME\s*=\s*"([^"]*)"/u
     .exec(readFileSync(path.join(ROOT, 'worker/wrangler.toml'), 'utf8'))?.[1]
     ?.split(',').map((name) => name.trim().toLowerCase()).filter(Boolean) || [];
-  const renderedOwnerLiteral = /const OWNER_USERNAMES = \[([^\]]*)\];/u.exec(homeJs)?.[1] || '';
-  const renderedOwners = [...renderedOwnerLiteral.matchAll(/'([^']+)'/gu)]
-    .map((match) => match[1].trim().toLowerCase()).filter(Boolean);
+  const renderedOwners = [...homeJs.matchAll(/const ownerUsernames = new Set\(\[([^\]]*)\]\)/gu)]
+    .flatMap((match) => [...match[1].matchAll(/'([^']+)'/gu)].map((owner) => owner[1].toLowerCase()));
   check(configuredOwners.length === 1 && configuredOwners[0] === 'hvsdcm'
     && JSON.stringify(renderedOwners) === JSON.stringify(configuredOwners),
-  'owner boundary: Worker and landing UI must expose owner controls to the sole human owner only');
-  const behaviorOwnerTemplate = /<template data-behavior-owner>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
-  const behaviorDrawerTemplate = /<template data-behavior-drawer>[^]*?<\/template>/u.exec(homeHtml)?.[0] ?? '';
-  check(behaviorOwnerTemplate.includes('href="/behavior-lab/#paper"'),
-    'index.html: the owner landing template must link directly to the Behavior Lab paper tab');
-  check(behaviorDrawerTemplate.includes('href="/behavior-lab/#live"'),
-    'index.html: the exact-owner drawer template must link directly to live trading');
-  check(!ownerTemplate.includes('href="/behavior-lab/'),
-    'index.html: Behavior Lab must not enter the broader owner template that also mounts for claude-test');
-  check(homeJs.includes("const BEHAVIOR_OWNER_USERNAME = 'hvsdcm';")
-    && homeJs.includes("normalize('NFKC').trim().toLowerCase() === BEHAVIOR_OWNER_USERNAME")
-    && /if \(!isBehaviorOwner\(username\)[^]*?return;/u.test(homeJs)
-    && homeJs.includes('mountBehaviorOwnerEntry(savedUsername)'),
-  'home.js: the Behavior Lab landing entry must mount only for the exact human owner');
-  // 4) 주입 루틴 존재 — 템플릿만 있고 주입 코드가 사라지면 로그인 화면이 빈다.
-  check(homeJs.includes('mountDrawerTemplates'), 'home.js: mountDrawerTemplates is missing — drawer templates would never render');
+    'owner boundary: Worker and landing UI must expose owner controls to the sole human owner only');
+  check(homeJs.includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;")
+    && homeJs.includes("['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델']"),
+    'home.js: owner-only navigation must stay behind the exact owner check');
 
-  // 5) 드로어가 여는 페이지는 전부 자기 로그인 게이트를 지나야 한다. 대상 목록도 템플릿의
-  //    링크에서 도출하므로, 드로어에 항목을 추가하면 그 페이지가 자동으로 검사를 받는다.
-  for (const target of templateTargets) {
-    const entry = path.join(ROOT, target.slice(1), 'index.html');
+  for (const target of dynamicTargets) {
+    const appPath = target.split('#')[0];
+    const entry = path.join(ROOT, appPath.slice(1), 'index.html');
     check(existsSync(entry), `index.html: the drawer links to ${target} but ${target}index.html does not exist`);
     if (!existsSync(entry)) continue;
     check(Boolean(loginGateOf(entry, readFileSync(entry, 'utf8'))),
@@ -2539,8 +2507,10 @@ function validateBehaviorLab() {
   check(!appSource.includes('api.bitget.com') && !/<form\b|type=["']submit["']|\baction=/iu.test(pageHtml)
     && !/marketTab|runBacktest|copyDraft|core\.js/iu.test(pageHtml),
   'behavior-lab: browser-direct exchange calls and retired market/draft surfaces are forbidden');
-  check(/<template data-behavior-owner>[^]*?href="\/behavior-lab\/#paper"[^]*?<\/template>/u.test(homeHtml),
-    'index.html: private Behavior Lab must have an exact-owner landing entry to the paper tab');
+  check(homeHtml.includes('id="ownerLinks"')
+    && readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8').includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;")
+    && readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8').includes("['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델']"),
+    'landing: private Behavior Lab must be created only inside the signed-in exact-owner drawer');
   check(pageHtml.includes('content="noindex, nofollow, noarchive"')
     && /id="labShell"[^>]*\bhidden\b/u.test(pageHtml)
     && appSource.includes("localStorage.getItem('hvsdcm.token')")
@@ -2669,6 +2639,7 @@ function validateDocSnapshots() {
 }
 
 validateSmStudyData();
+validatePlStudyData();
 validateRenderedCopy();
 validateDocSnapshots();
 

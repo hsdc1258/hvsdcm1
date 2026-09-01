@@ -49,7 +49,7 @@ export async function uploadLearningR2({
 } = {}) {
   const manifest = buildLearningPayloads({ outputDirectory });
   const previous = await readState(statePath);
-  // 이미지는 먼저, 두 JSON payload는 visibility switch로 마지막에 올린다.
+  // 이미지는 먼저, 세 JSON payload는 visibility switch로 마지막에 올린다.
   const changed = manifest.objects.filter((object) => previous[object.key] !== object.sha256);
   const invocation = executable ? { command: executable, arguments: [] } : wranglerInvocation();
   for (const object of changed) {

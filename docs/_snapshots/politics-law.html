@@ -5,15 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="HVSDCM1">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="HVSDCM1">
-  <meta property="og:description" content="HVSDCM1">
-  <meta property="og:url" content="https://hvsdcm1.xyz/">
-  <meta property="og:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
-  <title>HVSDCM1</title>
+  <meta name="description" content="정치와 법 6단원 18개 중단원 개념과 90문항 학습">
+  <meta property="og:title" content="정치와 법 — HVSDCM1">
+  <meta property="og:description" content="6개 대단원 · 18개 중단원 · 개념 연습 90문항">
+  <meta property="og:url" content="https://hvsdcm1.xyz/plstudy/">
+  <title>정치와 법</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <style>/* assets/css/system.css (inlined) */
 /* ==========================================================================
@@ -1741,197 +1737,375 @@ label.list-row {
   }
 }
 </style>
-<style>/* assets/css/home.css (inlined) */
-.home-page {
-  min-height: 100dvh;
-  overflow: hidden;
-  background: #000;
-  color: #fff;
-}
-.home-page::before, .home-page::after {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-}
-.home-page::before {
-  opacity: .38;
-  background: repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.09) 0 1px, transparent 1px 4px), repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.025) 3px 4px);
-  mask-image: radial-gradient(circle at 50% 50%, #000 0 18%, transparent 62%);
-}
-.home-page::after {
-  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.08), transparent 32%), radial-gradient(circle at center, transparent 0 46%, #000 82%);
-}
-#main {
+<style>/* plstudy/assets/css/style.css (inlined) */
+.pl-page {
   display: grid;
-  min-height: 100dvh;
-  place-items: center;
-  padding: 28px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: clamp(24px, 5vw, 72px);
+  padding-top: 40px;
+  padding-bottom: 80px;
 }
-.wordmark {
-  position: relative;
-  z-index: 1;
-  padding: .18em .24em;
-  border: 0;
+.pl-sidebar {
+  position: sticky;
+  top: 104px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  height: max-content;
+}
+.pl-nav {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
-  color: #fff;
-  font: 900 clamp(3.2rem, 12vw, 10.5rem)/.86 var(--font-mono);
-  letter-spacing: -.095em;
-  text-transform: uppercase;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
   cursor: pointer;
-  isolation: isolate;
 }
-.wordmark::before, .wordmark::after {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  color: transparent;
-  content: "HVSDCM1";
-  -webkit-text-stroke: 1px rgba(255,255,255,.55);
-  filter: blur(.35px);
+.pl-nav:hover, .pl-nav.is-active {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
 }
-.wordmark::before {
-  transform: translate(-3px, 2px);
-  clip-path: polygon(0 9%,100% 9%,100% 17%,0 17%,0 49%,100% 49%,100% 55%,0 55%);
-  opacity: .54;
+.pl-sidebar dl {
+  display: grid;
+  gap: 0;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
 }
-.wordmark::after {
-  transform: translate(3px, -2px);
-  clip-path: polygon(0 27%,100% 27%,100% 33%,0 33%,0 72%,100% 72%,100% 80%,0 80%);
-  opacity: .38;
-}
-.wordmark span {
-  display: block;
-  background: linear-gradient(96deg, #fff 5%, #8b8b8b 34%, #fff 52%, #606060 72%, #fff 96%);
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 18px rgba(255,255,255,.22)) contrast(1.25);
-  animation: wordmark-shine 7s ease-in-out infinite;
-}
-.wordmark:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 14px;
-}
-.wordmark:hover span {
-  filter: drop-shadow(0 0 26px rgba(255,255,255,.4)) contrast(1.4);
-}
-@keyframes wordmark-shine {
-  0%,100% {
-    background-position: 100% 0;
-  }
-  50% {
-    background-position: 0 0;
-  }
-}
-.shade {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  visibility: hidden;
-  background: rgba(0,0,0,.8);
-  opacity: 0;
-  backdrop-filter: blur(8px);
-  transition: opacity .18s ease, visibility .18s;
-}
-.shade.open {
-  visibility: visible;
-  opacity: 1;
-}
-.drawer {
-  position: fixed;
-  z-index: 40;
-  inset: 0 0 0 auto;
+.pl-sidebar dl div {
   display: flex;
-  width: min(390px, 92vw);
-  padding: 24px;
-  flex-direction: column;
-  gap: 24px;
-  border-left: 1px solid #292929;
-  background: #080808;
-  transform: translateX(102%);
-  visibility: hidden;
-  transition: transform .22s ease, visibility .22s;
-}
-.drawer.open {
-  visibility: visible;
-  transform: none;
-}
-.drawer-head {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  border-bottom: 1px solid #242424;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-faint);
 }
-.drawer-head strong {
-  font-family: var(--font-mono);
-  letter-spacing: -.04em;
-}
-.drawer-head button {
-  width: 44px;
-  height: 44px;
+.pl-sidebar dl div:last-child {
   border: 0;
-  background: transparent;
-  color: #fff;
-  font-size: 28px;
-  cursor: pointer;
 }
-.drawer-links {
+.pl-sidebar dt {
+  color: var(--text-3);
+}
+.pl-sidebar dd {
+  margin: 0;
+  font-weight: 800;
+}
+.pl-main {
+  min-width: 0;
+}
+.pl-loading, .pl-error {
+  padding: 40px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.pl-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  min-height: 230px;
+  padding: clamp(28px, 6vw, 64px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #080808, #1d1d1f);
+}
+.pl-head.is-compact {
+  min-height: 200px;
+}
+.pl-head span, .pl-quiz-head span, .pl-result > span {
+  color: var(--text-3);
+  font: 700 12px/1 var(--font-mono);
+  letter-spacing: .12em;
+}
+.pl-head h1 {
+  margin: 14px 0 10px;
+  font-size: clamp(2.3rem, 6vw, 5.5rem);
+  line-height: .95;
+  letter-spacing: -.065em;
+}
+.pl-head p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.pl-units {
+  display: grid;
+  gap: 28px;
+  margin-top: 48px;
+}
+.pl-unit {
+  display: grid;
+  grid-template-columns: minmax(180px, .38fr) minmax(0, 1fr);
+  gap: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.pl-unit header span {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.pl-unit h2 {
+  margin: 10px 0 0;
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+}
+.pl-unit > div {
   display: grid;
   gap: 8px;
 }
-.drawer-links a {
-  display: grid;
-  gap: 5px;
-  min-height: 68px;
-  padding: 14px 16px;
-  border: 1px solid #242424;
+.pl-sub, .pl-progress-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  min-height: 80px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #0e0e0e;
-  color: #fff;
-  text-decoration: none;
-}
-.drawer-links a:hover, .drawer-links a:focus-visible {
-  border-color: #fff;
-  background: #171717;
-}
-.drawer-links span {
-  color: #8d8d8d;
-  font-size: 13px;
-}
-#ownerLinks {
-  display: contents;
-}
-.drawer-logout {
-  min-height: 48px;
-  margin-top: auto;
-  border: 1px solid #303030;
-  border-radius: 10px;
-  background: transparent;
-  color: #fff;
-  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
   cursor: pointer;
 }
-.login-sheet {
-  border-color: #333;
-  background: #0b0b0b;
+.pl-sub:hover, .pl-progress-list button:hover {
+  border-color: #fff;
+  background: var(--surface-2);
 }
-@media (prefers-reduced-motion: reduce) {
-  .wordmark span {
-    animation: none;
+.pl-sub > span, .pl-progress-list button > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.pl-sub small, .pl-progress-list small {
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-sub b, .pl-progress-list b {
+  flex: none;
+  font-family: var(--font-mono);
+}
+.pl-back {
+  min-height: 44px;
+  margin-bottom: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.pl-concepts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.pl-concepts article {
+  min-height: 220px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.pl-concepts span {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.pl-concepts h2 {
+  margin: 50px 0 12px;
+  font-size: 21px;
+}
+.pl-concepts p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.pl-traps {
+  margin-top: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-alt);
+}
+.pl-traps h2 {
+  margin: 0 0 14px;
+}
+.pl-traps ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-2);
+}
+.pl-quiz-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 20px 0;
+}
+.pl-quiz-head h1 {
+  margin: 7px 0 0;
+}
+.pl-question {
+  padding: clamp(22px, 5vw, 50px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.pl-question > h2 {
+  max-width: 34ch;
+  margin: 0 0 30px;
+  font-size: clamp(1.4rem, 3vw, 2.35rem);
+  line-height: 1.4;
+}
+.pl-choices {
+  display: grid;
+  gap: 8px;
+}
+.pl-choices button {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 13px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pl-choices button:hover:not(:disabled) {
+  border-color: #fff;
+}
+.pl-choices button span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  place-items: center;
+}
+.pl-choices .is-correct {
+  background: #fff;
+  color: #000;
+}
+.pl-choices .is-wrong {
+  background: #777;
+  color: #000;
+}
+.pl-feedback {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.pl-feedback strong {
+  font-size: 24px;
+}
+.pl-feedback p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.pl-feedback .btn {
+  justify-self: start;
+}
+.pl-result {
+  display: grid;
+  min-height: 560px;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+.pl-result h1 {
+  margin: 20px 0 0;
+  font-size: clamp(5rem, 16vw, 11rem);
+  line-height: .85;
+  letter-spacing: -.09em;
+}
+.pl-result p {
+  color: var(--text-2);
+}
+.pl-result div {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+.pl-progress-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+@media (max-width: 860px) {
+  .pl-page {
+    grid-template-columns: 1fr;
+    padding-top: 20px;
   }
-  .drawer, .shade {
-    transition: none;
+  .pl-sidebar {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .pl-sidebar dl {
+    display: none;
+  }
+  .pl-nav {
+    flex: 1;
+    text-align: center;
+  }
+  .pl-unit {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .pl-concepts {
+    grid-template-columns: 1fr;
+  }
+  .pl-concepts article {
+    min-height: 170px;
+  }
+  .pl-concepts h2 {
+    margin-top: 28px;
   }
 }
-@media (max-width: 520px) {
-  .wordmark {
-    font-size: clamp(2.75rem, 15vw, 5rem);
+@media (max-width: 560px) {
+  .topbar-nav {
+    display: none;
   }
-  .drawer {
-    padding: 18px;
+  .pl-page {
+    width: min(100% - 24px, var(--container-wide));
+  }
+  .pl-head {
+    min-height: 230px;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 28px 22px;
+  }
+  .pl-head .btn {
+    width: 100%;
+  }
+  .pl-unit {
+    margin-top: 8px;
+  }
+  .pl-sub small {
+    white-space: normal;
+  }
+  .pl-question {
+    padding: 20px 14px;
+  }
+  .pl-result {
+    min-height: 440px;
   }
 }
 </style>
@@ -1941,34 +2115,15 @@ label.list-row {
 .snap-note code { color: var(--text); }
 </style>
 </head>
-<body class="home-page">
-  <div class="snap-note"><strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.
-  <br><strong>여기서 확인할 것</strong> — 본문에는 학습 콘텐츠가 노출되지 않고, 사람 소유자 전용 Behavior Lab 카드만 연락 섹션 앞에 나타나는지. 일반 학습·사용량 진입은 드로어에 있고, 드로어는 닫힌 상태(화면 밖)다.
-  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.
+<body>
+  <div class="snap-note"><strong>무엇인가</strong> — 정치와 법 학습 화면의 반응형 셸을 얼린 스냅샷이다.
+  실제 6단원 · 18중단원 · 90문항은 로그인 뒤 보호 API에서 로드한다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
-  <main id="main">
-    <button id="wordmark" class="wordmark" type="button" data-login-trigger aria-label="HVSDCM1 열기"><span aria-hidden="true">HVSDCM1</span></button>
-  </main>
-
-  <div id="shade" class="shade" aria-hidden="true"></div>
-  <aside id="drawer" class="drawer logged" aria-label="개인 메뉴" aria-hidden="true">
-    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기">×</button></header>
-    <nav class="drawer-links" aria-label="바로가기">
-      <span id="studyLinks"></span>
-      <span id="ownerLinks"></span>
-    </nav>
-    <button id="drawerLogout" class="drawer-logout" type="button">로그아웃</button>
-  </aside>
-
-  <div id="loginModal" class="sheet-backdrop" aria-hidden="true">
-    <form id="loginForm" class="sheet login-sheet" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-      <div><h1 id="loginTitle" class="sheet-title">로그인</h1></div>
-      <div class="field"><label class="field-label" for="username">아이디</label><input class="field-input" id="username" autocomplete="username" required></div>
-      <div class="field"><label class="field-label" for="password">비밀번호</label><input class="field-input" id="password" type="password" autocomplete="current-password" required></div>
-      <div id="loginError" class="field-error" role="alert"></div>
-      <div class="sheet-actions"><button class="btn btn-primary btn-lg" type="submit">계속</button><button class="btn btn-ghost" type="button" id="closeLogin">닫기</button></div>
-    </form>
+  <header class="topbar"><div class="topbar-inner container-wide"><a class="brand" href="/">HVSDCM1</a><span class="topbar-crumb">정치와 법</span><nav class="topbar-nav"><a class="topbar-link" href="/smstudy/">사회·문화</a><a class="topbar-link" href="/WordMaster/">WordMaster</a></nav></div></header>
+  <div class="topbar-spacer"></div>
+  <div class="container-wide pl-page">
+    <aside class="pl-sidebar"><button class="pl-nav is-active" type="button" data-view="home">단원 목록</button><button class="pl-nav" type="button" data-view="progress">학습 기록</button><dl><div><dt>대단원</dt><dd>6</dd></div><div><dt>중단원</dt><dd>18</dd></div><div><dt>문항</dt><dd>90</dd></div></dl></aside>
+    <main id="app" class="pl-main" tabindex="-1"><p class="pl-loading">정치와 법 학습 데이터를 불러오는 중입니다.</p></main>
   </div>
 </body>
 </html>

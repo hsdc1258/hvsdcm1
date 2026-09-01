@@ -482,6 +482,21 @@ ul.sm-deep-points li::marker {
 }
 .sm-question {
   gap: var(--space-5);
+  padding: clamp(20px, 3.2vw, 36px);
+}
+.sm-practice-question {
+  display: grid;
+  gap: var(--space-3);
+  padding: clamp(20px, 4vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--bg-alt);
+}
+.sm-practice-question h2 {
+  max-width: 34ch;
+  margin: 0;
+  font-size: clamp(1.35rem, 3vw, 2.25rem);
+  line-height: 1.35;
 }
 .sm-media {
   display: grid;
@@ -551,6 +566,32 @@ ul.sm-deep-points li::marker {
   font-weight: 700;
   transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
+.sm-choices.has-copy {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sm-choices.has-copy .sm-choice {
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  place-items: center start;
+  min-height: 54px;
+  padding: 10px 14px;
+  font-size: var(--fs-body);
+  text-align: left;
+}
+.sm-choices.has-copy .sm-choice > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  place-items: center;
+  font-size: var(--fs-caption);
+}
+.sm-choices.has-copy .sm-choice small {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.5;
+}
 .sm-choice:hover:not(:disabled) {
   background: var(--surface-3);
   border-color: var(--line-strong);
@@ -571,7 +612,7 @@ ul.sm-deep-points li::marker {
 .sm-choice.is-wrong {
   background: var(--red);
   border-color: var(--red);
-  color: #fff;
+  color: #000;
   opacity: 1;
 }
 /* ---- 채점 피드백 ---- */

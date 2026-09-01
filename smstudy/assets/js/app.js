@@ -2,8 +2,8 @@
   'use strict';
 
   const STORAGE_KEY = 'samun2027.study.v1';
-  const EXPECTED_QUESTION_COUNT = 78;
-  const EXPECTED_SUBUNIT_COUNT = 13;
+  const EXPECTED_QUESTION_COUNT = 98;
+  const EXPECTED_SUBUNIT_COUNT = 17;
   const app = document.getElementById('app');
   const toast = document.getElementById('toast');
   function start() {
@@ -360,7 +360,7 @@
           <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
           <div>
             <h1>단원 목록</h1>
-            <p>범위를 고르면 평가원 원문 그대로 출제됩니다. 13개 중단원 · 78문항.</p>
+            <p>범위를 고르면 평가원 기출과 5단원 개념 연습이 출제됩니다. 17개 중단원 · 98문항.</p>
           </div>
         </div>
         <span class="badge badge-accent">출제 범위 ${state.selected.size}/${SUBUNITS.length}</span>
@@ -676,7 +676,7 @@
         <div class="toolbar-spacer"></div>
         <button id="nextConceptFoot" class="btn btn-ghost btn-sm" type="button" ${index === SUBUNITS.length - 1 ? 'disabled' : ''}>다음 중단원 →</button>
       </div>
-      <p class="sm-source">개념 검토는 2027 불후의 명강과 EBS 수능특강 해설을 따랐습니다. 빈출 표시는 수록 78문항의 자동 집계입니다. 수록 범위는 2022~2026학년도 평가원 6월·9월·수능입니다. 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
+      <p class="sm-source">개념 검토는 2027 학습 범위를 따랐습니다. 빈출 표시는 평가원 기출 78문항의 자동 집계이며 5단원에는 개념 연습 20문항을 더했습니다. 기출 문항 저작권은 한국교육과정평가원에 있습니다.</p>`;
     document.getElementById('conceptHome').addEventListener('click', renderHome);
     document.getElementById('prevConcept').addEventListener('click', () => renderConcept(SUBUNITS[index - 1]?.id));
     document.getElementById('nextConcept').addEventListener('click', () => renderConcept(SUBUNITS[index + 1]?.id));
@@ -747,6 +747,9 @@
   }
   function renderQuestionMedia(question, options = {}) {
     const { className = '', loading = 'eager' } = options;
+    if (question.kind === 'practice') {
+      return `<section class="sm-practice-question ${esc(className)}"><span class="badge badge-accent">5단원 개념 연습</span><h2>${esc(question.stem)}</h2></section>`;
+    }
     const imageName = String(question.image || '').split('/').at(-1) || '';
     return `
       <figure class="sm-media ${esc(className)}">
@@ -814,10 +817,11 @@
       const className = session.answered && index === question.correct
         ? 'is-correct'
         : selected ? 'is-wrong' : '';
+      const choiceText = question.choices?.[index] ? `<small>${esc(question.choices[index])}</small>` : '';
       return `
         <button class="choice-option sm-choice ${className}" type="button" data-index="${index}"
           aria-label="${index + 1}번" ${session.answered ? 'disabled' : ''}>
-          <span>${mark}</span>
+          <span>${mark}</span>${choiceText}
         </button>`;
     }).join('');
 
@@ -827,7 +831,7 @@
     return `
       <div class="sm-answer">
         <p class="field-label">정답을 선택하세요.</p>
-        <div class="sm-choices" role="group" aria-label="선지 선택">${choices}</div>
+        <div class="sm-choices ${question.choices ? 'has-copy' : ''}" role="group" aria-label="선지 선택">${choices}</div>
         ${nextAction}
       </div>`;
   }
@@ -846,6 +850,7 @@
         showToast('오답 원인을 분석에 반영했습니다.');
       });
     });
+    document.querySelectorAll('.mistake-concept').forEach((button) => button.addEventListener('click', () => renderConcept(button.dataset.sub)));
     const submit = document.getElementById('submitAnswer');
     if (submit) submit.addEventListener('click', session.answered ? nextQuestion : () => submitAnswer());
     if (session.answered) requestAnimationFrame(() => submit?.focus());
@@ -861,7 +866,7 @@
     const current = session.index + 1;
     const total = session.questions.length;
     const progress = Math.round((current / total) * 100);
-    const sourceLabel = `${question.year}학년도 ${question.session} 기출 · 평가원`;
+    const sourceLabel = question.kind === 'practice' ? '2027 개념 연습' : `${question.year}학년도 ${question.session} 기출 · 평가원`;
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
@@ -882,7 +887,7 @@
       <article class="card card-xl sm-stack sm-question">
         <div class="view-head">
           <div>
-            <span class="kicker">평가원 원문 · ${esc(subunit.title)}</span>
+            <span class="kicker">${question.kind === 'practice' ? '개념 적용' : '평가원 원문'} · ${esc(subunit.title)}</span>
             <p class="sm-note">${esc(sourceLabel)} · ${question.number}번</p>
           </div>
           <span class="badge badge-accent">정답률 ${question.correctRate}%</span>
@@ -949,17 +954,13 @@
       <div class="sm-feedback ${modifier}" role="status">
         <p class="sm-feedback-head">${title}</p>
         <div class="sm-feedback-grid">
-          <div class="sm-feedback-cell"><small>평가원 정답</small><strong>${esc(question.answer)}</strong></div>
+          <div class="sm-feedback-cell"><small>${question.kind === 'practice' ? '정답' : '평가원 정답'}</small><strong>${esc(question.answer)}</strong></div>
           <div class="sm-feedback-cell"><small>내 답</small><strong>${esc(shownAnswer(question, result.input))}</strong></div>
         </div>
-        <p class="sm-note">평가원 원문 정답표와 대조한 답입니다. 통사랑 문항별 집계 정답률은 ${question.correctRate}%입니다.</p>
+        <p class="sm-note">${question.kind === 'practice' ? '5단원 핵심 개념을 기준으로 만든 연습 문항입니다.' : `평가원 원문 정답표와 대조한 답입니다. 통사랑 문항별 집계 정답률은 ${question.correctRate}%입니다.`}</p>
         ${renderExplanationGuide(question, result)}
         ${result.correct ? '' : renderWrongDiagnosis(question, result)}
-        <div class="sm-links">
-          <a class="btn btn-secondary btn-sm" href="${esc(question.source.question)}" target="_blank" rel="noopener">문제 원문 PDF</a>
-          <a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표 확인</a>
-          <a class="btn btn-secondary btn-sm" href="https://tongsarang.kr/" target="_blank" rel="noopener">정답률 출처</a>
-        </div>
+        ${question.kind === 'practice' ? `<div class="sm-links"><button class="btn btn-secondary btn-sm mistake-concept" type="button" data-sub="${question.sub}">개념 지도 다시 보기</button></div>` : `<div class="sm-links"><a class="btn btn-secondary btn-sm" href="${esc(question.source.question)}" target="_blank" rel="noopener">문제 원문 PDF</a><a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표 확인</a><a class="btn btn-secondary btn-sm" href="https://tongsarang.kr/" target="_blank" rel="noopener">정답률 출처</a></div>`}
       </div>`;
   }
 
@@ -978,7 +979,7 @@
           <div>
             <span class="badge badge-red">누적 오답 ${info.count || 1}회 · 출제 정답률 ${question.correctRate}%</span>
             <h3 class="title-3">${question.sub} · ${esc(subunit.title)}</h3>
-            <p class="sm-note">${question.year}학년도 ${esc(question.session)} ${question.number}번 · 평가원</p>
+            <p class="sm-note">${question.kind === 'practice' ? `2027 개념 연습 ${question.number}번` : `${question.year}학년도 ${esc(question.session)} ${question.number}번 · 평가원`}</p>
           </div>
           <span class="badge badge-orange">${esc(reason)}</span>
         </div>
@@ -986,7 +987,7 @@
         <div class="sm-compare">
           <div><small>최근 내 답</small><strong class="sm-answer-wrong">${esc(selected)}</strong></div>
           <span aria-hidden="true">→</span>
-          <div><small>평가원 정답</small><strong class="sm-answer-correct">${esc(question.answer)}</strong></div>
+          <div><small>${question.kind === 'practice' ? '정답' : '평가원 정답'}</small><strong class="sm-answer-correct">${esc(question.answer)}</strong></div>
         </div>
         ${renderExplanationGuide(question, { input, correct: false }, true)}
         <div class="sm-diagnosis">
@@ -997,7 +998,7 @@
         <div class="sm-links">
           <button class="btn btn-secondary btn-sm mistake-concept" type="button" data-sub="${question.sub}">개념 지도 다시 보기</button>
           <button class="btn btn-ghost btn-sm mistake-retry" type="button" data-id="${question.id}">이 문제 재시험</button>
-          <a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표</a>
+          ${question.kind === 'practice' ? '' : `<a class="btn btn-secondary btn-sm" href="${esc(question.source.answer)}" target="_blank" rel="noopener">정답표</a>`}
         </div>
       </article>`;
   }

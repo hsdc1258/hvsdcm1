@@ -142,7 +142,7 @@ const FORBIDDEN_BEHAVIOR_PAPER_PRIVATE_KEY_SUFFIXES = [
 ];
 export const HARNESS_STALE_MS = 15 * 60 * 1_000;
 const SESSION_HISTORY_MS = 90 * DAY_MS;
-const VALID_APPS = new Set(['wordmaster', 'smstudy']);
+const VALID_APPS = new Set(['wordmaster', 'smstudy', 'plstudy']);
 // 수집 원본. 이 집합이 ingest 허용 목록이자 조회 필터의 단일 원본이다 — 한쪽만 고치면
 // 받아 놓고 못 읽는(또는 그 반대의) 상태가 생긴다.
 const VALID_USAGE_SOURCES = new Set(['codex', 'claude']);
@@ -183,6 +183,7 @@ const GICHUL_HEADERS = Object.freeze({
 const LEARNING_CONTENT_KEYS = Object.freeze({
   wordmaster: 'learning/wordmaster.json',
   smstudy: 'learning/smstudy.json',
+  plstudy: 'learning/plstudy.json',
 });
 
 export function fixedTimeEqual(left, right) {
@@ -2992,7 +2993,7 @@ export async function route(request, env) {
   if (method === 'GET' && path === '/api/usage') return usage(request, env);
   if (method === 'GET' && path === '/api/gichul/manifest') return gichulManifest(request, env);
 
-  const learningContentMatch = path.match(/^\/api\/learning\/(wordmaster|smstudy)$/u);
+  const learningContentMatch = path.match(/^\/api\/learning\/(wordmaster|smstudy|plstudy)$/u);
   if (method === 'GET' && learningContentMatch) {
     return learningContent(request, env, learningContentMatch[1]);
   }

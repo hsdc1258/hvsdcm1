@@ -33,6 +33,7 @@ export const SNAPSHOT_BY_SCREEN = {
   'index.html': `${SNAPSHOT_DIR}/landing.html`,
   'WordMaster/index.html': `${SNAPSHOT_DIR}/wordmaster.html`,
   'smstudy/index.html': `${SNAPSHOT_DIR}/concept-sample.html`,
+  'plstudy/index.html': `${SNAPSHOT_DIR}/politics-law.html`,
   'admin/index.html': `${SNAPSHOT_DIR}/admin.html`,
   'usage/index.html': `${SNAPSHOT_DIR}/usage.html`,
   'gichul/index.html': `${SNAPSHOT_DIR}/gichul.html`,
@@ -313,14 +314,17 @@ function section(heading, body) {
 // 랜딩·admin은 마크업 자체가 화면이다. 렌더러를 통과시키는 대신 문서를 손대지 않고
 // (1) 외부 CSS·스크립트 참조를 인라인 스타일로 바꾸고, (2) 스크립트가 하는 일 중 화면
 // 상태에 해당하는 것만 정적으로 반영한다. 무엇을 반영했는지는 각 파일의 주석 상자에 적는다.
-function documentSnapshot(file, { note, mutate }) {
+function documentSnapshot(file, { note, mutate = (html) => html }) {
   const source = readSource(file);
   // 외부 호스트의 스타일시트(Pretendard CDN)는 인라인할 수 없다 — 링크째 걷어내고
   // 시스템 폰트 폴백으로 둔다. 조판 검증 대상은 --font-sans의 첫 순위(시스템 서체)다.
   const hrefs = [...source.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/gu)]
     .map(([, href]) => href)
     .filter((href) => !/^https?:/iu.test(href))
-    .map((href) => href.replace(/[?#].*$/u, '').replace(/^\//u, ''));
+    .map((href) => {
+      const clean = href.replace(/[?#].*$/u, '');
+      return clean.startsWith('/') ? clean.slice(1) : path.posix.join(path.posix.dirname(file), clean);
+    });
   let html = source
     .replace(/\n?\s*<link\b[^>]*rel="stylesheet"[^>]*>/gu, '')
     .replace(/\n?\s*<script\b[^>]*>\s*<\/script>/gu, '');
@@ -393,6 +397,11 @@ export function buildSnapshots() {
       [section('WordMaster — 시험 설정 (#app 전체)', `<div class="app-main">${renderWordMasterHome()}</div>`)],
       WORDMASTER_CSS,
     ),
+    [SNAPSHOT_BY_SCREEN['plstudy/index.html']]: documentSnapshot('plstudy/index.html', {
+      note: '<strong>무엇인가</strong> — 정치와 법 학습 화면의 반응형 셸을 얼린 스냅샷이다.'
+        + '\n  실제 6단원 · 18중단원 · 90문항은 로그인 뒤 보호 API에서 로드한다.'
+        + `\n  ${GENERATED_NOTE}`,
+    }),
     [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
         + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입,'
