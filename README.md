@@ -25,18 +25,18 @@ Requires Node.js 20 or newer. The normal test suite does not load the optional r
 npm test
 ```
 
-The command checks every JavaScript file, local HTML asset references, the WordMaster 50 × 40 data shape, all 13 social-studies subunits and 78 image-backed questions, shared study sorting behavior, then runs Worker utility and routing tests.
+The command checks every JavaScript file, local HTML asset references, the WordMaster 50 × 40 data shape, all 17 social-studies subunits and 98 questions, all 18 Politics and Law subunits and 90 questions, shared study sorting behavior, then runs Worker utility and routing tests.
 
 ## Protected learning content
 
-WordMaster and social-studies source data lives under `_learning/`, which GitHub Pages omits while Jekyll is enabled. Public loader files contain no content. Build and verify the 80 private R2 objects (2 JSON visibility switches plus 78 WebP files) before deploying the Worker or Pages change:
+WordMaster, social-studies, and Politics and Law source data lives under `_learning/`, which GitHub Pages omits while Jekyll is enabled. Public loader files contain no content. Build and verify the 81 private R2 objects (3 JSON visibility switches plus 78 WebP files) before deploying the Worker or Pages change:
 
 ```bash
 node scripts/learning/build-payloads.mjs
 node scripts/learning/upload-r2.mjs --bucket hvsdcm-gichul
 ```
 
-The uploader sends images first and the two JSON payloads last. Worker routes `/api/learning/wordmaster`, `/api/learning/smstudy`, and `/api/learning/smstudy/image/:name` require a valid user session and disable caching.
+The uploader sends images first and the three JSON payloads last. Worker routes `/api/learning/wordmaster`, `/api/learning/smstudy`, `/api/learning/plstudy`, and `/api/learning/smstudy/image/:name` require a valid user session and disable caching.
 
 For a static preview:
 
