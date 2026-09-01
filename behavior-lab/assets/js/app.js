@@ -589,7 +589,7 @@
     const profiles = {
       'abc-paper-experiment-v1': { experimentId: 'abc-paper-20260831', armIds: ['A', 'B', 'C'],
         strategyIds: ['abc-trend-momentum-v1', 'abc-breakout-volatility-v1', 'abc-mean-reversion-crowd-fade-v1'] },
-      'multi-paper-experiment-v3': { experimentId: 'multi-paper-20260901-v3', armIds: ['A', 'B', 'C', 'D', 'E', 'F'],
+      'multi-paper-experiment-v3': { experimentId: 'multi-paper-binance-20260901-v1', armIds: ['A', 'B', 'C', 'D', 'E', 'F'],
         strategyIds: ['multi-trend-persistence-v3', 'multi-breakout-confirmation-v3', 'multi-range-reversion-v3',
           'multi-ofi-continuation-v3', 'multi-overreaction-fade-v3', 'multi-consensus-conservative-v3'] },
     };
@@ -605,6 +605,7 @@
     return Boolean(experiment && profile && experiment.experiment_id === profile.experimentId && experiment.simulation === true
       && experiment.public_data_only === true && Number.isFinite(started) && validTiming
       && ['starting', 'active', 'complete', 'error'].includes(experiment.status)
+      && experiment.shared_feed?.provider === 'binance-usdm-public'
       && Number.isInteger(experiment.shared_feed?.sequence) && experiment.shared_feed.sequence > 0
       && hash(experiment.shared_feed.hash) && experiment.shared_feed.credential_used === false
       && JSON.stringify(experiment.shared_feed.symbols) === JSON.stringify(SYMBOLS)
@@ -884,7 +885,7 @@
     elements.experimentStarted.textContent = formatKoreanTime(experiment.started_at);
     elements.experimentDeadline.textContent = experiment.run_mode === 'until-stopped'
       ? '중단 버튼을 누를 때까지' : formatKoreanTime(experiment.deadline_at);
-    elements.experimentFeed.textContent = `#${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
+    elements.experimentFeed.textContent = `BINANCE USDⓈ-M · #${experiment.shared_feed.sequence} · ${experiment.shared_feed.hash.slice(0, 16)}…`;
     elements.experimentLastPacket.textContent = formatKoreanTime(experiment.shared_feed.last_packet_at);
     const overviewCopy = elements.paperExperiment.querySelector('[data-experiment-copy]');
     if (overviewCopy) overviewCopy.textContent = `같은 공개 시장 데이터와 비용 기준으로 ${experiment.arms.length}개 전략을 공정하게 비교해요.`;

@@ -39,7 +39,7 @@ export const BEHAVIOR_PAPER_DEADLINE = '2026-08-30T23:00:00.000Z';
 export const BEHAVIOR_PAPER_SNAPSHOT_SOURCE = `behavior-paper:${BEHAVIOR_PAPER_SESSION_ID}`;
 export const BEHAVIOR_ABC_EXPERIMENT_ID = 'abc-paper-20260831';
 export const BEHAVIOR_ABC_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_ABC_EXPERIMENT_ID}`;
-export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-20260901-v3';
+export const BEHAVIOR_MULTI_EXPERIMENT_ID = 'multi-paper-binance-20260901-v1';
 export const BEHAVIOR_MULTI_SNAPSHOT_SOURCE = `behavior-paper-experiment:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 export const BEHAVIOR_MULTI_CONTROL_SOURCE = `behavior-paper-control:${BEHAVIOR_MULTI_EXPERIMENT_ID}`;
 export const BEHAVIOR_LIVE_EXPERIMENT_ID = 'dual-live-20260901-v1';
@@ -2018,12 +2018,13 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
       || Date.parse(generatedAt) > Date.parse(deadlineAt) + 60 * 60_000))
     || Date.parse(generatedAt) < Date.parse(startedAt)
     || !['starting', 'active', 'complete', 'error'].includes(status)) return null;
-  const feedKeys = ['sequence', 'hash', 'last_packet_at', 'credential_used', 'symbols', 'channels'];
+  const feedKeys = ['provider', 'sequence', 'hash', 'last_packet_at', 'credential_used', 'symbols', 'channels'];
   if (!exactPaperKeys(input.shared_feed, feedKeys)) return null;
   const sharedSequence = boundedPaperNumber(input.shared_feed.sequence, 1, 1_000_000_000, true);
   const sharedHash = normalizedExperimentHash(input.shared_feed.hash);
   const lastPacketAt = normalizePaperTimestamp(input.shared_feed.last_packet_at, true);
-  if (sharedSequence === null || !sharedHash || lastPacketAt === undefined || input.shared_feed.credential_used !== false
+  if (sharedSequence === null || !sharedHash || lastPacketAt === undefined
+    || input.shared_feed.provider !== 'binance-usdm-public' || input.shared_feed.credential_used !== false
     || JSON.stringify(input.shared_feed.symbols) !== JSON.stringify(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'])
     || JSON.stringify(input.shared_feed.channels) !== JSON.stringify(['ticker', 'books5', 'trade', 'candle1m'])
     || (lastPacketAt && Date.parse(lastPacketAt) > Date.parse(generatedAt))) return null;
@@ -2061,7 +2062,7 @@ export function normalizeBehaviorMultiPaperExperimentReport(input) {
     simulation: true, public_data_only: true, generated_at: generatedAt, started_at: startedAt,
     ...(continuous ? { run_mode: 'until-stopped', deadline_at: null, stopped_at: stoppedAt }
       : { deadline_at: deadlineAt }), status, strategy_set_hash: MULTI_STRATEGY_SET_HASH,
-    shared_feed: { sequence: sharedSequence, hash: sharedHash, last_packet_at: lastPacketAt,
+    shared_feed: { provider: 'binance-usdm-public', sequence: sharedSequence, hash: sharedHash, last_packet_at: lastPacketAt,
       credential_used: false, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'],
       channels: ['ticker', 'books5', 'trade', 'candle1m'] }, assumptions, leaderboard, arms, limitations };
 }

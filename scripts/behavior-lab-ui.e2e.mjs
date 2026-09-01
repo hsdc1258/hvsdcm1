@@ -94,10 +94,10 @@ function multiExperiment(sequence = 10, status = 'active') {
       message: 'Newest paper cycle.' }],
     last_cycle_at: '2026-08-31T00:01:00.000Z',
   }));
-  return { schema: 'multi-paper-experiment-v3', experiment_id: 'multi-paper-20260901-v3', simulation: true,
+  return { schema: 'multi-paper-experiment-v3', experiment_id: 'multi-paper-binance-20260901-v1', simulation: true,
     public_data_only: true, generated_at: '2026-08-31T00:01:01.000Z', started_at: '2026-08-31T00:00:00.000Z',
     run_mode: 'until-stopped', deadline_at: null, stopped_at: null, status, strategy_set_hash: HASH_A,
-    shared_feed: { sequence, hash: HASH_A,
+    shared_feed: { provider: 'binance-usdm-public', sequence, hash: HASH_A,
       last_packet_at: '2026-08-31T00:01:00.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
     assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
@@ -162,7 +162,7 @@ function browserHarness(responses) {
     }
     if (String(url).endsWith('/api/behavior-lab/paper/stop') && options.method === 'POST') {
       window.__paperStopRequests.push(JSON.parse(options.body));
-      return new Response(JSON.stringify({ ok: true, experiment_id: 'multi-paper-20260901-v3',
+      return new Response(JSON.stringify({ ok: true, experiment_id: 'multi-paper-binance-20260901-v1',
         stop_requested: true, stop_requested_at: '2026-08-31T00:03:00.000Z' }), {
         status: 202, headers: { 'content-type': 'application/json' },
       });
@@ -170,7 +170,7 @@ function browserHarness(responses) {
     window.__paperFetchCount += 1;
     const entry = window.__paperResponses.shift() || { status: 500, error: 'fixture exhausted' };
     const response = () => new Response(JSON.stringify(entry.status === 200 ? { report: entry.report,
-      experiment: entry.experiment, control: entry.control || { experiment_id: 'multi-paper-20260901-v3',
+      experiment: entry.experiment, control: entry.control || { experiment_id: 'multi-paper-binance-20260901-v1',
         stop_requested: false, stop_requested_at: null } } : { error: entry.error || 'scripted error' }), {
       status: entry.status, headers: { 'content-type': 'application/json' },
     });
@@ -367,7 +367,7 @@ try {
       && document.getElementById('stopPaper').disabled
       && document.getElementById('stopPaper').textContent.includes('중단 요청됨'));
     assert.deepEqual(await page.evaluate(() => window.__paperStopRequests), [
-      { experiment_id: 'multi-paper-20260901-v3' },
+      { experiment_id: 'multi-paper-binance-20260901-v1' },
     ]);
     assert.match(await page.locator('#stopPaper').textContent(), /중단 요청됨/u);
     await page.locator('.abc-arm-details').first().evaluate((details) => { details.open = false; });

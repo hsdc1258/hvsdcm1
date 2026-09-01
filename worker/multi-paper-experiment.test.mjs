@@ -103,7 +103,7 @@ export function multiExperimentReport({ sequence = 10, status = 'active', maxima
     simulation: true, public_data_only: true, generated_at: '2026-08-31T00:02:00.000Z',
     started_at: '2026-08-31T00:00:00.000Z', run_mode: 'until-stopped', deadline_at: null,
     stopped_at: status === 'complete' ? generatedAt : null, status,
-    strategy_set_hash: SET_HASH, shared_feed: { sequence: effectiveSequence, hash: HASHES[6],
+    strategy_set_hash: SET_HASH, shared_feed: { provider: 'binance-usdm-public', sequence: effectiveSequence, hash: HASHES[6],
       last_packet_at: '2026-08-31T00:01:30.000Z', credential_used: false,
       symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'], channels: ['ticker', 'books5', 'trade', 'candle1m'] },
     assumptions: { seed_equity_per_arm: 100, fee_bps_per_side: 6, slippage_bps_per_side: 4,
