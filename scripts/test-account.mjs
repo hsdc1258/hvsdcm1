@@ -58,7 +58,6 @@ async function check() {
   const token = await userToken();
   const probes = [
     ['GET /api/usage (소유자 게이트)', '/api/usage', token],
-    ['GET /api/moderator (모더 탭)', '/api/moderator', token],
     ['GET /api/admin/stats (관리자)', '/api/admin/stats', credentials.admin.token],
   ];
   let failed = 0;

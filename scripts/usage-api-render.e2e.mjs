@@ -132,7 +132,7 @@ const report = (taskId, overrides = {}) => ({
     model: 'gpt-5.6-sol',
     reasoning: 'xhigh',
     category_key: 'pipeline-visualization',
-    category: '파이프라인 시각화',
+    category: '실행 현황 개선',
     current: '구현',
     done: '계약 고정',
     next: '리뷰',

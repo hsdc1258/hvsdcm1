@@ -2155,7 +2155,7 @@ function validateGlobalsAndOrder() {
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
-    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260901-v14'],
+    'behavior-lab/index.html': ['/behavior-lab/assets/js/app.js?v=20260901-v16'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2179,7 +2179,7 @@ function validateGlobalsAndOrder() {
     'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
     'usage/index.html': ['/assets/css/system.css?v=20260901-competition-review-v1', '/usage/assets/css/usage.css?v=20260901-competition-review-v1'],
     'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v11'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v12'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2522,9 +2522,7 @@ function validateBehaviorLab() {
   const files = [
     'behavior-lab/index.html',
     'behavior-lab/assets/css/app.css',
-    'behavior-lab/assets/js/core.js',
     'behavior-lab/assets/js/app.js',
-    'worker/src/behavior-lab.js',
   ];
   for (const file of files) check(existsSync(path.join(ROOT, file)), `${file}: Behavior Lab artifact is missing`);
   if (files.some((file) => !existsSync(path.join(ROOT, file)))) return;
@@ -2532,67 +2530,15 @@ function validateBehaviorLab() {
   const homeHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const pageHtml = readFileSync(path.join(ROOT, 'behavior-lab/index.html'), 'utf8');
   const appSource = readFileSync(path.join(ROOT, 'behavior-lab/assets/js/app.js'), 'utf8');
-  const coreSource = readFileSync(path.join(ROOT, 'behavior-lab/assets/js/core.js'), 'utf8');
-  const workerSource = readFileSync(path.join(ROOT, 'worker/src/behavior-lab.js'), 'utf8');
   const routerSource = readFileSync(path.join(ROOT, 'worker/src/router.js'), 'utf8');
-  const expectedPaths = [
-    '/api/v2/mix/market/tickers',
-    '/api/v2/mix/market/ticker',
-    '/api/v2/mix/market/candles',
-    '/api/v3/market/futures-long-short',
-    '/api/v3/market/futures-active-buy-sell',
-    '/api/v2/mix/market/open-interest',
-    '/api/v2/mix/market/contracts',
-  ];
-  const declaredBlock = /BITGET_PUBLIC_PATHS = Object\.freeze\(\[([\s\S]*?)\]\);/u.exec(workerSource)?.[1] ?? '';
-  const declaredPaths = [...declaredBlock.matchAll(/'([^']+)'/gu)].map((match) => match[1]);
-  const requestedPaths = [...workerSource.matchAll(/publicGet\('([^']+)'/gu)].map((match) => match[1]);
-  check(declaredPaths.join('\n') === expectedPaths.join('\n'),
-    `worker/src/behavior-lab.js: public path allowlist must be the exact accepted seven paths, found [${declaredPaths.join(', ')}]`);
-  check(requestedPaths.length === 7 && [...requestedPaths].sort().join('\n') === [...expectedPaths].sort().join('\n'),
-    'worker/src/behavior-lab.js: one dashboard load must construct every accepted path exactly once');
-  check(workerSource.includes("BITGET_PUBLIC_HOST = 'api.bitget.com'")
-    && workerSource.includes("method: 'GET'") && workerSource.includes("redirect: 'manual'"),
-  'worker/src/behavior-lab.js: upstream must stay https api.bitget.com GET with Workerd-compatible manual redirect refusal');
-  check(/BEHAVIOR_LAB_SYMBOLS = Object\.freeze\(\['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'\]\)/u.test(workerSource)
-    && /BEHAVIOR_LAB_PERIODS = Object\.freeze\(\['5m', '15m', '1h', '4h'\]\)/u.test(workerSource),
-  'worker/src/behavior-lab.js: symbol and period enums must remain fixed');
-  check(workerSource.includes('joinedTimes.length < 20') && workerSource.includes('unmatchedLong > 2')
-    && workerSource.includes('unmatchedTaker > 2'),
-  'worker/src/behavior-lab.js: long-short and taker rows must use exact timestamp joins with bounded unmatched edges');
-  check(workerSource.includes('REQUEST_TIMEOUT_MS') && workerSource.includes('MAX_RESPONSE_BYTES')
-    && workerSource.includes('TOTAL_DEADLINE_MS') && workerSource.includes('MAX_ACTIVE_DASHBOARD_LOADS')
-    && workerSource.includes('MAX_BEHAVIOR_QUEUE_DEPTH') && workerSource.includes('CACHE_TTL_MS')
-    && workerSource.includes('CACHE_LIMIT') && workerSource.includes('clock() + CACHE_TTL_MS'),
-  'worker/src/behavior-lab.js: total/fetch timeout, admission, behavior queue, response, completion TTL, and cache cardinality must stay bounded');
-  check(!/authorization|api[-_ ]?key|passphrase|signature/iu.test(workerSource),
-    'worker/src/behavior-lab.js: credential vocabulary is forbidden on the public market boundary');
-  check(!/\/api\/v\d+\/(?:mix\/)?(?:account|order|position|trade|private)(?:\/|['"`])/iu.test(workerSource),
-    'worker/src/behavior-lab.js: account, private, position, trading, and order paths are forbidden');
-  check(!/fixture|\bdemo\b/iu.test(workerSource),
-    'worker/src/behavior-lab.js: upstream failure must not fall back to fixture/demo data');
-  check(routerSource.includes("method === 'GET' && path === '/api/behavior-lab/dashboard'")
-    && (routerSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length === 1,
-  'worker/src/router.js: exactly one Behavior Lab dashboard route must exist');
-
-  check((appSource.match(/\/api\/behavior-lab\/dashboard/gu) || []).length === 1,
-    'behavior-lab app: the browser must fetch only the single Worker dashboard route');
-  check(!appSource.includes('api.bitget.com'),
-    'behavior-lab app: browser-direct Bitget requests are forbidden');
-  check(!/scheduler|notification|health/iu.test(appSource),
-    'behavior-lab app: local scheduler, notification, and health surfaces must stay out of the public page');
-  check(!/<form\b|type=["']submit["']|\baction=/iu.test(pageHtml)
-    && /id="copyDraft"[^>]*type="button"/u.test(pageHtml)
-    && pageHtml.includes('제출 기능은 존재하지 않습니다.'),
-  'behavior-lab page: the manual draft must remain text/copy-only with no submit surface');
-  check(coreSource.includes('runWalkForwardBacktest') && coreSource.includes('createManualDraft')
-    && coreSource.includes('BACKTEST_FEE_BPS_PER_SIDE = 6')
-    && coreSource.includes('BACKTEST_SLIPPAGE_BPS_PER_SIDE = 4'),
-  'behavior-lab core: chronological backtest and cost-inclusive manual draft semantics are incomplete');
-  check(coreSource.includes('evaluateSnapshotQuality') && coreSource.includes('componentMaxAges')
-    && coreSource.includes('createFreshManualDraft') && appSource.includes('setInterval(refreshLiveClock, 1_000)')
-    && /function createDraft\(\)[\s\S]*createFreshManualDraft/u.test(appSource),
-  'behavior-lab app: component/period live-clock freshness and action-time draft gating must stay fail-closed');
+  check(!existsSync(path.join(ROOT, 'behavior-lab/assets/js/core.js'))
+    && !existsSync(path.join(ROOT, 'worker/src/behavior-lab.js'))
+    && !routerSource.includes('/api/behavior-lab/dashboard')
+    && !appSource.includes('/api/behavior-lab/dashboard'),
+  'behavior-lab: retired market dashboard assets and API must stay removed');
+  check(!appSource.includes('api.bitget.com') && !/<form\b|type=["']submit["']|\baction=/iu.test(pageHtml)
+    && !/marketTab|runBacktest|copyDraft|core\.js/iu.test(pageHtml),
+  'behavior-lab: browser-direct exchange calls and retired market/draft surfaces are forbidden');
   check(/<template data-behavior-owner>[^]*?href="\/behavior-lab\/#paper"[^]*?<\/template>/u.test(homeHtml),
     'index.html: private Behavior Lab must have an exact-owner landing entry to the paper tab');
   check(pageHtml.includes('content="noindex, nofollow, noarchive"')
@@ -2602,21 +2548,22 @@ function validateBehaviorLab() {
     && appSource.includes('/api/behavior-lab/paper'),
   'behavior-lab: owner gate, bearer reads, noindex, and paper tab contract are incomplete');
   check(!pageHtml.includes('id="paperReport"') && !pageHtml.includes('id="paperAdaptive"')
-    && appSource.includes('PAPER_REFRESH_MS = 5_000') && appSource.includes('renderEquityChart')
+    && appSource.includes('PAPER_REFRESH_MS = 30_000') && appSource.includes('LIVE_REFRESH_MS = 60_000')
+    && !appSource.includes('setInterval(') && appSource.includes("document.visibilityState === 'hidden'")
+    && appSource.includes('renderEquityChart')
     && appSource.includes("['starting', 'active'].includes(payload.experiment.status)")
     && appSource.includes('curve.length <= 64') && appSource.includes("setAttribute('role', 'img')")
-    && routerSource.includes("value.engine_version !== 'realtime-paper-v2'")
-    && routerSource.includes('MAX_BEHAVIOR_ADAPTIVE_CHALLENGERS = 8')
-    && routerSource.includes('MAX_BEHAVIOR_ADAPTIVE_AUDIT_LOGS = 20')
-    && routerSource.includes("stream.credential_used !== false")
-    && routerSource.includes("'$.adaptive.audit.sequence'"),
-  'behavior-lab: active-only A/B/C UI and backward-compatible bounded adaptive Worker contract are incomplete');
+    && appSource.includes("'multi-paper-experiment-v3'")
+    && appSource.includes("details.querySelector('.abc-arm-details-body')")
+    && routerSource.includes("method === 'GET' && path === '/api/behavior-lab/paper'")
+    && routerSource.includes("method === 'GET' && path === '/api/behavior-lab/live'"),
+  'behavior-lab: bounded active paper/live dashboard contract is incomplete');
 
   const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   const architecture = readFileSync(path.join(ROOT, 'docs/ARCHITECTURE.md'), 'utf8');
   check(readme.includes('/behavior-lab/'), 'README.md: Behavior Lab is missing from the application list');
-  check(architecture.includes('GET /api/behavior-lab/dashboard'),
-    'docs/ARCHITECTURE.md: the public Behavior Lab API boundary is missing');
+  check(architecture.includes('GET /api/behavior-lab/paper') && architecture.includes('GET /api/behavior-lab/live'),
+    'docs/ARCHITECTURE.md: the private paper/live Behavior Lab API boundary is missing');
 }
 
 validateJavaScriptSyntax();

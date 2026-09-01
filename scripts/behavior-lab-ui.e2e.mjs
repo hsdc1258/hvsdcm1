@@ -225,7 +225,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v14',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v16',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));
@@ -309,11 +309,13 @@ try {
     assert.match(await page.locator('#experimentOpenPositions').textContent(), /1 \/ 6/u);
     assert.match(await page.locator('#experimentTotalTrades').textContent(), /6회/u);
     assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
-    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 6);
-    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 6);
-    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 6);
-    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 판단 · 최신순' }).count(), 6);
-    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 로그 · 최신순' }).count(), 6);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section').count(), 0);
+    await page.locator('.abc-arm-details summary').first().click();
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 1);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 1);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 1);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 판단 · 최신순' }).count(), 1);
+    assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 로그 · 최신순' }).count(), 1);
     assert.match(await page.locator('.abc-arm-card').nth(0).textContent(), /trade-A|BTCUSDT/u);
     assert.match(await page.locator('#experimentFeed').textContent(), /#10/u);
     assert.equal(await page.locator('#stopPaper').isVisible(), true);
@@ -327,7 +329,7 @@ try {
     const polylinePoints = (await page.locator('.abc-equity-chart polyline').first().getAttribute('points')).split(' ');
     assert.ok(Number(polylinePoints[1].split(',')[0]) < 100, polylinePoints.join(' '));
     await assertGeometry(page, 3);
-    assert.equal(await page.locator('.abc-arm-details[open]').count(), 0);
+    assert.equal(await page.locator('.abc-arm-details[open]').count(), 1);
     if (ARTIFACT_DIR) {
       await mkdir(ARTIFACT_DIR, { recursive: true });
       await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-desktop.png'), fullPage: true });
@@ -338,7 +340,6 @@ try {
     assert.match(await firstArmLists.nth(1).locator('li').first().textContent(), /ETHUSDT.*score 0\.7/u);
     assert.match(await firstArmLists.nth(2).locator('li').first().textContent(), /Newest paper cycle.*#2/u);
 
-    await advance(page, 5_000);
     await page.waitForFunction(() => window.__paperFetchCount === 2 && window.__paperHangs.length === 1);
     assert.equal(await page.locator('#paperExperiment').evaluate((element) => getComputedStyle(element).opacity), '1');
     assert.equal(await page.evaluate(() => window.__initialArmNodes.every((node, index) =>
@@ -372,7 +373,7 @@ try {
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGeometry(page, 1);
     if (ARTIFACT_DIR) await page.screenshot({ path: resolve(ARTIFACT_DIR, 'abc-dashboard-mobile.png'), fullPage: true });
-    await advance(page, 5_000);
+    await advance(page, 30_000);
     await page.waitForFunction(() => window.__paperFetchCount === 4 && document.getElementById('paperExperiment').hidden);
     assert.equal(await page.locator('#experimentArms .abc-arm-card').count(), 0);
     assert.equal(await page.locator('#paperEmpty').getAttribute('hidden'), null);
@@ -401,7 +402,7 @@ try {
     const { page, pageErrors } = await openFixture(browser, url, [
       { status: 200, experiment: multiExperiment(10) }, { status, error: 'locked' },
     ]);
-    await advance(page, 5_000);
+    await advance(page, 30_000);
     await page.waitForFunction(() => !document.getElementById('ownerGate').hidden);
     assert.equal(await page.locator('#labShell').getAttribute('hidden'), '');
     assert.deepEqual(pageErrors, []);

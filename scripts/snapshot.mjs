@@ -155,7 +155,7 @@ const USAGE_FIXTURE = {
     model: 'gpt-5.6-sol',
     reasoning: 'xhigh',
     category_key: 'pipeline-visualization',
-    category: '파이프라인 시각화',
+    category: '실행 현황 개선',
     current: '독립 검토와 반응형 확인',
     done: 'Worker 연결 · 렌더 구현 · 결정적 gate',
     next: '라이브 배포',
@@ -265,19 +265,7 @@ const DOCUMENT_SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ----
 .snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
 .snap-note code { color: var(--text); }`;
 
-// 사용량 문서 스냅샷이 조직도에 얹는 유일한 예외.
-//
-// **높이를 풀지 않는다.** 예전에는 `height: auto`로 캔버스를 통째로 펴서 트리 전체가
-// 문서에 흘러나오게 했는데, 그러면 "이 상자에 이 트리가 들어가는가"라는 물음 자체가
-// 사본에서 사라진다 — 390px 캡처가 멀쩡해 보여도 실제 화면의 맞춤 배율(0.23)은 보이지
-// 않았다 (WP3 리뷰 major 1이 지적한 사각지대). 실제 규칙과 같은 높이를 두고 스크롤만
-// 허용하면, 사람이 보는 사본에도 상자 대 트리의 실제 크기 비가 그대로 남는다.
-// 배율 계산 자체(가로 우선 · 판독 바닥 · 넘침 표시)는 scripts/usage.test.mjs가 잠근다.
-// usage 스냅샷에는 **전용 CSS가 없다.** 예전에는 확대·이동 캔버스를 사본에서 볼 수 있게
-// `.h-org-viewport { overflow: auto; }` 한 줄을 끼워 넣었고, 그 한 줄이 실제 화면과 사본을
-// 갈라놓아 리뷰가 사각지대라고 지적했다. 캔버스를 걷어낸 지금(usage.css `.h-org-scroll`)은
-// 배포되는 CSS 그대로가 사본에서도 옳다 — **사본과 실화면이 같은 규칙을 쓴다**는 것이
-// 이 상수를 빈 값으로 두는 이유이고, 다시 채우려면 그 사각지대를 다시 여는 셈이다.
+// 사용량 스냅샷은 배포되는 CSS와 같은 규칙을 사용한다.
 export const USAGE_SNAPSHOT_CSS = '';
 
 // 생성물이므로 줄 끝 공백을 남기지 않는다 (git diff --check).
@@ -440,20 +428,12 @@ export function buildSnapshots() {
         + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
         + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 상위 탭이 <strong>진행 중 · 중단됨 · 완료 셋</strong>이고 <strong>어느 것이 눌려 있는지 눈으로 갈리는지</strong>,'
-        + ' 진행 중 패널 머리의 <strong>관제탑 | 조직도</strong> 모드 토글에서 기본값(관제탑)이 눌려 있는지,'
-        + ' 관제탑 카드의 칩이 이름 · 역할 · 모델 · 상태 · 진행률 · 소요를 각자 슬롯으로 내고 위임 깊이가 들여쓰기로 남는지,'
-        + ' (조직도 모드로 바꿔 보면) 총괄이 <strong>최상단 뿌리</strong>로 서고 수평 trunk에서 단계마다 개별 stem이 내려오는지,'
-        + ' 카드가 되는 단계가 <strong>보고된 단계와 액터가 붙은 단계뿐</strong>이고 나머지(대기 · 기록 없음)는 조직도 아래 한 줄이 이름으로 받는지 (DESIGN.md §1.1 v9),'
-        + ' 사용자 입력이 조직도 node로 만들어지지 <strong>않고</strong> 요청 원문이 상세 머리의 inset 한 곳에만 있는지,'
-        + ' 노드 · 연결선 · 글자가 어디서도 겹치지 않는지,'
+        + ' 선택된 실행의 요청 · 현재 · 완료 · 다음 · 모듈 · 검증 결과가 한 흐름으로 읽히는지,'
         + ' 오른쪽 Codex · Claude 한도 rail에서 제목과 수집 시각이 폭을 다투지 않는지, 게이지의 세 색 구간과 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
         + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
-        + ' 조직도의 확대·이동 캔버스는 <strong>제거됐다</strong>: 트리는 일반 문서 흐름으로 원본 크기로 서고, 넘치면 조직도 상자만 가로로 스크롤한다.'
-        + ' 그래서 이 사본에는 <strong>스냅샷 전용 CSS가 한 줄도 없다</strong> — 배포되는 CSS 그대로이므로 사본에서 본 조판이 곧 실화면의 조판이다.'
-        + ' 예전 사본은 캔버스 변환을 우회하는 전용 CSS 때문에 실제 초기 배율을 가렸고, 그것이 직전 리뷰가 지적한 사각지대였다.'
+        + ' 이 사본에는 <strong>스냅샷 전용 CSS가 한 줄도 없다</strong> — 배포되는 CSS 그대로이므로 사본에서 본 조판이 곧 실화면의 조판이다.'
         + `\n  ${GENERATED_NOTE}`,
-      // 스냅샷 전용 CSS를 끼우지 않는다 (USAGE_SNAPSHOT_CSS는 빈 값이다). 확대·이동이
-      // 사라졌으므로 사본이 실화면과 달라질 이유가 없다 — 배포되는 CSS 그대로 렌더한다.
+      // 스냅샷 전용 CSS를 끼우지 않고 배포되는 CSS 그대로 렌더한다.
       mutate: (html) => html
         .replace(
           '<div id="usageBody" class="us-body"></div>',

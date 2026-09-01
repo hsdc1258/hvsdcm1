@@ -28,6 +28,7 @@ export function corsHeaders(env) {
     'access-control-allow-origin': env.ALLOWED_ORIGIN,
     'access-control-allow-headers': 'authorization,content-type',
     'access-control-allow-methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    'access-control-max-age': '600',
     vary: 'origin',
   };
 }

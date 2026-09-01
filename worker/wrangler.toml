@@ -14,7 +14,6 @@ bucket_name = "hvsdcm-gichul"
 # Required runtime secrets:
 #   npx wrangler secret put USAGE_INGEST_TOKEN
 #   npx wrangler secret put HARNESS_INGEST_TOKEN
-#   npx wrangler secret put MODERATOR_DAEMON_TOKEN
 #   npx wrangler secret put BEHAVIOR_PAPER_REPORT_TOKEN
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"

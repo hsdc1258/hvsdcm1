@@ -317,7 +317,6 @@ export function createUsageRenderers() {
   const renderers = context.USAGE_RENDER;
   if (typeof renderers?.buildDashboard !== 'function'
     || typeof renderers?.renderSessionViews !== 'function'
-    || typeof renderers?.sessionWorktree !== 'function'
     || typeof renderers?.activateTaskTab !== 'function'
     || typeof renderers?.wireTaskTabs !== 'function') {
     throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
@@ -365,19 +364,6 @@ export function createFakeClock() {
   };
 }
 
-// 모더를 따로 세우지 않은 검사가 받는 기본 응답. 안읽음이 0이므로 배지는 서지 않고,
-// 대시보드 검사는 배지의 존재를 몰라도 된다.
-const EMPTY_MODERATOR_FEED = Object.freeze({
-  brain: {},
-  active_sessions: 0,
-  active_commands: 0,
-  counts: { important: {}, proposal: {}, review: {} },
-  unread_counts: { important: 0, proposal: 0, review: 0, record: 0 },
-  items: [],
-  commands: [],
-  next_cursor: null,
-});
-
 export async function createUsageAppSandbox(responses = [], options = {}) {
   const store = new Map();
   const requests = [];
@@ -399,17 +385,6 @@ export async function createUsageAppSandbox(responses = [], options = {}) {
   context.fetch = async (url, requestOptions) => {
     const href = String(url);
     requests.push({ url: href, options: requestOptions });
-    // 모더 요청은 대시보드 응답 큐를 **소비하지 않는다.** 사이드바 안읽음 배지가 생기면서
-    // 실행 현황 화면도 /api/moderator를 한 번 부르는데, 그 요청이 큐에서 대시보드 응답을
-    // 훔쳐 가면 배지가 생겼다는 이유만으로 대시보드 검사가 엉뚱한 데이터를 보게 된다
-    // (2026-08-30에 실제로 usage 검사 다섯이 이렇게 깨졌다). 모더 응답이 필요한 검사는
-    // options.moderator로 직접 준다.
-    if (href.includes('/api/moderator')) {
-      const moderator = options.moderator;
-      if (moderator === HANGING_RESPONSE) return new Promise(() => {});
-      if (moderator instanceof Error) throw moderator;
-      return { ok: true, status: 200, json: async () => moderator || EMPTY_MODERATOR_FEED };
-    }
     const next = queue.shift();
     if (next === HANGING_RESPONSE) return new Promise(() => {});
     if (next instanceof Error) throw next;

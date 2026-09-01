@@ -775,7 +775,7 @@ function usageContext({
 } = {}) {
   const pageUrl = new URL(href);
   const store = new Map();
-  const tabs = ['ops', 'moderator', 'competition', 'guide'].map((name, index) => {
+  const tabs = ['ops', 'competition'].map((name, index) => {
     const tab = element(`tab-${name}`);
     tab.dataset.usageView = name;
     tab.tabIndex = index === 0 ? 0 : -1;
@@ -826,9 +826,6 @@ function usageContext({
         }),
       };
       if (href.includes('/api/competitions')) return { ok: true, status: 200, json: async () => competitionPayload };
-      if (href.includes('/api/moderator')) return {
-        ok: true, status: 200, json: async () => ({ items: [], commands: [], counts: {}, unread_counts: {} }),
-      };
       return { ok: true, status: 200, json: async () => ({ snapshots: [], tasks: [] }) };
     },
     setTimeout() { return 1; },
@@ -848,13 +845,13 @@ function usageContext({
 test('the competition deep link overrides a stored view and loads its API once', async () => {
   const shell = usageContext({
     href: 'https://hvsdcm1.xyz/usage/?view=competition',
-    storedView: 'guide',
+    storedView: 'ops',
   });
   await flush();
   await flush();
   assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 1);
   assert.equal(shell.store.get('viewCompetition').hidden, false);
-  assert.equal(shell.tabs[2].attributes['aria-selected'], 'true');
+  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
   assert.equal(shell.context.localStorage.values.get('hvsdcm.usage.view'), 'competition');
 });
 
@@ -899,21 +896,21 @@ test('the ARIA tab is wired and the API stays lazy through first activation', as
   assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 1);
   assert.equal(shell.store.get('viewCompetition').hidden, false);
   assert.equal(shell.store.get('viewOps').hidden, true);
-  assert.equal(shell.tabs[2].attributes['aria-selected'], 'true');
-  assert.equal(shell.tabs[2].tabIndex, 0);
+  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
+  assert.equal(shell.tabs[1].tabIndex, 0);
   assert.equal(shell.tabs[0].tabIndex, -1);
 
-  shell.context.USAGE_RENDER.activateUsageView('moderator');
+  shell.context.USAGE_RENDER.activateUsageView('ops');
   const event = { key: 'ArrowDown', preventDefault() { this.prevented = true; } };
-  shell.tabs[1].listeners.keydown(event);
+  shell.tabs[0].listeners.keydown(event);
   assert.equal(event.prevented, true);
-  assert.equal(shell.tabs[2].focused, true);
-  assert.equal(shell.tabs[2].attributes['aria-selected'], 'true');
+  assert.equal(shell.tabs[1].focused, true);
+  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
 });
 
 test('static markup connects every tab to one hidden-aware panel and keeps owner details out of titles', () => {
   const tabs = [...HTML.matchAll(/<button id="(tab\w+)"[^>]*role="tab"[^>]*aria-controls="(view\w+)"[^>]*data-usage-view="(\w+)"/gu)];
-  assert.deepEqual(Array.from(tabs, (match) => match[3]), ['ops', 'moderator', 'competition', 'guide']);
+  assert.deepEqual(Array.from(tabs, (match) => match[3]), ['ops', 'competition']);
   for (const [, tabId, viewId] of tabs) {
     assert.match(HTML, new RegExp(`<section id="${viewId}"[^>]*role="tabpanel"[^>]*aria-labelledby="${tabId}"`, 'u'));
   }

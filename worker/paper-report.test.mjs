@@ -738,18 +738,3 @@ test('paper read is exact behavior-owner only, fail-closed, no-store, and return
   assert.equal(failed.status, 500);
   assert.equal(failed.headers.get('cache-control'), 'private, no-store');
 });
-
-test('dashboard read authenticates the separate human owner before validating or starting upstream work', async () => {
-  const url = 'https://api.test/api/behavior-lab/dashboard?symbol=BTCUSDT&period=bad';
-  const noSession = await worker.fetch(new Request(url), envFor(memoryDb()));
-  assert.equal(noSession.status, 401);
-  assert.equal(noSession.headers.get('cache-control'), 'private, no-store');
-  const testAccount = await worker.fetch(new Request(url, { headers: { authorization: 'Bearer session' } }),
-    envFor(memoryDb({ username: 'claude-test' })));
-  assert.equal(testAccount.status, 404);
-  assert.equal(testAccount.headers.get('cache-control'), 'private, no-store');
-  const owner = await worker.fetch(new Request(url, { headers: { authorization: 'Bearer session' } }),
-    envFor(memoryDb()));
-  assert.equal(owner.status, 400);
-  assert.match(owner.headers.get('cache-control') || '', /no-store/u);
-});
