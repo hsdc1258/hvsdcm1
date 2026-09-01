@@ -3994,6 +3994,7 @@ export async function route(request, env) {
       return json(await getBehaviorLabDashboard(request.url), 200, { 'cache-control': 'private, no-store' });
     } catch (error) {
       if (error instanceof BehaviorLabRequestError) {
+        console.warn('behavior_lab_dashboard_failure', error.stage || 'request');
         return json({ error: error.message }, error.status, { 'cache-control': 'private, no-store' });
       }
       throw error;

@@ -2155,7 +2155,7 @@ function validateGlobalsAndOrder() {
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
-    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260901-v13'],
+    'behavior-lab/index.html': ['/behavior-lab/assets/js/core.js?v=20260831-v2', '/behavior-lab/assets/js/app.js?v=20260901-v14'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
     check(scriptSources(file).join(' → ') === order.join(' → '), `${file}: script load order must be ${order.join(' → ')}`);
@@ -2539,9 +2539,8 @@ function validateBehaviorLab() {
     '/api/v2/mix/market/tickers',
     '/api/v2/mix/market/ticker',
     '/api/v2/mix/market/candles',
-    '/api/v2/mix/market/long-short',
-    '/api/v2/mix/market/taker-buy-sell',
-    '/api/v2/mix/market/history-fund-rate',
+    '/api/v3/market/futures-long-short',
+    '/api/v3/market/futures-active-buy-sell',
     '/api/v2/mix/market/open-interest',
     '/api/v2/mix/market/contracts',
   ];
@@ -2549,8 +2548,8 @@ function validateBehaviorLab() {
   const declaredPaths = [...declaredBlock.matchAll(/'([^']+)'/gu)].map((match) => match[1]);
   const requestedPaths = [...workerSource.matchAll(/publicGet\('([^']+)'/gu)].map((match) => match[1]);
   check(declaredPaths.join('\n') === expectedPaths.join('\n'),
-    `worker/src/behavior-lab.js: public path allowlist must be the exact accepted eight paths, found [${declaredPaths.join(', ')}]`);
-  check(requestedPaths.length === 8 && [...requestedPaths].sort().join('\n') === [...expectedPaths].sort().join('\n'),
+    `worker/src/behavior-lab.js: public path allowlist must be the exact accepted seven paths, found [${declaredPaths.join(', ')}]`);
+  check(requestedPaths.length === 7 && [...requestedPaths].sort().join('\n') === [...expectedPaths].sort().join('\n'),
     'worker/src/behavior-lab.js: one dashboard load must construct every accepted path exactly once');
   check(workerSource.includes("BITGET_PUBLIC_HOST = 'api.bitget.com'")
     && workerSource.includes("method: 'GET'") && workerSource.includes("redirect: 'manual'"),

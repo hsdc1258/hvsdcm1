@@ -12,7 +12,7 @@
   const state = {
     symbol: 'BTCUSDT', period: '5m', dashboard: null, request: 0, controller: null, draft: null, freshness: null,
     ownerVerified: false, experiment: null, paperLoading: false, paperRequestId: 0, paperController: null,
-    stopSubmitting: false, stopRequested: false, activeTab: 'market', liveReport: null,
+    stopSubmitting: false, stopRequested: false, activeTab: 'paper', liveReport: null,
     liveLoading: false, liveRequestId: 0, liveController: null,
   };
 
@@ -525,7 +525,7 @@
   }
 
   function switchTab(tab) {
-    const next = ['paper', 'live'].includes(tab) ? tab : 'market';
+    const next = ['paper', 'live'].includes(tab) ? tab : 'paper';
     state.activeTab = next;
     const paperActive = next === 'paper';
     const liveActive = next === 'live';
@@ -1195,8 +1195,7 @@
     try {
       await loadPaper({ verifyOwner: true, force: true });
       void loadLiveTrading({ force: true });
-      switchTab(location.hash === '#paper' ? 'paper' : location.hash === '#live' ? 'live' : 'market');
-      void loadDashboard();
+      switchTab(location.hash === '#live' ? 'live' : 'paper');
     } catch (error) {
       showOwnerGate(error instanceof OwnerAccessError ? error.status : 0);
     }

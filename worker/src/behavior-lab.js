@@ -5,9 +5,8 @@ export const BITGET_PUBLIC_PATHS = Object.freeze([
   '/api/v2/mix/market/tickers',
   '/api/v2/mix/market/ticker',
   '/api/v2/mix/market/candles',
-  '/api/v2/mix/market/long-short',
-  '/api/v2/mix/market/taker-buy-sell',
-  '/api/v2/mix/market/history-fund-rate',
+  '/api/v3/market/futures-long-short',
+  '/api/v3/market/futures-active-buy-sell',
   '/api/v2/mix/market/open-interest',
   '/api/v2/mix/market/contracts',
 ]);
@@ -79,8 +78,10 @@ export function behaviorLabBudgetSnapshot() {
   };
 }
 
-function publicFailure() {
-  return new BehaviorLabRequestError('공개 시장 데이터를 검증하지 못했습니다. 잠시 후 다시 시도하세요.');
+function publicFailure(stage = 'validation') {
+  const error = new BehaviorLabRequestError('공개 시장 데이터를 검증하지 못했습니다. 잠시 후 다시 시도하세요.');
+  error.stage = stage;
+  return error;
 }
 
 function deadlineFailure() {
@@ -136,9 +137,10 @@ function parseTicker(row) {
   const high24h = finite(row.high24h ?? row.high);
   const low24h = finite(row.low24h ?? row.low);
   const ts = finite(row.ts);
+  const fundingRate = finite(row.fundingRate);
   const symbol = typeof row.symbol === 'string' ? row.symbol : '';
-  if ([rawChange, last, quoteVolume, high24h, low24h, ts].some((item) => item === null)) return null;
-  if (last <= 0 || quoteVolume < 0 || low24h <= 0 || high24h < low24h || ts <= 0) return null;
+  if ([rawChange, last, quoteVolume, high24h, low24h, ts, fundingRate].some((item) => item === null)) return null;
+  if (last <= 0 || quoteVolume < 0 || low24h <= 0 || high24h < low24h || ts <= 0 || Math.abs(fundingRate) > 1) return null;
   return {
     symbol,
     last,
@@ -147,6 +149,7 @@ function parseTicker(row) {
     high24h,
     low24h,
     ts,
+    fundingRate,
   };
 }
 
@@ -223,12 +226,14 @@ async function publicGet(path, query, fetchImpl, timeoutMs, ledger, context) {
       else controller.signal.addEventListener('abort', rejectAbort, { once: true });
     });
     const response = await Promise.race([fetchPromise, abortPromise]);
-    if (!response || !response.ok || response.status < 200 || response.status >= 300) throw publicFailure();
+    if (!response || !response.ok || response.status < 200 || response.status >= 300) {
+      throw publicFailure(`upstream:${path}:http-${response?.status ?? 'missing'}`);
+    }
     return await readBoundedJson(response);
   } catch (error) {
     if (error instanceof BehaviorLabRequestError) throw error;
     if (context.cancelled || remainingMs(context) <= 0) throw deadlineFailure();
-    throw publicFailure();
+    throw publicFailure(`upstream:${path}:network`);
   } finally {
     clearTimeout(timeout);
     context.controllers.delete(controller);
@@ -351,21 +356,20 @@ async function loadDashboard(symbol, period, options) {
     publicGet('/api/v2/mix/market/tickers', common, fetchImpl, timeoutMs, ledger, context),
     publicGet('/api/v2/mix/market/ticker', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
     publicGet('/api/v2/mix/market/candles', { ...common, symbol, granularity: PERIOD_TO_GRANULARITY[period], limit: '260' }, fetchImpl, timeoutMs, ledger, context),
-    publicGet('/api/v2/mix/market/history-fund-rate', { ...common, symbol, pageSize: '20' }, fetchImpl, timeoutMs, ledger, context),
     publicGet('/api/v2/mix/market/open-interest', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
     publicGet('/api/v2/mix/market/contracts', { ...common, symbol }, fetchImpl, timeoutMs, ledger, context),
   ];
   const longShortPromise = behaviorPublicGet(
-    () => publicGet('/api/v2/mix/market/long-short', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
+    () => publicGet('/api/v3/market/futures-long-short', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
     behaviorGapMs,
     context,
   );
   const takerPromise = behaviorPublicGet(
-    () => publicGet('/api/v2/mix/market/taker-buy-sell', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
+    () => publicGet('/api/v3/market/futures-active-buy-sell', { symbol, period }, fetchImpl, timeoutMs, ledger, context),
     behaviorGapMs,
     context,
   );
-  const [allRaw, tickerRaw, candlesRaw, fundingRaw, interestRaw, contractsRaw, longShortRaw, takerRaw] = await Promise.all([
+  const [allRaw, tickerRaw, candlesRaw, interestRaw, contractsRaw, longShortRaw, takerRaw] = await Promise.all([
     ...ordinary, longShortPromise, takerPromise,
   ]);
   requireActive(context);
@@ -431,17 +435,6 @@ async function loadDashboard(symbol, period, options) {
   const behaviorUpdatedAt = behaviorSeries.at(-1).ts;
   assertTimestamp(behaviorUpdatedAt, nowMs, PERIOD_MS[period] * 3);
 
-  const fundingEnvelope = unwrap(fundingRaw, nowMs);
-  const fundingRows = Array.isArray(fundingEnvelope.data) ? fundingEnvelope.data : [];
-  const fundingEntries = fundingRows.map((row) => {
-    const rate = finite(row?.fundingRate);
-    const time = finite(row?.fundingTime);
-    return row?.symbol === symbol && rate !== null && Math.abs(rate) <= 1 && time !== null && time > 0 ? { rate, time } : null;
-  });
-  if (!fundingRows.length || fundingEntries.some((item) => item === null)) throw publicFailure();
-  fundingEntries.sort((left, right) => right.time - left.time);
-  assertTimestamp(fundingEntries[0].time, nowMs, 12 * 3_600_000);
-
   const interestEnvelope = unwrap(interestRaw, nowMs);
   const interestData = interestEnvelope.data && typeof interestEnvelope.data === 'object' && !Array.isArray(interestEnvelope.data)
     ? interestEnvelope.data : {};
@@ -468,7 +461,7 @@ async function loadDashboard(symbol, period, options) {
     ticker: { status: 'fresh', updatedAt: ticker.ts, ageMs: Math.max(0, nowMs - ticker.ts) },
     candles: { status: 'fresh', updatedAt: candlesUpdatedAt, ageMs: Math.max(0, nowMs - candlesUpdatedAt) },
     behavior: { status: 'fresh', updatedAt: behaviorUpdatedAt, ageMs: Math.max(0, nowMs - behaviorUpdatedAt) },
-    funding: { status: 'fresh', updatedAt: fundingEntries[0].time, ageMs: Math.max(0, nowMs - fundingEntries[0].time) },
+    funding: { status: 'fresh', updatedAt: ticker.ts, ageMs: Math.max(0, nowMs - ticker.ts) },
     openInterest: { status: 'fresh', updatedAt: interestUpdatedAt, ageMs: Math.max(0, nowMs - interestUpdatedAt) },
     contracts: { status: 'fresh', updatedAt: contractsEnvelope.requestTime, ageMs: Math.max(0, nowMs - contractsEnvelope.requestTime) },
   };
@@ -487,7 +480,7 @@ async function loadDashboard(symbol, period, options) {
     ticker,
     candles,
     behaviorSeries,
-    fundingRate: fundingEntries[0].rate,
+    fundingRate: ticker.fundingRate,
     openInterest: interestMatches[0],
     maxLeverage: contractMatches[0],
   };

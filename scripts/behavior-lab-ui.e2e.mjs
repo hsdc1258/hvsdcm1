@@ -225,7 +225,7 @@ async function startServer() {
       let body = await readFile(file);
       const mutant = requested.searchParams.get('mutant');
       if (relative === 'behavior-lab/index.html' && mutant) {
-        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v13',
+        body = Buffer.from(body.toString('utf8').replace('/behavior-lab/assets/js/app.js?v=20260901-v14',
           `/behavior-lab/assets/js/app.js?mutant=${mutant}`));
       } else if (relative === 'behavior-lab/assets/js/app.js' && mutant === 'render') {
         body = Buffer.from(body.toString('utf8').replace('renderAdaptiveReport(report.adaptive);', 'renderAdaptiveReport(null);'));

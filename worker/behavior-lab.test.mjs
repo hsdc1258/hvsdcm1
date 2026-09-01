@@ -45,15 +45,15 @@ function fixtureFor(url, mutation = () => {}) {
     high24h: String(94_000 + index * 100),
     low24h: String(90_000 + index * 100),
     ts: String(NOW),
+    fundingRate: '0.0001',
   });
   let data;
   switch (url.pathname) {
     case '/api/v2/mix/market/tickers': data = SYMBOLS.map(ticker); break;
     case '/api/v2/mix/market/ticker': data = [ticker(symbol)]; break;
     case '/api/v2/mix/market/candles': data = candles; break;
-    case '/api/v2/mix/market/long-short': data = behavior; break;
-    case '/api/v2/mix/market/taker-buy-sell': data = taker; break;
-    case '/api/v2/mix/market/history-fund-rate': data = [{ symbol, fundingRate: '0.0001', fundingTime: String(NOW - 3_600_000) }]; break;
+    case '/api/v3/market/futures-long-short': data = behavior; break;
+    case '/api/v3/market/futures-active-buy-sell': data = taker; break;
     case '/api/v2/mix/market/open-interest': data = { openInterestList: [{ symbol, size: '184205.31' }], ts: String(NOW) }; break;
     case '/api/v2/mix/market/contracts': data = [{ symbol, maxLever: '50' }]; break;
     default: throw new Error(`unexpected fixture path ${url.pathname}`);
@@ -74,7 +74,7 @@ function transport(mutation, ledger = []) {
   };
 }
 
-test('dashboard makes exactly the eight accepted public Bitget GETs and returns only validated live data', async () => {
+test('dashboard makes exactly the seven accepted public Bitget GETs and returns only validated live data', async () => {
   const ledger = [];
   const result = await getBehaviorLabDashboard(
     'https://worker.example/api/behavior-lab/dashboard?symbol=BTCUSDT&period=5m',
@@ -89,7 +89,7 @@ test('dashboard makes exactly the eight accepted public Bitget GETs and returns 
   assert.equal(result.snapshot.behaviorSeries.length, 24);
   assert.equal(result.signal.dataQuality, 'live');
   assert.deepEqual(ledger.map(({ url }) => url.pathname).sort(), [...BITGET_PUBLIC_PATHS].sort());
-  assert.equal(ledger.length, 8);
+  assert.equal(ledger.length, 7);
   for (const { url, init } of ledger) {
     assert.equal(url.protocol, 'https:');
     assert.equal(url.hostname, BITGET_PUBLIC_HOST);
@@ -120,7 +120,7 @@ test('the upstream request uses Workerd-supported manual redirect refusal', asyn
     { cache: false, nowMs: NOW, behaviorGapMs: 0, fetchImpl: workerdTransport },
   );
   assert.equal(result.source, 'live');
-  assert.equal(ledger.length, 8);
+  assert.equal(ledger.length, 7);
 
   await assert.rejects(
     getBehaviorLabDashboard('https://worker.example/api/behavior-lab/dashboard?symbol=ETHUSDT&period=15m', {
@@ -169,7 +169,7 @@ test('stale, null, malformed, and timestamp-misaligned upstream data fail closed
     (body, url) => { if (url.pathname === '/api/v2/mix/market/ticker') body.data[0].ts = String(NOW - 3 * 60_000); },
     (body, url) => { if (url.pathname === '/api/v2/mix/market/candles') body.data[20][4] = null; },
     (body, url) => { if (url.pathname === '/api/v2/mix/market/open-interest') body.code = '99999'; },
-    (body, url) => { if (url.pathname === '/api/v2/mix/market/taker-buy-sell') body.data = body.data.map((row) => ({ ...row, ts: String(Number(row.ts) + 1) })); },
+    (body, url) => { if (url.pathname === '/api/v3/market/futures-active-buy-sell') body.data = body.data.map((row) => ({ ...row, ts: String(Number(row.ts) + 1) })); },
   ];
   for (const mutation of mutations) {
     await assert.rejects(
@@ -252,7 +252,7 @@ test('all 16 enums saturate within the module budget and overflow never starts u
   const snapshot = behaviorLabBudgetSnapshot();
   assert.equal(snapshot.maxObservedActiveLoads, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads);
   assert.ok(snapshot.maxObservedBehaviorQueueDepth <= BEHAVIOR_LAB_PUBLIC_BUDGET.maxBehaviorQueueDepth);
-  assert.equal(snapshot.upstreamStarts, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads * 8);
+  assert.equal(snapshot.upstreamStarts, BEHAVIOR_LAB_PUBLIC_BUDGET.maxActiveDashboardLoads * 7);
   assert.equal(snapshot.activeDashboardLoads, 0);
   assert.equal(snapshot.behaviorQueueDepth, 0);
   assert.equal(snapshot.behaviorReservations, 0);
@@ -277,7 +277,7 @@ test('the total deadline includes behavior queue wait and timed-out work never s
     (error) => error instanceof BehaviorLabRequestError && error.status === 503,
   );
   const startsAtTimeout = ledger.length;
-  assert.equal(startsAtTimeout, 7);
+  assert.equal(startsAtTimeout, 6);
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.equal(ledger.length, startsAtTimeout);
   assert.deepEqual(behaviorLabBudgetSnapshot(), {
@@ -286,7 +286,7 @@ test('the total deadline includes behavior queue wait and timed-out work never s
     behaviorReservations: 0,
     maxObservedActiveLoads: 1,
     maxObservedBehaviorQueueDepth: 2,
-    upstreamStarts: 7,
+    upstreamStarts: 6,
     inflightEntries: 0,
     cacheEntries: 0,
   });
@@ -318,21 +318,21 @@ test('same-key loads dedupe and successful cache TTL starts at completion', asyn
     getBehaviorLabDashboard(url, options),
   ]);
   assert.deepEqual(deduped, first);
-  assert.equal(ledger.length, 8);
-  assert.equal(cacheClock, 24_000);
+  assert.equal(ledger.length, 7);
+  assert.equal(cacheClock, 21_000);
 
   cacheClock = 30_000;
   assert.deepEqual(await getBehaviorLabDashboard(url, options), first);
-  assert.equal(ledger.length, 8);
+  assert.equal(ledger.length, 7);
 
   cacheClock = 40_000;
   await getBehaviorLabDashboard(url, options);
-  assert.equal(ledger.length, 16);
+  assert.equal(ledger.length, 14);
 });
 
 test('the Worker boundary contains no credential, account, private, or trading request vocabulary', () => {
   const source = readFileSync(new URL('./src/behavior-lab.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /authorization|api[-_ ]?key|passphrase|signature/iu);
   assert.doesNotMatch(source, /\/api\/v\d+\/(?:mix\/)?(?:account|order|position|trade|private)(?:\/|['"`])/iu);
-  assert.equal((source.match(/\/api\/v2\/mix\/market\//gu) || []).length >= 8, true);
+  assert.equal((source.match(/\/api\/v(?:2\/mix|3)\/market\//gu) || []).length >= 7, true);
 });

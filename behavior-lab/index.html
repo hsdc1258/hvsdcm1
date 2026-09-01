@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
   <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260901-v11">
   <script src="/behavior-lab/assets/js/core.js?v=20260831-v2" defer></script>
-  <script src="/behavior-lab/assets/js/app.js?v=20260901-v13" defer></script>
+  <script src="/behavior-lab/assets/js/app.js?v=20260901-v14" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
@@ -35,8 +35,8 @@
           <span><b>Behavior Lab</b><small>TRADING DASHBOARD</small></span>
         </a>
         <nav class="lab-tabs" aria-label="Behavior Lab 화면">
-          <button id="marketTab" class="lab-tab is-active" type="button" data-tab="market" aria-selected="true" aria-controls="marketTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>시장</button>
-          <button id="paperTab" class="lab-tab" type="button" data-tab="paper" aria-selected="false" aria-controls="paperTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg>모델</button>
+          <button id="marketTab" class="lab-tab" type="button" data-tab="market" aria-selected="false" aria-controls="marketTabPanel" hidden><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>시장</button>
+          <button id="paperTab" class="lab-tab is-active" type="button" data-tab="paper" aria-selected="true" aria-controls="paperTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bot"></use></svg>모델</button>
           <button id="liveTab" class="lab-tab" type="button" data-tab="live" aria-selected="false" aria-controls="liveTabPanel"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>실투</button>
         </nav>
         <span class="read-only-mark"><i></i> OWNER ONLY</span>
@@ -44,7 +44,7 @@
     </header>
 
     <main id="main" class="lab-main" tabindex="-1">
-      <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab">
+      <section id="marketTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="marketTab" hidden>
         <section class="view-masthead" aria-labelledby="marketControlsTitle">
           <div><p class="section-index">MARKET</p><h1 id="marketControlsTitle">시장 대시보드</h1><p>가격과 행동 신호를 실시간으로 확인해요.</p></div>
           <div id="liveStatus" class="live-status is-loading" role="status" aria-live="polite"><i></i><span>공개 데이터 확인 중</span></div>
@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab" hidden>
+      <section id="paperTabPanel" class="tab-panel paper-tab-panel" role="tabpanel" aria-labelledby="paperTab">
         <header class="paper-heading">
           <div class="paper-title-block"><p class="section-index">MODELS</p><h1>모델 대시보드</h1><p class="section-copy">6개 모의매매 모델의 성과와 최신 판단을 비교해요.</p></div>
           <div class="paper-command"><span id="paperStatus" class="live-status is-loading"><i></i><span>보고 확인 중</span></span><div class="paper-actions"><button id="refreshPaper" class="text-button" type="button">새로고침</button><button id="stopPaper" class="text-button is-danger" type="button" hidden>모델 중단</button></div></div>
