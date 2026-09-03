@@ -13,7 +13,7 @@ Static learning site served by GitHub Pages, with account synchronization and ad
 | `/gichul/` | Login-only KICE past-paper filtering, viewing and client-side PDF merge | `gichul/app.js` | filter settings |
 | `/behavior-lab/` | Human-owner-only Bitget behavior dashboard and bounded real-time adaptive $100 paper-session status | `behavior-lab/assets/js/app.js` | account token |
 | `/admin/` | User, activity, device/IP and shared-answer administration | `admin/assets/js/admin.js` | session-only admin token |
-| `/usage/` | Owner-only Codex limits and live AI harness hierarchy | `usage/assets/js/usage.js` | account token |
+| `/usage/` | Owner-only competition candidates and approval queue | `usage/assets/js/competition.js` | account token |
 | Worker | JSON API, D1 access, authenticated R2 learning/PDF proxy and owner-only Behavior Lab boundaries | `worker/src/index.js` | D1 tables and R2 objects |
 
 There is no front-end bundle step. HTML loads checked-in CSS and JavaScript directly, while learning content is fetched after login from authenticated Worker routes. The checked-in `_learning/` source is excluded by the default Jekyll Pages build and is converted into private R2 payloads before release.
@@ -84,6 +84,10 @@ Only the orchestrator should run the networked collection and upload commands. I
 
 The R2 uploader includes `manifest.json` and every referenced PDF. It records content hashes in `gichul-src/.r2-upload-state.json`, so a repeat run uploads only locally new or changed objects. Changed PDFs are uploaded first and `manifest.json` is published last; the checkpoint advances only after every upload succeeds. Deleting an object directly from R2 requires removing that local checkpoint before restoring it.
 
-Apply D1 migrations before deploying Worker code. Migration `0004_session_ip_address.sql` enables exact IP display for requests made after deployment; `0006_harness_tasks.sql` stores the latest owner-only pipeline state mirrored from Discord reporting, and `0010_harness_project_snapshots.sql` groups those tasks under one monotonic project snapshot for Discord and `/usage`. Older sessions may only have a one-way IP fingerprint.
+Apply D1 migrations before deploying Worker code. Migration `0004_session_ip_address.sql` enables exact IP display for requests made after deployment. The historical usage/harness migrations and their D1 rows remain intact, but their ingest/read routes and UI were archived on 2026-09-04; see [`docs/archive/2026-09-04-usage/`](docs/archive/2026-09-04-usage/README.md). Older sessions may only have a one-way IP fingerprint.
+
+## Archived features
+
+- 2026-09-04: Codex/Claude usage snapshots and harness task/event UI, routes, scripts, tests, and snapshot were preserved under [`docs/archive/2026-09-04-usage/`](docs/archive/2026-09-04-usage/README.md). D1 schema and rows were not deleted; Behavior Lab and the competition surface remain active.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for request and synchronization flows, and [`CONTRIBUTING.md`](CONTRIBUTING.md) before modifying data or D1 migrations.
