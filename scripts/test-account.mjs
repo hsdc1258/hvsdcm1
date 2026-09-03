@@ -57,7 +57,7 @@ function adminTokenDaysLeft() {
 async function check() {
   const token = await userToken();
   const probes = [
-    ['GET /api/usage (비소유자 은닉)', '/api/usage', token, 404],
+    ['GET /api/usage (보관됨)', '/api/usage', token, 404],
     ['GET /api/admin/stats (관리자)', '/api/admin/stats', credentials.admin.token, 200],
   ];
   let failed = 0;

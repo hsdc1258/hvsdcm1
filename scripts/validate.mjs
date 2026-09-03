@@ -225,7 +225,7 @@ function validateUiContracts() {
   const adminJs = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
   const usageHtml = readFileSync(path.join(ROOT, 'usage/index.html'), 'utf8');
   const usageCss = readFileSync(path.join(ROOT, 'usage/assets/css/usage.css'), 'utf8');
-  const usageJs = readFileSync(path.join(ROOT, 'usage/assets/js/usage.js'), 'utf8');
+  const competitionPageJs = readFileSync(path.join(ROOT, 'usage/assets/js/page.js'), 'utf8');
 
   // 랜딩의 본문은 워드마크 하나뿐이고, 로그인한 경우에만 빈 드로어에 링크를 조립한다.
   check(/<main id="main">\s*<button id="wordmark"[^]*?HVSDCM1[^]*?<\/button>\s*<\/main>/u.test(homeHtml),
@@ -268,37 +268,15 @@ function validateUiContracts() {
   check(homeJs.includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;"),
     'home: owner-only links must never be created for a non-owner');
 
-  // ---- 사용량 화면 (plan.md §1-2 / §3.2) ----
-  // 여기서 보는 것은 **마크업 구조 계약**뿐이다. 렌더 로직(버킷 키 도출, 모르는 키 폴백,
-  // resets_at 파싱, 24시간 stale, 게이지 색 구간)은 소스 문자열 grep이 아니라
-  // `scripts/usage.test.mjs`가 buildDashboard()를 **실제로 실행해** 검증한다 (review WP1 M-2).
-  // grep은 변수명만 바꿔도 깨지고 로직이 틀려도 통과했다 — 그래서 지웠다.
-  //
-  // 이 검사가 **못 보는 것**: API 응답의 실제 모양(런타임 계약은 worker/test.mjs가 본다),
-  // 게이지 폭이 퍼센트와 맞는지(스냅샷의 고정 표본이 사람 눈에 보여 준다).
-  check(usageHtml.includes('id="usageBody"'), 'usage: the dashboard mount point #usageBody is missing');
-  check(usageJs.includes('login=1&next='),
-    'usage: the redirect must carry ?login=1&next= so the visitor returns here after login');
-  check(usageCss.includes('.us-body'), 'usage: the screen stylesheet lost its layout rules');
-
-  // 화면이 그리는 단계 목록과 **Worker가 받아 주는 단계 목록**은 같아야 한다.
-  // 다르면 둘 중 하나가 반드시 거짓말이 된다: 화면이 영원히 이벤트가 오지 않는 단계를
-  // 그리거나(review WPA2 M4가 요구한 8단계가 이 경우다), 받은 단계를 못 그린다.
-  // 두 목록을 손으로 맞추지 않고 **원본 대 원본**으로 비교한다 (LESSONS: 파생 가능한
-  // 것을 손으로 적지 않는다). 계약을 넓히려면 worker의 허용 집합을 먼저 넓혀야 하고,
-  // 그때 이 검사가 화면 갱신을 강제한다.
-  const routerJs = readFileSync(path.join(ROOT, 'worker/src/router.js'), 'utf8');
-  const workerPhases = [...(/VALID_HARNESS_PHASES = new Set\(\[([^\]]*)\]\)/u.exec(routerJs)?.[1] || '')
-    .matchAll(/'([a-z0-9-]+)'/gu)].map((match) => match[1]);
-  const screenPhases = [...(/\n  const PHASES = \[([\s\S]*?)\n  \];/u.exec(usageJs)?.[1] || '')
-    .matchAll(/key: '([a-z0-9-]+)'/gu)].map((match) => match[1]);
-  check(workerPhases.length > 0,
-    'usage: could not derive VALID_HARNESS_PHASES from worker/src/router.js — this cross-check is inert');
-  check(screenPhases.length > 0,
-    'usage: could not derive the PHASES list from usage.js — this cross-check is inert');
-  check(workerPhases.join(',') === screenPhases.join(','),
-    `usage: the screen's phase chain [${screenPhases.join(', ')}] must equal the phases the Worker accepts`
-    + ` [${workerPhases.join(', ')}] — a stage the reporter cannot emit can never carry status, model, or duration`);
+  // `/usage/` 경로는 공모전 자동화가 이미 사용하므로 유지하지만, 화면은 공모전 전용이다.
+  check(usageHtml.includes('id="competitionBody"') && !usageHtml.includes('id="usageBody"'),
+    'competition: the retained /usage/ screen must expose competition only');
+  check(competitionPageJs.includes("request('/api/competitions')") || competitionPageJs.includes("path === '/api/competitions'"),
+    'competition: the page controller must use only the competition read route');
+  check(!competitionPageJs.includes('/api/usage') && !competitionPageJs.includes('/api/harness'),
+    'competition: archived usage and harness routes must not return to the active page');
+  check(usageCss.includes('.cp-body') && !usageCss.includes('.us-command-layout'),
+    'competition: the stylesheet must keep competition rules without the archived command center');
 
   // system.css 공통 프리미티브 — 3b에서 앱 3면이 이 위에 얹힌다.
   for (const primitive of ['.btn ', '.btn-primary ', '.field-input ', '.card ', '.sheet ', '.sheet-backdrop ', '.table ', '.badge ', '.segmented ', '.toolbar ', '.sidebar ', '.toast ', '.topbar ', '.app-shell ', '.segmented-btn ', '.sidebar-item ']) {
@@ -2146,7 +2124,7 @@ function validateGlobalsAndOrder() {
     'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
     'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-search-v1'],
     'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-study-sync-v1'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-competition-review-v1', '/usage/assets/js/usage.js?v=20260901-competition-review-v1'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-competition-only-v1', '/usage/assets/js/page.js?v=20260904-competition-only-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
@@ -2173,7 +2151,7 @@ function validateGlobalsAndOrder() {
     'smstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css'],
     'plstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css?v=20260904-search-v1'],
     'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
-    'usage/index.html': ['/assets/css/system.css?v=20260901-competition-review-v1', '/usage/assets/css/usage.css?v=20260901-competition-review-v1'],
+    'usage/index.html': ['/assets/css/system.css?v=20260904-competition-only-v1', '/usage/assets/css/usage.css?v=20260904-competition-only-v1'],
     'gichul/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', '/gichul/gichul.css?v=20260829-n4'],
     'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v12'],
   };

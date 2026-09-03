@@ -4,7 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const COMPETITION_SOURCE = fs.readFileSync('usage/assets/js/competition.js', 'utf8');
-const USAGE_SOURCE = fs.readFileSync('usage/assets/js/usage.js', 'utf8');
+const PAGE_SOURCE = fs.readFileSync('usage/assets/js/page.js', 'utf8');
 const HTML = fs.readFileSync('usage/index.html', 'utf8');
 const NOW = Date.parse('2026-08-31T03:00:00+09:00');
 
@@ -770,17 +770,9 @@ test('controller renders loading, empty, error/retry and manual refresh states',
   assert.match(failure.store.get('competitionBody').innerHTML, /data-competition-retry/u);
 });
 
-function usageContext({
-  href = 'https://hvsdcm1.xyz/usage/', storedView = null, competitionPayload = fixture(),
-} = {}) {
-  const pageUrl = new URL(href);
+function pageContext({ competitionPayload = fixture() } = {}) {
   const store = new Map();
-  const tabs = ['ops', 'competition'].map((name, index) => {
-    const tab = element(`tab-${name}`);
-    tab.dataset.usageView = name;
-    tab.tabIndex = index === 0 ? 0 : -1;
-    return tab;
-  });
+  const documentListeners = {};
   const document = {
     hidden: false,
     title: 'hvsdcm',
@@ -788,26 +780,18 @@ function usageContext({
       if (!store.has(id)) store.set(id, element(id));
       return store.get(id);
     },
-    querySelectorAll(selector) { return selector === '[data-usage-view]' ? tabs : []; },
-    querySelector() { return null; },
-    addEventListener() {},
-    removeEventListener() {},
-    createElement() { return element(); },
-    activeElement: null,
+    addEventListener(type, handler) { documentListeners[type] = handler; },
   };
   const requests = [];
   const requestDetails = [];
   const context = {
     document,
     location: {
-      href, pathname: pageUrl.pathname, search: pageUrl.search,
+      href: 'https://hvsdcm1.xyz/usage/', pathname: '/usage/',
       replace() { throw new Error('owner gate unexpectedly redirected'); },
     },
     localStorage: {
-      values: new Map([
-        ['hvsdcm.token', 'gate-token'],
-        ...(storedView ? [['hvsdcm.usage.view', storedView]] : []),
-      ]),
+      values: new Map([['hvsdcm.token', 'gate-token']]),
       getItem(key) { return this.values.get(key) ?? null; },
       setItem(key, value) { this.values.set(key, String(value)); },
       removeItem(key) { this.values.delete(key); },
@@ -817,8 +801,7 @@ function usageContext({
       requests.push(href);
       requestDetails.push({ href, options });
       if (href.includes('/api/competitions/approvals/')) return {
-        ok: true,
-        status: 201,
+        ok: true, status: 201,
         json: async () => ({
           ok: true, request_id: 'competition-preparation-contest-1',
           action_sha256: 'a'.repeat(64), decision: 'approved',
@@ -826,50 +809,37 @@ function usageContext({
         }),
       };
       if (href.includes('/api/competitions')) return { ok: true, status: 200, json: async () => competitionPayload };
-      return { ok: true, status: 200, json: async () => ({ snapshots: [], tasks: [] }) };
+      return { ok: false, status: 404, json: async () => ({ error: 'Not found' }) };
     },
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    AbortController,
-    URL,
-    Intl,
+    setTimeout() { return 1; }, clearTimeout() {}, AbortController, URL, Intl,
     console: { log() {}, warn() {}, error() {} },
   };
   context.window = context;
   vm.createContext(context);
   vm.runInContext(COMPETITION_SOURCE, context, { filename: 'competition.js' });
-  vm.runInContext(USAGE_SOURCE, context, { filename: 'usage.js' });
-  return { context, store, tabs, requests, requestDetails };
+  vm.runInContext(PAGE_SOURCE, context, { filename: 'page.js' });
+  return { context, store, requests, requestDetails, documentListeners };
 }
 
-test('the competition deep link overrides a stored view and loads its API once', async () => {
-  const shell = usageContext({
-    href: 'https://hvsdcm1.xyz/usage/?view=competition',
-    storedView: 'ops',
-  });
+test('the retained page loads only the competition API', async () => {
+  const shell = pageContext();
   await flush();
   await flush();
   assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 1);
-  assert.equal(shell.store.get('viewCompetition').hidden, false);
-  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
-  assert.equal(shell.context.localStorage.values.get('hvsdcm.usage.view'), 'competition');
+  assert.equal(shell.requests.some((url) => url.includes('/api/usage') || url.includes('/api/harness')), false);
+  assert.equal(shell.context.document.title, '공모전 — hvsdcm');
 });
 
-test('the owner shell sends web approval with bearer JSON through the shared timeout path', async () => {
-  const shell = usageContext({
-    href: 'https://hvsdcm1.xyz/usage/?view=competition',
-    competitionPayload: approvalFixture(),
-  });
+test('the competition page sends web approval with bearer JSON', async () => {
+  const shell = pageContext({ competitionPayload: approvalFixture() });
   await flush();
   await flush();
   const button = {
     dataset: {
-      requestId: 'competition-preparation-contest-1',
-      actionSha256: 'a'.repeat(64),
+      requestId: 'competition-preparation-contest-1', actionSha256: 'a'.repeat(64),
       competitionApprovalDecision: 'approved',
     },
-    disabled: false,
-    isConnected: true,
+    disabled: false, isConnected: true,
   };
   shell.store.get('competitionApprovalInbox').listeners.click({
     target: { closest(selector) { return selector === '[data-competition-approval-decision]' ? button : null; } },
@@ -885,35 +855,9 @@ test('the owner shell sends web approval with bearer JSON through the shared tim
   });
 });
 
-test('the ARIA tab is wired and the API stays lazy through first activation', async () => {
-  const shell = usageContext();
-  await flush();
-  assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 0);
-
-  shell.context.USAGE_RENDER.activateUsageView('competition');
-  shell.context.USAGE_RENDER.activateUsageView('competition');
-  await flush();
-  assert.equal(shell.requests.filter((url) => url.includes('/api/competitions')).length, 1);
-  assert.equal(shell.store.get('viewCompetition').hidden, false);
-  assert.equal(shell.store.get('viewOps').hidden, true);
-  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
-  assert.equal(shell.tabs[1].tabIndex, 0);
-  assert.equal(shell.tabs[0].tabIndex, -1);
-
-  shell.context.USAGE_RENDER.activateUsageView('ops');
-  const event = { key: 'ArrowDown', preventDefault() { this.prevented = true; } };
-  shell.tabs[0].listeners.keydown(event);
-  assert.equal(event.prevented, true);
-  assert.equal(shell.tabs[1].focused, true);
-  assert.equal(shell.tabs[1].attributes['aria-selected'], 'true');
-});
-
-test('static markup connects every tab to one hidden-aware panel and keeps owner details out of titles', () => {
-  const tabs = [...HTML.matchAll(/<button id="(tab\w+)"[^>]*role="tab"[^>]*aria-controls="(view\w+)"[^>]*data-usage-view="(\w+)"/gu)];
-  assert.deepEqual(Array.from(tabs, (match) => match[3]), ['ops', 'competition']);
-  for (const [, tabId, viewId] of tabs) {
-    assert.match(HTML, new RegExp(`<section id="${viewId}"[^>]*role="tabpanel"[^>]*aria-labelledby="${tabId}"`, 'u'));
-  }
+test('static markup is competition-only and keeps private details out of the initial title', () => {
+  assert.match(HTML, /id="competitionBody"/u);
+  assert.match(HTML, />공모전 센터</u);
+  assert.doesNotMatch(HTML, /id="usageBody"|data-usage-view|AI 실행 현황|Codex · Claude/u);
   assert.match(HTML, /<title>hvsdcm<\/title>/u);
-  assert.doesNotMatch(HTML.match(/<title>[\s\S]*?<\/title>/u)?.[0] || '', /공모전/u);
 });

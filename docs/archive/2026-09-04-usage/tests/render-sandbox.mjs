@@ -281,6 +281,129 @@ export function renderWordMasterHome() {
   return markup;
 }
 
+// usage.js도 IIFE다. 화면 전체를 문자열 하나로 만드는 buildDashboard()를 window에 얹어
+// 두었으므로, 소스를 **그대로** 평가하고 그 함수를 fixture로 부르면 실제 렌더가 나온다.
+// 로그인 게이트(토큰 없으면 location.replace) 때문에 토큰을 미리 심고, fetch는 영원히
+// 대기하는 프라미스로 둔다 — 로드 시 load()가 부르는 네트워크는 스냅샷의 대상이 아니다.
+export const USAGE_APP_SOURCE = 'usage/assets/js/usage.js';
+export function createUsageRenderers() {
+  const store = new Map();
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = {
+    href: 'https://hvsdcm1.xyz/usage/',
+    pathname: '/usage/',
+    search: '',
+    hash: '',
+    replace() { throw new Error(`${USAGE_APP_SOURCE}: the login gate fired inside the snapshot sandbox`); },
+    assign() {},
+    reload() {},
+  };
+  context.localStorage = {
+    store: new Map([['hvsdcm.token', 'gate-token']]),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  context.fetch = () => new Promise(() => {});
+  context.setTimeout = (callback) => { void callback; return 0; };
+  context.clearTimeout = () => {};
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
+
+  const renderers = context.USAGE_RENDER;
+  if (typeof renderers?.buildDashboard !== 'function'
+    || typeof renderers?.renderSessionViews !== 'function'
+    || typeof renderers?.activateTaskTab !== 'function'
+    || typeof renderers?.wireTaskTabs !== 'function') {
+    throw new Error(`${USAGE_APP_SOURCE}: buildDashboard is not reachable — the usage snapshot sandbox is broken`);
+  }
+  return renderers;
+}
+
+// 응답이 영영 오지 않는 요청. 큐에 이 표식을 넣으면 fetch가 정착하지 않는다.
+// (review WPA2 M2 — 그 상황에서 자동 갱신이 통째로 멈췄다.)
+export const HANGING_RESPONSE = Symbol('hanging-response');
+
+// 제어 가능한 시계. 샌드박스의 setTimeout이 no-op이면 "타이머가 걸렸는가"를 물을 수
+// 없어 폴링 계약을 검사할 수 없다 — 그래서 시간을 손으로 밀 수 있게 만든다.
+export function createFakeClock() {
+  let current = 0;
+  let sequence = 0;
+  const timers = new Map();
+  const settle = () => new Promise((resolve) => { setImmediate(resolve); });
+  return {
+    now() { return current; },
+    pending() { return timers.size; },
+    setTimeout(callback, delay) {
+      sequence += 1;
+      timers.set(sequence, { at: current + (Number(delay) || 0), callback });
+      return sequence;
+    },
+    clearTimeout(id) { timers.delete(id); },
+    // 예약 시각 순서대로 실제로 실행한다. 콜백이 다시 예약한 타이머도 목표 시각
+    // 안이면 이어서 돈다 (freshness 틱처럼 스스로를 다시 거는 타이머가 있다).
+    async advance(milliseconds) {
+      const target = current + milliseconds;
+      for (;;) {
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.at <= target)
+          .sort((left, right) => left[1].at - right[1].at)[0];
+        if (!due) break;
+        timers.delete(due[0]);
+        current = due[1].at;
+        due[1].callback();
+        await settle();
+      }
+      current = target;
+      await settle();
+    },
+  };
+}
+
+export async function createUsageAppSandbox(responses = [], options = {}) {
+  const store = new Map();
+  const requests = [];
+  const queue = [...responses];
+  const context = {};
+  context.window = context;
+  context.document = stubDocument(store);
+  context.navigator = { userAgent: 'gate' };
+  context.location = {
+    href: 'https://hvsdcm1.xyz/usage/', pathname: '/usage/', search: '', hash: '',
+    replace() { throw new Error(`${USAGE_APP_SOURCE}: login gate fired`); },
+  };
+  context.localStorage = {
+    store: new Map([['hvsdcm.token', 'gate-token']]),
+    getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+    setItem(key, value) { this.store.set(key, String(value)); },
+    removeItem(key) { this.store.delete(key); },
+  };
+  context.fetch = async (url, requestOptions) => {
+    const href = String(url);
+    requests.push({ url: href, options: requestOptions });
+    const next = queue.shift();
+    if (next === HANGING_RESPONSE) return new Promise(() => {});
+    if (next instanceof Error) throw next;
+    const data = next || { snapshots: [], tasks: [] };
+    return { ok: true, status: 200, json: async () => data };
+  };
+  const clock = options.clock || null;
+  context.setTimeout = clock
+    ? ((callback, delay) => clock.setTimeout(callback, delay))
+    : ((callback) => { void callback; return 0; });
+  context.clearTimeout = clock ? ((id) => clock.clearTimeout(id)) : (() => {});
+  context.AbortController = AbortController;
+  context.console = { log() {}, warn() {}, error() {} };
+  vm.createContext(context);
+  vm.runInContext(readSource(USAGE_APP_SOURCE), context, { filename: USAGE_APP_SOURCE });
+  await new Promise((resolve) => setImmediate(resolve));
+  return { context, store, requests, renderers: context.USAGE_RENDER };
+}
+
 // 기출의 app.js도 IIFE다. 필터와 결과를 문자열로 만드는 렌더러를 window.GICHUL_RENDER에
 // 얹어 두었으므로, 소스를 **그대로** 평가하고 fixture로 부르면 실제 화면 마크업이 나온다.
 // 로그인 게이트 때문에 토큰을 미리 심고, 매니페스트 fetch는 영원히 대기하는 프라미스로
@@ -341,6 +464,17 @@ export function renderGichulScreen(manifest, state) {
     throw new Error(`${GICHUL_APP_SOURCE}: the gichul screen rendered without its filter or result contracts`);
   }
   return { filters, body };
+}
+
+// 보기 모드 인자는 사라졌다 — 조판이 워크트리 하나뿐이라 고를 것이 없다
+// (2026-08-30 사용자 지시). 호출자는 그냥 대시보드를 렌더한다.
+export function renderUsageDashboard(input, now) {
+  const renderers = createUsageRenderers();
+  const markup = renderers.buildDashboard(input, now);
+  if (!markup.includes('us-command-layout') || !markup.includes('us-quota-rail')) {
+    throw new Error(`${USAGE_APP_SOURCE}: the dashboard rendered without command-center contracts`);
+  }
+  return markup;
 }
 
 // 함수 **본문 경계**를 잡는다. 소스 전체 정규식으로 마크업을 찾으면 함수 밖의 같은 모양

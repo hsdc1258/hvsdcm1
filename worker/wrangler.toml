@@ -11,15 +11,11 @@ database_id = "0a6320b7-e7b7-4c9d-b13e-cab8ef423dea"
 binding = "GICHUL"
 bucket_name = "hvsdcm-gichul"
 
-# Required runtime secrets:
-#   npx wrangler secret put USAGE_INGEST_TOKEN
-#   npx wrangler secret put HARNESS_INGEST_TOKEN
+# Required runtime secret:
 #   npx wrangler secret put BEHAVIOR_PAPER_REPORT_TOKEN
 [vars]
 ALLOWED_ORIGIN = "https://hvsdcm1.xyz"
-# GET /api/usage를 볼 수 있는 계정 목록(쉼표 구분). 이 값이 소유자 판정의 단일 원본이며,
-# 비어 있으면 아무도 통과하지 못한다(fail-closed).
-# claude-test는 로그인된 비소유자 404 경계를 검증하는 에이전트 전용 테스트 계정이다.
+# 공모전 API가 사용하는 소유자 계정 목록. 비어 있으면 아무도 통과하지 못한다(fail-closed).
 OWNER_USERNAME = "hvsdcm"
 # Behavior Lab intentionally has a separate, single human-owner setting. Commas are rejected and
 # an unset/invalid value denies every dashboard and paper read.

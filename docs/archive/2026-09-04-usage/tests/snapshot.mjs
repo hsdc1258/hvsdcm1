@@ -20,7 +20,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer,
-  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderGichulScreen, renderWordMasterHome,
+  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderGichulScreen, renderUsageDashboard, renderWordMasterHome,
 } from './render-sandbox.mjs';
 
 const ROOT = process.cwd();
@@ -47,6 +47,166 @@ export const SNAPSHOT_FILES = {
 
 // 개념 화면 스냅샷이 담는 중단원. 바꾸면 파일도 함께 다시 만들어야 한다.
 const CONCEPT_SAMPLE_ID = 'III-01';
+
+// ---- 사용량 화면 fixture ----------------------------------------------------
+// 사용량 본문은 Worker가 돌려주는 수집 결과라 저장소에 원본이 없다. 그래서 계약
+// (docs/plan.md §3.2)이 정한 모양의 표본을 여기에 둔다. 기준 시각도 고정값이다 —
+// 상대 시간을 렌더하므로 now가 흐르면 스냅샷이 매번 달라져 대조가 무의미해진다.
+//
+// 표본은 계약의 갈래를 전부 한 번씩 지난다: Codex의 primary/secondary와 모르는
+// 키(monthly), 게이지 세 구간, 모델별로 창을 담는 Claude payload(used_percentage),
+// 그리고 Main Codex·Codex 서브에이전트·WebGPT 실행자·Claude 오케스트레이터를
+// 같은 작업 계층에 둔 실제 하네스 payload.
+const USAGE_NOW = Date.parse('2026-08-27T12:00:00Z');
+const USAGE_FIXTURE = {
+  snapshots: [{
+    source: 'codex',
+    captured_at: '2026-08-27T11:48:00Z',
+    payload: {
+      model: 'gpt-5.6-sol',
+      plan_type: 'pro',
+      rate_limits: {
+        primary: { used_percent: 41.5, resets_at: '2026-08-27T15:10:00Z', window_minutes: 300 },
+        secondary: { used_percent: 78.2, resets_at: '2026-08-31T09:00:00Z', window_minutes: 10_080 },
+        monthly: { used_percent: 96.1 },
+      },
+    },
+  }, {
+    source: 'claude',
+    // 행 시각은 모델 시각의 최댓값이다. 아래 두 모델은 수집 시각이 다르다 —
+    // 그룹마다 자기 시각·지연을 그리는 계약(usage.js "수집 시각 계약")을 스냅샷이
+    // 실제로 지나가게 하려는 표본이다. 카드 머리는 신선한 쪽(11:52)을 따른다.
+    captured_at: '2026-08-27T11:52:00Z',
+    payload: {
+      models: {
+        'claude-opus-5': {
+          captured_at: '2026-08-27T11:52:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 33.4, resets_at: '2026-08-27T14:00:00Z' },
+            seven_day: { used_percentage: 57.9, resets_at: '2026-09-01T00:00:00Z' },
+          },
+        },
+        'claude-fable-5': {
+          captured_at: '2026-08-27T09:20:00Z',
+          rate_limits: {
+            five_hour: { used_percentage: 18.6, resets_at: '2026-08-27T14:00:00Z' },
+          },
+        },
+      },
+    },
+  }],
+  tasks: [
+    {
+      version: 1,
+      id: 'jimunhanjang-project',
+      name: '프로젝트 지문한장 (08-27)',
+      phase: 'done',
+      progress: 100,
+      status: 'complete',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      category_key: 'jimunhanjang-project',
+      category: '지문한장 프로젝트',
+      current: '배포 완료',
+      done: '제품 E2E와 독립 검토 통과',
+      next: '완료 기록 보존',
+      deadline: '20:20 KST',
+      created_at: '2026-08-27T08:40:00Z',
+      updated_at: '2026-08-27T11:50:00Z',
+      actors: [{
+        id: 'jimunhanjang:main', parent_id: '', name: 'Main Codex', kind: 'codex',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '제품 개선 총괄', status: 'done',
+        assignment: '배포와 최종 판정 완료',
+      }],
+      artifacts: ['제품 E2E 기준 고정'],
+    },
+    {
+      version: 1,
+      id: 'pipeline-hardening',
+      name: 'Pipeline 개선 프로토콜 (08-27)',
+      // 확장된 8단계 중 **새 키**를 쓰는 세션. 아래 usage-harness 세션은 구 4단계 키만
+      // 보고하므로, 한 스냅샷에서 신·구 보고가 나란히 그려지는 것을 눈으로 확인한다.
+      phase: 'gate',
+      progress: 82,
+      status: 'active',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      category_key: 'pipeline-protocol',
+      category: '자체 pipeline 개선 프로토콜',
+      current: '독립 gate 검토',
+      done: 'WIP와 실패 복구 규칙 고정',
+      next: '하네스 회귀 확인',
+      deadline: '20:15 KST',
+      created_at: '2026-08-27T08:50:00Z',
+      updated_at: '2026-08-27T11:52:00Z',
+      actors: [{
+        id: 'pipeline-hardening:main', parent_id: '', name: 'Main Codex', kind: 'codex',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '프로토콜 소유자', status: 'reviewing',
+        assignment: '결정적 gate와 최종 판정',
+      }],
+      artifacts: ['control npm test'],
+    },
+    {
+    version: 1,
+    id: 'usage-harness-visualization',
+    name: '사용량 하네스 시각화 (08-27)',
+    phase: 'review',
+    progress: 86,
+    status: 'active',
+    model: 'gpt-5.6-sol',
+    reasoning: 'xhigh',
+    category_key: 'pipeline-visualization',
+    category: '실행 현황 개선',
+    current: '독립 검토와 반응형 확인',
+    done: 'Worker 연결 · 렌더 구현 · 결정적 gate',
+    next: '라이브 배포',
+    deadline: '20:10 KST',
+    created_at: '2026-08-27T09:00:00Z',
+    updated_at: '2026-08-27T11:54:00Z',
+    modules: [
+      { id: 'verification', name: '검증 단계', progress: 80, status: 'reviewing', owner: '독립 검토' },
+      { id: 'css', name: 'CSS 구현', progress: 88, status: 'working', owner: 'Main Codex' },
+      { id: 'quota', name: '한도 수집', progress: 72, status: 'working', owner: 'Main Codex' },
+    ],
+    actors: [
+      {
+        id: 'usage-harness:main', parent_id: '', name: 'Main Codex', kind: 'codex',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '기획 · 통합 · 최종 판정', status: 'reviewing',
+        assignment: '전체 계약과 최종 판정', progress: 86,
+      },
+      {
+        id: 'usage-harness:writer', parent_id: 'usage-harness:main', name: '구현 컨텍스트', kind: 'codex',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '구현자', status: 'done', assignment: 'Worker와 사용량 화면 구현', progress: 100,
+      },
+      {
+        id: 'usage-harness:reviewer', parent_id: 'usage-harness:main', name: '독립 검토', kind: 'codex',
+        model: 'gpt-5.6-sol', reasoning: 'xhigh', role: '검토자', status: 'reviewing', assignment: 'diff와 실제 artifact 반증', progress: 80,
+      },
+      {
+        id: 'usage-harness:webgpt', parent_id: 'usage-harness:main', name: 'WebGPT 실행자', kind: 'webgpt',
+        model: 'WebGPT PRO', role: '보조 실행', status: 'waiting', assignment: '경계가 명확한 저위험 작업 대기', progress: 37,
+      },
+      {
+        id: 'usage-harness:claude', parent_id: 'usage-harness:main', name: 'Fable 5 오케스트레이터', kind: 'claude',
+        model: 'claude-fable-5', reasoning: 'high', role: '기획 · 총괄', status: 'working',
+        assignment: 'Claude 한도 복원 통합', progress: 62,
+      },
+    ],
+    // WP-A1의 이벤트 로그. 셋 중 이 세션에만 넣는다 — 단계 소요시간과 세션 한도 소모가
+    // 붙은 화면과, 구세션처럼 그 두 줄이 없는 화면을 한 파일에서 나란히 보기 위해서다.
+    // usage_*는 그 시점의 **잔여 한도(%)**라 시간이 갈수록 줄어든다 (worker의
+    // remainingUsagePercent). 화면의 "한도 소모"는 이 감소분의 합이다.
+    events: [
+      { ts: '2026-08-27T09:00:00Z', kind: 'phase-change', phase: 'plan', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 81.6, usage_claude: 79.0 },
+      { ts: '2026-08-27T09:35:00Z', kind: 'phase-change', phase: 'work', model: 'gpt-5.6-sol', reasoning: 'xhigh', usage_codex: 75.1, usage_claude: 74.4 },
+      { ts: '2026-08-27T10:20:00Z', kind: 'report', phase: 'work', actor_id: 'usage-harness:writer', percent: 100, usage_codex: 68.8, usage_claude: 71.9 },
+      { ts: '2026-08-27T11:05:00Z', kind: 'phase-change', phase: 'review', model: 'claude-opus-5', reasoning: 'high', usage_codex: 61.4, usage_claude: 69.6 },
+      { ts: '2026-08-27T11:40:00Z', kind: 'report', phase: 'review', actor_id: 'usage-harness:reviewer', percent: 80, usage_codex: 58.5, usage_claude: 66.6 },
+    ],
+    artifacts: ['npm test', 'HARNESS E2E: PASS', 'PC · 태블릿 · 모바일 캡처'],
+    },
+  ],
+};
 
 // ---- 기출 화면 fixture ------------------------------------------------------
 // 기출 목록도 저장소에 원본이 없다(로그인 뒤 R2에서 온다). 표본의 **모양**은 손으로
@@ -105,6 +265,9 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
 const DOCUMENT_SNAPSHOT_CSS = `/* ---- 스냅샷 전용 (원본 CSS 아님) ---- */
 .snap-note { position: relative; z-index: 300; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.7; }
 .snap-note code { color: var(--text); }`;
+
+// 사용량 스냅샷은 배포되는 CSS와 같은 규칙을 사용한다.
+export const USAGE_SNAPSHOT_CSS = '';
 
 // 생성물이므로 줄 끝 공백을 남기지 않는다 (git diff --check).
 function normalize(html) {
@@ -270,10 +433,21 @@ export function buildSnapshots() {
         .replace(/(<button class="sidebar-item" type="button" data-view="overview"[^>]*?)>/u, '$1 aria-current="page">'),
     }),
     [SNAPSHOT_BY_SCREEN['usage/index.html']]: documentSnapshot('usage/index.html', {
-      note: '<strong>무엇인가</strong> — 소유자 전용 공모전 화면의 반응형 셸이다.'
-        + '\n  사용량과 harness 화면은 2026-09-04에 보관했고, 이 경로에는 공모전 후보와 승인 흐름만 남는다.'
-        + '\n  <br><strong>주의</strong> — 후보와 승인 데이터는 로그인 뒤 <code>GET /api/competitions</code>에서 온다. 정적 사본이라 비어 있다.'
-        + `\n  ${GENERATED_NOTE}` ,
+      note: '<strong>무엇인가</strong> — 사용량(<code>/usage/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 본문은 <code>usage.js</code>의 <code>buildDashboard()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다.'
+        + ' 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>USAGE_FIXTURE</code>)이고 기준 시각도 고정이라, 상대 시간이 흐르지 않는다.'
+        + '\n  <br><strong>여기서 확인할 것</strong> — 상위 탭이 <strong>진행 중 · 중단됨 · 완료 셋</strong>이고 <strong>어느 것이 눌려 있는지 눈으로 갈리는지</strong>,'
+        + ' 선택된 실행의 요청 · 현재 · 완료 · 다음 · 모듈 · 검증 결과가 한 흐름으로 읽히는지,'
+        + ' 오른쪽 Codex · Claude 한도 rail에서 제목과 수집 시각이 폭을 다투지 않는지, 게이지의 세 색 구간과 모르는 버킷 키(<code>monthly</code>)가 모두 실제 renderer 산출물에 있는지.'
+        + '\n  <br><strong>주의</strong> — 미로그인 접근은 <code>usage.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다.'
+        + ' 이 사본에는 <strong>스냅샷 전용 CSS가 한 줄도 없다</strong> — 배포되는 CSS 그대로이므로 사본에서 본 조판이 곧 실화면의 조판이다.'
+        + `\n  ${GENERATED_NOTE}`,
+      // 스냅샷 전용 CSS를 끼우지 않고 배포되는 CSS 그대로 렌더한다.
+      mutate: (html) => html
+        .replace(
+          '<div id="usageBody" class="us-body"></div>',
+          `<div id="usageBody" class="us-body">${renderUsageDashboard(USAGE_FIXTURE, USAGE_NOW)}</div>`,
+        ),
     }),
     [SNAPSHOT_BY_SCREEN['gichul/index.html']]: documentSnapshot('gichul/index.html', {
       note: '<strong>무엇인가</strong> — 기출(<code>/gichul/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'

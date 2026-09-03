@@ -90,7 +90,7 @@
     if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;
     appendLinks(elements.ownerLinks, [
       ['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델'],
-      ['/usage/', '사용량', 'Codex · AI'],
+      ['/usage/', '공모전', '후보 · 승인'],
       ['/admin/', '관리자', '계정 · 접속 · 학습 데이터'],
     ]);
   }

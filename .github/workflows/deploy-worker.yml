@@ -47,16 +47,6 @@ jobs:
       - name: Run Worker tests
         run: pnpm test
 
-      - name: Configure ingest secrets
-        run: |
-          printf '%s' "$HARNESS_INGEST_TOKEN" | pnpm exec wrangler secret put HARNESS_INGEST_TOKEN
-          printf '%s' "$USAGE_INGEST_TOKEN" | pnpm exec wrangler secret put USAGE_INGEST_TOKEN
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          HARNESS_INGEST_TOKEN: ${{ secrets.HARNESS_INGEST_TOKEN }}
-          USAGE_INGEST_TOKEN: ${{ secrets.USAGE_INGEST_TOKEN }}
-
       - name: Apply D1 migrations
         run: pnpm exec wrangler d1 migrations apply hvsdcm --remote
         env:
