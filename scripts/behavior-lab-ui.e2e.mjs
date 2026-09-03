@@ -311,6 +311,7 @@ try {
     assert.deepEqual(await page.locator('.abc-equity-chart svg').evaluateAll((charts) => charts.map((chart) => Number(chart.dataset.pointCount))), [3, 3, 3, 3, 3, 3]);
     assert.equal(await page.locator('#experimentArms .abc-arm-section').count(), 0);
     await page.locator('.abc-arm-details summary').first().click();
+    await page.waitForSelector('.abc-arm-details[open] .abc-arm-details-body');
     assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '진입 정책 / 위험' }).count(), 1);
     assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '최근 거래 · 최신순' }).count(), 1);
     assert.equal(await page.locator('#experimentArms .abc-arm-section h4').filter({ hasText: '현재 포지션' }).count(), 1);
