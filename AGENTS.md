@@ -12,7 +12,7 @@ git diff --check
 Critical invariants:
 
 - `WordMaster/assets/js/words.js` contains exactly 2,000 entries: 50 DAYs × 40 words.
-- `smstudy/assets/js/data.js` contains 4 units, 13 subunits and 78 questions: 6 per subunit.
+- `_learning/smstudy/data.js` contains 5 units, 17 subunits, 78 KICE questions and 20 concept-practice questions (98 total).
 - Do not rename the localStorage keys or the API app names without a migration.
 - Keep content data separate from UI logic. Do not move CSS or executable JavaScript back into HTML.
 - Add D1 schema changes as a new numbered file under `worker/migrations/`; never rewrite an applied migration.
