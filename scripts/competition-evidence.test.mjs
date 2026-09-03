@@ -145,7 +145,7 @@ test('the CLI writes a complete ledger containing carried and newly verified can
     '--evidence', evidencePath,
     '--out', outPath,
     '--evidence-out', ledgerPath,
-  ]);
+  ], { finishedAt: '2026-08-31T01:15:00+09:00' });
   assert.equal(result.verified, 2);
   assert.equal(result.evidence_candidates, 2);
   const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));

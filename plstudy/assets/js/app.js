@@ -7,15 +7,37 @@
   let session = null;
   const progress = (() => { try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { return {}; } })();
   const esc = (value) => String(value ?? '').replace(/[&<>"']/gu, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const save = () => { try { localStorage.setItem(storageKey, JSON.stringify(progress)); } catch { /* 학습은 계속한다. */ } };
+  const save = () => {
+    try {
+      const serialized = JSON.stringify(progress);
+      localStorage.setItem(storageKey, serialized);
+      window.HvsAccount?.scheduleProgressSync(serialized);
+    } catch { /* 학습은 계속한다. */ }
+  };
   const subunits = () => data.UNITS.flatMap((unit) => unit.subs.map((sub) => ({ ...sub, unitId: unit.id, unitTitle: unit.title })));
   const subById = (id) => subunits().find((sub) => sub.id === id);
   function setNav(view) { document.querySelectorAll('.pl-nav').forEach((button) => button.classList.toggle('is-active', button.dataset.view === view)); }
+  // 홈 화면 중단원 검색 — 메모리에만 두는 화면 상태다. 데이터·localStorage 계약을 바꾸지 않는다.
+  let homeQuery = '';
+  const fold = (value) => String(value ?? '').toLowerCase().replace(/\s+/gu, '');
+  const searchText = (sub) => fold([sub.unitId, sub.unitTitle, sub.id, sub.title, sub.summary, ...(sub.concepts || []).flatMap((concept) => [concept.term, concept.definition]), ...(sub.traps || [])].join('|'));
   function renderHome() {
     setNav('home'); activeSub = null; session = null;
-    app.innerHTML = `<header class="pl-head"><div><span>POLITICS & LAW</span><h1>정치와 법</h1><p>개념을 읽고 바로 다섯 문항으로 확인하세요.</p></div><button class="btn btn-primary" type="button" data-random>전체 랜덤 20문항</button></header><div class="pl-units">${data.UNITS.map((unit) => `<section class="pl-unit"><header><span>${unit.id}</span><h2>${esc(unit.title)}</h2></header><div>${unit.subs.map((sub) => { const row = progress[sub.id] || {}; return `<button type="button" class="pl-sub" data-sub="${sub.id}"><span><strong>${esc(sub.title)}</strong><small>${esc(sub.summary)}</small></span><b>${row.correct || 0}/${row.answered || 0}</b></button>`; }).join('')}</div></section>`).join('')}</div>`;
+    const rows = subunits(); const index = new Map(rows.map((sub) => [sub.id, searchText(sub)]));
+    app.innerHTML = `<header class="pl-head"><div><span>POLITICS & LAW</span><h1>정치와 법</h1><p>개념을 읽고 바로 다섯 문항으로 확인하세요.</p></div><button class="btn btn-primary" type="button" data-random>전체 랜덤 20문항</button></header><section class="pl-search" aria-label="중단원 검색"><div class="pl-search-head"><label class="pl-search-label" for="plSearch">중단원 검색</label><p id="plSearchCount" class="pl-search-count" role="status" aria-live="polite"></p></div><div class="pl-search-row"><input id="plSearch" class="field-input" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="단원명, 개념, 함정" aria-describedby="plSearchCount" value="${esc(homeQuery)}"><button class="btn btn-secondary pl-search-clear" type="button" data-clear hidden>지우기</button></div></section><div class="pl-units">${data.UNITS.map((unit) => `<section class="pl-unit"><header><span>${unit.id}</span><h2>${esc(unit.title)}</h2></header><div>${unit.subs.map((sub) => { const row = progress[sub.id] || {}; return `<button type="button" class="pl-sub" data-sub="${sub.id}"><span><strong>${esc(sub.title)}</strong><small>${esc(sub.summary)}</small></span><b>${row.correct || 0}/${row.answered || 0}</b></button>`; }).join('')}</div></section>`).join('')}</div><p class="pl-empty" hidden></p>`;
     app.querySelectorAll('[data-sub]').forEach((button) => button.addEventListener('click', () => renderConcept(button.dataset.sub)));
     app.querySelector('[data-random]').addEventListener('click', () => startQuiz([...data.QUESTIONS].sort(() => Math.random() - .5).slice(0, 20), '전체 랜덤'));
+    const input = app.querySelector('#plSearch'); const count = app.querySelector('#plSearchCount'); const clear = app.querySelector('[data-clear]'); const empty = app.querySelector('.pl-empty');
+    const applyFilter = () => {
+      homeQuery = input.value; const query = fold(homeQuery); let shown = 0;
+      app.querySelectorAll('.pl-unit').forEach((unit) => { let visible = 0; unit.querySelectorAll('.pl-sub').forEach((button) => { const hit = !query || (index.get(button.dataset.sub) || '').includes(query); button.hidden = !hit; if (hit) visible++; }); unit.hidden = visible === 0; shown += visible; });
+      count.textContent = query ? `일치 ${shown}개` : `중단원 ${rows.length}개`; clear.hidden = !homeQuery; empty.hidden = shown > 0;
+      if (shown === 0) empty.textContent = `“${homeQuery.trim()}” 검색 결과가 없습니다.`;
+    };
+    input.addEventListener('input', applyFilter);
+    input.addEventListener('keydown', (event) => { if (event.key === 'Escape' && input.value) { input.value = ''; applyFilter(); } });
+    clear.addEventListener('click', () => { input.value = ''; applyFilter(); input.focus(); });
+    applyFilter();
   }
   function renderConcept(id) {
     const sub = subById(id); if (!sub) return renderHome(); activeSub = id; setNav('home');

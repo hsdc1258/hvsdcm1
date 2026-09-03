@@ -95,10 +95,66 @@
   color: var(--text-2);
   line-height: 1.7;
 }
+.pl-search {
+  display: grid;
+  gap: 10px;
+  margin-top: 40px;
+}
+.pl-search-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pl-search-label {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.pl-search-count {
+  flex: none;
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+.pl-search-row {
+  display: flex;
+  gap: 8px;
+}
+.pl-search-row .field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pl-search-row input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pl-search-clear {
+  flex: none;
+  min-height: 46px;
+}
+.pl-empty {
+  margin: 20px 0 0;
+  padding: 40px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text-2);
+  text-align: center;
+}
+/* 화면 CSS가 display를 지정한 요소는 UA의 [hidden]을 이기므로 여기서 다시 닫는다. */
+.pl-unit[hidden], .pl-sub[hidden], .pl-search-clear[hidden] {
+  display: none;
+}
 .pl-units {
   display: grid;
   gap: 28px;
   margin-top: 48px;
+}
+.pl-search + .pl-units {
+  margin-top: 20px;
 }
 .pl-unit {
   display: grid;

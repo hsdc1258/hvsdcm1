@@ -526,6 +526,95 @@ test('authenticated learning routes stream only fixed R2 keys', async () => {
   assert.equal(env.r2Reads.length, 3);
 });
 
+test('politics and law progress plus shared answers use the same authenticated account contract', async () => {
+  const writes = [];
+  const env = {
+    ALLOWED_ORIGIN: 'https://hvsdcm1.xyz',
+    DB: {
+      prepare(sql) {
+        const query = sql.replace(/\s+/gu, ' ').trim();
+        return {
+          bind(...values) {
+            if (query.startsWith('SELECT s.*, u.username, u.disabled FROM sessions')) {
+              return { async first() { return { user_id: 7, role: 'user', username: 'learner', disabled: 0 }; } };
+            }
+            if (query.startsWith('UPDATE sessions SET last_seen_at')) {
+              return { async run() { return { success: true }; } };
+            }
+            if (query.startsWith('SELECT data, updated_at FROM progress')) {
+              return { async first() { return null; } };
+            }
+            if (query.startsWith('INSERT INTO progress')) {
+              return { async run() { writes.push({ kind: 'progress', values }); return { success: true }; } };
+            }
+            if (query.startsWith('SELECT question_id, display_answer FROM shared_answers')) {
+              return { async all() { return { results: [] }; } };
+            }
+            if (query.startsWith('INSERT INTO activity')) {
+              return { async run() { writes.push({ kind: 'activity', values }); return { success: true }; } };
+            }
+            throw new Error(`Unexpected politics account SQL in test: ${query}`);
+          },
+        };
+      },
+    },
+  };
+  const headers = { authorization: 'Bearer user-token' };
+
+  const readProgress = await worker.fetch(new Request('https://api.test/api/progress/plstudy', { headers }), env);
+  assert.equal(readProgress.status, 200);
+  assert.deepEqual(await readProgress.json(), { data: null, updatedAt: 0 });
+
+  const writeProgress = await worker.fetch(new Request('https://api.test/api/progress/plstudy', {
+    method: 'PUT',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ data: { 'I-01': { answered: 1, correct: 1 } } }),
+  }), env);
+  assert.equal(writeProgress.status, 200);
+  assert.equal(writes.filter((entry) => entry.kind === 'progress').length, 1);
+
+  const answers = await worker.fetch(new Request('https://api.test/api/answers/plstudy', { headers }), env);
+  assert.equal(answers.status, 200);
+  assert.deepEqual(await answers.json(), { answers: [] });
+});
+
+test('an unchanged shared answer does not add another activity event', async () => {
+  let activityWrites = 0;
+  const env = {
+    ALLOWED_ORIGIN: 'https://example.test',
+    DB: {
+      prepare(sql) {
+        const query = sql.replace(/\s+/gu, ' ').trim();
+        return {
+          bind() {
+            if (query.startsWith('SELECT s.*, u.username, u.disabled FROM sessions')) {
+              return { async first() { return { user_id: 7, role: 'user', username: 'learner', disabled: 0 }; } };
+            }
+            if (query.startsWith('UPDATE sessions SET last_seen_at')) {
+              return { async run() { return { success: true }; } };
+            }
+            if (query.startsWith('INSERT INTO shared_answers')) {
+              assert.match(query, /WHERE \(excluded\.question_label != ''/u);
+              return { async run() { return { success: true, meta: { changes: 0 } }; } };
+            }
+            if (query.startsWith('INSERT INTO activity')) {
+              return { async run() { activityWrites += 1; return { success: true }; } };
+            }
+            throw new Error(`Unexpected shared answer SQL in test: ${query}`);
+          },
+        };
+      },
+    },
+  };
+  const response = await worker.fetch(new Request('https://api.test/api/answers/accept', {
+    method: 'POST',
+    headers: { authorization: 'Bearer user-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ app: 'wordmaster', questionId: 'd01-01', answer: '뜻' }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(activityWrites, 0);
+});
+
 test('authenticated gichul routes stream only manifest-mapped PDFs with no-store CORS', async () => {
   const id = '2024-06-korean-hwajak-question';
   const pdfBytes = new TextEncoder().encode('%PDF-fixture');
@@ -704,6 +793,7 @@ test('admin user statistics include the latest activity time separately from log
                       logins: 2,
                       word_events: 5,
                       sm_events: 4,
+                      pl_events: 3,
                     }],
                   };
                 },
@@ -730,6 +820,7 @@ test('admin user statistics include the latest activity time separately from log
   assert.equal(data.users[0].last_activity_at, lastActivityAt);
   assert.match(userQuery, /MAX\(activity_session\.last_seen_at\)/u);
   assert.match(userQuery, /activity_session\.role = 'user'/u);
+  assert.match(userQuery, /a\.app = 'plstudy'/u);
 });
 
 test('logout expires the session but preserves its audit record', async () => {

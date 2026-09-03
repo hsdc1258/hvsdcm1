@@ -29,6 +29,11 @@
     viewTitle: document.getElementById('viewTitle'),
   };
   let sessionRows = [];
+  const appLabels = {
+    wordmaster: '영단어',
+    smstudy: '사회문화',
+    plstudy: '정치와 법',
+  };
 
   // ---- 카테고리 뷰 전환 ------------------------------------------------------
   // 뷰 목록을 JS에 다시 적지 않는다 — 사이드바 버튼과 뷰 컨테이너의 data-view가 원본이고,
@@ -164,6 +169,7 @@
         <td class="ad-n">${Number(user.logins).toLocaleString()}</td>
         <td class="ad-n">${Number(user.word_events).toLocaleString()}</td>
         <td class="ad-n">${Number(user.sm_events).toLocaleString()}</td>
+        <td class="ad-n">${Number(user.pl_events).toLocaleString()}</td>
         <td>
           <div class="ad-row-actions">
             <button type="button" class="btn btn-secondary btn-sm view-sessions" data-id="${Number(user.id)}">접속</button>
@@ -233,7 +239,7 @@
 
     elements.answers.innerHTML = answers.map((answer) => `
       <tr>
-        <td>${answer.app === 'wordmaster' ? '영단어' : '사회문화'}</td>
+        <td>${escapeHtml(appLabels[answer.app] || answer.app || '알 수 없음')}</td>
         <td>${escapeHtml(answer.question_label || answer.question_id)}</td>
         <td>${escapeHtml(answer.username || '삭제된 사용자')}</td>
         <td>${escapeHtml(answer.base_answer || '-')}</td>

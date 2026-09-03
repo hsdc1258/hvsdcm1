@@ -2142,14 +2142,14 @@ function validateGlobalsAndOrder() {
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
     'index.html': ['/assets/js/home.js?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/account.js', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260901-dark-workspace-v3'],
-    'smstudy/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
-    'plstudy/index.html': ['/account.js', 'assets/js/data.js', 'assets/js/app.js'],
-    'admin/index.html': ['/admin/assets/js/admin.js'],
+    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260901-dark-workspace-v3'],
+    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
+    'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-search-v1'],
+    'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-study-sync-v1'],
     'usage/index.html': ['/usage/assets/js/competition.js?v=20260901-competition-review-v1', '/usage/assets/js/usage.js?v=20260901-competition-review-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
+    'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
     'behavior-lab/index.html': ['/behavior-lab/assets/js/app.js?v=20260901-v16'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
@@ -2169,12 +2169,12 @@ function validateGlobalsAndOrder() {
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
     'index.html': ['/assets/css/system.css?v=20260902-monochrome-v1', '/assets/css/home.css?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css?v=20260901-dark-workspace-v3'],
-    'smstudy/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', 'assets/css/style.css'],
-    'plstudy/index.html': ['/assets/css/system.css?v=20260902-monochrome-v1', 'assets/css/style.css?v=20260902-v1'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css?v=20260901-dark-workspace-v3'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css'],
+    'plstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css?v=20260904-search-v1'],
     'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
     'usage/index.html': ['/assets/css/system.css?v=20260901-competition-review-v1', '/usage/assets/css/usage.css?v=20260901-competition-review-v1'],
-    'gichul/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/gichul/gichul.css?v=20260829-n4'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', '/gichul/gichul.css?v=20260829-n4'],
     'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v12'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
@@ -2204,7 +2204,7 @@ function validateGlobalsAndOrder() {
   // 없는 앱이라 매 방문이 404가 된다.
   {
     const gichulHtml = readFileSync(path.join(ROOT, 'gichul/index.html'), 'utf8');
-    const accountTag = /<script\b[^>]*\bsrc="\/account\.js"[^>]*>/u.exec(gichulHtml)?.[0] || '';
+    const accountTag = /<script\b[^>]*\bsrc="\/account\.js(?:\?[^"]*)?"[^>]*>/u.exec(gichulHtml)?.[0] || '';
     check(accountTag.includes('data-app="gichul"'), 'gichul: account.js must declare data-app="gichul"');
     check(!accountTag.includes('data-key'), 'gichul: account.js must load in gate-only mode (no data-key — there is no study progress to sync)');
   }
@@ -2216,6 +2216,21 @@ function validateGlobalsAndOrder() {
   }
   const accountJs = readFileSync(path.join(ROOT, 'account.js'), 'utf8');
   check(accountJs.includes('hvsdcm.token') && accountJs.includes('hvsdcm.loaded.'), 'account.js: sync storage keys are missing');
+  check(accountJs.includes("classList.remove('auth-pending')") && accountJs.includes("api('/api/me')"),
+    'account.js: first-paint login cover and gate-only session validation must stay wired');
+  const systemCss = readFileSync(path.join(ROOT, 'assets/css/system.css'), 'utf8');
+  check(/html\.auth-pending body\s*\{[^}]*visibility:\s*hidden/u.test(systemCss),
+    'system.css: learning pages must stay hidden until account validation');
+  for (const file of ['WordMaster/index.html', 'smstudy/index.html', 'plstudy/index.html', 'gichul/index.html']) {
+    check(/<html\b[^>]*class="[^"]*auth-pending/u.test(readFileSync(path.join(ROOT, file), 'utf8')),
+      `${file}: first-paint account cover is missing`);
+  }
+  const wordMasterHtml = readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8');
+  check(!wordMasterHtml.includes('/behavior-lab/') && !wordMasterHtml.includes('/usage/'),
+    'WordMaster: general learner navigation must not advertise owner-only routes');
+  const plstudyApp = readFileSync(path.join(ROOT, 'plstudy/assets/js/app.js'), 'utf8');
+  check(plstudyApp.includes('window.HvsAccount?.scheduleProgressSync(serialized)'),
+    'plstudy: local progress must schedule account synchronization');
   check(readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8').includes('hvsdcm.admin'), 'admin.js: admin session key is missing');
   check(readFileSync(path.join(ROOT, 'WordMaster/index.html'), 'utf8').includes('data-key="wordmaster2000.quiz.v1"'), 'WordMaster: study DB key is missing');
   check(readFileSync(path.join(ROOT, 'smstudy/index.html'), 'utf8').includes('data-key="samun2027.study.v1"'), 'smstudy: study DB key is missing');

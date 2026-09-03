@@ -267,7 +267,9 @@ export function runCompetitionEvidenceCli(argv, options = {}) {
   const args = parseCompetitionEvidenceArgs(argv, { fsImpl });
   const report = readCompetitionReport(args.report, { fsImpl });
   const evidence = readBoundedJson(args.evidence, fsImpl);
-  const merged = mergeCompetitionOfficialEvidence(report, evidence);
+  const merged = mergeCompetitionOfficialEvidence(report, evidence, {
+    ...(options.finishedAt ? { finishedAt: options.finishedAt } : {}),
+  });
   atomicWrite(args.out, merged, fsImpl);
   const ledger = competitionEvidenceLedger(merged);
   if (args.evidenceOut) atomicWrite(args.evidenceOut, ledger, fsImpl);

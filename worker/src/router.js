@@ -2748,7 +2748,7 @@ async function acceptAnswer(request, env) {
     return json({ error: '잘못된 답안입니다.' }, 400);
   }
 
-  await env.DB.prepare(`
+  const answerWrite = await env.DB.prepare(`
     INSERT INTO shared_answers(
       app, question_id, normalized_answer, display_answer,
       created_by, created_at, question_label, base_answer
@@ -2763,6 +2763,10 @@ async function acceptAnswer(request, env) {
         WHEN excluded.base_answer != '' THEN excluded.base_answer
         ELSE shared_answers.base_answer
       END
+    WHERE (excluded.question_label != ''
+      AND excluded.question_label != COALESCE(shared_answers.question_label, ''))
+      OR (excluded.base_answer != ''
+        AND excluded.base_answer != COALESCE(shared_answers.base_answer, ''))
   `).bind(
     app,
     questionId,
@@ -2774,7 +2778,9 @@ async function acceptAnswer(request, env) {
     baseAnswer,
   ).run();
 
-  await logActivity(env, session.user_id, 'shared_answer', app, questionId);
+  if (answerWrite?.meta?.changes !== 0) {
+    await logActivity(env, session.user_id, 'shared_answer', app, questionId);
+  }
   return json({ ok: true });
 }
 
@@ -2796,6 +2802,7 @@ async function listUsers(env) {
       COALESCE(SUM(CASE WHEN a.event = 'login' THEN 1 ELSE 0 END), 0) logins,
       COUNT(DISTINCT CASE WHEN a.app = 'wordmaster' THEN a.id END) word_events,
       COUNT(DISTINCT CASE WHEN a.app = 'smstudy' THEN a.id END) sm_events,
+      COUNT(DISTINCT CASE WHEN a.app = 'plstudy' THEN a.id END) pl_events,
       (
         SELECT COUNT(DISTINCT
           COALESCE(active_session.user_agent, '') || '|' ||
@@ -3008,13 +3015,13 @@ export async function route(request, env) {
     return gichulPdf(request, env, gichulPdfMatch[1]);
   }
 
-  const progressMatch = path.match(/^\/api\/progress\/(wordmaster|smstudy)$/);
+  const progressMatch = path.match(/^\/api\/progress\/(wordmaster|smstudy|plstudy)$/);
   if (progressMatch) {
     const response = await progress(request, env, progressMatch[1]);
     if (response) return response;
   }
 
-  const answersMatch = path.match(/^\/api\/answers\/(wordmaster|smstudy)$/);
+  const answersMatch = path.match(/^\/api\/answers\/(wordmaster|smstudy|plstudy)$/);
   if (answersMatch && method === 'GET') {
     return sharedAnswers(request, env, answersMatch[1]);
   }

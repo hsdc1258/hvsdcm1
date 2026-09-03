@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="auth-pending">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>WordMaster 2000</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-auth-gate-v1">
   <link rel="stylesheet" href="assets/css/style.css?v=20260901-dark-workspace-v3">
 </head>
 <body class="workspace-app wordmaster-page">
@@ -29,7 +29,6 @@
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">WordMaster</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
-        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
         <a class="topbar-link" href="/smstudy/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>사회·문화</a>
       </nav>
@@ -48,12 +47,6 @@
           <p class="sidebar-label">화면</p>
           <button id="homeLogo" class="sidebar-item is-active" type="button" data-nav="home" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-settings"></use></svg>시험 설정</button>
           <button id="openStatsBtn" class="sidebar-item" type="button" data-nav="stats"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>학습 기록</button>
-        </nav>
-
-        <nav class="sidebar-group" aria-label="워크스페이스 도구">
-          <p class="sidebar-label">워크스페이스</p>
-          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span>코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
-          <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span>Usage</span></a>
         </nav>
 
         <div class="sidebar-group">
@@ -84,7 +77,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="/account.js" data-app="wordmaster" data-key="wordmaster2000.quiz.v1"></script>
+  <script src="/account.js?v=20260904-auth-gate-v1" data-app="wordmaster" data-key="wordmaster2000.quiz.v1"></script>
   <script src="assets/js/words.js"></script>
   <script src="/assets/js/study-utils.js"></script>
   <script src="assets/js/app.js?v=20260901-dark-workspace-v3"></script>

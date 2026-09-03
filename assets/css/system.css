@@ -1497,6 +1497,9 @@ label.list-row {
    Workspace suite — Usage · Admin · WordMaster
    세 화면의 제품 문법만 공유한다. 다른 학습 화면은 기존 앱 셸을 그대로 유지한다.
    ========================================================================== */
+html.auth-pending body {
+  visibility: hidden;
+}
 .workspace-app {
   min-height: 100dvh;
   background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);

@@ -57,16 +57,16 @@ function adminTokenDaysLeft() {
 async function check() {
   const token = await userToken();
   const probes = [
-    ['GET /api/usage (소유자 게이트)', '/api/usage', token],
-    ['GET /api/admin/stats (관리자)', '/api/admin/stats', credentials.admin.token],
+    ['GET /api/usage (비소유자 은닉)', '/api/usage', token, 404],
+    ['GET /api/admin/stats (관리자)', '/api/admin/stats', credentials.admin.token, 200],
   ];
   let failed = 0;
   console.log(`POST /api/login → 200 (${credentials.user.username})`);
-  for (const [label, route, bearer] of probes) {
+  for (const [label, route, bearer, expectedStatus] of probes) {
     const response = await fetch(`${credentials.api}${route}`, {
       headers: { authorization: `Bearer ${bearer}` },
     });
-    if (response.status !== 200) failed += 1;
+    if (response.status !== expectedStatus) failed += 1;
     console.log(`${label} → ${response.status}`);
   }
   console.log(`관리자 토큰 잔여 ${adminTokenDaysLeft()}일 (${credentials.admin.expires_at_iso})`);
@@ -74,7 +74,7 @@ async function check() {
     console.error(`${failed}개 표면이 200이 아니다.`);
     process.exit(1);
   }
-  console.log('세 표면 모두 열려 있다.');
+  console.log('사용자·비소유자 은닉·관리자 경계가 모두 정상이다.');
 }
 
 function base64Url(bytes) {
