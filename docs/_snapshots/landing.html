@@ -34,8 +34,11 @@
    - 깊이는 명도 단차 + 1px 헤어라인이다(DESIGN.md §4). --shadow-*는 떠 있는
      오버레이(시트·토스트·세그먼티드 인디케이터) 전용으로 격하했고 값도 낮췄다.
      .card-hover에서 그림자를 제거하고 표면 한 단으로 대체했다.
-   - 그룹 리스트(.list-group / .list-row) · 인셋(.inset) · 이모지 슬롯(.emoji*)을
-     시스템 레벨에 신설했다. 3b·3c가 이것을 소비한다 (용법: DESIGN.md §7).
+   - 그룹 리스트(.list-group / .list-row) · 인셋(.inset)을 시스템 레벨에 신설했다.
+     3b·3c가 이것을 소비한다 (용법: DESIGN.md §7).
+   - v14(2026-09-04): 이모지 슬롯(.emoji / .emoji-box / .emoji-lg)과 --font-emoji를 폐기했다.
+     아이콘은 assets/ui-icons.svg의 테두리형 한 세트(.ui-icon)뿐이고 크기는 17/16/20 3단이다
+     (DESIGN.md §5). 아이콘 뒤에 강조색·상태색 면을 두지 않는다.
 
    ==========================================================================
    대비 전수표 — DESIGN.md §3.1 / LESSONS 규칙 1·2
@@ -135,7 +138,6 @@
      추가하지 않는다(DESIGN.md §2). */
   --font-sans: -apple-system, BlinkMacSystemFont, "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
-  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* 사다리: 12 · 14 · 15 · 17 · 21 · 24 · 32 · 48 · 80 */
   --fs-display-xl: clamp(2.5rem, 1.6rem + 4.5vw, 5rem);
   /* 40 → 80 */
@@ -212,10 +214,8 @@
   /* 터치 타깃 하한 (WCAG 2.5.5) */
   --row-pad-x: var(--space-4);
   --row-pad-y: 10px;
-  --emoji-size: 1.0625rem;
-  --emoji-box: 30px;
-  --list-inset: 62px;
-  /* 리드가 있는 행의 구분선 좌측 인셋 */
+  --list-inset: 45px;
+  /* 리드(17px 아이콘)가 있는 행의 구분선 좌측 인셋 = row-pad-x 16 + 아이콘 17 + gap 12 */
 }
 /* ==========================================================================
    리셋
@@ -377,7 +377,7 @@ hr {
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-/* 앱 이모지 + 제목 묶음. 이모지는 뷰마다 한 번, 헤더에만 크게 놓는다 (§5). */
+/* 앱 아이콘(20px .ui-icon) + 제목 묶음. 아이콘은 뷰마다 한 번, 헤더에만 놓는다 (§5). */
 .view-head-main {
   display: flex;
   align-items: center;
@@ -530,46 +530,37 @@ hr {
   height: 32px;
   flex: none;
 }
+/* ==========================================================================
+   UI 아이콘 (DESIGN.md §5 v14) — assets/ui-icons.svg의 테두리형 한 세트만 쓴다.
+   기본 17px(사이드바·행 선두). 툴바·버튼 안은 16px, 뷰 헤더·엠블럼은 20px — 이 3단 외
+   임의 크기는 없다. 선 굵기는 크기와 무관하게 1.75다. 기본 선 색은 --text-3, hover·활성은
+   --accent. 아이콘 뒤에 --accent / --accent-soft / 상태색 면을 두지 않는다(§5.2 게이트 4).
+   ========================================================================== */
 .ui-icon {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   flex: none;
   fill: none;
+  color: var(--text-3);
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* ==========================================================================
-   이모지 슬롯 (DESIGN.md §5)
-   이모지는 서체마다 기준선이 달라 font-size만으로는 정렬이 흔들린다.
-   광학 크기와 정렬을 여기서만 고정하고, 마크업은 이 클래스를 우회하지 않는다.
-   ========================================================================== */
-.emoji {
-  display: inline-block;
-  flex: none;
-  font-family: var(--font-emoji);
-  font-size: var(--emoji-size);
-  line-height: 1;
-  font-style: normal;
-  vertical-align: -.08em;
+.btn .ui-icon, .toolbar .ui-icon, .segmented-btn .ui-icon {
+  width: 16px;
+  height: 16px;
 }
-/* 고정 정사각 컨테이너 — 그룹 리스트 행의 리드 슬롯. 배경은 알파 헤어라인색이라
-   어느 표면 위에서도 정확히 한 단만 밝다(§4 "단차를 건너뛰지 않는다"). */
-.emoji-box {
-  width: var(--emoji-box);
-  height: var(--emoji-box);
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-s);
-  background: var(--line-faint);
-  font-family: var(--font-emoji);
-  font-size: var(--emoji-size);
-  line-height: 1;
+.btn-primary .ui-icon, .btn-danger .ui-icon {
+  color: inherit;
 }
-.emoji-lg {
-  font-size: 1.5rem;
+.btn-secondary:hover .ui-icon, .btn-ghost:hover .ui-icon, .topbar-link:hover .ui-icon, .segmented-btn:hover .ui-icon, .segmented-btn[aria-selected="true"] .ui-icon, .segmented-btn[aria-pressed="true"] .ui-icon {
+  color: var(--accent);
+}
+.view-head-main > .ui-icon, .sidebar-emblem .ui-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
 }
 /* ==========================================================================
    상단바
@@ -612,8 +603,8 @@ hr {
   text-decoration: none;
 }
 .topbar-link .ui-icon {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .topbar-crumb {
   font-size: var(--fs-caption);
@@ -937,14 +928,20 @@ label.list-row {
   height: 1px;
   background: var(--line-faint);
 }
-/* 리드(이모지) 슬롯이 있는 행은 리드 폭만큼 더 들여쓴다. */
+/* 리드(아이콘) 슬롯이 있는 행은 리드 폭만큼 더 들여쓴다. */
 .list-row + .list-row:has(.list-row-lead)::before {
   left: var(--list-inset);
 }
+/* 행 선두 아이콘 슬롯 — 안에 17px .ui-icon 하나. 배경 타일 없음(§5). */
 .list-row-lead {
   display: flex;
   flex: none;
   align-items: center;
+  color: var(--text-3);
+  /* on --surface 4.99:1 — 그래픽 3:1 요건 충족 */
+}
+a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.list-row:hover .list-row-lead {
+  color: var(--accent);
 }
 .list-row-body {
   display: grid;
@@ -1640,9 +1637,7 @@ html.auth-pending body {
   height: 30px;
 }
 .workspace-app .sidebar-emblem > .ui-icon {
-  width: 23px;
-  height: 23px;
-  color: var(--accent);
+  color: var(--text);
 }
 .sidebar-product-copy {
   display: grid;
@@ -1680,31 +1675,13 @@ html.auth-pending body {
   border-color: rgba(255,255,255,.08);
   background: rgba(255,255,255,.05);
 }
+/* 활성 항목 — 색 면이 아니라 표면 한 단(--surface-3) + 헤어라인으로 구분한다(§4·§5).
+   v14에서 강조 항목(.sidebar-item-featured)과 우측 메타 배지(.sidebar-item-meta)를 폐기했다 —
+   사이드바 항목은 아이콘 + 라벨 한 줄뿐이다(§6.1). */
 .workspace-app .sidebar-item.is-active, .workspace-app .sidebar-item[aria-current] {
-  border-color: rgba(41,151,255,.22);
-  background: rgba(41,151,255,.12);
-  color: #f7fbff;
-}
-/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
-.workspace-app .sidebar-item-featured {
   border-color: var(--line);
-  background: var(--accent-soft);
-  color: var(--text);
-}
-.workspace-app .sidebar-item-featured .ui-icon {
-  color: var(--accent);
-}
-/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
-.sidebar-item-meta {
-  margin-left: auto;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
   background: var(--surface-3);
-  color: var(--text-2);
-  font-size: .52rem;
-  font-weight: 800;
-  letter-spacing: .08em;
+  color: var(--text);
 }
 .workspace-kicker {
   display: inline-flex;
@@ -1894,17 +1871,23 @@ html.auth-pending body {
   visibility: visible;
   opacity: 1;
 }
+/* ---- 드로어 (DESIGN.md §5 v14 · §6 · §7.1) ----
+   폭은 데스크톱 320px, 모바일은 화면 폭 - 24px. 안은 그룹 리스트 두 개(학습 / 운영)뿐이다 —
+   링크 7개를 각각 테두리 카드로 세로 스택하던 조판을 폐기했다. 행은 48px, [아이콘 17px][라벨][chevron],
+   행 사이 인셋 헤어라인은 system.css의 .list-row 규칙이 그린다. */
 .drawer {
   position: fixed;
   z-index: 40;
   inset: 0 0 0 auto;
   display: flex;
-  width: min(390px, 92vw);
-  padding: 24px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: 16px 16px 20px;
   flex-direction: column;
-  gap: 24px;
-  border-left: 1px solid #292929;
-  background: #080808;
+  gap: 20px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--bg-alt);
   transform: translateX(102%);
   visibility: hidden;
   transition: transform .22s ease, visibility .22s;
@@ -1918,56 +1901,71 @@ html.auth-pending body {
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
-  border-bottom: 1px solid #242424;
+  padding-left: 4px;
+  border-bottom: 1px solid var(--line-faint);
 }
 .drawer-head strong {
   font-family: var(--font-mono);
   letter-spacing: -.04em;
 }
+/* 닫기 — 테두리형 icon-x 하나(16px, 툴바·버튼 단). 터치 타깃 44px. */
 .drawer-head button {
+  display: grid;
   width: 44px;
   height: 44px;
+  place-items: center;
   border: 0;
+  border-radius: var(--radius-m);
   background: transparent;
-  color: #fff;
-  font-size: 28px;
+  color: var(--text-2);
   cursor: pointer;
+}
+.drawer-head button:hover {
+  background: var(--line-faint);
+  color: var(--text);
+}
+.drawer-head button .ui-icon {
+  width: 16px;
+  height: 16px;
 }
 .drawer-links {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  align-content: start;
 }
-.drawer-links a {
+.drawer-group {
   display: grid;
-  gap: 5px;
-  min-height: 68px;
-  padding: 14px 16px;
-  border: 1px solid #242424;
-  border-radius: 12px;
-  background: #0e0e0e;
-  color: #fff;
-  text-decoration: none;
+  gap: 0;
 }
-.drawer-links a:hover, .drawer-links a:focus-visible {
-  border-color: #fff;
-  background: #171717;
+/* 두 번째 그룹(운영)은 첫 그룹과 iOS 설정의 섹션 간격으로 뗀다. 비어 있는 마운트는 자리를 먹지 않는다. */
+.drawer-group:empty {
+  display: none;
 }
-.drawer-links span {
-  color: #8d8d8d;
-  font-size: 13px;
+.drawer-group + .drawer-group:not(:empty) {
+  margin-top: var(--space-5);
 }
-#ownerLinks {
-  display: contents;
+.drawer .list-row {
+  min-height: 48px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.drawer .list-row-title {
+  font-weight: 500;
 }
 .drawer-logout {
   min-height: 48px;
   margin-top: auto;
-  border: 1px solid #303030;
-  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
   background: transparent;
-  color: #fff;
+  color: var(--text);
   font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
   cursor: pointer;
+}
+.drawer-logout:hover {
+  border-color: var(--text-3);
 }
 .login-sheet {
   border-color: #333;
@@ -1985,8 +1983,10 @@ html.auth-pending body {
   .wordmark {
     font-size: clamp(2.75rem, 15vw, 5rem);
   }
+  /* 모바일: 화면 폭 - 24px (375px에서 351px). */
   .drawer {
-    padding: 18px;
+    width: calc(100vw - 24px);
+    padding: 12px 12px 16px;
   }
 }
 </style>
@@ -1998,7 +1998,7 @@ html.auth-pending body {
 </head>
 <body class="home-page">
   <div class="snap-note"><strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입, <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기. 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.
+  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 사람 소유자 로그인 뒤 만드는 드로어의 학습·운영 그룹 리스트와 테두리형 아이콘을 주입했다. 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.
   <br><strong>여기서 확인할 것</strong> — 본문에는 학습 콘텐츠가 노출되지 않고, 사람 소유자 전용 Behavior Lab 카드만 연락 섹션 앞에 나타나는지. 일반 학습·사용량 진입은 드로어에 있고, 드로어는 닫힌 상태(화면 밖)다.
   <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
@@ -2008,10 +2008,11 @@ html.auth-pending body {
 
   <div id="shade" class="shade" aria-hidden="true"></div>
   <aside id="drawer" class="drawer logged" aria-label="개인 메뉴" aria-hidden="true">
-    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기">×</button></header>
+    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-x"></use></svg></button></header>
+    <!-- 두 마운트는 비어 있다. 로그인 뒤 home.js가 그룹 헤드 + 그룹 리스트를 만든다. -->
     <nav class="drawer-links" aria-label="바로가기">
-      <span id="studyLinks"></span>
-      <span id="ownerLinks"></span>
+      <div id="studyLinks" class="drawer-group"><h2 class="list-group-head">학습</h2><div class="list-group"><a class="list-row list-row-nav" href="/WordMaster/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg></span><span class="list-row-body"><span class="list-row-title">WordMaster</span></span></a><a class="list-row list-row-nav" href="/smstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg></span><span class="list-row-body"><span class="list-row-title">사회·문화</span></span></a><a class="list-row list-row-nav" href="/plstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-scale"></use></svg></span><span class="list-row-body"><span class="list-row-title">정치와 법</span></span></a><a class="list-row list-row-nav" href="/gichul/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-file"></use></svg></span><span class="list-row-body"><span class="list-row-title">기출</span></span></a></div></div>
+      <div id="ownerLinks" class="drawer-group"><h2 class="list-group-head">운영</h2><div class="list-group"><a class="list-row list-row-nav" href="/behavior-lab/#paper"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg></span><span class="list-row-body"><span class="list-row-title">Behavior Lab</span></span></a><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg></span><span class="list-row-body"><span class="list-row-title">공모전</span></span></a><a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></span><span class="list-row-body"><span class="list-row-title">관리자</span></span></a></div></div>
     </nav>
     <button id="drawerLogout" class="drawer-logout" type="button">로그아웃</button>
   </aside>

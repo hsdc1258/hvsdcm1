@@ -172,11 +172,13 @@ function documentSnapshot(file, { note, mutate = (html) => html }) {
   return normalize(html);
 }
 
-// home.js의 paintEmoji()와 같은 매핑으로 슬롯을 채운다 — 스냅샷이 매핑 배선까지 보여준다.
-function paintEmoji(html) {
-  const map = evaluateBrowserData('assets/js/site-emoji.js', 'SITE_EMOJI') || {};
-  return html.replace(/(<[^>]*\sdata-emoji="([^"]+)"[^>]*>)(<\/span>)/gu,
-    (whole, open, key, close) => `${open}${map[key] || ''}${close}`);
+function uiIcon(id) {
+  return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#${id}"></use></svg>`;
+}
+
+function drawerGroup(heading, links) {
+  const rows = links.map(([href, label, icon]) => `<a class="list-row list-row-nav" href="${href}"><span class="list-row-lead">${uiIcon(icon)}</span><span class="list-row-body"><span class="list-row-title">${label}</span></span></a>`).join('');
+  return `<h2 class="list-group-head">${heading}</h2><div class="list-group">${rows}</div>`;
 }
 
 export function buildSnapshots() {
@@ -241,23 +243,31 @@ export function buildSnapshots() {
     }),
     [SNAPSHOT_BY_SCREEN['index.html']]: documentSnapshot('index.html', {
       note: '<strong>무엇인가</strong> — 랜딩(<code>/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
-        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 로그인 시 하는 일: 드로어의 학습·계정 템플릿과 사람 소유자 전용 Behavior Lab 랜딩 템플릿 주입,'
-        + ' <code>body/#account/#drawer</code>에 <code>logged</code> 부여, <code>data-emoji</code> 슬롯을 <code>site-emoji.js</code> 매핑으로 채우기.'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — <code>home.js</code>가 사람 소유자 로그인 뒤 만드는 드로어의 학습·운영 그룹 리스트와 테두리형 아이콘을 주입했다.'
         + ' 즉 <strong>사람 소유자 계정으로 로그인한 화면</strong>이다.'
         + '\n  <br><strong>여기서 확인할 것</strong> — 본문에는 학습 콘텐츠가 노출되지 않고, 사람 소유자 전용 Behavior Lab 카드만 연락 섹션 앞에 나타나는지.'
         + ' 일반 학습·사용량 진입은 드로어에 있고, 드로어는 닫힌 상태(화면 밖)다.'
         + '\n  <br><strong>주의</strong> — 등장 애니메이션(<code>.reveal</code>)은 <code>html.js</code>가 없어 처음부터 보인 상태로 조판된다.'
         + `\n  ${GENERATED_NOTE}`,
-      mutate: (html) => paintEmoji(html
-        // 소유자로 로그인한 상태를 얼린다 — data-owner 그룹(사용량)까지 주입된다.
-        .replace(/<template data-(?:study|owner|behavior-owner)>([^]*?)<\/template>/gu, '$1')
+      mutate: (html) => html
+        .replace('<div id="studyLinks" class="drawer-group"></div>', `<div id="studyLinks" class="drawer-group">${drawerGroup('학습', [
+          ['/WordMaster/', 'WordMaster', 'icon-book-open'],
+          ['/smstudy/', '사회·문화', 'icon-layers'],
+          ['/plstudy/', '정치와 법', 'icon-scale'],
+          ['/gichul/', '기출', 'icon-file'],
+        ])}</div>`)
+        .replace('<div id="ownerLinks" class="drawer-group"></div>', `<div id="ownerLinks" class="drawer-group">${drawerGroup('운영', [
+          ['/behavior-lab/#paper', 'Behavior Lab', 'icon-bolt'],
+          ['/usage/', '공모전', 'icon-trophy'],
+          ['/admin/', '관리자', 'icon-shield'],
+        ])}</div>`)
         .replace('<body>', '<body class="logged">')
         .replace('<aside id="drawer" class="drawer"', '<aside id="drawer" class="drawer logged"')
-        .replace('<div id="account" class="account hero-actions">', '<div id="account" class="account hero-actions logged">')),
+        .replace('<div id="account" class="account hero-actions">', '<div id="account" class="account hero-actions logged">'),
     }),
     [SNAPSHOT_BY_SCREEN['admin/index.html']]: documentSnapshot('admin/index.html', {
       note: '<strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.'
-        + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며,'
+        + '\n  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#adminShell</code>의 <code>hidden</code>을 풀었으며,'
         + ' 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다.'
         + ' 사이드바 최상단에는 흰 헤어라인 로고 엠블럼(<code>.sidebar-emblem</code>)이 있고, 그 아래 각 항목은 아이콘 없이 <strong>텍스트 전용 행</strong>이다(DESIGN.md §8/v5 — 이모지 슬롯 폐지).'
         + '\n  <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>).'
@@ -265,8 +275,8 @@ export function buildSnapshots() {
         + '\n  <br><strong>주의</strong> — 요약 스트립과 표의 행은 Worker API가 채우므로 이 사본에서는 비어 있다. 검증 대상은 셸·사이드바·툴바·표 머리의 조판이다.'
         + `\n  ${GENERATED_NOTE}`,
       mutate: (html) => html
-        .replace('<section id="login" class="ad-login">', '<section id="login" class="ad-login hidden">')
-        .replace('<section id="panel" class="ad-panel hidden">', '<section id="panel" class="ad-panel">')
+        .replace('<section id="login" class="ad-gate"', '<section id="login" class="ad-gate" hidden')
+        .replace('<div id="adminShell" class="app-shell" hidden>', '<div id="adminShell" class="app-shell">')
         .replace(/(<button class="sidebar-item" type="button" data-view="overview"[^>]*?)>/u, '$1 aria-current="page">'),
     }),
     [SNAPSHOT_BY_SCREEN['usage/index.html']]: documentSnapshot('usage/index.html', {

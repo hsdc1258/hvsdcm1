@@ -27,8 +27,11 @@
    - 깊이는 명도 단차 + 1px 헤어라인이다(DESIGN.md §4). --shadow-*는 떠 있는
      오버레이(시트·토스트·세그먼티드 인디케이터) 전용으로 격하했고 값도 낮췄다.
      .card-hover에서 그림자를 제거하고 표면 한 단으로 대체했다.
-   - 그룹 리스트(.list-group / .list-row) · 인셋(.inset) · 이모지 슬롯(.emoji*)을
-     시스템 레벨에 신설했다. 3b·3c가 이것을 소비한다 (용법: DESIGN.md §7).
+   - 그룹 리스트(.list-group / .list-row) · 인셋(.inset)을 시스템 레벨에 신설했다.
+     3b·3c가 이것을 소비한다 (용법: DESIGN.md §7).
+   - v14(2026-09-04): 이모지 슬롯(.emoji / .emoji-box / .emoji-lg)과 --font-emoji를 폐기했다.
+     아이콘은 assets/ui-icons.svg의 테두리형 한 세트(.ui-icon)뿐이고 크기는 17/16/20 3단이다
+     (DESIGN.md §5). 아이콘 뒤에 강조색·상태색 면을 두지 않는다.
 
    ==========================================================================
    대비 전수표 — DESIGN.md §3.1 / LESSONS 규칙 1·2
@@ -128,7 +131,6 @@
      추가하지 않는다(DESIGN.md §2). */
   --font-sans: -apple-system, BlinkMacSystemFont, "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
-  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* 사다리: 12 · 14 · 15 · 17 · 21 · 24 · 32 · 48 · 80 */
   --fs-display-xl: clamp(2.5rem, 1.6rem + 4.5vw, 5rem);
   /* 40 → 80 */
@@ -205,10 +207,8 @@
   /* 터치 타깃 하한 (WCAG 2.5.5) */
   --row-pad-x: var(--space-4);
   --row-pad-y: 10px;
-  --emoji-size: 1.0625rem;
-  --emoji-box: 30px;
-  --list-inset: 62px;
-  /* 리드가 있는 행의 구분선 좌측 인셋 */
+  --list-inset: 45px;
+  /* 리드(17px 아이콘)가 있는 행의 구분선 좌측 인셋 = row-pad-x 16 + 아이콘 17 + gap 12 */
 }
 /* ==========================================================================
    리셋
@@ -370,7 +370,7 @@ hr {
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-/* 앱 이모지 + 제목 묶음. 이모지는 뷰마다 한 번, 헤더에만 크게 놓는다 (§5). */
+/* 앱 아이콘(20px .ui-icon) + 제목 묶음. 아이콘은 뷰마다 한 번, 헤더에만 놓는다 (§5). */
 .view-head-main {
   display: flex;
   align-items: center;
@@ -523,46 +523,37 @@ hr {
   height: 32px;
   flex: none;
 }
+/* ==========================================================================
+   UI 아이콘 (DESIGN.md §5 v14) — assets/ui-icons.svg의 테두리형 한 세트만 쓴다.
+   기본 17px(사이드바·행 선두). 툴바·버튼 안은 16px, 뷰 헤더·엠블럼은 20px — 이 3단 외
+   임의 크기는 없다. 선 굵기는 크기와 무관하게 1.75다. 기본 선 색은 --text-3, hover·활성은
+   --accent. 아이콘 뒤에 --accent / --accent-soft / 상태색 면을 두지 않는다(§5.2 게이트 4).
+   ========================================================================== */
 .ui-icon {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   flex: none;
   fill: none;
+  color: var(--text-3);
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* ==========================================================================
-   이모지 슬롯 (DESIGN.md §5)
-   이모지는 서체마다 기준선이 달라 font-size만으로는 정렬이 흔들린다.
-   광학 크기와 정렬을 여기서만 고정하고, 마크업은 이 클래스를 우회하지 않는다.
-   ========================================================================== */
-.emoji {
-  display: inline-block;
-  flex: none;
-  font-family: var(--font-emoji);
-  font-size: var(--emoji-size);
-  line-height: 1;
-  font-style: normal;
-  vertical-align: -.08em;
+.btn .ui-icon, .toolbar .ui-icon, .segmented-btn .ui-icon {
+  width: 16px;
+  height: 16px;
 }
-/* 고정 정사각 컨테이너 — 그룹 리스트 행의 리드 슬롯. 배경은 알파 헤어라인색이라
-   어느 표면 위에서도 정확히 한 단만 밝다(§4 "단차를 건너뛰지 않는다"). */
-.emoji-box {
-  width: var(--emoji-box);
-  height: var(--emoji-box);
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-s);
-  background: var(--line-faint);
-  font-family: var(--font-emoji);
-  font-size: var(--emoji-size);
-  line-height: 1;
+.btn-primary .ui-icon, .btn-danger .ui-icon {
+  color: inherit;
 }
-.emoji-lg {
-  font-size: 1.5rem;
+.btn-secondary:hover .ui-icon, .btn-ghost:hover .ui-icon, .topbar-link:hover .ui-icon, .segmented-btn:hover .ui-icon, .segmented-btn[aria-selected="true"] .ui-icon, .segmented-btn[aria-pressed="true"] .ui-icon {
+  color: var(--accent);
+}
+.view-head-main > .ui-icon, .sidebar-emblem .ui-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
 }
 /* ==========================================================================
    상단바
@@ -605,8 +596,8 @@ hr {
   text-decoration: none;
 }
 .topbar-link .ui-icon {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .topbar-crumb {
   font-size: var(--fs-caption);
@@ -930,14 +921,20 @@ label.list-row {
   height: 1px;
   background: var(--line-faint);
 }
-/* 리드(이모지) 슬롯이 있는 행은 리드 폭만큼 더 들여쓴다. */
+/* 리드(아이콘) 슬롯이 있는 행은 리드 폭만큼 더 들여쓴다. */
 .list-row + .list-row:has(.list-row-lead)::before {
   left: var(--list-inset);
 }
+/* 행 선두 아이콘 슬롯 — 안에 17px .ui-icon 하나. 배경 타일 없음(§5). */
 .list-row-lead {
   display: flex;
   flex: none;
   align-items: center;
+  color: var(--text-3);
+  /* on --surface 4.99:1 — 그래픽 3:1 요건 충족 */
+}
+a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.list-row:hover .list-row-lead {
+  color: var(--accent);
 }
 .list-row-body {
   display: grid;
@@ -1633,9 +1630,7 @@ html.auth-pending body {
   height: 30px;
 }
 .workspace-app .sidebar-emblem > .ui-icon {
-  width: 23px;
-  height: 23px;
-  color: var(--accent);
+  color: var(--text);
 }
 .sidebar-product-copy {
   display: grid;
@@ -1673,31 +1668,13 @@ html.auth-pending body {
   border-color: rgba(255,255,255,.08);
   background: rgba(255,255,255,.05);
 }
+/* 활성 항목 — 색 면이 아니라 표면 한 단(--surface-3) + 헤어라인으로 구분한다(§4·§5).
+   v14에서 강조 항목(.sidebar-item-featured)과 우측 메타 배지(.sidebar-item-meta)를 폐기했다 —
+   사이드바 항목은 아이콘 + 라벨 한 줄뿐이다(§6.1). */
 .workspace-app .sidebar-item.is-active, .workspace-app .sidebar-item[aria-current] {
-  border-color: rgba(41,151,255,.22);
-  background: rgba(41,151,255,.12);
-  color: #f7fbff;
-}
-/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
-.workspace-app .sidebar-item-featured {
   border-color: var(--line);
-  background: var(--accent-soft);
-  color: var(--text);
-}
-.workspace-app .sidebar-item-featured .ui-icon {
-  color: var(--accent);
-}
-/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
-.sidebar-item-meta {
-  margin-left: auto;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
   background: var(--surface-3);
-  color: var(--text-2);
-  font-size: .52rem;
-  font-weight: 800;
-  letter-spacing: .08em;
+  color: var(--text);
 }
 .workspace-kicker {
   display: inline-flex;
@@ -1791,45 +1768,67 @@ html.auth-pending body {
 </style>
 <style>/* admin/assets/css/admin.css (inlined) */
 /* ==========================================================================
-   admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
+   admin — 운영 대시보드 (DESIGN.md §1.1: 클라우드 콘솔 대시보드 — 그룹형 사이드바·뷰·표)
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
+
+   2026-09-04 v14 게이트 정리 (지시 §4)
+   - 로그인 전 화면은 .app-shell 그리드를 쓰지 않는다. 셸(#adminShell)은 hidden이고,
+     캔버스(--bg) 위에 .card 하나(최대 22em, 위 여백 --space-8)만 뷰포트 가운데 선다.
+     방패 타일·디스플레이급 헤드라인·특징 칩(.ad-login-intro)과 accent-soft 아이콘 타일
+     (.ad-secure-mark)은 통째로 지웠다 — 색 타일·채움 아이콘 금지(§5), 로그인은 익숙한
+     행동이라 설명이 필요 없다(§6.1). 2열 그리드가 .app-main 밖으로 넘치던 원인도 함께 사라졌다.
+   - 대시보드가 열릴 때만 사이드바와 .app-shell이 나타난다.
 
    사이클5 재편 요지 (plan.md §3.4 — 콘솔 대시보드 문법)
    - 한 화면 세로 나열을 **카테고리별 독립 뷰**로 바꿨다. 사이드바가 뷰를 고르고,
      선택되지 않은 뷰는 hidden으로 문서에서 빠진다. 뷰 컨테이너는 여기서 배치만 맡는다.
-   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다 —
-     같은 모양을 사용량 화면과 공유한다 (DESIGN.md §7).
-   - 공용 답안의 접힘 그룹(.disclosure)은 없앴다. 자기 뷰를 가진 표를 다시 접을 이유가 없다.
+   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다.
 
    사이클4 재조판 요지
-   - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
-     행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
-   - 섹션 머리를 다른 3면과 같은 어법으로 맞췄다: 뷰 제목은 h1(title-1),
-     섹션 라벨은 .list-group-head(마이크로 캡스). title-2 두 줄 헤더를 걷어냈다.
-   - 접기 카드(.ad-fold)는 system.css의 .disclosure 프리미티브로 대체했다.
-   - 로그인 카드의 box-shadow를 제거했다. 카드는 떠 있지 않다 — 그림자는 시트·토스트·
-     세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
-   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js)로 줄여
-     표가 가로로 밀리지 않게 했다.
+   - 표는 표로 둔다. 열이 8~10개인 운영 데이터는 행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
+   - 뷰 제목은 h1(title-1), 섹션 라벨은 .list-group-head(마이크로 캡스).
+   - 카드는 떠 있지 않다 — 그림자는 시트·토스트·세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
+   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js).
 
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
      --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-ip)
      --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
      --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
    ========================================================================== */
-.hidden {
-  display: none !important;
-}
-/* ---- 로그인 ---- */
-.ad-login {
+/* ---- 로그인 게이트 (셸 밖) ----
+   부모(.app-page → .container-wide)의 폭 안에서 가운데 정렬. 375px에서는 컨테이너 폭(343px)이
+   22em(374px)보다 좁으므로 카드가 컨테이너 폭에 맞춰 줄어든다 — 뷰포트·부모 밖으로 나가지 않는다. */
+.ad-gate {
   display: grid;
-  place-items: center;
-  min-height: 60dvh;
+  justify-items: center;
+  padding-top: var(--space-8);
+}
+.ad-gate[hidden] {
+  display: none;
 }
 .ad-login-card {
   display: grid;
   gap: var(--space-4);
-  width: min(360px, 100%);
+  width: 100%;
+  max-width: 22em;
+  min-width: 0;
+}
+.ad-login-title {
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+  font-weight: 600;
+}
+.ad-login-card .btn {
+  width: 100%;
+}
+/* ---- 셸 ----
+   .app-shell은 system.css에서 display: grid라 UA의 [hidden]을 이긴다 — 명시적으로 접는다. */
+.app-shell[hidden] {
+  display: none;
+}
+.admin-page .app-shell {
+  min-height: calc(100dvh - var(--topbar-h) - 138px);
 }
 /* ---- 패널 ---- */
 .ad-panel {
@@ -1923,119 +1922,7 @@ html.auth-pending body {
   text-align: center;
   color: var(--text-2);
 }
-/* ---- 반응형 ---- */
-@media (max-width: 860px) {
-  .ad-panel {
-    gap: var(--space-4);
-  }
-}
-/* ---- dark operations redesign ---- */
-.admin-page .app-shell {
-  min-height: calc(100dvh - var(--topbar-h) - 138px);
-}
-.admin-page .ad-login {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
-  align-items: stretch;
-  gap: 28px;
-  min-height: 650px;
-}
-.ad-login-intro {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-  padding: clamp(36px, 6vw, 84px);
-  overflow: hidden;
-  border: 1px solid var(--line-faint);
-  border-radius: 32px;
-  /* 그라디언트·글로우 링 없음 — 한 단 밝은 면 + 헤어라인(DESIGN.md §3·§4). */
-  background: var(--surface);
-}
-.ad-login-symbol {
-  display: grid;
-  width: 68px;
-  height: 68px;
-  margin: 28px 0;
-  place-items: center;
-  border: 1px solid rgba(41,151,255,.25);
-  border-radius: 21px;
-  background: rgba(41,151,255,.12);
-  color: #70bfff;
-}
-.ad-login-symbol .ui-icon {
-  width: 30px;
-  height: 30px;
-}
-.ad-login-intro h1 {
-  position: relative;
-  z-index: 1;
-  max-width: 700px;
-  font-size: clamp(3rem, 3.4vw, 4rem);
-  line-height: .95;
-  letter-spacing: -.07em;
-}
-.ad-login-facts {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 42px;
-}
-.ad-login-facts li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 13px;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 999px;
-  background: rgba(255,255,255,.035);
-  color: #c4c9d4;
-  font-size: .78rem;
-}
-.ad-login-facts .ui-icon {
-  width: 15px;
-  height: 15px;
-  color: var(--accent);
-}
-.admin-page .ad-login-card {
-  align-self: center;
-  width: 100%;
-  padding: 34px;
-  border-color: var(--line);
-  border-radius: 26px;
-  background: var(--surface);
-}
-.ad-login-card-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.ad-secure-mark {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: none;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.ad-secure-mark .ui-icon {
-  width: 20px;
-  height: 20px;
-}
-.admin-page .ad-login-card .field-input {
-  min-height: 54px;
-  border-radius: 14px;
-  background: #0b0c10;
-}
-.admin-page .ad-login-card .btn {
-  width: 100%;
-  min-height: 54px;
-}
+/* ---- 대시보드 조판 ---- */
 .admin-page .ad-panel {
   gap: 28px;
 }
@@ -2051,58 +1938,32 @@ html.auth-pending body {
   background: transparent;
 }
 .admin-page #stats > div .stat-value {
-  color: #f8fbff;
   font-size: clamp(2rem, 3vw, 3.2rem);
   letter-spacing: -.05em;
 }
 .admin-page .ad-view > .list-group, .admin-page .table-wrap {
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line);
   border-radius: 20px;
-  background: rgba(18,20,26,.88);
+  background: var(--surface);
 }
 .admin-page .toolbar {
   padding: 14px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line);
   border-radius: 18px;
-  background: rgba(18,20,26,.9);
+  background: var(--surface);
 }
 .admin-page .table th {
-  background: #111319;
-  color: #8b93a3;
+  background: var(--surface-2);
 }
-.admin-page .table tbody tr:hover td {
-  background: rgba(41,151,255,.045);
-}
-@media (max-width: 1100px) {
-  .admin-page .ad-login {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-  }
-  .ad-login-intro {
-    min-height: 420px;
-  }
-  .admin-page .ad-login-card {
-    width: 100%;
+/* ---- 반응형 ---- */
+@media (max-width: 860px) {
+  .ad-panel {
+    gap: var(--space-4);
   }
 }
 @media (max-width: 620px) {
-  .admin-page .ad-login {
-    min-height: 0;
-  }
-  .ad-login-intro {
-    min-height: 360px;
-    padding: 28px;
-    border-radius: 24px;
-  }
-  .ad-login-intro h1 {
-    font-size: clamp(2.45rem, 12vw, 3.1rem);
-  }
-  .ad-login-facts {
-    margin-top: 28px;
-  }
-  .admin-page .ad-login-card {
-    padding: 24px;
-    border-radius: 22px;
+  .ad-gate {
+    padding-top: var(--space-7);
   }
   .admin-page #stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2117,7 +1978,7 @@ html.auth-pending body {
 </head>
 <body class="workspace-app admin-page">
   <div class="snap-note"><strong>무엇인가</strong> — 관리자(<code>/admin/index.html</code>) 문서를 그대로 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
-  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#panel</code>의 <code>hidden</code>을 풀었으며, 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다. 사이드바 최상단에는 흰 헤어라인 로고 엠블럼(<code>.sidebar-emblem</code>)이 있고, 그 아래 각 항목은 아이콘 없이 <strong>텍스트 전용 행</strong>이다(DESIGN.md §8/v5 — 이모지 슬롯 폐지).
+  <br><strong>정적으로 반영한 상태</strong> — 인증 후 화면을 보기 위해 <code>#login</code>을 감추고 <code>#adminShell</code>의 <code>hidden</code>을 풀었으며, 사이드바의 <strong>개요</strong> 항목에 <code>aria-current</code>를 얹었다(활성 필). 즉 <strong>개요 뷰</strong> 하나만 보이는 상태다. 사이드바 최상단에는 흰 헤어라인 로고 엠블럼(<code>.sidebar-emblem</code>)이 있고, 그 아래 각 항목은 아이콘 없이 <strong>텍스트 전용 행</strong>이다(DESIGN.md §8/v5 — 이모지 슬롯 폐지).
   <br><strong>여기서 확인할 것</strong> — 뷰가 하나만 렌더된다(나머지 <code>.ad-view</code>는 <code>hidden</code>). 사이드바가 대문자 소제목으로 묶여 있고, 엠블럼이 로고와 같은 사각형 3개 기하를 그대로 쓰는지.
   <br><strong>주의</strong> — 요약 스트립과 표의 행은 Worker API가 채우므로 이 사본에서는 비어 있다. 검증 대상은 셸·사이드바·툴바·표 머리의 조판이다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
@@ -2129,7 +1990,7 @@ html.auth-pending body {
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
         <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg>공모전</a>
-        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>Behavior Lab</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
       </nav>
     </div>
@@ -2137,9 +1998,24 @@ html.auth-pending body {
   <div class="topbar-spacer"></div>
 
   <div class="container-wide app-page">
-    <div class="app-shell">
+    <!-- 로그인 전 — 셸(.app-shell)·사이드바를 쓰지 않는다. 캔버스(--bg) 위 카드 하나가 뷰포트
+         가운데 선다(DESIGN.md v14 · 지시 §4). 제목·비밀번호·버튼·오류 한 줄이 전부다(§6.1). -->
+    <section id="login" class="ad-gate" hidden aria-labelledby="adminLoginTitle">
+      <form id="adminLogin" class="card ad-login-card">
+        <h1 id="adminLoginTitle" class="ad-login-title">관리자</h1>
+        <div class="field">
+          <label class="field-label" for="adminPassword">비밀번호</label>
+          <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-lg" type="submit">열기</button>
+        <p id="loginError" class="field-error" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- 대시보드 셸 — 로그인 성공 뒤에만 hidden이 풀린다(admin.js loadDashboard). -->
+    <div id="adminShell" class="app-shell">
       <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 아이콘 + 라벨 한 줄이다
-           (DESIGN.md §1.1·§6.1). 항목 아래 부제·설명을 두지 않는다 — 뷰 제목은 여기 적힌
+           (DESIGN.md §1.1·§6.1). 항목 아래 부제·설명·배지를 두지 않는다 — 뷰 제목은 여기 적힌
            라벨에서 나오고(admin.js가 .sidebar-item-text를 읽는다) 범위 설명은 본문 캡션이
            담당한다. 같은 문구를 두 곳에 적지 않는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
@@ -2155,7 +2031,7 @@ html.auth-pending body {
 
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
           <p class="sidebar-label">워크스페이스</p>
-          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
+          <a class="sidebar-item" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">Behavior Lab</span></a>
           <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></a>
           <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
         </nav>
@@ -2173,26 +2049,6 @@ html.auth-pending body {
       </aside>
 
       <main id="adminMain" class="app-main" tabindex="-1">
-        <section id="login" class="ad-login hidden">
-          <div class="ad-login-intro">
-            <div class="ad-login-symbol" aria-hidden="true"><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></div>
-            <h1>워크스페이스를 운영하는 한 화면.</h1>
-            <ul class="ad-login-facts" aria-label="관리자 화면 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg>탭 단위 세션</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg>기기 추적</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-database"></use></svg>학습 데이터</li></ul>
-          </div>
-          <form id="adminLogin" class="card ad-login-card">
-            <div class="ad-login-card-head">
-              <span class="ad-secure-mark"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg></span>
-              <h2 class="title-3">관리자 인증</h2>
-            </div>
-            <div class="field">
-              <label class="field-label" for="adminPassword">관리자 비밀번호</label>
-              <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required>
-            </div>
-            <button class="btn btn-primary btn-lg" type="submit">관리자 화면 열기</button>
-            <p id="loginError" class="field-error" role="alert"></p>
-          </form>
-        </section>
-
         <section id="panel" class="ad-panel">
           <header class="view-head">
             <div class="view-head-main">

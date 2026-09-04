@@ -29,16 +29,38 @@
     sortStudyItems,
   } = studyUtils;
 
-  // 이모지는 words.js의 WORDMASTER_EMOJI 매핑에서만 나온다 (DESIGN.md §5).
-  // 마크업에는 슬롯만 두고 글리프 리터럴을 박지 않는다. 키는 항상 리터럴로 넘긴다 —
-  // scripts/validate.mjs가 이 호출에서 매핑 키를 도출해 죽은 항목·누락을 잡는다.
-  const EMOJI = window.WORDMASTER_EMOJI || {};
+  // 행·헤더 아이콘은 키 → ui-icons.svg 심볼 id 상수 하나에서 나온다 (DESIGN.md §5 v14).
+  // 페이로드의 emoji 필드는 읽지 않는다 — 화면에 이모지를 렌더하지 않는다. 키는 항상
+  // 리터럴로 넘긴다. 페이로드 emoji 키 15개(app·range·preset·count·order·attempts·accuracy·
+  // wrong·study·retest·correct·incorrect·backup·restore·reset)를 빠짐없이 덮는다.
+  const ICONS = Object.freeze({
+    app: 'icon-book-open',
+    range: 'icon-calendar',
+    preset: 'icon-bolt',
+    count: 'icon-hash',
+    order: 'icon-shuffle',
+    attempts: 'icon-pen',
+    accuracy: 'icon-target',
+    wrong: 'icon-bookmark',
+    study: 'icon-eye',
+    retest: 'icon-refresh',
+    correct: 'icon-check-circle',
+    incorrect: 'icon-x',
+    backup: 'icon-file',
+    restore: 'icon-database',
+    reset: 'icon-x',
+  });
 
-  function emojiLead(key, variant) {
-    const glyph = escapeHtml(EMOJI[key] || EMOJI.app || '');
+  function uiIcon(id) {
+    return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#${id}"></use></svg>`;
+  }
+
+  // 'lg'는 뷰 헤더(.view-head-main 직계, 20px), 기본은 행 선두(.list-row-lead, 17px).
+  function iconLead(key, variant) {
+    const id = ICONS[key] || ICONS.app;
     return variant === 'lg'
-      ? `<span class="emoji emoji-lg" aria-hidden="true">${glyph}</span>`
-      : `<span class="list-row-lead"><span class="emoji-box" aria-hidden="true">${glyph}</span></span>`;
+      ? uiIcon(id)
+      : `<span class="list-row-lead">${uiIcon(id)}</span>`;
   }
 
   const pad2 = (value) => String(value).padStart(2, '0');
@@ -406,7 +428,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          ${emojiLead('app', 'lg')}
+          ${iconLead('app', 'lg')}
           <div>
             <h1>시험 설정</h1>
           </div>
@@ -419,7 +441,7 @@
           <h2 class="list-group-head" id="rangeHead">시험 설정</h2>
           <div class="list-group">
             <div class="list-row">
-              ${emojiLead('range')}
+              ${iconLead('range')}
               <span class="list-row-body"><span class="list-row-title">DAY 범위</span></span>
               <span class="list-row-value wm-range">
                 <input id="startDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="시작 DAY" value="${state.home.startDay}">
@@ -428,7 +450,7 @@
               </span>
             </div>
             <div class="list-row wm-row-wrap">
-              ${emojiLead('preset')}
+              ${iconLead('preset')}
               <span class="list-row-body"><span class="list-row-title">빠른 선택</span></span>
               <span class="segmented wm-presets" role="group" aria-label="DAY 범위 빠른 선택">
                 <button class="segmented-btn preset" type="button" data-start="1" data-end="1">1</button>
@@ -439,7 +461,7 @@
               </span>
             </div>
             <div class="list-row">
-              ${emojiLead('count')}
+              ${iconLead('count')}
               <span class="list-row-body"><label class="list-row-title" for="questionCount">문제 수</label></span>
               <span class="list-row-value">
                 <select id="questionCount" class="field-input-inline">
@@ -451,7 +473,7 @@
               </span>
             </div>
             <div class="list-row">
-              ${emojiLead('order')}
+              ${iconLead('order')}
               <span class="list-row-body"><label class="list-row-title" for="orderMode">출제 순서</label></span>
               <span class="list-row-value"><select id="orderMode" class="field-input-inline">${renderSortOptions(state.home.order)}</select></span>
             </div>
@@ -464,26 +486,26 @@
           <h2 class="list-group-head">학습 현황</h2>
           <div class="list-group">
             <div class="list-row">
-              ${emojiLead('attempts')}
+              ${iconLead('attempts')}
               <span class="list-row-body"><span class="list-row-title">총 풀이</span></span>
               <span class="list-row-value">${s.attempts.toLocaleString()}</span>
             </div>
             <div class="list-row">
-              ${emojiLead('accuracy')}
+              ${iconLead('accuracy')}
               <span class="list-row-body"><span class="list-row-title">정답률</span></span>
               <span class="list-row-value">${s.accuracy}%</span>
             </div>
             <div class="list-row">
-              ${emojiLead('wrong')}
+              ${iconLead('wrong')}
               <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
               <span class="list-row-value">${s.wrongCount.toLocaleString()}</span>
             </div>
             <button id="wrongStudyBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
-              ${emojiLead('study')}
+              ${iconLead('study')}
               <span class="list-row-body"><span class="list-row-title">오답 보고 외우기</span></span>
             </button>
             <button id="reviewBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
-              ${emojiLead('retest')}
+              ${iconLead('retest')}
               <span class="list-row-body"><span class="list-row-title">오답 재시험</span></span>
             </button>
           </div>
@@ -518,7 +540,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          ${emojiLead('app', 'lg')}
+          ${iconLead('app', 'lg')}
           <div>
             <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
             <h1>뜻 시험</h1>
@@ -569,14 +591,14 @@
   }
 
   // 채점 결과는 색 패널이 아니라 인셋 그룹 리스트 3행이다 — 문장 하나에 상자 하나를
-  // 두르지 않는다 (DESIGN.md §6). 상태는 행 선두 이모지와 판정 라벨 색이 낸다.
+  // 두르지 않는다 (DESIGN.md §6). 상태는 행 선두 아이콘과 판정 라벨 색이 낸다.
   function renderFeedback(item, result) {
     const isCorrect = result.correct;
     return `
       <div class="wm-feedback ${isCorrect ? 'is-correct' : 'is-wrong'}" role="status">
         <div class="list-group is-inset">
           <div class="list-row">
-            ${isCorrect ? emojiLead('correct') : emojiLead('incorrect')}
+            ${isCorrect ? iconLead('correct') : iconLead('incorrect')}
             <span class="list-row-body"><span class="list-row-title wm-verdict">${isCorrect ? '정답' : '오답'}</span></span>
             ${result.overridden ? '<span class="list-row-value">내 답을 정답으로 저장함</span>' : ''}
           </div>
@@ -608,7 +630,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          ${emojiLead('app', 'lg')}
+          ${iconLead('app', 'lg')}
           <div>
             <span class="kicker">${escapeHtml(sessionLabel(session))} 완료</span>
             <h1>시험 결과</h1>
@@ -619,17 +641,17 @@
 
       <div class="list-group">
         <div class="list-row">
-          ${emojiLead('correct')}
+          ${iconLead('correct')}
           <span class="list-row-body"><span class="list-row-title">정답</span></span>
           <span class="list-row-value">${session.correct}</span>
         </div>
         <div class="list-row">
-          ${emojiLead('incorrect')}
+          ${iconLead('incorrect')}
           <span class="list-row-body"><span class="list-row-title">오답</span></span>
           <span class="list-row-value">${session.wrong}</span>
         </div>
         <div class="list-row">
-          ${emojiLead('count')}
+          ${iconLead('count')}
           <span class="list-row-body"><span class="list-row-title">문항</span></span>
           <span class="list-row-value">${total}</span>
         </div>
@@ -682,7 +704,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          ${emojiLead('app', 'lg')}
+          ${iconLead('app', 'lg')}
           <div>
             <h1>학습 기록</h1>
           </div>
@@ -718,17 +740,17 @@
           <h2 class="list-group-head">누적 지표</h2>
           <div class="list-group">
             <div class="list-row">
-              ${emojiLead('attempts')}
+              ${iconLead('attempts')}
               <span class="list-row-body"><span class="list-row-title">총 풀이</span></span>
               <span class="list-row-value">${s.attempts.toLocaleString()}</span>
             </div>
             <div class="list-row">
-              ${emojiLead('accuracy')}
+              ${iconLead('accuracy')}
               <span class="list-row-body"><span class="list-row-title">정답률</span></span>
               <span class="list-row-value">${s.accuracy}%</span>
             </div>
             <div class="list-row">
-              ${emojiLead('wrong')}
+              ${iconLead('wrong')}
               <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
               <span class="list-row-value">${s.wrongCount.toLocaleString()}</span>
             </div>
@@ -737,15 +759,15 @@
           <h2 class="list-group-head">기록 데이터</h2>
           <div class="list-group">
             <button id="exportBtn" class="list-row list-row-nav" type="button">
-              ${emojiLead('backup')}
+              ${iconLead('backup')}
               <span class="list-row-body"><span class="list-row-title">기록 백업</span></span>
             </button>
             <label class="list-row list-row-nav" for="importFile">
-              ${emojiLead('restore')}
+              ${iconLead('restore')}
               <span class="list-row-body"><span class="list-row-title">기록 복원</span></span>
             </label>
             <button id="resetBtn" class="list-row wm-row-danger" type="button">
-              ${emojiLead('reset')}
+              ${iconLead('reset')}
               <span class="list-row-body"><span class="list-row-title">기록 초기화</span></span>
             </button>
           </div>

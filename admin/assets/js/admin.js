@@ -22,6 +22,7 @@
     sessionCount: document.getElementById('sessionCount'),
     sessions: document.getElementById('sessions'),
     sessionUserFilter: document.getElementById('sessionUserFilter'),
+    shell: document.getElementById('adminShell'),
     stats: document.getElementById('stats'),
     userError: document.getElementById('userError'),
     users: document.getElementById('users'),
@@ -40,8 +41,8 @@
   // 여기서는 그 둘을 이름으로 짝짓는다. 사이드바에 항목을 추가하면 뷰도 따라온다.
   const navButtons = [...document.querySelectorAll('.sidebar-item[data-view]')];
   const views = [...document.querySelectorAll('.ad-view[data-view]')];
-  // 항목 라벨은 텍스트 슬롯에서만 읽는다 — button.textContent에는 아이콘 글리프가
-  // 섞이므로 뷰 제목이 "🧭개요"가 된다.
+  // 항목 라벨은 텍스트 슬롯(.sidebar-item-text)에서만 읽는다 — button.textContent에는
+  // 아이콘 SVG 주변 공백이 섞일 수 있다.
   const labelOf = (button) => (button.querySelector('.sidebar-item-text') || button).textContent.trim();
   const DEFAULT_VIEW = navButtons[0]?.dataset.view || '';
   let currentView = DEFAULT_VIEW;
@@ -257,8 +258,9 @@
       request('/api/admin/sessions'),
     ]);
 
-    elements.login.classList.add('hidden');
-    elements.panel.classList.remove('hidden');
+    // 게이트 뒤집기(v14): 로그인 카드를 접고 그제서야 셸(사이드바 + 본문)을 연다.
+    elements.login.hidden = true;
+    elements.shell.hidden = false;
     renderStats(statsData.totals);
     renderUsers(userData.users);
     sessionRows = sessionData.sessions;

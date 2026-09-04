@@ -8,9 +8,9 @@
   const toast = document.getElementById('toast');
   function start() {
   const studyUtils = window.HvsStudyUtils;
+  // 페이로드의 EMOJI 매핑은 읽지 않는다 — 화면에 이모지를 렌더하지 않는다(DESIGN.md §5 v14).
   const {
     CHOICE_MARKS,
-    EMOJI,
     QUESTIONS,
     UNITS
   } = window.SMSTUDY_DATA || {};
@@ -28,7 +28,7 @@
   } = window.SMSTUDY_DIAGRAM || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !EMOJI || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -274,10 +274,10 @@
       </div>`;
   }
 
-  // 이모지는 데이터의 매핑(SMSTUDY_DATA.EMOJI)에서만 나온다 — 마크업에는 슬롯만 둔다
-  // (DESIGN.md §5). 값도 다른 데이터 문자열과 같이 예외 없이 이스케이프한다.
-  function emojiOf(key) {
-    return EMOJI[key] || EMOJI.app;
+  // 앱 아이콘은 사이트 공통 매핑과 같은 icon-layers 하나다(DESIGN.md §5.1). 뷰 헤더와
+  // 개념 노트 머리에서 20px(.view-head-main / .sm-concept-head 직계)로 한 번씩만 놓는다.
+  function appIcon() {
+    return '<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>';
   }
 
   function renderStartPanel(summary) {
@@ -357,7 +357,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          ${appIcon()}
           <div>
             <h1>단원 목록</h1>
           </div>
@@ -397,11 +397,12 @@
   // 중단원 = 행. 행 자체가 개념 학습 진입점이고(늘린 히트 영역), 오른쪽 액세서리는
   // 출제 범위 체크박스 하나뿐이다. 행마다 버튼을 반복하지 않는다 (DESIGN.md §6·§7.1).
   // 부제(.list-row-sub)를 두지 않는다 — 설명문이 아니라 값이므로 .list-row-value 하나에 모은다.
+  // 행 선두는 단원 번호 텍스트(로마 숫자-번호, --text-3 tabular)다 — 이모지 타일을 폐기했다(§5 v14).
   function renderSubunit(sub) {
     const done = Boolean(db.completed[sub.id]);
     return `
       <div class="list-row">
-        <span class="list-row-lead"><span class="emoji-box" aria-hidden="true">${esc(emojiOf(sub.id))}</span></span>
+        <span class="sm-sub-id">${esc(sub.id)}</span>
         <span class="list-row-body">
           <button class="list-row-stretch" type="button" data-id="${sub.id}">
             <span class="list-row-title">${esc(sub.title)}</span>
@@ -663,7 +664,7 @@
     app.innerHTML = `
       ${renderConceptNavigation(id, index, questionCount)}
       <header class="sm-concept-head">
-        <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf(id))}</span>
+        ${appIcon()}
         <div>
           <h1 class="title-1">${esc(sub.title)}</h1>
           <p class="sm-concept-meta">${esc(sub.unitTitle)} · 약 ${sub.time}분 · 수록 기출 ${questionCount}문항</p>
@@ -880,7 +881,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          ${appIcon()}
           <div>
             <span class="kicker">${esc(session.label)} · ${question.sub}</span>
             <h1>기출 풀이</h1>
@@ -1035,7 +1036,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          ${appIcon()}
           <div>
             <span class="kicker">${esc(session.label)} 완료</span>
             <h1>풀이 결과</h1>
@@ -1202,7 +1203,7 @@
     app.innerHTML = `
       <header class="view-head">
         <div class="view-head-main">
-          <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
+          ${appIcon()}
           <div>
             <h1>학습 기록</h1>
             <p>정답 번호가 아니라 원문·오답 원인·단원별 정확도를 함께 봅니다.</p>
