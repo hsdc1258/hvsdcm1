@@ -895,8 +895,11 @@
     let accessDenied = false;
 
     function setDataControlsVisible(visible) {
-      if (elements.toolbar) elements.toolbar.hidden = !visible;
-      if (elements.filters) elements.filters.hidden = !visible;
+      for (const element of [elements.toolbar, elements.filters]) {
+        if (!element) continue;
+        element.hidden = !visible;
+        if (element.style) element.style.display = visible ? '' : 'none';
+      }
     }
 
     function renderInitialFailure({ denied = false } = {}) {

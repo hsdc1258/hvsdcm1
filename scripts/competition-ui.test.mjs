@@ -19,6 +19,7 @@ function element(id = '') {
     hidden: false,
     disabled: false,
     tabIndex: -1,
+    style: { display: '' },
     dataset: {},
     attributes: {},
     listeners: {},
@@ -779,6 +780,8 @@ test('controller renders loading, empty, error/retry and manual refresh states',
   assert.equal(denied.store.get('competitionRefreshStatus').textContent, '');
   assert.equal(denied.store.get('competitionFilters').hidden, true);
   assert.equal(denied.store.get('competitionToolbar').hidden, true);
+  assert.equal(denied.store.get('competitionFilters').style.display, 'none');
+  assert.equal(denied.store.get('competitionToolbar').style.display, 'none');
 });
 
 function pageContext({ competitionPayload = fixture() } = {}) {
