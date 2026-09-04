@@ -8,9 +8,9 @@
   <meta name="robots" content="noindex, nofollow">
   <title>hvsdcm admin</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
-  <link rel="stylesheet" href="/admin/assets/css/admin.css?v=20260904-ui-v1">
-  <script src="/admin/assets/js/admin.js?v=20260904-ui-v1" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-icons-v1">
+  <link rel="stylesheet" href="/admin/assets/css/admin.css?v=20260904-icons-v1">
+  <script src="/admin/assets/js/admin.js?v=20260904-icons-v1" defer></script>
 </head>
 <body class="workspace-app admin-page">
   <a class="skip-link" href="#adminMain">본문으로 건너뛰기</a>
@@ -21,7 +21,7 @@
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
         <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg>공모전</a>
-        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>코인매매</a>
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>Behavior Lab</a>
         <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
       </nav>
     </div>
@@ -29,9 +29,24 @@
   <div class="topbar-spacer"></div>
 
   <div class="container-wide app-page">
-    <div class="app-shell">
+    <!-- 로그인 전 — 셸(.app-shell)·사이드바를 쓰지 않는다. 캔버스(--bg) 위 카드 하나가 뷰포트
+         가운데 선다(DESIGN.md v14 · 지시 §4). 제목·비밀번호·버튼·오류 한 줄이 전부다(§6.1). -->
+    <section id="login" class="ad-gate" aria-labelledby="adminLoginTitle">
+      <form id="adminLogin" class="card ad-login-card">
+        <h1 id="adminLoginTitle" class="ad-login-title">관리자</h1>
+        <div class="field">
+          <label class="field-label" for="adminPassword">비밀번호</label>
+          <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-lg" type="submit">열기</button>
+        <p id="loginError" class="field-error" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- 대시보드 셸 — 로그인 성공 뒤에만 hidden이 풀린다(admin.js loadDashboard). -->
+    <div id="adminShell" class="app-shell" hidden>
       <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 아이콘 + 라벨 한 줄이다
-           (DESIGN.md §1.1·§6.1). 항목 아래 부제·설명을 두지 않는다 — 뷰 제목은 여기 적힌
+           (DESIGN.md §1.1·§6.1). 항목 아래 부제·설명·배지를 두지 않는다 — 뷰 제목은 여기 적힌
            라벨에서 나오고(admin.js가 .sidebar-item-text를 읽는다) 범위 설명은 본문 캡션이
            담당한다. 같은 문구를 두 곳에 적지 않는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
@@ -47,7 +62,7 @@
 
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
           <p class="sidebar-label">워크스페이스</p>
-          <a class="sidebar-item sidebar-item-featured" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">코인매매</span><span class="sidebar-item-meta">LIVE</span></a>
+          <a class="sidebar-item" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">Behavior Lab</span></a>
           <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></a>
           <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
         </nav>
@@ -65,27 +80,7 @@
       </aside>
 
       <main id="adminMain" class="app-main" tabindex="-1">
-        <section id="login" class="ad-login">
-          <div class="ad-login-intro">
-            <div class="ad-login-symbol" aria-hidden="true"><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></div>
-            <h1>워크스페이스를 운영하는 한 화면.</h1>
-            <ul class="ad-login-facts" aria-label="관리자 화면 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg>탭 단위 세션</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg>기기 추적</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-database"></use></svg>학습 데이터</li></ul>
-          </div>
-          <form id="adminLogin" class="card ad-login-card">
-            <div class="ad-login-card-head">
-              <span class="ad-secure-mark"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg></span>
-              <h2 class="title-3">관리자 인증</h2>
-            </div>
-            <div class="field">
-              <label class="field-label" for="adminPassword">관리자 비밀번호</label>
-              <input id="adminPassword" class="field-input" type="password" autocomplete="current-password" required>
-            </div>
-            <button class="btn btn-primary btn-lg" type="submit">관리자 화면 열기</button>
-            <p id="loginError" class="field-error" role="alert"></p>
-          </form>
-        </section>
-
-        <section id="panel" class="ad-panel hidden">
+        <section id="panel" class="ad-panel">
           <header class="view-head">
             <div class="view-head-main">
               <div>

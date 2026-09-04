@@ -1,43 +1,65 @@
 /* ==========================================================================
-   admin — 운영 대시보드 (DESIGN.md §1: macOS 앱 / Apple HIG — 툴바·사이드바·표·시트)
+   admin — 운영 대시보드 (DESIGN.md §1.1: 클라우드 콘솔 대시보드 — 그룹형 사이드바·뷰·표)
    색·타이포·간격 토큰은 /assets/css/system.css가 단일 원본이다. 여기에 :root 없음(C-3).
+
+   2026-09-04 v14 게이트 정리 (지시 §4)
+   - 로그인 전 화면은 .app-shell 그리드를 쓰지 않는다. 셸(#adminShell)은 hidden이고,
+     캔버스(--bg) 위에 .card 하나(최대 22em, 위 여백 --space-8)만 뷰포트 가운데 선다.
+     방패 타일·디스플레이급 헤드라인·특징 칩(.ad-login-intro)과 accent-soft 아이콘 타일
+     (.ad-secure-mark)은 통째로 지웠다 — 색 타일·채움 아이콘 금지(§5), 로그인은 익숙한
+     행동이라 설명이 필요 없다(§6.1). 2열 그리드가 .app-main 밖으로 넘치던 원인도 함께 사라졌다.
+   - 대시보드가 열릴 때만 사이드바와 .app-shell이 나타난다.
 
    사이클5 재편 요지 (plan.md §3.4 — 콘솔 대시보드 문법)
    - 한 화면 세로 나열을 **카테고리별 독립 뷰**로 바꿨다. 사이드바가 뷰를 고르고,
      선택되지 않은 뷰는 hidden으로 문서에서 빠진다. 뷰 컨테이너는 여기서 배치만 맡는다.
-   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다 —
-     같은 모양을 사용량 화면과 공유한다 (DESIGN.md §7).
-   - 공용 답안의 접힘 그룹(.disclosure)은 없앴다. 자기 뷰를 가진 표를 다시 접을 이유가 없다.
+   - 개요 상단의 요약 타일(.ad-stat)은 system.css의 .summary-strip으로 승격해 걷어냈다.
 
    사이클4 재조판 요지
-   - 표는 표로 둔다. 그룹 리스트로 억지 변환하지 않는다 — 열이 8~10개인 운영 데이터는
-     행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
-   - 섹션 머리를 다른 3면과 같은 어법으로 맞췄다: 뷰 제목은 h1(title-1),
-     섹션 라벨은 .list-group-head(마이크로 캡스). title-2 두 줄 헤더를 걷어냈다.
-   - 접기 카드(.ad-fold)는 system.css의 .disclosure 프리미티브로 대체했다.
-   - 로그인 카드의 box-shadow를 제거했다. 카드는 떠 있지 않다 — 그림자는 시트·토스트·
-     세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
-   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js)로 줄여
-     표가 가로로 밀리지 않게 했다.
+   - 표는 표로 둔다. 열이 8~10개인 운영 데이터는 행 단위 위계가 아니라 열 정렬로 읽힌다 (HIG).
+   - 뷰 제목은 h1(title-1), 섹션 라벨은 .list-group-head(마이크로 캡스).
+   - 카드는 떠 있지 않다 — 그림자는 시트·토스트·세그먼티드 인디케이터 전용이다 (DESIGN.md §4).
+   - 수치 열은 우측 정렬 + tabular-nums, 시각 열은 고정폭 표기(admin.js).
 
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
      --text-2 #a1a1a6 on --surface #161617  7.03:1  (.ad-ip)
      --text-3 #86868b on --surface #161617  4.99:1  (.ad-caption — 캡션 하한 충족)
      --text-3 #86868b on --bg      #000     5.80:1  (.ad-note / .ad-filter-label)
    ========================================================================== */
-.hidden {
-  display: none !important;
-}
-/* ---- 로그인 ---- */
-.ad-login {
+/* ---- 로그인 게이트 (셸 밖) ----
+   부모(.app-page → .container-wide)의 폭 안에서 가운데 정렬. 375px에서는 컨테이너 폭(343px)이
+   22em(374px)보다 좁으므로 카드가 컨테이너 폭에 맞춰 줄어든다 — 뷰포트·부모 밖으로 나가지 않는다. */
+.ad-gate {
   display: grid;
-  place-items: center;
-  min-height: 60dvh;
+  justify-items: center;
+  padding-top: var(--space-8);
+}
+.ad-gate[hidden] {
+  display: none;
 }
 .ad-login-card {
   display: grid;
   gap: var(--space-4);
-  width: min(360px, 100%);
+  width: 100%;
+  max-width: 22em;
+  min-width: 0;
+}
+.ad-login-title {
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+  font-weight: 600;
+}
+.ad-login-card .btn {
+  width: 100%;
+}
+/* ---- 셸 ----
+   .app-shell은 system.css에서 display: grid라 UA의 [hidden]을 이긴다 — 명시적으로 접는다. */
+.app-shell[hidden] {
+  display: none;
+}
+.admin-page .app-shell {
+  min-height: calc(100dvh - var(--topbar-h) - 138px);
 }
 /* ---- 패널 ---- */
 .ad-panel {
@@ -131,119 +153,7 @@
   text-align: center;
   color: var(--text-2);
 }
-/* ---- 반응형 ---- */
-@media (max-width: 860px) {
-  .ad-panel {
-    gap: var(--space-4);
-  }
-}
-/* ---- dark operations redesign ---- */
-.admin-page .app-shell {
-  min-height: calc(100dvh - var(--topbar-h) - 138px);
-}
-.admin-page .ad-login {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
-  align-items: stretch;
-  gap: 28px;
-  min-height: 650px;
-}
-.ad-login-intro {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-  padding: clamp(36px, 6vw, 84px);
-  overflow: hidden;
-  border: 1px solid var(--line-faint);
-  border-radius: 32px;
-  /* 그라디언트·글로우 링 없음 — 한 단 밝은 면 + 헤어라인(DESIGN.md §3·§4). */
-  background: var(--surface);
-}
-.ad-login-symbol {
-  display: grid;
-  width: 68px;
-  height: 68px;
-  margin: 28px 0;
-  place-items: center;
-  border: 1px solid rgba(41,151,255,.25);
-  border-radius: 21px;
-  background: rgba(41,151,255,.12);
-  color: #70bfff;
-}
-.ad-login-symbol .ui-icon {
-  width: 30px;
-  height: 30px;
-}
-.ad-login-intro h1 {
-  position: relative;
-  z-index: 1;
-  max-width: 700px;
-  font-size: clamp(3rem, 3.4vw, 4rem);
-  line-height: .95;
-  letter-spacing: -.07em;
-}
-.ad-login-facts {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 42px;
-}
-.ad-login-facts li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 13px;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 999px;
-  background: rgba(255,255,255,.035);
-  color: #c4c9d4;
-  font-size: .78rem;
-}
-.ad-login-facts .ui-icon {
-  width: 15px;
-  height: 15px;
-  color: var(--accent);
-}
-.admin-page .ad-login-card {
-  align-self: center;
-  width: 100%;
-  padding: 34px;
-  border-color: var(--line);
-  border-radius: 26px;
-  background: var(--surface);
-}
-.ad-login-card-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.ad-secure-mark {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: none;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.ad-secure-mark .ui-icon {
-  width: 20px;
-  height: 20px;
-}
-.admin-page .ad-login-card .field-input {
-  min-height: 54px;
-  border-radius: 14px;
-  background: #0b0c10;
-}
-.admin-page .ad-login-card .btn {
-  width: 100%;
-  min-height: 54px;
-}
+/* ---- 대시보드 조판 ---- */
 .admin-page .ad-panel {
   gap: 28px;
 }
@@ -259,58 +169,32 @@
   background: transparent;
 }
 .admin-page #stats > div .stat-value {
-  color: #f8fbff;
   font-size: clamp(2rem, 3vw, 3.2rem);
   letter-spacing: -.05em;
 }
 .admin-page .ad-view > .list-group, .admin-page .table-wrap {
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line);
   border-radius: 20px;
-  background: rgba(18,20,26,.88);
+  background: var(--surface);
 }
 .admin-page .toolbar {
   padding: 14px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line);
   border-radius: 18px;
-  background: rgba(18,20,26,.9);
+  background: var(--surface);
 }
 .admin-page .table th {
-  background: #111319;
-  color: #8b93a3;
+  background: var(--surface-2);
 }
-.admin-page .table tbody tr:hover td {
-  background: rgba(41,151,255,.045);
-}
-@media (max-width: 1100px) {
-  .admin-page .ad-login {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-  }
-  .ad-login-intro {
-    min-height: 420px;
-  }
-  .admin-page .ad-login-card {
-    width: 100%;
+/* ---- 반응형 ---- */
+@media (max-width: 860px) {
+  .ad-panel {
+    gap: var(--space-4);
   }
 }
 @media (max-width: 620px) {
-  .admin-page .ad-login {
-    min-height: 0;
-  }
-  .ad-login-intro {
-    min-height: 360px;
-    padding: 28px;
-    border-radius: 24px;
-  }
-  .ad-login-intro h1 {
-    font-size: clamp(2.45rem, 12vw, 3.1rem);
-  }
-  .ad-login-facts {
-    margin-top: 28px;
-  }
-  .admin-page .ad-login-card {
-    padding: 24px;
-    border-radius: 22px;
+  .ad-gate {
+    padding-top: var(--space-7);
   }
   .admin-page #stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

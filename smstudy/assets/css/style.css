@@ -148,6 +148,21 @@ ul.sm-bullets {
 .sm-concept-head > div {
   min-width: 0;
 }
+/* 개념 노트 머리의 앱 아이콘 — 뷰 헤더 단(20px). 색 타일 없음(§5 v14). */
+.sm-concept-head > .ui-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+}
+/* 중단원 행 선두의 단원 번호(I-01 …). 이모지 타일을 대체한다 — 텍스트라 배경 면이 없다.
+   --text-3 on --surface 4.99:1 (캡션 하한 충족). 폭을 고정해 제목 시작선을 맞춘다. */
+.sm-sub-id {
+  flex: none;
+  min-width: 3.4em;
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
 .sm-concept-meta {
   font-size: var(--fs-caption);
   color: var(--text-2);

@@ -683,7 +683,7 @@
         <section class="cp-approval-copy" aria-label="읽어야 하는 내용">
           <h4>읽어야 하는 내용</h4>
           <p>${escapeHtml(approval.readSummary || '자동 검토 요약이 없습니다. 공식 공고를 직접 확인해야 합니다.')}</p>
-          ${link(candidate?.officialUrl, candidate?.officialVerification === 'verified' ? '주최기관 공식 공고 열기 ↗' : '공고 링크 열기 ↗', 'cp-official-link')}
+          ${link(candidate?.officialUrl, candidate?.officialVerification === 'verified' ? '주최기관 공식 공고 열기' : '공고 링크 열기', 'cp-official-link')}
         </section>
         <section class="cp-approval-copy is-decision" aria-label="승인하는 내용">
           <h4>승인하는 내용</h4>
@@ -755,7 +755,7 @@
 
   function renderCoverage(sources, now) {
     const rows = sources.length ? sources.map((source) => `<li class="cp-source">
-      <div><strong>${escapeHtml(source.name)}</strong><span>${escapeHtml(source.kind)} · ${escapeHtml(relative(source.checkedAt, now))}${source.found === null ? '' : ` · ${source.found}건`}</span>${link(source.referenceUrl, '원본 확인 ↗', 'cp-source-link')}</div>
+      <div><strong>${escapeHtml(source.name)}</strong><span>${escapeHtml(source.kind)} · ${escapeHtml(relative(source.checkedAt, now))}${source.found === null ? '' : ` · ${source.found}건`}</span>${link(source.referenceUrl, '원본 확인', 'cp-source-link')}</div>
       <span class="cp-state${tone(source.status)}">${escapeHtml(COVERAGE_LABELS[source.status] || COVERAGE_LABELS.unknown)}</span>
       ${source.error ? `<p>${escapeHtml(source.error)}</p>` : ''}
       ${source.failureCode ? `<p><b>확인 사유</b> ${escapeHtml(source.failureCode)}</p>` : ''}

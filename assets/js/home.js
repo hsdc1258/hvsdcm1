@@ -3,6 +3,9 @@
   const DEFAULT_API_URL = 'https://hvsdcm-api.hvsdcm1.workers.dev';
   const API_URL = localStorage.getItem('hvsdcm.api') || DEFAULT_API_URL;
   const ownerUsernames = new Set(['hvsdcm']);
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  // 드로어 아이콘은 site-icons.js(DESIGN.md §5.1)에서만 나온다. 매핑이 없으면 아이콘 없이 라벨만 그린다.
+  const ICONS = window.SITE_ICONS || {};
   const elements = {
     wordmark: document.getElementById('wordmark'), drawer: document.getElementById('drawer'),
     shade: document.getElementById('shade'), closeDrawer: document.getElementById('closeDrawer'),
@@ -72,26 +75,47 @@
     try { await fetch(`${API_URL}/api/logout`, { method: 'POST', headers: { authorization: `Bearer ${token || ''}` } }); } catch { /* 로컬 세션은 항상 지운다. */ }
     localStorage.removeItem('hvsdcm.token'); localStorage.removeItem('hvsdcm.user'); sessionStorage.clear(); location.reload();
   }
-  function appendLinks(target, links) {
-    for (const [href, title, description] of links) {
-      const anchor = document.createElement('a'); anchor.href = href;
-      const strong = document.createElement('strong'); strong.textContent = title;
-      const span = document.createElement('span'); span.textContent = description;
-      anchor.append(strong, span); target.append(anchor);
+  // 테두리형 SVG 아이콘 하나 — 스프라이트의 <use> 참조. 라벨이 항상 곁에 있으므로 aria-hidden이다(§5).
+  function uiIcon(id) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ui-icon');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', `/assets/ui-icons.svg#${id}`);
+    svg.append(use);
+    return svg;
+  }
+  // 드로어 그룹 하나 = 대문자 헤드(.list-group-head) + 그룹 리스트(.list-group). 항목은 48px 행
+  // [아이콘][제목][chevron]이고 항목마다 테두리·둥근 상자를 두르지 않는다(DESIGN.md §6·§7.1).
+  // 헤드 문구는 마크업이 아니라 여기서 만든다 — 미로그인 index.html은 학습 어휘를 갖지 않는다.
+  function appendLinks(target, heading, links) {
+    const head = document.createElement('h2'); head.className = 'list-group-head'; head.textContent = heading;
+    const group = document.createElement('div'); group.className = 'list-group';
+    for (const [href, title, iconKey] of links) {
+      const anchor = document.createElement('a'); anchor.className = 'list-row list-row-nav'; anchor.href = href;
+      const iconId = ICONS[iconKey];
+      if (iconId) {
+        const lead = document.createElement('span'); lead.className = 'list-row-lead'; lead.append(uiIcon(iconId));
+        anchor.append(lead);
+      }
+      const body = document.createElement('span'); body.className = 'list-row-body';
+      const label = document.createElement('span'); label.className = 'list-row-title'; label.textContent = title;
+      body.append(label); anchor.append(body); group.append(anchor);
     }
+    target.append(head, group);
   }
   function mountSignedInLinks() {
-    appendLinks(elements.studyLinks, [
-      ['/WordMaster/', 'WordMaster', '2,000단어'],
-      ['/smstudy/', '사회·문화', '5단원 · 개념과 문제'],
-      ['/plstudy/', '정치와 법', '6단원 · 개념과 문제'],
-      ['/gichul/', '기출', '평가원 문제지'],
+    appendLinks(elements.studyLinks, '학습', [
+      ['/WordMaster/', 'WordMaster', 'WordMaster'],
+      ['/smstudy/', '사회·문화', 'smstudy'],
+      ['/plstudy/', '정치와 법', 'plstudy'],
+      ['/gichul/', '기출', 'gichul'],
     ]);
     if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;
-    appendLinks(elements.ownerLinks, [
-      ['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델'],
-      ['/usage/', '공모전', '후보 · 승인'],
-      ['/admin/', '관리자', '계정 · 접속 · 학습 데이터'],
+    appendLinks(elements.ownerLinks, '운영', [
+      ['/behavior-lab/#paper', 'Behavior Lab', 'behaviorLab'],
+      ['/usage/', '공모전', 'usage'],
+      ['/admin/', '관리자', 'admin'],
     ]);
   }
 

@@ -15,9 +15,10 @@
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>HVSDCM1</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
-  <link rel="stylesheet" href="/assets/css/home.css?v=20260902-wordmark-v1">
-  <script src="/assets/js/home.js?v=20260902-wordmark-v1" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-icons-v1">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260904-icons-v1">
+  <script src="/assets/js/site-icons.js?v=20260904-icons-v1" defer></script>
+  <script src="/assets/js/home.js?v=20260904-icons-v1" defer></script>
 </head>
 <body class="home-page">
   <main id="main">
@@ -26,10 +27,11 @@
 
   <div id="shade" class="shade" aria-hidden="true"></div>
   <aside id="drawer" class="drawer" aria-label="개인 메뉴" aria-hidden="true">
-    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기">×</button></header>
+    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-x"></use></svg></button></header>
+    <!-- 두 마운트는 비어 있다. 로그인 뒤 home.js가 그룹 헤드 + 그룹 리스트를 만든다. -->
     <nav class="drawer-links" aria-label="바로가기">
-      <span id="studyLinks"></span>
-      <span id="ownerLinks"></span>
+      <div id="studyLinks" class="drawer-group"></div>
+      <div id="ownerLinks" class="drawer-group"></div>
     </nav>
     <button id="drawerLogout" class="drawer-logout" type="button">로그아웃</button>
   </aside>

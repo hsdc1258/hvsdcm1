@@ -9,6 +9,9 @@ import {
 import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
 import { DEFAULT_AVAILABILITY } from './gichul/availability.mjs';
 import { buildSnapshots, SNAPSHOT_BY_SCREEN, SNAPSHOT_FILES } from './snapshot.mjs';
+import {
+  findColoredIconParents, findIconBackgroundViolations, findMissingIconReferences, findRenderedEmoji, inspectSprite,
+} from './icon-gates.mjs';
 
 const ROOT = process.cwd();
 const DESIGN_HEADING_PATH = process.env.HVSDCM_VALIDATE_DESIGN_PATH
@@ -392,10 +395,11 @@ function validateUiContracts() {
 
   check(adminHtml.includes('content="noindex, nofollow"'), 'admin: dashboard must stay unindexed');
   check(/<table class="table">/u.test(adminHtml), 'admin: tables must use the shared table primitive');
-  check(/id="panel"[^>]*\bhidden\b/u.test(adminHtml), 'admin: dashboard panel must start hidden');
-  // 조판이 아니라 규칙을 본다 — `npm run format:css`가 한 줄 규칙을 펼쳐도 계약은 그대로다 (review WP1 M-4).
-  check(/\.hidden\s*\{\s*display:\s*none\s*!important;?\s*\}/u.test(adminCss),
-    'admin: hidden-state utility (.hidden { display: none !important }) is missing');
+  check(/id="adminShell"[^>]*\bhidden\b/u.test(adminHtml), 'admin: dashboard shell must start hidden');
+  // 로그인 전에는 셸 전체가 렌더 트리에서 빠져야 한다. 공용 .hidden 유틸 대신 실제
+  // hidden 속성을 쓰고, author display:grid가 UA 규칙을 이기지 못하게 셸에 직접 잠근다.
+  check(/\.app-shell\[hidden\]\s*\{\s*display:\s*none;?\s*\}/u.test(adminCss),
+    'admin: .app-shell[hidden] must collapse the dashboard shell');
   check(adminJs.includes('btn btn-danger btn-sm delete-user'), 'admin: destructive user action must use the danger button primitive');
 
   // ---- 어드민 카테고리 뷰 (plan.md §3 요구사항 3 / §3.4) ----
@@ -1734,363 +1738,75 @@ function validateDesignTokens() {
   }
 }
 
-// ==========================================================================
-// 이모지 체계 (DESIGN.md §5 / plan.md §2.4·§4)
-//
-// 검사 대상 이모지 목록을 하드코딩하지 않는다 (LESSONS 규칙 5). 유니코드 속성으로
-// 소스에서 자동 도출하므로 새 이모지를 도입해도 검사가 뒤처지지 않는다.
-//
-// 이 검사가 **못 보는 것** (LESSONS 규칙 6 — 사각지대를 먼저 적는다):
-//  - 이모지의 *의미 적절성*. 📘가 사회·문화에 어울리는지는 사람만 판단한다.
-//  - 이미지·SVG 안에 그려진 그림 문자. 텍스트 스캔의 범위 밖이다.
-//  - 데이터 파일의 이모지 값 자체(매핑 원본). 값이 슬롯을 거쳐 렌더되는지만 본다.
-//  - 런타임에 문자열을 조립해 만든 이모지(String.fromCodePoint 등).
-// ==========================================================================
-
-// 그림문자 = 이모지 표현이 기본인 문자 + VS16으로 이모지 표현을 강제한 문자 + 키캡.
-const EMOJI_PATTERN = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️|⃣/u;
-// system.css가 제공하는 이모지 슬롯 클래스 (DESIGN.md §5·§7.3).
-const EMOJI_SLOT_CLASS = /\bemoji(?:-box|-lg)?\b/u;
-
-// 랜딩의 이모지 단일 원본. 앱 키는 앱 디렉터리 이름이다 (assets/js/site-emoji.js 주석 참조).
-const SITE_EMOJI_SOURCE = 'assets/js/site-emoji.js';
-const siteEmoji = () => evaluateBrowserData(SITE_EMOJI_SOURCE, 'SITE_EMOJI') || {};
-
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img',
-  'input', 'link', 'meta', 'source', 'track', 'wbr']);
-
-// ---- R4-M-6. 중첩을 세는 요소 절단 ----
-// 이전 행 검사는 `<(\w+)...>[^]*?</\1>`로 조각을 떴다. 비탐욕 매칭은 **같은 태그의 첫
-// 닫힘**에서 멈추므로 중첩된 div가 있으면 행이 중간에서 잘리고, 잘린 뒤의 두 번째 이모지가
-// "행 바깥"으로 오인돼 실제 위반이 통과했다. 여기서는 깊이를 추적해 짝이 맞는 닫는 태그까지
-// 간다 — 즉 행의 전체 자손이 검사 대상이 된다.
-//
-// 이 절단이 **못 보는 것**: 따옴표 안에 '>'가 들어간 속성값(`title="a > b"`)이나
-// 템플릿 보간(`${a > b}`)이 여는 태그를 일찍 끝내는 경우. 저장소 소스에는 없고,
-// 생기면 조각이 짧아져 **놓칠 뿐 거짓 실패는 내지 않는다**.
-function htmlElementSlice(source, openIndex) {
-  const name = /^<([a-z][\w-]*)/iu.exec(source.slice(openIndex, openIndex + 40));
-  if (!name) return '';
-  const tag = name[1].toLowerCase();
-  if (VOID_TAGS.has(tag)) return source.slice(openIndex, source.indexOf('>', openIndex) + 1);
-  const boundary = new RegExp(`<${tag}\\b[^>]*>|</${tag}\\s*>`, 'giu');
-  boundary.lastIndex = openIndex;
-  let depth = 0;
-  for (let hit = boundary.exec(source); hit; hit = boundary.exec(source)) {
-    if (hit[0].startsWith('</')) {
-      depth -= 1;
-      if (depth <= 0) return source.slice(openIndex, hit.index + hit[0].length);
-    } else if (!hit[0].endsWith('/>')) {
-      depth += 1;
-    }
-  }
-  return source.slice(openIndex);
-}
-
-// 조각이 이모지를 **몇 개 만들어 내는가**. 리터럴 글리프만 세면 매핑을 거치는 렌더러
-// (emojiLead('x') / emojiOf(id) / data-emoji="key")에서는 언제나 0이 되어 검사가 죽는다.
-// 템플릿 보간 `${...}` 하나는 문자열 하나를 내므로 1로 센다 — 삼항의 두 가지
-// (`cond ? emojiLead('a') : emojiLead('b')`)는 동시에 렌더되지 않는다.
-//
-// 이 셈이 **못 보는 것**: 보간 하나가 map()으로 여러 조각을 만드는 경우(그 경우 행은
-// 보통 보간 안에서 생성되므로 이 조각 밖이다), 그리고 런타임에만 정해지는 반복 횟수.
-function emojiSourceCount(chunk) {
-  let count = 0;
-  let plain = '';
-  for (let index = 0; index < chunk.length; index += 1) {
-    if (chunk[index] === '$' && chunk[index + 1] === '{') {
-      let depth = 0;
-      let end = index + 1;
-      for (; end < chunk.length; end += 1) {
-        if (chunk[end] === '{') depth += 1;
-        else if (chunk[end] === '}') { depth -= 1; if (depth === 0) break; }
-      }
-      const expression = chunk.slice(index + 2, end);
-      if (/\b(?:emojiLead|emojiOf)\(/u.test(expression)
-        || new RegExp(EMOJI_PATTERN.source, 'u').test(expression)) count += 1;
-      index = end;
-      continue;
-    }
-    plain += chunk[index];
-  }
-  count += (plain.match(new RegExp(EMOJI_PATTERN.source, 'gu')) || []).length;
-  count += (plain.match(/\sdata-emoji="/gu) || []).length;
-  return count;
-}
-
-// 마크업 문자열에서 "여는 태그 직후에 등장하는 그림문자"를 모은다.
-// HTML 파일과 JS 렌더러(템플릿 문자열)에 같은 판정을 적용할 수 있다.
-function emojiInMarkup(source) {
-  const found = [];
-  const pattern = new RegExp(EMOJI_PATTERN.source, 'gu');
-  const withoutComments = source.replace(/<!--[^]*?-->/gu, (match) => ' '.repeat(match.length));
-  for (const hit of withoutComments.matchAll(pattern)) {
-    const index = hit.index;
-    const before = withoutComments.slice(0, index);
-    const tagEnd = before.lastIndexOf('>');
-    // 여는 태그와 그림문자 사이에 공백 말고 다른 것이 있으면 슬롯 밖이다.
-    const gap = tagEnd === -1 ? before : before.slice(tagEnd + 1);
-    const tagStart = before.lastIndexOf('<', tagEnd);
-    const tag = tagStart === -1 || tagEnd === -1 ? '' : before.slice(tagStart, tagEnd + 1);
-    const classAttribute = /\sclass="([^"]*)"/u.exec(tag);
-    found.push({
-      index,
-      glyph: hit[0],
-      inMarkupTextPosition: tagEnd !== -1 && gap.trim() === '',
-      slotted: Boolean(classAttribute) && EMOJI_SLOT_CLASS.test(classAttribute[1]),
-      line: withoutComments.slice(0, index).split('\n').length,
-      after: withoutComments.slice(index + hit[0].length, index + hit[0].length + 700),
-    });
-  }
-  return found;
-}
-
-function validateEmojiSystem() {
-  const labelPattern = /class="[^"]*\b(?:list-row-title|title-1|title-2|title-3|sidebar-item|list-group-head)\b[^"]*"[^>]*>\s*([^<]+?)\s*</u;
-  // 대상 ↔ 이모지는 사이트 전체에서 일대일이어야 한다 (같은 대상엔 같은 이모지).
-  const labelToGlyph = new Map();
-  const glyphToLabel = new Map();
-  const site = siteEmoji();
-  let sloted = 0;
-
-  check(Object.keys(site).length > 0,
-    `${SITE_EMOJI_SOURCE}: SITE_EMOJI mapping is missing — the landing emoji need a single source (DESIGN.md §5.1)`);
-
-  // 검사 대상 표면은 게시 HTML과 **그 HTML이 로드하는 스크립트 전부**다 (하드코딩 금지).
-  const surfaces = [...publishedHtml().map(relative), ...publishedScripts()];
-
-  for (const file of surfaces) {
-    const source = readFileSync(path.join(ROOT, file), 'utf8');
-    const occurrences = emojiInMarkup(source);
-    const isHtml = file.endsWith('.html');
-
-    // ---- R4-M-4. HTML 마크업에는 글리프 리터럴을 두지 않는다 ----
-    // 리터럴이 허용되면 같은 대상의 이모지가 두 곳에 적히고 한쪽만 바뀌어도 아무도 모른다.
-    // 모든 글리프는 매핑(SITE_EMOJI / SMSTUDY_DATA.EMOJI / WORDMASTER_EMOJI)에서 나온다.
-    if (isHtml) {
-      for (const occurrence of occurrences) {
-        check(false,
-          `${file}:${occurrence.line}: emoji literal "${occurrence.glyph}" in markup — put it in a mapping and use a data-emoji slot (DESIGN.md §5)`);
-      }
-      for (const hit of source.matchAll(/<[^>]*\sdata-emoji="([^"]*)"[^>]*>/gu)) {
-        const [tag, key] = hit;
-        const classAttribute = /\sclass="([^"]*)"/u.exec(tag);
-        check(Boolean(classAttribute) && EMOJI_SLOT_CLASS.test(classAttribute[1]),
-          `${file}: data-emoji="${key}" is not on an .emoji / .emoji-box / .emoji-lg slot (DESIGN.md §5)`);
-        check(Object.prototype.hasOwnProperty.call(site, key),
-          `${file}: data-emoji="${key}" has no entry in SITE_EMOJI (${SITE_EMOJI_SOURCE})`);
-        const glyph = site[key];
-        if (!glyph) continue;
-        sloted += 1;
-        const label = labelPattern.exec(source.slice(hit.index + tag.length, hit.index + tag.length + 700));
-        if (!label) continue;
-        const text = label[1].replace(/\s+/gu, ' ');
-        const knownGlyph = labelToGlyph.get(text);
-        const knownLabel = glyphToLabel.get(glyph);
-        check(knownGlyph === undefined || knownGlyph === glyph,
-          `${file}: "${text}" is marked with "${glyph}" here but with "${knownGlyph}" elsewhere — one target, one emoji (DESIGN.md §5)`);
-        check(knownLabel === undefined || knownLabel === text,
-          `${file}: emoji "${glyph}" marks both "${knownLabel}" and "${text}" — one emoji, one target (DESIGN.md §5)`);
-        labelToGlyph.set(text, glyph);
-        glyphToLabel.set(glyph, text);
-      }
-    }
-
-    for (const occurrence of occurrences) {
-      // JS는 데이터 위치의 이모지(매핑 단일 원본)를 허용한다 — 마크업에 박힌 것만 본다.
-      if (isHtml || !occurrence.inMarkupTextPosition) continue;
-      check(occurrence.slotted,
-        `${file}:${occurrence.line}: emoji "${occurrence.glyph}" must sit directly inside an .emoji / .emoji-box / .emoji-lg slot (DESIGN.md §5)`);
-      if (!occurrence.slotted) continue;
-      sloted += 1;
-
-      // 한 슬롯에 이모지 하나 (같은 슬롯 안에서 닫는 태그 전까지).
-      const slotBody = occurrence.after.slice(0, Math.max(occurrence.after.indexOf('<'), 0));
-      check(!new RegExp(EMOJI_PATTERN.source, 'u').test(slotBody),
-        `${file}:${occurrence.line}: an emoji slot must hold exactly one emoji (DESIGN.md §5)`);
-    }
-
-    // "한 행에 이모지 1개" — .list-row 하나가 이모지를 둘 이상 만들어 내면 안 된다.
-    // \blist-row\b는 "list-row-title"에도 걸린다 — 클래스 토큰 경계까지 맞춘다.
-    // 조각은 중첩을 세며 뜬다 (R4-M-6) — 행의 전체 자손이 검사 대상이다.
-    let rows = 0;
-    for (const hit of source.matchAll(/<[a-z][\w-]*\b[^>]*class="[^"]*\blist-row(?:\s[^"]*)?"[^>]*>/giu)) {
-      const row = htmlElementSlice(source, hit.index);
-      const count = emojiSourceCount(row);
-      rows += 1;
-      check(count <= 1,
-        `${file}: a .list-row produces ${count} emoji — one emoji per row (DESIGN.md §5)`);
-    }
-  }
-
-  // 정적 셸은 OS 의존 이모지를 제거하고 하나의 선형 SVG 아이콘 세트를 쓴다. 과목 내부의
-  // 기존 데이터 이모지는 아래 앱별 매핑 검사가 계속 잠근다.
-  const landingHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  check(!landingHtml.includes('data-emoji='), 'index.html: minimal landing must not include emoji slots');
-}
-
-// smstudy의 단원 이모지는 마크업이 아니라 데이터 매핑(SMSTUDY_DATA.EMOJI)에서 나온다.
-// 그것이 §5.2가 적어 둔 위 검사의 사각지대다 — 위 스캔은 "슬롯을 거쳤는가"만 보고
-// 매핑 자체의 일대일성은 못 본다. 여기서 매핑을 소스에서 도출해 직접 잠근다.
-// 검사 대상 목록을 하드코딩하지 않는다 (LESSONS 규칙 5): 키는 data.js의 UNITS에서,
-// 비교 대상 글리프는 마크업 스캔에서 도출한다.
-//
-// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🧩가 문화의 속성에 맞는지).
-// 3c에서 WordMaster가 같은 방식의 매핑(WORDMASTER_EMOJI)을 도입했으므로,
-// 앱 사이의 교차 충돌은 아래 validateWordMasterEmoji() + validateEmojiCrossMaps()가 본다.
-// (admin은 매핑을 두지 않는다 — macOS HIG 어법의 조작 화면이라 이모지를 쓰지 않는다.)
-function validateSmStudyEmoji() {
-  const data = evaluateBrowserData('_learning/smstudy/data.js', 'SMSTUDY_DATA');
-  const map = data?.EMOJI;
-  check(Boolean(map), 'smstudy: SMSTUDY_DATA.EMOJI mapping is missing — unit emoji need a single source (DESIGN.md §5)');
-  if (!map) return;
-
-  const subunitIds = (data.UNITS || []).flatMap((unit) => unit.subs.map((sub) => sub.id));
-  const expectedKeys = new Set([...subunitIds, 'app']);
-  check(subunitIds.length > 0, 'smstudy: subunit id derivation for the emoji map looks broken');
-  for (const id of expectedKeys) {
-    check(typeof map[id] === 'string' && map[id].length > 0,
-      `smstudy: SMSTUDY_DATA.EMOJI has no glyph for "${id}"`);
-  }
-  for (const key of Object.keys(map)) {
-    check(expectedKeys.has(key),
-      `smstudy: SMSTUDY_DATA.EMOJI carries "${key}", which is neither a subunit id nor "app" — dead mapping`);
-  }
-  const glyphs = Object.values(map);
-  check(new Set(glyphs).size === glyphs.length,
-    'smstudy: SMSTUDY_DATA.EMOJI reuses a glyph for two targets — one target, one emoji (DESIGN.md §5)');
-  for (const [key, glyph] of Object.entries(map)) {
-    check(new RegExp(EMOJI_PATTERN.source, 'u').test(glyph),
-      `smstudy: SMSTUDY_DATA.EMOJI["${key}"] = "${glyph}" is not a pictograph`);
-  }
-
-  // 랜딩의 매핑과 교차 대조한다. ---- R4-M-5 ----
-  // 이전 검사는 markupGlyphSet().has(map.app), 즉 "사이트가 쓰는 글리프 집합에 들어
-  // 있는가"만 봤다. 집합 포함 여부는 대상을 구분하지 못하므로 WordMaster의 📗와
-  // smstudy의 📘를 서로 바꿔도 두 글리프가 그대로 집합에 남아 통과했다. 이제 SITE_EMOJI의
-  // **키로** 대조한다 — 키는 앱 디렉터리 이름이라 대상이 한 벌로 정해진다.
-  const site = siteEmoji();
-  check(Object.keys(site).length > 0, 'smstudy: SITE_EMOJI is empty — this cross-check is inert');
-  check(map.app === site.smstudy,
-    `smstudy: SMSTUDY_DATA.EMOJI.app is "${map.app}" but SITE_EMOJI.smstudy is "${site.smstudy}" — one target, one emoji (DESIGN.md §5.1)`);
-  const siteGlyphs = new Set(Object.values(site));
-  for (const id of subunitIds) {
-    check(!siteGlyphs.has(map[id]),
-      `smstudy: subunit ${id} takes "${map[id]}", which SITE_EMOJI already assigns to another target — one emoji, one target (DESIGN.md §5)`);
-  }
-
-  // 마크업이 이모지를 리터럴로 박지 않고 매핑을 거치는지 — 렌더러가 실제로 매핑을 읽는가.
-  const appSource = readFileSync(path.join(ROOT, APP_SOURCE), 'utf8');
-  check(/emojiOf\(/u.test(appSource) && /EMOJI\[/u.test(appSource),
-    `smstudy: ${APP_SOURCE} must read glyphs from the SMSTUDY_DATA.EMOJI mapping, not from literals`);
-  const slots = (appSource.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
-  check(slots >= 2, `smstudy: ${APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
-}
-
-// WordMaster의 이모지도 마크업이 아니라 데이터 매핑(words.js의 WORDMASTER_EMOJI)에서
-// 나온다. smstudy와 같은 사각지대이므로 같은 도출을 여기서 한 벌 더 한다.
-// 검사 대상 키를 하드코딩하지 않는다 (LESSONS 규칙 5): 키는 **렌더러의 호출부**에서
-// 도출한다. 그래서 렌더러가 키를 리터럴로 넘기는지도 함께 강제한다 — 동적 키가 하나라도
-// 있으면 도출이 조용히 뒤처지기 때문이다.
-//
-// 이 검사가 **못 보는 것**: 글리프의 의미 적절성(🎲가 출제 순서에 맞는지),
-// 그리고 런타임에 조립한 키(`emojiLead('a' + b)`처럼 리터럴이 아닌 호출) —
-// 후자는 아래 "동적 호출 금지" 검사가 대신 막는다.
-const WORDMASTER_APP_SOURCE = 'WordMaster/assets/js/app.js';
-
-function validateWordMasterEmoji() {
-  const map = evaluateBrowserData('_learning/wordmaster/words.js', 'WORDMASTER_EMOJI');
-  check(Boolean(map), 'WordMaster: WORDMASTER_EMOJI mapping is missing — row emoji need a single source (DESIGN.md §5)');
-  if (!map) return;
-
-  const source = readFileSync(path.join(ROOT, WORDMASTER_APP_SOURCE), 'utf8');
-  // 렌더러가 매핑을 통해서만 글리프를 얻는지 — 슬롯에 리터럴을 박으면 여기서 걸린다.
-  check(/window\.WORDMASTER_EMOJI/u.test(source),
-    `WordMaster: ${WORDMASTER_APP_SOURCE} must read glyphs from window.WORDMASTER_EMOJI, not from literals`);
-  const slots = (source.match(/class="emoji(?:-box|-lg| emoji-lg)?"/gu) || []).length;
-  check(slots >= 2, `WordMaster: ${WORDMASTER_APP_SOURCE} renders ${slots} emoji slots — the §5 system has regressed`);
-
-  // 키 도출: emojiLead('key') 호출부. 함수 정의를 제외한 모든 호출은 리터럴이어야 한다.
-  const calls = [...source.matchAll(/emojiLead\('([\w-]+)'/gu)].map(([, key]) => key);
-  const dynamic = source.replace(/function emojiLead\(/gu, 'function __def(')
-    .match(/emojiLead\((?!')/gu) || [];
-  check(dynamic.length === 0,
-    `WordMaster: emojiLead() must be called with a literal key (${dynamic.length} dynamic calls) — the mapping derivation depends on it`);
-  const usedKeys = new Set(calls);
-  check(usedKeys.size > 0, 'WordMaster: emoji key derivation from the renderer looks broken');
-
-  const expectedKeys = new Set([...usedKeys, 'app']);
-  for (const key of expectedKeys) {
-    check(typeof map[key] === 'string' && map[key].length > 0,
-      `WordMaster: WORDMASTER_EMOJI has no glyph for "${key}"`);
-  }
-  for (const key of Object.keys(map)) {
-    check(expectedKeys.has(key),
-      `WordMaster: WORDMASTER_EMOJI carries "${key}", which the renderer never asks for — dead mapping`);
-  }
-  const glyphs = Object.values(map);
-  check(new Set(glyphs).size === glyphs.length,
-    'WordMaster: WORDMASTER_EMOJI reuses a glyph for two targets — one target, one emoji (DESIGN.md §5)');
-  for (const [key, glyph] of Object.entries(map)) {
-    check(new RegExp(EMOJI_PATTERN.source, 'u').test(glyph),
-      `WordMaster: WORDMASTER_EMOJI["${key}"] = "${glyph}" is not a pictograph`);
-  }
-
-  // 앱 글리프는 랜딩이 이 앱에 준 글리프와 **같아야** 하고(집합 포함이 아니라 키 대조 —
-  // R4-M-5), 나머지 키는 SITE_EMOJI가 다른 대상에 쓰는 글리프를 가져가면 안 된다.
-  const site = siteEmoji();
-  check(Object.keys(site).length > 0, 'WordMaster: SITE_EMOJI is empty — this cross-check is inert');
-  check(map.app === site.WordMaster,
-    `WordMaster: WORDMASTER_EMOJI.app is "${map.app}" but SITE_EMOJI.WordMaster is "${site.WordMaster}" — one target, one emoji (DESIGN.md §5.1)`);
-  const siteGlyphs = new Set(Object.values(site));
-  for (const key of usedKeys) {
-    if (key === 'app') continue;
-    check(!siteGlyphs.has(map[key]),
-      `WordMaster: "${key}" takes "${map[key]}", which SITE_EMOJI already assigns to another target — one emoji, one target (DESIGN.md §5)`);
-  }
-}
-
-// 앱별 매핑이 둘 이상이 되면 각각의 검사만으로는 **앱 사이의 중복 배정**을 못 본다
-// (smstudy의 🔭와 WordMaster의 🔭가 서로 다른 대상을 가리켜도 각자는 통과한다).
-// 여기서 두 매핑을 한 레지스트리로 합쳐 글리프 소유자를 하나로 강제한다.
-// 매핑 목록도 하드코딩하지 않는다 — 아래 sources는 "전역 이름 → 파일" 한 쌍이고,
-// 새 앱이 매핑을 도입하면 그 항목만 늘린다.
-function validateEmojiCrossMaps() {
-  const sources = [
-    { app: 'site', file: SITE_EMOJI_SOURCE, global: 'SITE_EMOJI', pick: (data) => data },
-    { app: 'smstudy', file: '_learning/smstudy/data.js', global: 'SMSTUDY_DATA', pick: (data) => data?.EMOJI },
-    { app: 'WordMaster', file: '_learning/wordmaster/words.js', global: 'WORDMASTER_EMOJI', pick: (data) => data },
+// DESIGN.md §5.2 v14 — 데이터 원본의 emoji 필드는 유지하되, 게시 화면과 그 화면이
+// 로드하는 렌더러에는 그림문자가 하나도 없어야 한다.
+function validateNoRenderedEmoji() {
+  const surfaces = [
+    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
+    ...publishedScripts().filter((file) => !file.startsWith('assets/vendor/'))
+      .map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
   ];
-
-  // 대상 이름 정규화. 앱 자신을 가리키는 항목은 랜딩과 앱 매핑 **양쪽에** 있는 것이
-  // 정상이므로 같은 대상으로 접어야 한다. 접는 조건도 손으로 적지 않는다 —
-  // SITE_EMOJI의 키가 저장소의 앱 디렉터리 이름이면 그것이 앱 자신이다.
-  const targetOf = (source, key) => {
-    if (key === 'app') return `app:${source.app}`;
-    const asDirectory = path.join(ROOT, key);
-    if (source.app === 'site' && existsSync(asDirectory) && statSync(asDirectory).isDirectory()) {
-      return `app:${key}`;
-    }
-    return `${source.app}:${key}`;
-  };
-
-  const owner = new Map();   // glyph -> target
-  let pairs = 0;
-
-  for (const source of sources) {
-    const map = source.pick(evaluateBrowserData(source.file, source.global)) || {};
-    for (const [key, glyph] of Object.entries(map)) {
-      const target = targetOf(source, key);
-      const known = owner.get(glyph);
-      check(known === undefined || known === target,
-        `emoji registry: "${glyph}" is assigned to both ${known} and ${target} — one emoji, one target (DESIGN.md §5)`);
-      owner.set(glyph, target);
-      pairs += 1;
-    }
+  check(surfaces.length >= 12,
+    `icon gate: only ${surfaces.length} published HTML/JS surfaces were derived — the emoji scan is inert`);
+  for (const failure of findRenderedEmoji(surfaces)) {
+    check(false, `${failure.file}:${failure.line}: rendered pictograph "${failure.glyph}" is forbidden (DESIGN.md §5.2)`);
   }
-  // 세 매핑이 모두 살아 있는지 — 하나가 사라지면 교차 검사는 무의미해진다.
-  check(sources.length >= 3 && pairs >= 25,
-    `emoji registry: only ${pairs} glyph assignments were derived from ${sources.length} maps — the cross-app check is inert`);
+}
+
+function iconSpriteState() {
+  const file = 'assets/ui-icons.svg';
+  const source = readFileSync(path.join(ROOT, file), 'utf8');
+  const symbols = inspectSprite(source);
+  return { file, source, symbols, ids: new Set(symbols.map((symbol) => symbol.id).filter(Boolean)) };
+}
+
+// 정적 <use href>와 런타임 키→id 매핑의 icon-* 리터럴을 함께 검사한다. 후자를 빼면
+// WordMaster처럼 href를 보간하는 렌더러의 잘못된 id가 게이트 밖에 남는다.
+function validateIconReferences() {
+  const sprite = iconSpriteState();
+  const surfaces = [
+    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
+    ...publishedScripts().map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
+  ];
+  let references = 0;
+  for (const surface of surfaces) references += (surface.source.match(/\bicon-[a-z0-9-]+\b/gu) || []).length;
+  check(references >= 35, `icon gate: only ${references} icon references were derived — the href/map check is inert`);
+  for (const failure of findMissingIconReferences(surfaces, sprite.ids)) {
+    check(false, `${failure.file}:${failure.line}: ${failure.id} does not exist in ${sprite.file} (DESIGN.md §5.2)`);
+  }
+}
+
+function validateIconSprite() {
+  const { file, symbols } = iconSpriteState();
+  check(symbols.length >= 30, `${file}: only ${symbols.length} symbols were derived — the sprite check is inert`);
+  const seen = new Set();
+  for (const symbol of symbols) {
+    check(Boolean(symbol.id), `${file}: every symbol needs an id`);
+    check(!seen.has(symbol.id), `${file}: duplicate symbol id "${symbol.id}"`);
+    seen.add(symbol.id);
+    check(symbol.fill === 'none' && symbol.stroke === 'currentColor',
+      `${file}#${symbol.id}: symbols must set fill="none" and stroke="currentColor"`);
+    check(symbol.strokeWidth === '1.75' && symbol.strokeLinecap === 'round' && symbol.strokeLinejoin === 'round',
+      `${file}#${symbol.id}: symbols must use the Lucide 1.75 round stroke contract`);
+  }
+}
+
+function validateIconBackgrounds() {
+  const stylesheets = walk(ROOT, (file) => file.endsWith('.css'))
+    .map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') }));
+  const surfaces = [
+    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
+    ...publishedScripts().filter((file) => !file.startsWith('assets/vendor/'))
+      .map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
+  ];
+  check(stylesheets.length >= 8,
+    `icon gate: only ${stylesheets.length} stylesheets were derived — the background scan is inert`);
+  for (const failure of findIconBackgroundViolations(stylesheets)) {
+    check(false, `${failure.file}:${failure.line}: ${failure.selector} gives an icon wrapper an accent/status background (DESIGN.md §5.2)`);
+  }
+  for (const failure of findColoredIconParents(surfaces, stylesheets)) {
+    check(false, `${failure.file}:${failure.line}: .${failure.className} wraps a ui-icon but ${failure.rule.file} gives it an accent/status background (DESIGN.md §5.2)`);
+  }
 }
 
 function validateBrandName() {
@@ -2137,12 +1853,12 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/home.js?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-ui-v1'],
-    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js?v=20260904-ui-v1'],
+    'index.html': ['/assets/js/site-icons.js?v=20260904-icons-v1', '/assets/js/home.js?v=20260904-icons-v1'],
+    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-icons-v1'],
+    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js?v=20260904-icons-v1'],
     'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-ui-v1'],
-    'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-ui-v1'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-ui-v1', '/usage/assets/js/page.js?v=20260904-ui-v1'],
+    'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-icons-v1'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-icons-v1', '/usage/assets/js/page.js?v=20260904-icons-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
     'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260904-ui-v1'],
@@ -2164,14 +1880,14 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/assets/css/home.css?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
-    'smstudy/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
-    'plstudy/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
-    'admin/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/admin/assets/css/admin.css?v=20260904-ui-v1'],
-    'usage/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/usage/assets/css/usage.css?v=20260904-ui-v1'],
-    'gichul/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/gichul/gichul.css?v=20260904-ui-v1'],
-    'behavior-lab/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/behavior-lab/assets/css/app.css?v=20260904-ui-v1'],
+    'index.html': ['/assets/css/system.css?v=20260904-icons-v1', '/assets/css/home.css?v=20260904-icons-v1'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-icons-v1', 'assets/css/style.css?v=20260904-icons-v1'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260904-icons-v1', 'assets/css/style.css?v=20260904-icons-v1'],
+    'plstudy/index.html': ['/assets/css/system.css?v=20260904-icons-v1', 'assets/css/style.css?v=20260904-ui-v1'],
+    'admin/index.html': ['/assets/css/system.css?v=20260904-icons-v1', '/admin/assets/css/admin.css?v=20260904-icons-v1'],
+    'usage/index.html': ['/assets/css/system.css?v=20260904-icons-v1', '/usage/assets/css/usage.css?v=20260904-icons-v1'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260904-icons-v1', '/gichul/gichul.css?v=20260904-ui-v1'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260904-icons-v1', '/behavior-lab/assets/css/app.css?v=20260904-ui-v1'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
@@ -2484,7 +2200,7 @@ function validateLandingGating() {
     && JSON.stringify(renderedOwners) === JSON.stringify(configuredOwners),
     'owner boundary: Worker and landing UI must expose owner controls to the sole human owner only');
   check(homeJs.includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;")
-    && homeJs.includes("['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델']"),
+    && homeJs.includes("['/behavior-lab/#paper', 'Behavior Lab', 'behaviorLab']"),
     'home.js: owner-only navigation must stay behind the exact owner check');
 
   for (const target of dynamicTargets) {
@@ -2520,7 +2236,7 @@ function validateBehaviorLab() {
   'behavior-lab: browser-direct exchange calls and retired market/draft surfaces are forbidden');
   check(homeHtml.includes('id="ownerLinks"')
     && readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8').includes("if (!ownerUsernames.has(String(savedUsername).toLowerCase())) return;")
-    && readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8').includes("['/behavior-lab/#paper', 'Behavior Lab', 'PAPER 모델']"),
+    && readFileSync(path.join(ROOT, 'assets/js/home.js'), 'utf8').includes("['/behavior-lab/#paper', 'Behavior Lab', 'behaviorLab']"),
     'landing: private Behavior Lab must be created only inside the signed-in exact-owner drawer');
   check(pageHtml.includes('content="noindex, nofollow, noarchive"')
     && /id="labShell"[^>]*\bhidden\b/u.test(pageHtml)
@@ -2557,10 +2273,10 @@ validateContrastTable();
 validateDesignHeadingSequence();
 validateDesignTokens();
 validateBrandName();
-validateEmojiSystem();
-validateSmStudyEmoji();
-validateWordMasterEmoji();
-validateEmojiCrossMaps();
+validateNoRenderedEmoji();
+validateIconReferences();
+validateIconSprite();
+validateIconBackgrounds();
 validateOgImageLock();
 validateGlobalsAndOrder();
 validateMigrations();
