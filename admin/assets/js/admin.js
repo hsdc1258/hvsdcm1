@@ -301,7 +301,7 @@
           password: elements.newPassword.value,
         }),
       });
-      event.currentTarget.reset();
+      elements.addUserForm.reset();
       await loadDashboard();
     } catch (error) {
       elements.userError.textContent = error.message || '사용자 생성 실패';
@@ -373,6 +373,9 @@
     loadDashboard().catch(() => {
       adminToken = '';
       sessionStorage.removeItem('hvsdcm.admin');
+      elements.adminPassword.focus();
     });
+  } else {
+    elements.adminPassword.focus();
   }
 })();

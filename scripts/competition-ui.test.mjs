@@ -756,18 +756,29 @@ test('controller renders loading, empty, error/retry and manual refresh states',
   await flush();
   assert.equal(refreshFailure.store.get('competitionBody').getAttribute('aria-busy'), 'false');
   assert.match(refreshFailure.store.get('competitionBody').innerHTML, /청소년 디자인 공모전/u);
-  assert.equal(refreshFailure.store.get('competitionError').textContent, 'refresh failed');
-  assert.equal(
-    refreshFailure.store.get('competitionRefreshStatus').textContent,
-    '업데이트하지 못했습니다. 이전 결과를 표시합니다.',
-  );
+  assert.equal(refreshFailure.store.get('competitionError').textContent, '업데이트하지 못했습니다. 이전 결과를 표시합니다.');
+  assert.equal(refreshFailure.store.get('competitionRefreshStatus').textContent, '');
 
   const failure = competitionContext();
   const failedController = failure.ui.createDashboard({ request: async () => { throw new Error('network down'); } });
   failedController.activate();
   await flush();
-  assert.equal(failure.store.get('competitionError').textContent, 'network down');
+  assert.equal(failure.store.get('competitionError').textContent, '');
+  assert.match(failure.store.get('competitionBody').innerHTML, /공모전 정보를 불러오지 못했습니다/u);
   assert.match(failure.store.get('competitionBody').innerHTML, /data-competition-retry/u);
+
+  const denied = competitionContext();
+  const deniedError = new Error('Not found');
+  deniedError.status = 404;
+  const deniedController = denied.ui.createDashboard({ request: async () => { throw deniedError; } });
+  deniedController.activate();
+  await flush();
+  assert.match(denied.store.get('competitionBody').innerHTML, /소유자 계정에서만 열 수 있습니다/u);
+  assert.doesNotMatch(denied.store.get('competitionBody').innerHTML, /data-competition-retry/u);
+  assert.equal(denied.store.get('competitionError').textContent, '');
+  assert.equal(denied.store.get('competitionRefreshStatus').textContent, '');
+  assert.equal(denied.store.get('competitionFilters').hidden, true);
+  assert.equal(denied.store.get('competitionToolbar').hidden, true);
 });
 
 function pageContext({ competitionPayload = fixture() } = {}) {

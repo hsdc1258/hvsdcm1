@@ -873,6 +873,7 @@
       error: document.getElementById('competitionError'),
       refreshStatus: document.getElementById('competitionRefreshStatus'),
       freshness: document.getElementById('competitionFreshness'),
+      toolbar: document.getElementById('competitionToolbar'),
       reload: document.getElementById('competitionReload'),
       filters: document.getElementById('competitionFilters'),
       search: document.getElementById('competitionSearch'),
@@ -891,6 +892,26 @@
     let syncedAt = null;
     let refreshTimer = null;
     let pendingDecision = null;
+    let accessDenied = false;
+
+    function setDataControlsVisible(visible) {
+      if (elements.toolbar) elements.toolbar.hidden = !visible;
+      if (elements.filters) elements.filters.hidden = !visible;
+    }
+
+    function renderInitialFailure({ denied = false } = {}) {
+      if (elements.approvals) {
+        elements.approvals.innerHTML = '';
+        elements.approvals.hidden = true;
+      }
+      if (elements.error) elements.error.textContent = '';
+      if (elements.refreshStatus) elements.refreshStatus.textContent = '';
+      setDataControlsVisible(false);
+      if (!elements.body) return;
+      elements.body.innerHTML = denied
+        ? '<div class="cp-empty" role="status"><p>이 화면은 소유자 계정에서만 열 수 있습니다.</p></div>'
+        : '<div class="cp-empty" role="status"><p>공모전 정보를 불러오지 못했습니다.</p><button class="btn btn-secondary btn-sm" type="button" data-competition-retry>다시 시도</button></div>';
+    }
 
     function filters() {
       return {
@@ -908,8 +929,10 @@
     function render() {
       if (!data || !elements.body) return;
       if (elements.approvals) {
+        elements.approvals.hidden = false;
         elements.approvals.innerHTML = renderApprovalInbox(data.applications, data.candidates, now());
       }
+      setDataControlsVisible(true);
       elements.body.innerHTML = renderDashboard(data, filters(), now(), false);
       elements.body.setAttribute?.('aria-busy', 'false');
     }
@@ -924,7 +947,7 @@
     function schedule() {
       clearTimer(refreshTimer);
       refreshTimer = null;
-      if (!active) return;
+      if (!active || accessDenied) return;
       refreshTimer = setTimer(() => { void load(); }, AUTO_REFRESH_MS);
     }
 
@@ -942,21 +965,19 @@
       try {
         const payload = await request('/api/competitions');
         data = normalizePayload(payload);
+        accessDenied = false;
         loaded = true;
         syncedAt = now();
         render();
         if (announce && elements.refreshStatus) elements.refreshStatus.textContent = '서버에서 방금 확인했습니다.';
       } catch (error) {
-        const message = error?.message === 'unauthorized' ? '' : (error?.message || '공모전 스캔을 불러오지 못했습니다.');
-        if (message && elements.error) elements.error.textContent = message;
-        if (!loaded && elements.body) {
-          elements.body.innerHTML = '<div class="cp-empty"><p>공모전 스캔을 불러오지 못했습니다.</p><button class="btn btn-secondary btn-sm" type="button" data-competition-retry>다시 시도</button></div>';
-          elements.body.setAttribute?.('aria-busy', 'false');
-        }
-        if (elements.refreshStatus) {
-          elements.refreshStatus.textContent = loaded
-            ? '업데이트하지 못했습니다. 이전 결과를 표시합니다.'
-            : '공모전 스캔을 불러오지 못했습니다.';
+        const denied = error?.status === 403 || error?.status === 404;
+        accessDenied = denied;
+        if (!loaded || denied) {
+          renderInitialFailure({ denied });
+        } else {
+          if (elements.error) elements.error.textContent = '업데이트하지 못했습니다. 이전 결과를 표시합니다.';
+          if (elements.refreshStatus) elements.refreshStatus.textContent = '';
         }
       } finally {
         inFlight = false;
@@ -1067,7 +1088,7 @@
       },
       load,
       render,
-      state: () => ({ active, loaded, inFlight, data, syncedAt, pendingDecision }),
+      state: () => ({ active, loaded, inFlight, data, syncedAt, pendingDecision, accessDenied }),
     };
   }
 

@@ -28,7 +28,11 @@
         location.replace(loginPath());
         throw new Error('unauthorized');
       }
-      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       const data = await response.json();
       if (path === '/api/competitions') document.title = '공모전 — hvsdcm';
       return data;

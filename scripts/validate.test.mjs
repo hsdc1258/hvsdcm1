@@ -10,9 +10,18 @@ import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DESIGN = readFileSync(path.join(ROOT, 'docs/DESIGN.md'), 'utf8');
+const ADMIN_HTML = readFileSync(path.join(ROOT, 'admin/index.html'), 'utf8');
+const ADMIN_JS = readFileSync(path.join(ROOT, 'admin/assets/js/admin.js'), 'utf8');
 
 test('DESIGN headings have continuous section numbers', () => {
   assert.deepEqual(findDesignHeadingSequenceErrors(DESIGN), []);
+});
+
+test('admin async forms use stable references and focus only a visible login', () => {
+  assert.doesNotMatch(ADMIN_HTML, /\sautofocus(?=[\s>])/u);
+  assert.doesNotMatch(ADMIN_JS, /await[^]*?event\.currentTarget\.reset\(\)/u);
+  assert.match(ADMIN_JS, /elements\.addUserForm\.reset\(\)/u);
+  assert.match(ADMIN_JS, /else\s*\{\s*elements\.adminPassword\.focus\(\);/u);
 });
 
 test('validate.mjs rejects a real DESIGN copy with a duplicate section number', () => {
