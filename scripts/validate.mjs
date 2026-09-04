@@ -2141,7 +2141,7 @@ function validateGlobalsAndOrder() {
     'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-ui-v1'],
     'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js?v=20260904-ui-v1'],
     'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-ui-v1'],
-    'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-study-sync-v1'],
+    'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-ui-v1'],
     'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-ui-v1', '/usage/assets/js/page.js?v=20260904-ui-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
