@@ -637,6 +637,19 @@ function validateGichulFrontend() {
     'gichul/app.js: renderers must be reachable as window.GICHUL_RENDER so the snapshot renders the real markup');
   check(appSource.includes('window.PDFLib'),
     'gichul/app.js: merging must use the vendored window.PDFLib');
+  const renderSection = appSource.slice(
+    appSource.indexOf('function renderFilters'),
+    appSource.indexOf('function planSegments'),
+  );
+  check(appSource.includes('class="disclosure gi-filter" open data-group=')
+    && appSource.includes('class="list-row-value"')
+    && appSource.includes('list-row-nav" type="button" data-open='),
+  'gichul/app.js: filters and result rows must use disclosure, value and navigation primitives');
+  check(!/list-row-sub|list-group-foot|side-note/u.test(renderSection),
+    'gichul/app.js: filter and result renderers must not restore repeated descriptions');
+  check(appSource.includes("matchMedia('(max-width: 860px)')")
+    && appSource.includes("querySelectorAll('.gi-filter[open]')"),
+  'gichul/app.js: mobile disclosures must preserve their open state across paint()');
   // 부분 병합 금지 — 실패 목록을 만든 뒤 PDFDocument.create()에 도달하기 전에 되돌아야 한다.
   check(appSource.includes('Promise.allSettled')
     && appSource.indexOf('if (failures.length)') !== -1
@@ -1502,6 +1515,11 @@ function validatePlStudyData() {
   check(subunits.length === 18, `plstudy: expected 18 subunits, found ${subunits.length}`);
   check(subunitIds.size === 18, 'plstudy: subunit IDs must be unique');
   check(data.QUESTIONS?.length === 90, `plstudy: expected 90 questions, found ${data.QUESTIONS?.length || 0}`);
+  const plstudyHtml = readFileSync(path.join(ROOT, 'plstudy/index.html'), 'utf8');
+  const sidebarUnitTitles = [...plstudyHtml.matchAll(/<a\b[^>]*\bhref="#pl-unit-[^"]+"[^>]*>[\s\S]*?<\/span>([^<]+)<\/a>/gu)]
+    .map(([, title]) => title.trim());
+  check(JSON.stringify(sidebarUnitTitles) === JSON.stringify(data.UNITS.map((unit) => unit.title)),
+    'plstudy: sidebar unit titles must exactly match PLSTUDY_DATA.UNITS titles');
   const questionIds = new Set();
   const coverage = new Map([...subunitIds].map((id) => [id, 0]));
   for (const question of data.QUESTIONS || []) {
@@ -2120,14 +2138,14 @@ function validateGlobalsAndOrder() {
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
     'index.html': ['/assets/js/home.js?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260901-dark-workspace-v3'],
-    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js'],
-    'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-search-v1'],
+    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-ui-v1'],
+    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js?v=20260904-ui-v1'],
+    'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-ui-v1'],
     'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-study-sync-v1'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-competition-only-v1', '/usage/assets/js/page.js?v=20260904-competition-only-v1'],
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-ui-v1', '/usage/assets/js/page.js?v=20260904-ui-v1'],
     // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260829-n7'],
+    'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260904-ui-v1'],
     'behavior-lab/index.html': ['/behavior-lab/assets/js/app.js?v=20260901-v16'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
@@ -2146,14 +2164,14 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css?v=20260902-monochrome-v1', '/assets/css/home.css?v=20260902-wordmark-v1'],
-    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css?v=20260901-dark-workspace-v3'],
-    'smstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css'],
-    'plstudy/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', 'assets/css/style.css?v=20260904-search-v1'],
-    'admin/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/admin/assets/css/admin.css?v=20260901-dark-workspace-v3'],
-    'usage/index.html': ['/assets/css/system.css?v=20260904-competition-only-v1', '/usage/assets/css/usage.css?v=20260904-competition-only-v1'],
-    'gichul/index.html': ['/assets/css/system.css?v=20260904-auth-gate-v1', '/gichul/gichul.css?v=20260829-n4'],
-    'behavior-lab/index.html': ['/assets/css/system.css?v=20260901-dark-workspace-v3', '/behavior-lab/assets/css/app.css?v=20260901-v12'],
+    'index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/assets/css/home.css?v=20260902-wordmark-v1'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
+    'plstudy/index.html': ['/assets/css/system.css?v=20260904-ui-v1', 'assets/css/style.css?v=20260904-ui-v1'],
+    'admin/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/admin/assets/css/admin.css?v=20260904-ui-v1'],
+    'usage/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/usage/assets/css/usage.css?v=20260904-ui-v1'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/gichul/gichul.css?v=20260904-ui-v1'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260904-ui-v1', '/behavior-lab/assets/css/app.css?v=20260904-ui-v1'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);

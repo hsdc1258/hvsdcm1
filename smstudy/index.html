@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>평가원 사회·문화 기출 회독</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-auth-gate-v1">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260904-ui-v1">
 </head>
 <body>
   <a class="skip-link" href="#app">본문으로 건너뛰기</a>
@@ -39,26 +39,13 @@
   <div class="container-wide app-page">
     <div class="app-shell">
       <aside class="sidebar" aria-label="학습 메뉴">
+        <!-- 사이드바는 화면 이동 항목만이다(DESIGN.md §6.1 · v13). 수록 범위 수치는 본문
+             배지·단원 그룹이 이미 말하고, 저작권 고지는 푸터 한 줄로 옮겼다. -->
         <nav class="sidebar-group" aria-label="화면 이동">
-          <p class="sidebar-label">화면</p>
+          <span class="sidebar-label">화면</span>
           <button id="homeLogo" class="sidebar-item is-active" type="button" data-nav="home" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>단원 목록</button>
           <button id="openStats" class="sidebar-item" type="button" data-nav="stats"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>학습 기록</button>
         </nav>
-
-        <div class="sidebar-group">
-          <p class="sidebar-label">수록 범위</p>
-          <dl class="side-facts">
-            <div><dt>대단원</dt><dd>5</dd></div>
-            <div><dt>중단원</dt><dd>17</dd></div>
-            <div><dt>문항</dt><dd>98</dd></div>
-            <div><dt>출처</dt><dd>2022–2026 평가원</dd></div>
-          </dl>
-        </div>
-
-        <div class="sidebar-group">
-          <p class="sidebar-label">저작권</p>
-          <p class="side-note">문항 저작권은 한국교육과정평가원에 있으며 비상업적 개인 학습용으로 발췌했습니다. 학습 기록은 계정 DB에 동기화됩니다.</p>
-        </div>
       </aside>
 
       <main id="app" class="app-main" tabindex="-1"></main>
@@ -67,7 +54,7 @@
 
   <footer class="app-footer">
     <div class="container-wide app-footer-inner">
-      <span>사회·문화 1~5단원 · 평가원 기출 78문항 · 개념 연습 20문항</span>
+      <span>사회·문화 1~5단원 · 2022–2026 평가원 기출 78문항 · 개념 연습 20문항 · 문항 저작권 한국교육과정평가원, 개인 학습용 발췌</span>
       <span class="text-tertiary">hvsdcm</span>
     </div>
   </footer>
@@ -81,6 +68,6 @@
   <script src="assets/js/explanation-data.js"></script>
   <script src="/assets/js/study-utils.js"></script>
   <script src="assets/js/diagram.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/js/app.js?v=20260904-ui-v1"></script>
 </body>
 </html>

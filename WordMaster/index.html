@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://hvsdcm1.xyz/assets/og.png">
   <title>WordMaster 2000</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-auth-gate-v1">
-  <link rel="stylesheet" href="assets/css/style.css?v=20260901-dark-workspace-v3">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260904-ui-v1">
 </head>
 <body class="workspace-app wordmaster-page">
   <a class="skip-link" href="#app">본문으로 건너뛰기</a>
@@ -44,23 +44,20 @@
           <div class="sidebar-product-copy"><span>STUDY TOOL</span><strong>WordMaster</strong></div>
         </div>
         <nav class="sidebar-group" aria-label="화면 이동">
-          <p class="sidebar-label">화면</p>
+          <span class="sidebar-label">화면</span>
           <button id="homeLogo" class="sidebar-item is-active" type="button" data-nav="home" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-settings"></use></svg>시험 설정</button>
           <button id="openStatsBtn" class="sidebar-item" type="button" data-nav="stats"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>학습 기록</button>
         </nav>
 
+        <!-- 사이드바 항목은 라벨 한 줄뿐이다(DESIGN.md §6.1). 동기화 설명문은 지웠다 —
+             기록 저장 위치는 학습 기록 화면의 "기록 데이터" 그룹이 행으로 말한다. -->
         <div class="sidebar-group">
-          <p class="sidebar-label">교재</p>
+          <span class="sidebar-label">교재</span>
           <dl class="side-facts">
             <div><dt>범위</dt><dd>DAY 01–50</dd></div>
             <div><dt>표제어</dt><dd>2,000</dd></div>
             <div><dt>채점</dt><dd>한국어 뜻 주관식</dd></div>
           </dl>
-        </div>
-
-        <div class="sidebar-group">
-          <p class="sidebar-label">동기화</p>
-          <p class="side-note">학습 기록은 계정 DB에 저장되고, 이 브라우저에는 빠른 실행용 사본만 남습니다.</p>
         </div>
       </aside>
 
@@ -80,6 +77,6 @@
   <script src="/account.js?v=20260904-auth-gate-v1" data-app="wordmaster" data-key="wordmaster2000.quiz.v1"></script>
   <script src="assets/js/words.js"></script>
   <script src="/assets/js/study-utils.js"></script>
-  <script src="assets/js/app.js?v=20260901-dark-workspace-v3"></script>
+  <script src="assets/js/app.js?v=20260904-ui-v1"></script>
 </body>
 </html>

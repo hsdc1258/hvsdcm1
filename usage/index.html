@@ -9,10 +9,10 @@
   <!-- 소유자 응답을 받기 전에는 비공개 운영 화면의 제목을 노출하지 않는다. -->
   <title>hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-competition-only-v1">
-  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260904-competition-only-v1">
-  <script src="/usage/assets/js/competition.js?v=20260904-competition-only-v1" defer></script>
-  <script src="/usage/assets/js/page.js?v=20260904-competition-only-v1" defer></script>
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
+  <link rel="stylesheet" href="/usage/assets/css/usage.css?v=20260904-ui-v1">
+  <script src="/usage/assets/js/competition.js?v=20260904-ui-v1" defer></script>
+  <script src="/usage/assets/js/page.js?v=20260904-ui-v1" defer></script>
 </head>
 <body class="workspace-app usage-page">
   <a class="skip-link" href="#competitionMain">본문으로 건너뛰기</a>
@@ -31,13 +31,14 @@
 
   <div class="container-wide us-wide app-page">
     <div class="app-shell">
+      <!-- 사이드바 항목은 아이콘 + 라벨 한 줄이다(DESIGN.md §6.1). 부제·범위 설명을 두지 않는다. -->
       <aside class="sidebar" aria-label="공모전 화면">
         <div class="sidebar-product">
           <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
-          <div class="sidebar-product-copy"><span>COMPETITION</span><strong>공모전 센터</strong></div>
+          <div class="sidebar-product-copy"><strong>공모전 센터</strong></div>
         </div>
-        <nav class="sidebar-group" aria-label="공모전">
-          <p class="sidebar-label">공모전</p>
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <p class="sidebar-label">화면</p>
           <a class="sidebar-item is-active" href="/usage/" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">후보와 승인</span></a>
         </nav>
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
@@ -46,19 +47,15 @@
           <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
           <a class="sidebar-item" href="/admin/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg><span class="sidebar-item-text">관리자</span></a>
         </nav>
-        <div class="sidebar-group">
-          <p class="sidebar-label">범위</p>
-          <p class="side-note">소유자 계정에서만 열립니다. 최종 제출은 정확한 승인 뒤에만 진행됩니다.</p>
-        </div>
       </aside>
 
       <main id="competitionMain" class="app-main" tabindex="-1">
-        <section>
+        <section class="cp-screen">
           <header class="view-head cp-head">
             <div class="view-head-main"><div>
-              <span class="workspace-kicker"><i aria-hidden="true"></i>COMPETITION</span>
               <h1 class="title-1">공모전</h1>
-              <p>승인 전에는 외부 제출을 실행하지 않습니다. 정확한 최종 제출 승인 뒤에는 승인된 내용만 1회 자동 제출합니다.</p>
+              <!-- 비가역 행동(자동 제출)의 조건만 한 문장으로 적는다(§3·§6.1). -->
+              <p>최종 승인 전에는 외부 제출을 하지 않고, 승인 뒤 승인된 내용만 1회 자동 제출합니다.</p>
             </div></div>
             <div id="competitionToolbar" class="toolbar-group" hidden>
               <span id="competitionFreshness" class="us-freshness"></span>
@@ -66,8 +63,12 @@
             </div>
           </header>
           <div id="competitionApprovalInbox" class="cp-approval-mount" aria-live="polite"></div>
-          <p id="competitionRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
-          <p id="competitionError" class="field-error" role="alert"></p>
+          <!-- 상태·오류 안내 자리 하나. 두 p는 비면 접히므로 화면에는 한 문장만 선다 —
+               어느 슬롯에 어떤 문구를 쓸지(권한 거절 vs 재시도 가능한 장애)는 JS가 정한다. -->
+          <div class="cp-status">
+            <p id="competitionRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+            <p id="competitionError" class="field-error" role="alert"></p>
+          </div>
           <form id="competitionFilters" class="cp-filters" aria-label="공모전 후보 필터" hidden>
             <div class="field cp-search"><label class="field-label" for="competitionSearch">후보 검색</label><input id="competitionSearch" class="field-input field-input-sm" type="search" placeholder="이름 · 주최기관 · 자격" autocomplete="off"></div>
             <div class="field"><label class="field-label" for="competitionStatus">상태</label><select id="competitionStatus" class="field-input field-input-sm"><option value="all">전체</option><option value="watching">살펴보는 중</option><option value="verifying">검증 중</option><option value="preparing">지원 준비</option><option value="awaiting-approval">승인 대기</option><option value="approved">승인됨</option><option value="applied">지원 완료</option><option value="blocked">막힘</option><option value="closed">종료</option><option value="unknown">미확인</option></select></div>

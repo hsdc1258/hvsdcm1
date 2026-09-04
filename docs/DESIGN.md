@@ -384,7 +384,7 @@ adminAnswers)은 `site-emoji.js`에서 함께 지웠다 — 아무도 읽지 않
 | `.list-row-lead` | 행 선두의 이모지/글리프 슬롯. 안에 `.emoji-box`를 둔다. |
 | `.list-row-body` | 제목+부제 묶음. 남는 폭을 전부 먹고 `min-width: 0`으로 축소 안전. |
 | `.list-row-title` | 행 제목(본문 크기, `--text`). |
-| `.list-row-sub` | 행 부제(작은 본문, `--text-2`). 한 줄 권장. |
+| `.list-row-sub` | 행 부제(작은 본문, `--text-2`). 한 줄 권장. 비어 있으면 렌더 높이 없이 접힌다. |
 | `.list-row-value` | 행 우측 값(수치·상태). `--text-2`, tabular-nums. |
 | `.list-row-nav` | 우측 chevron(`›`)을 붙인다. 이동하는 행에만. |
 | `.list-group.is-inset` | 카드 안에 들어가는 그룹(배경을 `--surface-2`로 한 단 올림). |
@@ -431,9 +431,10 @@ summary 행의 기하는 `.list-row`와 같은 토큰(`--row-min-h` / `--row-pad
 | `.summary-strip` / `.summary-cell` | 상태 요약 스트립(가로 1카드 N칸). 칸 안에 `.stat-label` + `.stat-value`(또는 `.stat-state`)를 둔다. §1.1. |
 | `.status-dot` (+`.is-warn`/`.is-accent`/`.is-idle`) | 상태를 나타내는 색 점. **항상 텍스트 라벨과 짝**이고 `aria-hidden`이다. 기본=성공(green), `.is-accent`=진행 중, `.is-idle`=완료·대기(중립), `.is-warn`=경고. |
 | `.gauge-track` / `.gauge-fill` (+`.is-warn`/`.is-over`) | 퍼센트 게이지. `.list-row-body` 안에 넣으면 제목과 부제 사이 한 줄을 차지한다. 실제 진행 데이터 전용(§6). |
-| `.app-page` / `.app-main` / `.app-footer` / `.app-footer-inner` | 앱 3면(smstudy·WordMaster·admin)의 페이지 여백·본문 그리드·푸터. 화면마다 다시 만들지 않는다. |
+| `.app-page` / `.app-main` / `.app-footer` / `.app-footer-inner` | WordMaster·smstudy·plstudy·gichul·admin의 공통 페이지 여백·본문 그리드·푸터. 화면마다 다시 만들지 않는다. |
 | `.view-head` / `.view-head-main` / `.view-head h1` / `.view-head p` | 뷰 제목 줄. `.view-head-main`이 앱 이모지(`.emoji.emoji-lg`)와 제목 묶음을 담는다. |
-| `.side-facts` / `.side-note` | 사이드바의 정의 목록과 각주. |
+| `.side-facts` / `.side-note` | 사이드바의 정의 목록과 각주. 모바일(≤860px)에서는 숨기며, 저작권 고지는 `.app-footer`로 옮긴다. |
+| `.cp-screen` / `.cp-status` | 공모전 화면의 축소 안전 컨테이너와 상태·오류 단일 슬롯. 둘 다 화면 전용이며 `min-width: 0`을 유지한다. |
 | `.sr-only` | 시각적으로만 숨김. `position: absolute`이므로 스크롤 컨테이너 안에 둘 때는 그 컨테이너가 `position: relative`여야 한다(`.table-wrap`이 그렇다). |
 | `.field-input-sm` | 툴바에 들어가는 작은 입력·셀렉트(`.btn-sm`과 같은 높이). |
 | `.field-input-inline` | `.list-row-value` 자리에 들어가는 행 안의 값 컨트롤. 테두리 대신 `--surface-3` 면으로 구분한다. 셀렉트 화살표는 `--select-arrow`(인라인 SVG) 하나가 원본이며 화면별 CSS에서 다시 그리지 않는다. |

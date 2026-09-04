@@ -12,6 +12,14 @@
    - 장식 프리미티브는 진행 막대(실제 진행 데이터) 하나로 줄였다. 통계 타일(.stat)과
      동그라미 수치는 전부 그룹 리스트 행으로 흡수했다 (§6 장식 상한 2종).
 
+   2026-09-04 재조판 (DESIGN.md v13 §6.1)
+   - "focused study redesign" 블록(170px hero, 그라디언트 두 곳, 버튼 드롭섀도, 4.8rem
+     제목, 72~82px 행)을 통째로 폐기했다. 학습 화면에 마케팅 패턴을 두지 않는다(§1)이고,
+     그라디언트·그림자는 §3·§4가 금지한다. 셸은 system.css의 .workspace-app 규칙을
+     그대로 소비하며 여기서 다시 만들지 않는다(§7).
+   - 첫 화면은 .view-head 한 줄(제목 + 대표 행동 하나) → "시험 설정" 그룹 → "학습 현황"
+     그룹 두 개뿐이다. 설정·현황·오답을 카드 3연속으로 쌓지 않는다(§6).
+
    이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
      --text  #f5f5f7 on --surface-3 #2c2c2e  12.80:1  (.field-input-inline 값 — system.css)
      --text-2 #a1a1a6 on --surface  #161617   7.03:1  (.wm-meta 우측 메타)
@@ -41,10 +49,6 @@
 }
 .wm-col > .list-group + .list-group-head, .wm-panel > .list-group + .list-group-head {
   margin-top: var(--space-5);
-}
-.wm-start {
-  width: 100%;
-  margin-top: var(--space-4);
 }
 /* ---- 행 안의 컨트롤 ---- */
 /* 행 우측 값 자리의 입력·셀렉트는 system.css의 .field-input-inline을 그대로 쓴다.
@@ -283,179 +287,5 @@
     flex: 1 1 100%;
     margin-left: 0;
     text-align: left;
-  }
-}
-/* ---- focused study redesign ---- */
-.wordmaster-page .app-shell {
-  grid-template-columns: 270px minmax(0, 1fr);
-}
-.wordmaster-page #app {
-  display: grid;
-  gap: 30px;
-}
-.wordmaster-page #app > .wm-view-head {
-  min-height: 170px;
-  padding: 34px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 28px;
-  background: radial-gradient(circle at 82% 15%, rgba(41,151,255,.2), transparent 19rem), linear-gradient(135deg, #171a23, #0c0e13 72%);
-}
-.wordmaster-page .wm-view-head .view-head-main {
-  align-items: center;
-}
-.wordmaster-page .wm-view-head .emoji-lg {
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  border: 1px solid rgba(41,151,255,.24);
-  border-radius: 20px;
-  background: rgba(41,151,255,.1);
-  font-size: 1.85rem;
-}
-.wordmaster-page #app .wm-view-head h1 {
-  font-size: clamp(2.75rem, 4vw, 4.8rem);
-  line-height: .95;
-  letter-spacing: -.065em;
-}
-.wordmaster-page #app .wm-view-head p {
-  margin-top: 12px;
-  color: #949baa;
-  font-size: .98rem;
-}
-.wordmaster-page #app .wm-view-head .badge {
-  align-self: flex-start;
-  min-height: 36px;
-  padding-inline: 13px;
-  border-color: rgba(41,151,255,.22);
-  background: rgba(41,151,255,.1);
-}
-.wordmaster-page .wm-layout {
-  grid-template-columns: minmax(0, 1.45fr) minmax(300px, .78fr);
-  gap: 24px;
-}
-.wordmaster-page .list-group-head {
-  padding: 0 4px 10px;
-  color: #777f8f;
-  letter-spacing: .15em;
-}
-.wordmaster-page .wm-col > .list-group, .wordmaster-page .wm-panel > .list-group {
-  overflow: hidden;
-  border-color: rgba(255,255,255,.1);
-  border-radius: 22px;
-  background: rgba(18,20,26,.92);
-}
-.wordmaster-page .wm-col > .list-group .list-row {
-  min-height: 72px;
-  padding-inline: 18px;
-}
-.wordmaster-page .emoji-box {
-  border-color: rgba(255,255,255,.08);
-  border-radius: 12px;
-  background: #20232b;
-  filter: saturate(.78);
-}
-.wordmaster-page .wm-start {
-  min-height: 58px;
-  margin-top: 14px;
-  border-radius: 17px;
-  background: linear-gradient(90deg, #087cf0, #2997ff);
-  box-shadow: 0 18px 42px rgba(0,113,227,.22);
-  font-size: 1rem;
-}
-.wordmaster-page .wm-start .ui-icon {
-  width: 19px;
-  height: 19px;
-}
-.wordmaster-page .wm-panel {
-  top: calc(var(--topbar-h) + 28px);
-}
-.wordmaster-page .wm-panel > .list-group:first-of-type .list-row {
-  min-height: 82px;
-}
-.wordmaster-page .wm-panel > .list-group:first-of-type .list-row-value {
-  color: #f6f9ff;
-  font-size: 1.55rem;
-  font-weight: 750;
-  letter-spacing: -.04em;
-}
-.wordmaster-page .wm-panel > .list-group:last-of-type .list-row {
-  min-height: 70px;
-}
-.wordmaster-page .segmented {
-  padding: 3px;
-  border: 1px solid rgba(255,255,255,.07);
-  background: #0d0f14;
-}
-.wordmaster-page .field-input-inline {
-  min-height: 38px;
-  border-color: rgba(255,255,255,.08);
-  border-radius: 11px;
-  background-color: #0d0f14;
-}
-.wordmaster-page .wm-question {
-  min-height: 430px;
-  justify-content: center;
-  padding: clamp(28px, 5vw, 64px);
-  border-color: rgba(255,255,255,.1);
-  border-radius: 28px;
-  background: radial-gradient(circle at 92% 8%, rgba(41,151,255,.14), transparent 18rem), #14161c;
-}
-.wordmaster-page .wm-word {
-  font-size: clamp(3.5rem, 8vw, 7.5rem);
-  letter-spacing: -.07em;
-}
-.wordmaster-page .wm-answer-row .field-input {
-  min-height: 58px;
-  border-radius: 16px;
-  background: #090a0d;
-  font-size: 1.05rem;
-}
-.wordmaster-page .wm-answer-row .btn {
-  min-height: 58px;
-  padding-inline: 28px;
-  border-radius: 16px;
-}
-.wordmaster-page .wm-track {
-  height: 8px;
-  background: #252832;
-}
-@media (max-width: 1100px) {
-  .wordmaster-page .wm-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .wordmaster-page .wm-panel {
-    position: static;
-  }
-}
-@media (max-width: 620px) {
-  .wordmaster-page #app {
-    gap: 22px;
-  }
-  .wordmaster-page #app > .wm-view-head {
-    min-height: 0;
-    padding: 24px;
-    border-radius: 22px;
-  }
-  .wordmaster-page .wm-view-head .emoji-lg {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
-  }
-  .wordmaster-page #app .wm-view-head h1 {
-    font-size: clamp(2.6rem, 13vw, 3.7rem);
-  }
-  .wordmaster-page .wm-col > .list-group .list-row {
-    min-height: 66px;
-    padding-inline: 14px;
-  }
-  .wordmaster-page .wm-question {
-    min-height: 360px;
-    padding: 24px;
-    border-radius: 22px;
-  }
-  .wordmaster-page .wm-word {
-    font-size: clamp(3rem, 17vw, 5rem);
   }
 }

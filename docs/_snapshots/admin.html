@@ -572,9 +572,8 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(11,11,13,.86);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(16px) saturate(130%);
+  background: var(--bg);
 }
 .topbar-inner {
   height: 100%;
@@ -956,6 +955,10 @@ label.list-row {
   font-size: var(--fs-body-sm);
   line-height: var(--lh-snug);
   color: var(--text-2);
+}
+/* 부제가 비면 줄 자체를 접는다 — 렌더러가 빈 슬롯을 남겨도 행 높이가 늘지 않는다(§6.1). */
+.list-row-sub:empty {
+  display: none;
 }
 .list-row-value {
   flex: none;
@@ -1346,13 +1349,74 @@ label.list-row {
   background: var(--surface-3);
   color: var(--text);
 }
+/* 모바일 사이드바 — 가로 스크롤 스트립이 아니라 줄바꿈 칩 격자다(DESIGN.md §6.1 · v13).
+   첫 줄은 엠블럼(+제품 이름) 한 줄, 그 아래 그룹이 인라인으로 이어지며 그룹 사이는
+   헤어라인 하나다. 모든 항목이 잘리지 않고 보이고, 항목 높이는 44px 터치 하한을 지킨다.
+   설명 슬롯(.side-facts / .side-note / 제품 부제)은 모바일에서 렌더하지 않는다 —
+   사이드바 항목은 라벨 한 줄만이다. 6개 화면이 이 규칙 하나를 소비한다. */
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
     max-height: none;
+    overflow: visible;
+    padding: var(--space-3);
+  }
+  .sidebar > .sidebar-emblem, .sidebar > .sidebar-product {
+    flex: 1 0 100%;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .sidebar > .sidebar-emblem {
+    justify-content: flex-start;
+    height: auto;
+    padding: 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .sidebar-group + .sidebar-group {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--line-faint);
+  }
+  /* 컨트롤(체크박스 행 등)을 담은 그룹은 한 줄을 통째로 쓴다 — 칩 사이에 끼면 접힌다. */
+  .sidebar-group:has(> .list-group) {
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sidebar-group > .list-group {
+    flex: 1 0 100%;
+  }
+  .sidebar-label {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1) 0 0;
+  }
+  .sidebar-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
+    display: none;
   }
 }
 /* ==========================================================================
@@ -1511,10 +1575,10 @@ label.list-row {
 html.auth-pending body {
   visibility: hidden;
 }
+/* 캔버스는 순검정 한 면이다 — 글로우·격자 그라디언트 없음(DESIGN.md §1.1·§3). */
 .workspace-app {
   min-height: 100dvh;
-  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
-  background-size: auto, 64px 64px, 64px 64px, auto;
+  background: var(--bg);
 }
 .workspace-app .topbar {
   border-bottom-color: rgba(255,255,255,.08);
@@ -1544,10 +1608,10 @@ html.auth-pending body {
   gap: 22px;
   max-height: calc(100dvh - var(--topbar-h) - 56px);
   padding: 16px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
-  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+  /* 깊이는 명도 단차 한 단 + 헤어라인뿐 — 그라디언트·그림자 없음(§4). */
+  background: var(--surface);
 }
 .sidebar-product {
   display: flex;
@@ -1560,9 +1624,9 @@ html.auth-pending body {
   width: 48px;
   height: 48px;
   flex: none;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 15px;
-  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+  background: var(--surface-2);
 }
 .workspace-app .sidebar-emblem .brand-mark {
   width: 30px;
@@ -1614,21 +1678,23 @@ html.auth-pending body {
   background: rgba(41,151,255,.12);
   color: #f7fbff;
 }
+/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
 .workspace-app .sidebar-item-featured {
-  border-color: rgba(41,151,255,.2);
-  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
-  color: #d9efff;
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 .workspace-app .sidebar-item-featured .ui-icon {
-  color: #55b5ff;
+  color: var(--accent);
 }
+/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
 .sidebar-item-meta {
   margin-left: auto;
   padding: 3px 6px;
-  border: 1px solid rgba(48,209,88,.24);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(48,209,88,.08);
-  color: #65e787;
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: .52rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1648,7 +1714,6 @@ html.auth-pending body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
 }
 .workspace-app .view-head {
   align-items: flex-end;
@@ -1669,44 +1734,34 @@ html.auth-pending body {
 .workspace-app .btn {
   border-radius: 13px;
 }
+/* 모바일 — 줄바꿈 칩 격자는 위의 공통 .sidebar 규칙이 담당한다. 여기서는 워크스페이스
+   셸의 여백·곡률만 맞춘다. 가로 스크롤 스트립(overflow-x · nowrap · flex: none)은 폐지했다. */
 @media (max-width: 860px) {
   .workspace-app .app-shell {
     display: block;
   }
   .workspace-app .sidebar {
     position: static;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    contain: inline-size;
-    min-width: 0;
-    max-width: 100%;
+    gap: var(--space-2);
     max-height: none;
     margin-bottom: 30px;
-    padding: 10px;
-    overflow-x: auto;
+    padding: 12px;
     border-radius: 18px;
-    scrollbar-width: none;
-  }
-  .workspace-app .sidebar::-webkit-scrollbar {
-    display: none;
   }
   .workspace-app .sidebar-product {
-    flex: none;
-    padding-right: 12px;
-    border-right: 1px solid var(--line-faint);
+    gap: 10px;
+    padding: 0 0 8px;
   }
-  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
-    display: none;
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 40px;
+    height: 40px;
   }
-  .workspace-app .sidebar-group {
-    display: flex;
-    flex: none;
-    gap: 4px;
+  .workspace-app .sidebar-label {
+    padding-inline: 0 4px;
   }
   .workspace-app .sidebar-item {
-    flex: none;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 }
 @media (max-width: 620px) {
@@ -1720,12 +1775,9 @@ html.auth-pending body {
     margin-inline: -4px;
     margin-bottom: 24px;
   }
-  .workspace-app .sidebar-product {
-    padding: 0 10px 0 2px;
-  }
   .workspace-app .sidebar-product .sidebar-emblem {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
   }
   .workspace-app .view-head {
     align-items: flex-start;
@@ -1779,15 +1831,14 @@ html.auth-pending body {
   gap: var(--space-4);
   width: min(360px, 100%);
 }
-.ad-login-sub {
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  margin-top: 2px;
-}
 /* ---- 패널 ---- */
 .ad-panel {
   display: grid;
   gap: var(--space-5);
+}
+/* 뷰 부제 슬롯 — 사이드바에 부제가 없으므로 비어 있고, 비면 줄을 접는다(§6.1). */
+#viewSub:empty {
+  display: none;
 }
 /* 뷰 컨테이너 — 한 번에 하나만 보인다. hidden 속성으로 감추므로 여기서 display를 주면
    UA의 [hidden] 규칙을 이겨 버린다. 그래서 :not([hidden])에만 display를 건다. */
@@ -1896,20 +1947,10 @@ html.auth-pending body {
   min-width: 0;
   padding: clamp(36px, 6vw, 84px);
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.1);
+  border: 1px solid var(--line-faint);
   border-radius: 32px;
-  background: radial-gradient(circle at 78% 22%, rgba(41,151,255,.22), transparent 18rem), linear-gradient(145deg, #161a24, #090a0e 72%);
-}
-.ad-login-intro::after {
-  position: absolute;
-  right: -90px;
-  bottom: -120px;
-  width: 320px;
-  height: 320px;
-  border: 1px solid rgba(41,151,255,.15);
-  border-radius: 50%;
-  box-shadow: 0 0 0 60px rgba(41,151,255,.025), 0 0 0 120px rgba(41,151,255,.018);
-  content: "";
+  /* 그라디언트·글로우 링 없음 — 한 단 밝은 면 + 헤어라인(DESIGN.md §3·§4). */
+  background: var(--surface);
 }
 .ad-login-symbol {
   display: grid;
@@ -1933,15 +1974,6 @@ html.auth-pending body {
   font-size: clamp(3rem, 3.4vw, 4rem);
   line-height: .95;
   letter-spacing: -.07em;
-}
-.ad-login-intro > p {
-  position: relative;
-  z-index: 1;
-  max-width: 560px;
-  margin-top: 24px;
-  color: #9aa2b2;
-  font-size: 1.05rem;
-  line-height: 1.7;
 }
 .ad-login-facts {
   position: relative;
@@ -1972,10 +2004,9 @@ html.auth-pending body {
   align-self: center;
   width: 100%;
   padding: 34px;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 26px;
-  background: #14161c;
-  box-shadow: 0 30px 90px rgba(0,0,0,.38);
+  background: var(--surface);
 }
 .ad-login-card-head {
   display: flex;
@@ -2010,9 +2041,9 @@ html.auth-pending body {
 }
 .admin-page #stats {
   overflow: hidden;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 20px;
-  background: linear-gradient(110deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 42%, rgba(48,209,88,.05));
+  background: var(--surface);
 }
 .admin-page #stats > div {
   min-height: 116px;
@@ -2066,9 +2097,6 @@ html.auth-pending body {
   .ad-login-intro h1 {
     font-size: clamp(2.45rem, 12vw, 3.1rem);
   }
-  .ad-login-intro > p {
-    font-size: .92rem;
-  }
   .ad-login-facts {
     margin-top: 28px;
   }
@@ -2110,20 +2138,19 @@ html.auth-pending body {
 
   <div class="container-wide app-page">
     <div class="app-shell">
-      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 텍스트 행이다
-           (plan.md §3.4 / DESIGN.md §1.1). 항목 아이콘은 로고 엠블럼(.sidebar-emblem)으로
-           대체했다 — 개별 항목에는 더 이상 아이콘 슬롯을 두지 않는다.
-           각 항목은 뷰 전환 버튼이고, 뷰 제목·부제는 여기 적힌 라벨에서 나온다 —
-           admin.js가 .sidebar-item-text와 data-sub를 읽는다. 라벨은 한 곳에만 적는다. -->
+      <!-- 사이드바는 대문자 소제목으로 묶인 그룹이고, 각 항목은 아이콘 + 라벨 한 줄이다
+           (DESIGN.md §1.1·§6.1). 항목 아래 부제·설명을 두지 않는다 — 뷰 제목은 여기 적힌
+           라벨에서 나오고(admin.js가 .sidebar-item-text를 읽는다) 범위 설명은 본문 캡션이
+           담당한다. 같은 문구를 두 곳에 적지 않는다. -->
       <aside class="sidebar" aria-label="관리 메뉴">
         <div class="sidebar-product">
           <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
-          <div class="sidebar-product-copy"><span>OWNER ONLY</span><strong>관리 센터</strong></div>
+          <div class="sidebar-product-copy"><strong>관리 센터</strong></div>
         </div>
 
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" data-sub="운영 상태 요약" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
+          <button class="sidebar-item" type="button" data-view="overview" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
@@ -2135,34 +2162,27 @@ html.auth-pending body {
 
         <nav class="sidebar-group" aria-label="사용자 관리">
           <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users" data-sub="계정 생성·삭제와 앱별 이벤트"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-users"></use></svg><span class="sidebar-item-text">사용자</span></button>
-          <button class="sidebar-item" type="button" data-view="sessions" data-sub="최근 90일 로그인 세션"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg><span class="sidebar-item-text">접속 기기</span></button>
+          <button class="sidebar-item" type="button" data-view="users"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-users"></use></svg><span class="sidebar-item-text">사용자</span></button>
+          <button class="sidebar-item" type="button" data-view="sessions"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg><span class="sidebar-item-text">접속 기기</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="학습 데이터">
           <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers" data-sub="모든 계정의 채점에 적용됩니다"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-message"></use></svg><span class="sidebar-item-text">공용 답안</span></button>
+          <button class="sidebar-item" type="button" data-view="answers"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-message"></use></svg><span class="sidebar-item-text">공용 답안</span></button>
         </nav>
-
-        <div class="sidebar-group">
-          <p class="sidebar-label">범위</p>
-          <p class="side-note">세션은 최근 90일, IP 통계는 최근 30일 기준입니다. 관리자 세션은 탭을 닫으면 사라집니다.</p>
-        </div>
       </aside>
 
       <main id="adminMain" class="app-main" tabindex="-1">
         <section id="login" class="ad-login hidden">
           <div class="ad-login-intro">
-            <span class="workspace-kicker"><i aria-hidden="true"></i>PRIVATE OPERATIONS</span>
             <div class="ad-login-symbol" aria-hidden="true"><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></div>
-            <h1>워크스페이스를<br>운영하는 한 화면.</h1>
-            <p>계정, 접속 기기, 학습 데이터를 안전한 관리자 세션에서 확인합니다.</p>
+            <h1>워크스페이스를 운영하는 한 화면.</h1>
             <ul class="ad-login-facts" aria-label="관리자 화면 특징"><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg>탭 단위 세션</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg>기기 추적</li><li><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-database"></use></svg>학습 데이터</li></ul>
           </div>
           <form id="adminLogin" class="card ad-login-card">
             <div class="ad-login-card-head">
               <span class="ad-secure-mark"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-key"></use></svg></span>
-              <div><h2 class="title-3">관리자 인증</h2><p class="ad-login-sub">Owner access only</p></div>
+              <h2 class="title-3">관리자 인증</h2>
             </div>
             <div class="field">
               <label class="field-label" for="adminPassword">관리자 비밀번호</label>
@@ -2177,9 +2197,10 @@ html.auth-pending body {
           <header class="view-head">
             <div class="view-head-main">
               <div>
-                <span class="workspace-kicker"><i aria-hidden="true"></i>ADMIN CONSOLE</span>
                 <h1 id="viewTitle" class="title-1">개요</h1>
-                <p id="viewSub">운영 상태 요약</p>
+                <!-- 부제 슬롯. admin.js가 data-sub를 읽어 채우지만 이제 사이드바에 부제가
+                     없으므로 항상 비어 있고, 빈 p는 CSS(:empty)로 접힌다. -->
+                <p id="viewSub"></p>
               </div>
             </div>
             <div class="toolbar-group">

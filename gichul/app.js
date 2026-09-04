@@ -132,6 +132,19 @@
 
   // ---- 렌더 -------------------------------------------------------------------
 
+  // 사이드바 필터 그룹 하나 = system.css의 .disclosure(DESIGN.md §7.2). 그룹 자체가 둥근
+  // 컨테이너라 안에 .list-group을 한 번 더 두르지 않고 행을 본문에 직접 넣는다.
+  // 항상 open으로 그린다 — 템플릿은 뷰포트 폭을 모른다. 모바일에서 첫 그룹만 남기고
+  // 접는 것은 paint()가 matchMedia로 결정한다(data-group이 그 열쇠다).
+  // note는 접힌 각주다(§6.1 ②): 사이드바에 서술문을 두지 않고 summary의 툴팁으로 내린다.
+  function renderDisclosure(key, title, hint, body, note) {
+    return `<details class="disclosure gi-filter" open data-group="${escapeHtml(key)}">`
+      + `<summary class="disclosure-head"${note ? ` title="${escapeHtml(note)}"` : ''}>`
+      + `<span class="disclosure-title">${escapeHtml(title)}</span>`
+      + `<span class="disclosure-hint">${escapeHtml(hint)}</span></summary>`
+      + `<div class="disclosure-body gi-filter-body">${body}</div></details>`;
+  }
+
   function renderFilterGroup(title, name, options, chosen, note) {
     if (!options.length) return '';
     // 행에 다른 컨트롤이 없으므로 행 자체를 <label>로 둔다 — 체크박스와 보이는 이름이
@@ -142,11 +155,9 @@
       + `<input type="checkbox" data-facet="${escapeHtml(name)}"`
       + ` value="${escapeHtml(value)}"${chosen.includes(value) ? ' checked' : ''}>`
       + `</span></label>`).join('');
-    return `<div class="sidebar-group">`
-      + `<p class="sidebar-label">${escapeHtml(title)}</p>`
-      + `<div class="list-group">${rows}</div>`
-      + (note ? `<p class="list-group-foot">${escapeHtml(note)}</p>` : '')
-      + `</div>`;
+    // 빈 선택 = 제한 없음. 그 설명문("고르지 않으면 전부입니다")은 힌트 '전체'가 대신한다.
+    const hint = chosen.length ? `${chosen.length}개` : '전체';
+    return renderDisclosure(name, title, hint, rows, note);
   }
 
   function renderFilters(manifest, state) {
@@ -155,44 +166,44 @@
       + ` data-subject="${escapeHtml(key)}"${key === state.subject ? ' aria-current="page"' : ''}>`
       + `${escapeHtml(SUBJECT_LABEL[key] || key)}</button>`).join('');
 
+    // 옵션 행은 라벨 한 줄이다 — "정답표 포함"은 익숙한 말이라 설명 부제를 달지 않는다(§6.1 ①).
     const downloadRows = [
       {
         key: 'includeAnswers',
         title: '정답표 포함',
-        sub: '문제지 뒤에 해당 회차 정답표를 붙입니다.',
         disabled: false,
         checked: state.includeAnswers,
       },
     ].map((option) => {
       const tag = option.disabled ? 'div' : 'label';
       return `<${tag} class="list-row"${option.disabled ? ' aria-disabled="true"' : ''}>`
-        + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(option.title)}</span>`
-        + `<span class="list-row-sub">${escapeHtml(option.sub)}</span></span>`
+        + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(option.title)}</span></span>`
         + `<span class="list-row-accessory"><input type="checkbox" data-option="${option.key}"`
         + `${option.checked ? ' checked' : ''}${option.disabled ? ' disabled' : ''}></span></${tag}>`;
     }).join('');
 
-    return `<nav class="sidebar-group" aria-label="과목 선택">`
-      + `<p class="sidebar-label">과목</p>${subjectItems}</nav>`
-      + renderFilterGroup('시행', 'rounds', facets.rounds.map((value) => ({ value, label: ROUND_LABEL[value] || value })), state.rounds, '고르지 않으면 전부입니다.')
+    // 저작권 문장은 푸터가 정본이다 — 같은 문자열을 사이드바에 한 번 더 세우지 않는다.
+    return renderDisclosure('subject', '과목', SUBJECT_LABEL[state.subject] || state.subject,
+      `<nav class="gi-subjects" aria-label="과목 선택">${subjectItems}</nav>`, '')
+      + renderFilterGroup('시행', 'rounds', facets.rounds.map((value) => ({ value, label: ROUND_LABEL[value] || value })), state.rounds, '')
       + renderFilterGroup('학년도', 'years', facets.years.map((value) => ({ value: String(value), label: `${value}학년도` })), state.years.map(String), '')
       + renderFilterGroup('선택과목', 'tracks', facets.tracks.map((value) => ({ value, label: TRACK_LABEL[value] || value })), state.tracks, SUBJECT_NOTE[state.subject] || '')
-      + `<div class="sidebar-group"><p class="sidebar-label">내려받기</p>`
-      + `<div class="list-group">${downloadRows}</div></div>`
-      + `<div class="sidebar-group"><p class="sidebar-label">저작권</p>`
-      + `<p class="side-note">문항 저작권은 한국교육과정평가원에 있습니다. 비상업적 개인 학습 목적으로만 내려받아 씁니다.</p></div>`;
+      + `<div class="sidebar-group"><div class="list-group">${downloadRows}</div></div>`;
   }
 
   function renderRow(exam, state) {
     const blocked = state.mode === 'excerpt' && !isExcerptable(exam);
-    const title = `${ROUND_LABEL[exam.round] || exam.round} · ${SUBJECT_LABEL[exam.subject] || exam.subject}`
-      + `${exam.track ? ` (${TRACK_LABEL[exam.track] || exam.track})` : ''}`;
-    let sub = `문제지 ${exam.pages}쪽`;
+    // 반복 메타를 행마다 다시 쓰지 않는다: 과목은 사이드바가, 학년도는 그룹 머리가 이미
+    // 말한다. 행 제목은 시행(+선택과목)뿐이고 sr-only 라벨만 전체 이름을 갖는다.
+    const title = `${ROUND_LABEL[exam.round] || exam.round}`
+      + `${exam.track ? ` · ${TRACK_LABEL[exam.track] || exam.track}` : ''}`;
+    // 행 우측 값 한 조각(.list-row-value) — 부제 서술문이 아니라 데이터 값이다(§6.1).
+    let value = `${exam.pages}쪽`;
     if (state.mode === 'excerpt') {
-      if (blocked) sub = '선택과목 구간이 없어 발췌할 수 없습니다';
+      if (blocked) value = '발췌 불가';
       else {
         const [from, to] = exam.sections.selection;
-        sub = `선택과목만 ${from}–${to}쪽`;
+        value = `선택과목만 ${from}–${to}쪽`;
       }
     }
     const id = `gi-pick-${exam.id}`;
@@ -200,11 +211,13 @@
       ? ''
       : `<label class="list-row-stretch gi-pick-hit" for="${escapeHtml(id)}">`
         + `<span class="sr-only">${escapeHtml(examLabel(exam))} 선택</span></label>`;
+    // chevron(.list-row-nav)은 실제로 이동하는 컨트롤인 "열기"에만 붙인다 — 행 전체의
+    // 기본 동작은 선택(체크)이므로 행에 chevron을 달면 거짓 신호가 된다.
     return `<div class="list-row"${blocked ? ' aria-disabled="true"' : ''}>${lead}`
-      + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(title)}</span>`
-      + `<span class="list-row-sub">${escapeHtml(sub)}</span></span>`
+      + `<span class="list-row-body"><span class="list-row-title">${escapeHtml(title)}</span></span>`
+      + `<span class="list-row-value">${escapeHtml(value)}</span>`
       + `<span class="list-row-accessory gi-accessory">`
-      + `<button class="btn btn-ghost btn-sm" type="button" data-open="${escapeHtml(exam.id)}">열기</button>`
+      + `<button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="${escapeHtml(exam.id)}">열기</button>`
       + `<input type="checkbox" id="${escapeHtml(id)}" data-pick="${escapeHtml(exam.id)}"`
       + `${state.selected.includes(exam.id) ? ' checked' : ''}${blocked ? ' disabled' : ''}></span></div>`;
   }
@@ -485,8 +498,16 @@
 
   function paint() {
     pruneSelection();
+    const wasOpen = new Set([...elements.filters.querySelectorAll('.gi-filter[open]')]
+      .map((details) => details.dataset.group));
+    const firstPaint = !elements.filters.children.length;
     elements.filters.innerHTML = renderFilters(manifest, state);
     elements.body.innerHTML = renderBody(manifest, state);
+    if (matchMedia('(max-width: 860px)').matches) {
+      elements.filters.querySelectorAll('.gi-filter').forEach((details, index) => {
+        details.open = firstPaint ? index === 0 : wasOpen.has(details.dataset.group);
+      });
+    }
   }
 
   function status(html) {

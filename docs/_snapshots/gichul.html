@@ -573,9 +573,8 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(11,11,13,.86);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(16px) saturate(130%);
+  background: var(--bg);
 }
 .topbar-inner {
   height: 100%;
@@ -957,6 +956,10 @@ label.list-row {
   font-size: var(--fs-body-sm);
   line-height: var(--lh-snug);
   color: var(--text-2);
+}
+/* 부제가 비면 줄 자체를 접는다 — 렌더러가 빈 슬롯을 남겨도 행 높이가 늘지 않는다(§6.1). */
+.list-row-sub:empty {
+  display: none;
 }
 .list-row-value {
   flex: none;
@@ -1347,13 +1350,74 @@ label.list-row {
   background: var(--surface-3);
   color: var(--text);
 }
+/* 모바일 사이드바 — 가로 스크롤 스트립이 아니라 줄바꿈 칩 격자다(DESIGN.md §6.1 · v13).
+   첫 줄은 엠블럼(+제품 이름) 한 줄, 그 아래 그룹이 인라인으로 이어지며 그룹 사이는
+   헤어라인 하나다. 모든 항목이 잘리지 않고 보이고, 항목 높이는 44px 터치 하한을 지킨다.
+   설명 슬롯(.side-facts / .side-note / 제품 부제)은 모바일에서 렌더하지 않는다 —
+   사이드바 항목은 라벨 한 줄만이다. 6개 화면이 이 규칙 하나를 소비한다. */
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
     max-height: none;
+    overflow: visible;
+    padding: var(--space-3);
+  }
+  .sidebar > .sidebar-emblem, .sidebar > .sidebar-product {
+    flex: 1 0 100%;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .sidebar > .sidebar-emblem {
+    justify-content: flex-start;
+    height: auto;
+    padding: 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .sidebar-group + .sidebar-group {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--line-faint);
+  }
+  /* 컨트롤(체크박스 행 등)을 담은 그룹은 한 줄을 통째로 쓴다 — 칩 사이에 끼면 접힌다. */
+  .sidebar-group:has(> .list-group) {
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sidebar-group > .list-group {
+    flex: 1 0 100%;
+  }
+  .sidebar-label {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1) 0 0;
+  }
+  .sidebar-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
+    display: none;
   }
 }
 /* ==========================================================================
@@ -1512,10 +1576,10 @@ label.list-row {
 html.auth-pending body {
   visibility: hidden;
 }
+/* 캔버스는 순검정 한 면이다 — 글로우·격자 그라디언트 없음(DESIGN.md §1.1·§3). */
 .workspace-app {
   min-height: 100dvh;
-  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
-  background-size: auto, 64px 64px, 64px 64px, auto;
+  background: var(--bg);
 }
 .workspace-app .topbar {
   border-bottom-color: rgba(255,255,255,.08);
@@ -1545,10 +1609,10 @@ html.auth-pending body {
   gap: 22px;
   max-height: calc(100dvh - var(--topbar-h) - 56px);
   padding: 16px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
-  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+  /* 깊이는 명도 단차 한 단 + 헤어라인뿐 — 그라디언트·그림자 없음(§4). */
+  background: var(--surface);
 }
 .sidebar-product {
   display: flex;
@@ -1561,9 +1625,9 @@ html.auth-pending body {
   width: 48px;
   height: 48px;
   flex: none;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 15px;
-  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+  background: var(--surface-2);
 }
 .workspace-app .sidebar-emblem .brand-mark {
   width: 30px;
@@ -1615,21 +1679,23 @@ html.auth-pending body {
   background: rgba(41,151,255,.12);
   color: #f7fbff;
 }
+/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
 .workspace-app .sidebar-item-featured {
-  border-color: rgba(41,151,255,.2);
-  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
-  color: #d9efff;
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 .workspace-app .sidebar-item-featured .ui-icon {
-  color: #55b5ff;
+  color: var(--accent);
 }
+/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
 .sidebar-item-meta {
   margin-left: auto;
   padding: 3px 6px;
-  border: 1px solid rgba(48,209,88,.24);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(48,209,88,.08);
-  color: #65e787;
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: .52rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1649,7 +1715,6 @@ html.auth-pending body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
 }
 .workspace-app .view-head {
   align-items: flex-end;
@@ -1670,44 +1735,34 @@ html.auth-pending body {
 .workspace-app .btn {
   border-radius: 13px;
 }
+/* 모바일 — 줄바꿈 칩 격자는 위의 공통 .sidebar 규칙이 담당한다. 여기서는 워크스페이스
+   셸의 여백·곡률만 맞춘다. 가로 스크롤 스트립(overflow-x · nowrap · flex: none)은 폐지했다. */
 @media (max-width: 860px) {
   .workspace-app .app-shell {
     display: block;
   }
   .workspace-app .sidebar {
     position: static;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    contain: inline-size;
-    min-width: 0;
-    max-width: 100%;
+    gap: var(--space-2);
     max-height: none;
     margin-bottom: 30px;
-    padding: 10px;
-    overflow-x: auto;
+    padding: 12px;
     border-radius: 18px;
-    scrollbar-width: none;
-  }
-  .workspace-app .sidebar::-webkit-scrollbar {
-    display: none;
   }
   .workspace-app .sidebar-product {
-    flex: none;
-    padding-right: 12px;
-    border-right: 1px solid var(--line-faint);
+    gap: 10px;
+    padding: 0 0 8px;
   }
-  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
-    display: none;
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 40px;
+    height: 40px;
   }
-  .workspace-app .sidebar-group {
-    display: flex;
-    flex: none;
-    gap: 4px;
+  .workspace-app .sidebar-label {
+    padding-inline: 0 4px;
   }
   .workspace-app .sidebar-item {
-    flex: none;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 }
 @media (max-width: 620px) {
@@ -1721,12 +1776,9 @@ html.auth-pending body {
     margin-inline: -4px;
     margin-bottom: 24px;
   }
-  .workspace-app .sidebar-product {
-    padding: 0 10px 0 2px;
-  }
   .workspace-app .sidebar-product .sidebar-emblem {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
   }
   .workspace-app .view-head {
     align-items: flex-start;
@@ -1741,13 +1793,35 @@ html.auth-pending body {
 <style>/* gichul/gichul.css (inlined) */
 /* ==========================================================================
    기출 화면 (gichul) — 화면 전용 글루만 담는다.
-   레퍼런스는 학습 화면과 같은 iOS 그룹 리스트 + 인셋(DESIGN.md §1)이고, 골격·행·툴바·
-   세그먼티드·배지는 전부 system.css의 프리미티브를 그대로 소비한다(§7). 여기 있는 것은
-   그 프리미티브가 다루지 않는 배치뿐이다: 결과 그룹의 세로 리듬, 행 우측의 두 컨트롤,
-   그리고 실패를 알리는 줄.
+   레퍼런스는 조작 화면의 macOS 앱 어법(DESIGN.md §1: 툴바·사이드바·표)이고, 골격·행·
+   툴바·세그먼티드·접힘 그룹은 전부 system.css의 프리미티브를 그대로 소비한다(§7).
+   여기 있는 것은 그 프리미티브가 다루지 않는 배치뿐이다: 사이드바 안 접힘 그룹의 밀도,
+   결과 그룹의 세로 리듬, 행 우측의 두 컨트롤, 좁은 폭에서의 행·툴바 줄바꿈, 실패 줄.
    색 토큰을 정의하지 않는다 — 단일 원본은 assets/css/system.css다(§3).
    깊이는 명도 단차 + 1px 헤어라인이며 그림자·그라디언트를 쓰지 않는다(§4).
    ========================================================================== */
+/* ---- 필터 사이드바 --------------------------------------------------------
+   그룹 하나 = .disclosure(§7.2). 사이드바 안에서는 다섯 그룹이 한 덩어리로 읽혀야 하므로
+   콘솔 사이드바의 24px 그룹 간격 대신 12px을 쓴다. 모바일 간격은 system.css의 공통
+   사이드바 규칙(8px)이 담당하므로 데스크톱에만 건다. */
+@media (min-width: 861px) {
+  #gichulFilters {
+    gap: var(--space-3);
+  }
+}
+/* 접힘 본문이 곧 그룹 컨테이너다 — 행을 직접 담고, .list-group을 한 번 더 두르지 않는다.
+   행 사이 헤어라인은 .list-row + .list-row가 자동으로 그린다(§7.1). */
+.gi-filter-body {
+  gap: 0;
+  padding: 0;
+}
+/* 과목은 단일 선택 탐색이라 .sidebar-item을 쓴다. 데스크톱은 세로 목록. */
+.gi-subjects {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-2);
+}
+/* ---- 결과 목록 ------------------------------------------------------------ */
 .gi-body {
   display: grid;
   gap: var(--space-4);
@@ -1832,11 +1906,51 @@ html.auth-pending body {
   font-size: var(--fs-caption);
   line-height: var(--lh-body);
 }
-/* 좁은 화면에서는 사이드바가 본문 위로 접히므로(system.css @860px) 필터 그룹의
-   세로 길이를 줄인다. 행 높이는 터치 타깃 하한을 지키는 --row-min-h 그대로 둔다. */
+/* ---- 좁은 폭 --------------------------------------------------------------
+   사이드바는 본문 위로 올라온다(system.css @860px, 줄바꿈 칩 격자). 접힘 그룹은 칩
+   사이에 끼지 않고 한 줄을 통째로 쓰며, 과목 목록은 칩으로 흐른다. 첫 결과 행이
+   스크롤 없이 보이는 것이 목표이므로 셸의 세로 간격도 한 단 줄인다 — 글자 크기·행
+   높이는 건드리지 않는다(§6.1). */
 @media (max-width: 860px) {
+  .app-shell {
+    gap: var(--space-5);
+  }
+  .sidebar > .gi-filter {
+    flex: 1 0 100%;
+  }
+  .gi-subjects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
   .gi-body {
     gap: var(--space-3);
+  }
+}
+/* 375px에서 제목 + 값 + 두 컨트롤이 한 줄에 서지 않는다. 값(쪽수·구간)을 두 번째
+   줄로 내려 제목이 어절 단위로 쪼개지지 않게 한다. 툴바도 세 줄로 정리한다:
+   범위 세그먼트 / 선택 개수 + 전체 선택 / 병합 버튼. */
+@media (max-width: 480px) {
+  .gi-body .list-row {
+    flex-wrap: wrap;
+  }
+  .gi-body .list-row-value {
+    flex: 1 0 100%;
+    order: 3;
+    margin-left: 0;
+    text-align: left;
+  }
+  .gi-body .toolbar .segmented {
+    flex: 1 0 100%;
+  }
+  .gi-body .toolbar .toolbar-spacer {
+    display: none;
+  }
+  .gi-body .toolbar .gi-count {
+    flex: 1 1 auto;
+  }
+  .gi-body .toolbar #gichulMerge {
+    flex: 1 0 100%;
   }
 }
 </style>
@@ -1849,7 +1963,7 @@ html.auth-pending body {
 <body>
   <div class="snap-note"><strong>무엇인가</strong> — 기출(<code>/gichul/index.html</code>) 문서를 얼린 스냅샷이다. 링크된 CSS를 인라인하고 스크립트를 걷어냈다.
   <br><strong>정적으로 반영한 상태</strong> — 필터와 결과는 <code>gichul/app.js</code>의 <code>renderFilters()</code>·<code>renderBody()</code>를 <strong>실제로 실행</strong>해 얻은 마크업이다. 입력은 <code>scripts/snapshot.mjs</code>의 고정 표본(<code>GICHUL_FIXTURE</code>)이고, 과목은 국어 · 범위는 <strong>선택과목 발췌</strong> · 정답표 포함 · 두 항목 선택 상태다.
-  <br><strong>여기서 확인할 것</strong> — 필터가 표본에서 도출한 값(학년도 · 시행 · 선택과목)만 내는지, 발췌 모드에서 선택과목 구간이 없는 2021학년도 수능 행이 <strong>비활성</strong>으로 내려앉고 체크박스가 잠기는지, 행마다 선택과목 전용 구간이 부제 한 줄로 읽히는지, 툴바의 선택 개수와 버튼 상태가 선택과 맞는지, 그리고 그룹 리스트 · 세그먼티드 · 툴바가 전부 <code>system.css</code>의 프리미티브를 그대로 쓰는지.
+  <br><strong>여기서 확인할 것</strong> — 필터가 표본에서 도출한 값(학년도 · 시행 · 선택과목)만 내는지, 발췌 모드에서 선택과목 구간이 없는 2021학년도 수능 행이 <strong>비활성</strong>으로 내려앉고 체크박스가 잠기는지, 행마다 선택과목 전용 구간이 우측 값 한 조각으로 읽히는지, 툴바의 선택 개수와 버튼 상태가 선택과 맞는지, 그리고 그룹 리스트 · 세그먼티드 · 툴바가 전부 <code>system.css</code>의 프리미티브를 그대로 쓰는지.
   <br><strong>주의</strong> — 미로그인 접근은 <code>account.js</code>와 <code>app.js</code>가 랜딩으로 되돌린다. 이 사본은 로그인한 방문자가 보는 화면이다. 실제 시험 목록은 이 문서가 아니라 로그인 뒤 <code>GET /api/gichul/manifest</code>에서 온다 — 표본은 계약의 모양을 보여주기 위한 것이지 실제 수록 범위가 아니다. 정적 사본이라 체크박스 · 버튼 · 병합 내려받기는 동작하지 않는다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <a class="skip-link" href="#app">본문으로 건너뛰기</a>
@@ -1870,7 +1984,7 @@ html.auth-pending body {
       <!-- 필터는 전부 app.js가 매니페스트에서 도출해 그린다. 과목·년도·시행 목록을 여기
            마크업에 적으면 손으로 적은 사본이 되고(승격 규칙 "파생 가능한 것을 손으로
            적지 않는다"), 미로그인 문서에 시험 목록이 남는다. -->
-      <aside id="gichulFilters" class="sidebar" aria-label="기출 필터"><nav class="sidebar-group" aria-label="과목 선택"><p class="sidebar-label">과목</p><button class="sidebar-item" type="button" data-subject="english">영어</button><button class="sidebar-item" type="button" data-subject="korean" aria-current="page">국어</button><button class="sidebar-item" type="button" data-subject="math">수학</button><button class="sidebar-item" type="button" data-subject="politics_law">정치와 법</button><button class="sidebar-item" type="button" data-subject="soc_culture">사회·문화</button></nav><div class="sidebar-group"><p class="sidebar-label">시행</p><div class="list-group"><label class="list-row"><span class="list-row-body"><span class="list-row-title">6월</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="rounds" value="06"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">수능</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="rounds" value="csat"></span></label></div><p class="list-group-foot">고르지 않으면 전부입니다.</p></div><div class="sidebar-group"><p class="sidebar-label">학년도</p><div class="list-group"><label class="list-row"><span class="list-row-body"><span class="list-row-title">2021학년도</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="years" value="2021"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">2024학년도</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="years" value="2024"></span></label></div></div><div class="sidebar-group"><p class="sidebar-label">선택과목</p><div class="list-group"><label class="list-row"><span class="list-row-body"><span class="list-row-title">언어와 매체</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="tracks" value="eonmae"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">화법과 작문</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="tracks" value="hwajak"></span></label></div><p class="list-group-foot">2022학년도부터 공통 + 화법과 작문 · 언어와 매체 체제입니다.</p></div><div class="sidebar-group"><p class="sidebar-label">내려받기</p><div class="list-group"><label class="list-row"><span class="list-row-body"><span class="list-row-title">정답표 포함</span><span class="list-row-sub">문제지 뒤에 해당 회차 정답표를 붙입니다.</span></span><span class="list-row-accessory"><input type="checkbox" data-option="includeAnswers" checked></span></label></div></div><div class="sidebar-group"><p class="sidebar-label">저작권</p><p class="side-note">문항 저작권은 한국교육과정평가원에 있습니다. 비상업적 개인 학습 목적으로만 내려받아 씁니다.</p></div></aside>
+      <aside id="gichulFilters" class="sidebar" aria-label="기출 필터"><details class="disclosure gi-filter" open data-group="subject"><summary class="disclosure-head"><span class="disclosure-title">과목</span><span class="disclosure-hint">국어</span></summary><div class="disclosure-body gi-filter-body"><nav class="gi-subjects" aria-label="과목 선택"><button class="sidebar-item" type="button" data-subject="english">영어</button><button class="sidebar-item" type="button" data-subject="korean" aria-current="page">국어</button><button class="sidebar-item" type="button" data-subject="math">수학</button><button class="sidebar-item" type="button" data-subject="politics_law">정치와 법</button><button class="sidebar-item" type="button" data-subject="soc_culture">사회·문화</button></nav></div></details><details class="disclosure gi-filter" open data-group="rounds"><summary class="disclosure-head"><span class="disclosure-title">시행</span><span class="disclosure-hint">전체</span></summary><div class="disclosure-body gi-filter-body"><label class="list-row"><span class="list-row-body"><span class="list-row-title">6월</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="rounds" value="06"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">수능</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="rounds" value="csat"></span></label></div></details><details class="disclosure gi-filter" open data-group="years"><summary class="disclosure-head"><span class="disclosure-title">학년도</span><span class="disclosure-hint">전체</span></summary><div class="disclosure-body gi-filter-body"><label class="list-row"><span class="list-row-body"><span class="list-row-title">2021학년도</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="years" value="2021"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">2024학년도</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="years" value="2024"></span></label></div></details><details class="disclosure gi-filter" open data-group="tracks"><summary class="disclosure-head" title="2022학년도부터 공통 + 화법과 작문 · 언어와 매체 체제입니다."><span class="disclosure-title">선택과목</span><span class="disclosure-hint">전체</span></summary><div class="disclosure-body gi-filter-body"><label class="list-row"><span class="list-row-body"><span class="list-row-title">언어와 매체</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="tracks" value="eonmae"></span></label><label class="list-row"><span class="list-row-body"><span class="list-row-title">화법과 작문</span></span><span class="list-row-accessory"><input type="checkbox" data-facet="tracks" value="hwajak"></span></label></div></details><div class="sidebar-group"><div class="list-group"><label class="list-row"><span class="list-row-body"><span class="list-row-title">정답표 포함</span></span><span class="list-row-accessory"><input type="checkbox" data-option="includeAnswers" checked></span></label></div></div></aside>
 
       <main id="app" class="app-main" tabindex="-1">
         <div class="view-head">
@@ -1881,7 +1995,7 @@ html.auth-pending body {
             </div>
           </div>
         </div>
-        <div id="gichulBody" class="gi-body"><div class="toolbar toolbar-sticky"><div class="segmented" role="group" aria-label="내려받기 범위"><button class="segmented-btn" type="button" data-mode="full" aria-pressed="false">전체 시험지</button><button class="segmented-btn" type="button" data-mode="excerpt" aria-pressed="true">선택과목 발췌</button></div><span class="toolbar-spacer"></span><span class="gi-count">선택 2개 / 4개</span><button class="btn btn-secondary btn-sm" type="button" data-bulk="all">전체 선택</button><button class="btn btn-primary btn-sm" type="button" id="gichulMerge">PDF로 병합 내려받기</button></div><div id="gichulStatus" class="gi-status" role="status" aria-live="polite"></div><section class="gi-group"><h2 class="list-group-head" id="gi-year-2021">2021학년도</h2><div class="list-group" role="group" aria-labelledby="gi-year-2021"><div class="list-row" aria-disabled="true"><span class="list-row-body"><span class="list-row-title">수능 · 국어</span><span class="list-row-sub">선택과목 구간이 없어 발췌할 수 없습니다</span></span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm" type="button" data-open="2020-csat-korean-question">열기</button><input type="checkbox" id="gi-pick-2020-csat-korean-question" data-pick="2020-csat-korean-question" disabled></span></div></div></section><section class="gi-group"><h2 class="list-group-head" id="gi-year-2024">2024학년도</h2><div class="list-group" role="group" aria-labelledby="gi-year-2024"><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-06-korean-eonmae-question"><span class="sr-only">2024학년도 6월 국어 (언어와 매체) 선택</span></label><span class="list-row-body"><span class="list-row-title">6월 · 국어 (언어와 매체)</span><span class="list-row-sub">선택과목만 13–16쪽</span></span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm" type="button" data-open="2023-06-korean-eonmae-question">열기</button><input type="checkbox" id="gi-pick-2023-06-korean-eonmae-question" data-pick="2023-06-korean-eonmae-question"></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-06-korean-hwajak-question"><span class="sr-only">2024학년도 6월 국어 (화법과 작문) 선택</span></label><span class="list-row-body"><span class="list-row-title">6월 · 국어 (화법과 작문)</span><span class="list-row-sub">선택과목만 9–12쪽</span></span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm" type="button" data-open="2023-06-korean-hwajak-question">열기</button><input type="checkbox" id="gi-pick-2023-06-korean-hwajak-question" data-pick="2023-06-korean-hwajak-question" checked></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-csat-korean-eonmae-question"><span class="sr-only">2024학년도 수능 국어 (언어와 매체) 선택</span></label><span class="list-row-body"><span class="list-row-title">수능 · 국어 (언어와 매체)</span><span class="list-row-sub">선택과목만 13–16쪽</span></span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm" type="button" data-open="2023-csat-korean-eonmae-question">열기</button><input type="checkbox" id="gi-pick-2023-csat-korean-eonmae-question" data-pick="2023-csat-korean-eonmae-question"></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-csat-korean-hwajak-question"><span class="sr-only">2024학년도 수능 국어 (화법과 작문) 선택</span></label><span class="list-row-body"><span class="list-row-title">수능 · 국어 (화법과 작문)</span><span class="list-row-sub">선택과목만 9–12쪽</span></span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm" type="button" data-open="2023-csat-korean-hwajak-question">열기</button><input type="checkbox" id="gi-pick-2023-csat-korean-hwajak-question" data-pick="2023-csat-korean-hwajak-question" checked></span></div></div></section></div>
+        <div id="gichulBody" class="gi-body"><div class="toolbar toolbar-sticky"><div class="segmented" role="group" aria-label="내려받기 범위"><button class="segmented-btn" type="button" data-mode="full" aria-pressed="false">전체 시험지</button><button class="segmented-btn" type="button" data-mode="excerpt" aria-pressed="true">선택과목 발췌</button></div><span class="toolbar-spacer"></span><span class="gi-count">선택 2개 / 4개</span><button class="btn btn-secondary btn-sm" type="button" data-bulk="all">전체 선택</button><button class="btn btn-primary btn-sm" type="button" id="gichulMerge">PDF로 병합 내려받기</button></div><div id="gichulStatus" class="gi-status" role="status" aria-live="polite"></div><section class="gi-group"><h2 class="list-group-head" id="gi-year-2021">2021학년도</h2><div class="list-group" role="group" aria-labelledby="gi-year-2021"><div class="list-row" aria-disabled="true"><span class="list-row-body"><span class="list-row-title">수능</span></span><span class="list-row-value">발췌 불가</span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="2020-csat-korean-question">열기</button><input type="checkbox" id="gi-pick-2020-csat-korean-question" data-pick="2020-csat-korean-question" disabled></span></div></div></section><section class="gi-group"><h2 class="list-group-head" id="gi-year-2024">2024학년도</h2><div class="list-group" role="group" aria-labelledby="gi-year-2024"><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-06-korean-eonmae-question"><span class="sr-only">2024학년도 6월 국어 (언어와 매체) 선택</span></label><span class="list-row-body"><span class="list-row-title">6월 · 언어와 매체</span></span><span class="list-row-value">선택과목만 13–16쪽</span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="2023-06-korean-eonmae-question">열기</button><input type="checkbox" id="gi-pick-2023-06-korean-eonmae-question" data-pick="2023-06-korean-eonmae-question"></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-06-korean-hwajak-question"><span class="sr-only">2024학년도 6월 국어 (화법과 작문) 선택</span></label><span class="list-row-body"><span class="list-row-title">6월 · 화법과 작문</span></span><span class="list-row-value">선택과목만 9–12쪽</span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="2023-06-korean-hwajak-question">열기</button><input type="checkbox" id="gi-pick-2023-06-korean-hwajak-question" data-pick="2023-06-korean-hwajak-question" checked></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-csat-korean-eonmae-question"><span class="sr-only">2024학년도 수능 국어 (언어와 매체) 선택</span></label><span class="list-row-body"><span class="list-row-title">수능 · 언어와 매체</span></span><span class="list-row-value">선택과목만 13–16쪽</span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="2023-csat-korean-eonmae-question">열기</button><input type="checkbox" id="gi-pick-2023-csat-korean-eonmae-question" data-pick="2023-csat-korean-eonmae-question"></span></div><div class="list-row"><label class="list-row-stretch gi-pick-hit" for="gi-pick-2023-csat-korean-hwajak-question"><span class="sr-only">2024학년도 수능 국어 (화법과 작문) 선택</span></label><span class="list-row-body"><span class="list-row-title">수능 · 화법과 작문</span></span><span class="list-row-value">선택과목만 9–12쪽</span><span class="list-row-accessory gi-accessory"><button class="btn btn-ghost btn-sm list-row-nav" type="button" data-open="2023-csat-korean-hwajak-question">열기</button><input type="checkbox" id="gi-pick-2023-csat-korean-hwajak-question" data-pick="2023-csat-korean-hwajak-question" checked></span></div></div></section></div>
       </main>
     </div>
   </div>

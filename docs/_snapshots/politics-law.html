@@ -575,9 +575,8 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(11,11,13,.86);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(16px) saturate(130%);
+  background: var(--bg);
 }
 .topbar-inner {
   height: 100%;
@@ -959,6 +958,10 @@ label.list-row {
   font-size: var(--fs-body-sm);
   line-height: var(--lh-snug);
   color: var(--text-2);
+}
+/* 부제가 비면 줄 자체를 접는다 — 렌더러가 빈 슬롯을 남겨도 행 높이가 늘지 않는다(§6.1). */
+.list-row-sub:empty {
+  display: none;
 }
 .list-row-value {
   flex: none;
@@ -1349,13 +1352,74 @@ label.list-row {
   background: var(--surface-3);
   color: var(--text);
 }
+/* 모바일 사이드바 — 가로 스크롤 스트립이 아니라 줄바꿈 칩 격자다(DESIGN.md §6.1 · v13).
+   첫 줄은 엠블럼(+제품 이름) 한 줄, 그 아래 그룹이 인라인으로 이어지며 그룹 사이는
+   헤어라인 하나다. 모든 항목이 잘리지 않고 보이고, 항목 높이는 44px 터치 하한을 지킨다.
+   설명 슬롯(.side-facts / .side-note / 제품 부제)은 모바일에서 렌더하지 않는다 —
+   사이드바 항목은 라벨 한 줄만이다. 6개 화면이 이 규칙 하나를 소비한다. */
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
     max-height: none;
+    overflow: visible;
+    padding: var(--space-3);
+  }
+  .sidebar > .sidebar-emblem, .sidebar > .sidebar-product {
+    flex: 1 0 100%;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .sidebar > .sidebar-emblem {
+    justify-content: flex-start;
+    height: auto;
+    padding: 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .sidebar-group + .sidebar-group {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--line-faint);
+  }
+  /* 컨트롤(체크박스 행 등)을 담은 그룹은 한 줄을 통째로 쓴다 — 칩 사이에 끼면 접힌다. */
+  .sidebar-group:has(> .list-group) {
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sidebar-group > .list-group {
+    flex: 1 0 100%;
+  }
+  .sidebar-label {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1) 0 0;
+  }
+  .sidebar-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
+    display: none;
   }
 }
 /* ==========================================================================
@@ -1514,10 +1578,10 @@ label.list-row {
 html.auth-pending body {
   visibility: hidden;
 }
+/* 캔버스는 순검정 한 면이다 — 글로우·격자 그라디언트 없음(DESIGN.md §1.1·§3). */
 .workspace-app {
   min-height: 100dvh;
-  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
-  background-size: auto, 64px 64px, 64px 64px, auto;
+  background: var(--bg);
 }
 .workspace-app .topbar {
   border-bottom-color: rgba(255,255,255,.08);
@@ -1547,10 +1611,10 @@ html.auth-pending body {
   gap: 22px;
   max-height: calc(100dvh - var(--topbar-h) - 56px);
   padding: 16px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
-  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+  /* 깊이는 명도 단차 한 단 + 헤어라인뿐 — 그라디언트·그림자 없음(§4). */
+  background: var(--surface);
 }
 .sidebar-product {
   display: flex;
@@ -1563,9 +1627,9 @@ html.auth-pending body {
   width: 48px;
   height: 48px;
   flex: none;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 15px;
-  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+  background: var(--surface-2);
 }
 .workspace-app .sidebar-emblem .brand-mark {
   width: 30px;
@@ -1617,21 +1681,23 @@ html.auth-pending body {
   background: rgba(41,151,255,.12);
   color: #f7fbff;
 }
+/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
 .workspace-app .sidebar-item-featured {
-  border-color: rgba(41,151,255,.2);
-  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
-  color: #d9efff;
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 .workspace-app .sidebar-item-featured .ui-icon {
-  color: #55b5ff;
+  color: var(--accent);
 }
+/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
 .sidebar-item-meta {
   margin-left: auto;
   padding: 3px 6px;
-  border: 1px solid rgba(48,209,88,.24);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(48,209,88,.08);
-  color: #65e787;
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: .52rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1651,7 +1717,6 @@ html.auth-pending body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
 }
 .workspace-app .view-head {
   align-items: flex-end;
@@ -1672,44 +1737,34 @@ html.auth-pending body {
 .workspace-app .btn {
   border-radius: 13px;
 }
+/* 모바일 — 줄바꿈 칩 격자는 위의 공통 .sidebar 규칙이 담당한다. 여기서는 워크스페이스
+   셸의 여백·곡률만 맞춘다. 가로 스크롤 스트립(overflow-x · nowrap · flex: none)은 폐지했다. */
 @media (max-width: 860px) {
   .workspace-app .app-shell {
     display: block;
   }
   .workspace-app .sidebar {
     position: static;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    contain: inline-size;
-    min-width: 0;
-    max-width: 100%;
+    gap: var(--space-2);
     max-height: none;
     margin-bottom: 30px;
-    padding: 10px;
-    overflow-x: auto;
+    padding: 12px;
     border-radius: 18px;
-    scrollbar-width: none;
-  }
-  .workspace-app .sidebar::-webkit-scrollbar {
-    display: none;
   }
   .workspace-app .sidebar-product {
-    flex: none;
-    padding-right: 12px;
-    border-right: 1px solid var(--line-faint);
+    gap: 10px;
+    padding: 0 0 8px;
   }
-  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
-    display: none;
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 40px;
+    height: 40px;
   }
-  .workspace-app .sidebar-group {
-    display: flex;
-    flex: none;
-    gap: 4px;
+  .workspace-app .sidebar-label {
+    padding-inline: 0 4px;
   }
   .workspace-app .sidebar-item {
-    flex: none;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 }
 @media (max-width: 620px) {
@@ -1723,12 +1778,9 @@ html.auth-pending body {
     margin-inline: -4px;
     margin-bottom: 24px;
   }
-  .workspace-app .sidebar-product {
-    padding: 0 10px 0 2px;
-  }
   .workspace-app .sidebar-product .sidebar-emblem {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
   }
   .workspace-app .view-head {
     align-items: flex-start;
@@ -1741,130 +1793,61 @@ html.auth-pending body {
 }
 </style>
 <style>/* plstudy/assets/css/style.css (inlined) */
-.pl-page {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: clamp(24px, 5vw, 72px);
-  padding-top: 40px;
-  padding-bottom: 80px;
-}
-.pl-sidebar {
-  position: sticky;
-  top: 104px;
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  height: max-content;
-}
-.pl-nav {
-  min-height: 46px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-.pl-nav:hover, .pl-nav.is-active {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--text);
-}
-.pl-sidebar dl {
-  display: grid;
-  gap: 0;
-  margin-top: 18px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-.pl-sidebar dl div {
-  display: flex;
-  justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--line-faint);
-}
-.pl-sidebar dl div:last-child {
-  border: 0;
-}
-.pl-sidebar dt {
-  color: var(--text-3);
-}
-.pl-sidebar dd {
-  margin: 0;
-  font-weight: 800;
-}
-.pl-main {
-  min-width: 0;
-}
+/* ==========================================================================
+   plstudy — 정치와 법 (DESIGN.md §1: iOS 설정·건강 앱의 그룹 리스트 + 인셋 카드)
+   셸(.app-page / .app-shell / .sidebar / .view-head)·그룹 리스트(.list-group / .list-row)·
+   접힘 그룹(.disclosure*)은 /assets/css/system.css를 그대로 소비한다. 여기에 :root 없음.
+
+   2026-09-04 재조판 (진단 §2 plstudy 행 · DESIGN.md v13 §6.1)
+   - 중단원 18개 독립 카드 스택을 폐기했다. 대단원 6개가 .disclosure(첫 번째만 open)이고
+     중단원은 그 안의 .list-row(제목 + 우측 진행값)다. 데스크톱은 사이드바 대단원 목록(좌) +
+     행 목록(우), 모바일은 disclosure만이다.
+   - 그라디언트 헤더(.pl-head 230px, 5.5rem 제목), 220px 개념 카드 3열, mono 눈썹 라벨,
+     hover 흰 보더를 걷어냈다(§2·§3·§4·§6). 강조색은 --accent 하나, 상태색은 채점에만 쓴다.
+   - 대단원 제목은 본문 크기 한 줄이고 폭 예산은 em이다(§2).
+
+   이 파일이 새로 만드는 색 조합의 대비 실측 (LESSONS 승격 규칙 "토큰 대비 전수 검산"):
+     --text-3 #86868b on --surface  #161617   4.99:1  (.pl-unit-num — 캡션 하한 충족)
+     --text-3 #86868b on --bg       #000      5.80:1  (.pl-unit-num — 사이드바 항목 안)
+     --text-2 #a1a1a6 on --surface  #161617   7.03:1  (.pl-search-count · .pl-feedback p)
+     --green  #30d158 on --surface  #161617   8.60:1  (.pl-feedback.is-correct strong)
+     --red    #ff453a on --surface  #161617   5.31:1  (.pl-feedback.is-wrong strong)
+     #000 on --green #30d158                   10.9:1  (.pl-choices .is-correct)
+     #000 on --red   #ff453a                    5.9:1  (.pl-choices .is-wrong)
+   ========================================================================== */
+/* ---- 로드·오류 상태 — 한 문장 (§6.1) ---- */
 .pl-loading, .pl-error {
-  padding: 40px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  padding: var(--space-5);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
   background: var(--surface);
-}
-.pl-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 28px;
-  min-height: 230px;
-  padding: clamp(28px, 6vw, 64px);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: linear-gradient(145deg, #080808, #1d1d1f);
-}
-.pl-head.is-compact {
-  min-height: 200px;
-}
-.pl-head span, .pl-quiz-head span, .pl-result > span {
-  color: var(--text-3);
-  font: 700 12px/1 var(--font-mono);
-  letter-spacing: .12em;
-}
-.pl-head h1 {
-  margin: 14px 0 10px;
-  font-size: clamp(2.3rem, 6vw, 5.5rem);
-  line-height: .95;
-  letter-spacing: -.065em;
-}
-.pl-head p {
-  max-width: 680px;
-  margin: 0;
   color: var(--text-2);
-  line-height: 1.7;
+  font-size: var(--fs-caption);
 }
+.pl-error h1 {
+  margin-bottom: var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-title-3);
+  line-height: var(--lh-title);
+}
+/* ---- 로마 숫자 리드 — 사이드바 대단원 항목과 disclosure 머리가 같은 슬롯을 쓴다 ---- */
+.pl-unit-num {
+  flex: none;
+  min-width: 2.2em;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* ---- 중단원 검색 ---- */
 .pl-search {
   display: grid;
-  gap: 10px;
-  margin-top: 40px;
-}
-.pl-search-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-.pl-search-label {
-  color: var(--text-2);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-}
-.pl-search-count {
-  flex: none;
-  margin: 0;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  font-variant-numeric: tabular-nums;
+  gap: var(--space-2);
 }
 .pl-search-row {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: var(--space-2);
 }
 .pl-search-row .field-input {
   flex: 1 1 auto;
@@ -1876,168 +1859,95 @@ html.auth-pending body {
 }
 .pl-search-clear {
   flex: none;
-  min-height: 46px;
+}
+.pl-search-count {
+  padding: 0 var(--space-3);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
 }
 .pl-empty {
-  margin: 20px 0 0;
-  padding: 40px 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
+  padding: var(--space-6) var(--space-4);
   color: var(--text-2);
+  font-size: var(--fs-caption);
   text-align: center;
 }
-/* 화면 CSS가 display를 지정한 요소는 UA의 [hidden]을 이기므로 여기서 다시 닫는다. */
+/* 화면 CSS(또는 system.css의 .list-row { display: flex })가 display를 지정한 요소는 UA의
+   [hidden]을 이기므로 여기서 다시 닫는다. 검색 필터가 행·단원에 hidden을 건다. */
 .pl-unit[hidden], .pl-sub[hidden], .pl-search-clear[hidden] {
   display: none;
 }
+/* ---- 대단원 = disclosure / 중단원 = 행 (§7.1·§7.2) ---- */
 .pl-units {
   display: grid;
-  gap: 28px;
-  margin-top: 48px;
+  gap: var(--space-2);
 }
-.pl-search + .pl-units {
-  margin-top: 20px;
-}
+/* 사이드바 앵커의 점프 대상 — 고정 상단바 아래로 숨지 않게 여유를 둔다. */
 .pl-unit {
-  display: grid;
-  grid-template-columns: minmax(180px, .38fr) minmax(0, 1fr);
-  gap: 28px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-4));
 }
-.pl-unit header span {
-  color: var(--text-3);
-  font-family: var(--font-mono);
-}
-.pl-unit h2 {
-  margin: 10px 0 0;
-  font-size: clamp(1.4rem, 3vw, 2.4rem);
-}
-.pl-unit > div {
-  display: grid;
-  gap: 8px;
-}
-.pl-sub, .pl-progress-list button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  width: 100%;
-  min-height: 80px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.pl-sub:hover, .pl-progress-list button:hover {
-  border-color: #fff;
-  background: var(--surface-2);
-}
-.pl-sub > span, .pl-progress-list button > span {
-  display: grid;
-  gap: 6px;
+/* 제목은 본문 크기 한 줄이다(최장 9자). 폭 예산은 em으로 잡는다 — ch 금지(§2). */
+.pl-unit .disclosure-title {
   min-width: 0;
+  max-width: 18em;
 }
-.pl-sub small, .pl-progress-list small {
-  overflow: hidden;
-  color: var(--text-3);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 행이 곧 본문이다 — 본문 패딩과 안쪽 그룹 테두리를 겹치지 않는다. 행 사이 선은
+   .list-row + .list-row 인셋 헤어라인이 그린다. */
+.pl-unit > .disclosure-body {
+  padding: 0;
+  gap: 0;
 }
-.pl-sub b, .pl-progress-list b {
-  flex: none;
-  font-family: var(--font-mono);
-}
+/* ---- 개념 노트 ---- */
 .pl-back {
-  min-height: 44px;
-  margin-bottom: 16px;
-  border: 0;
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
+  justify-self: start;
 }
-.pl-concepts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 24px;
-}
-.pl-concepts article {
-  min-height: 220px;
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-}
-.pl-concepts span {
-  color: var(--text-3);
-  font-family: var(--font-mono);
-}
-.pl-concepts h2 {
-  margin: 50px 0 12px;
-  font-size: 21px;
-}
-.pl-concepts p {
-  margin: 0;
-  color: var(--text-2);
-  line-height: 1.7;
-}
-.pl-traps {
-  margin-top: 16px;
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--bg-alt);
-}
-.pl-traps h2 {
-  margin: 0 0 14px;
-}
-.pl-traps ul {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding-left: 20px;
-  color: var(--text-2);
-}
+/* ---- 퀴즈 ---- */
 .pl-quiz-head {
   display: flex;
-  justify-content: space-between;
-  gap: 24px;
   align-items: center;
-  padding: 20px 0;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.pl-quiz-head > div {
+  min-width: 0;
 }
 .pl-quiz-head h1 {
-  margin: 7px 0 0;
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+}
+.pl-quiz-head b {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .pl-question {
-  padding: clamp(22px, 5vw, 50px);
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  padding: clamp(20px, 3.2vw, 36px);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-l);
   background: var(--surface);
 }
 .pl-question > h2 {
-  max-width: 34ch;
-  margin: 0 0 30px;
-  font-size: clamp(1.4rem, 3vw, 2.35rem);
+  max-width: 30em;
+  margin: 0 0 var(--space-5);
+  font-size: var(--fs-title-3);
   line-height: 1.4;
 }
 .pl-choices {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .pl-choices button {
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 13px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  min-height: 58px;
+  min-height: 54px;
   padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-m);
   background: var(--surface-2);
   color: var(--text);
   font: inherit;
@@ -2045,7 +1955,11 @@ html.auth-pending body {
   cursor: pointer;
 }
 .pl-choices button:hover:not(:disabled) {
-  border-color: #fff;
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+}
+.pl-choices button:disabled {
+  cursor: default;
 }
 .pl-choices button span {
   display: grid;
@@ -2054,117 +1968,79 @@ html.auth-pending body {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   place-items: center;
+  font-size: var(--fs-caption);
 }
+/* 채점 결과는 상태색으로만 낸다 — 장식 목적의 흰 면·회색 면을 쓰지 않는다(§3). */
 .pl-choices .is-correct {
-  background: #fff;
+  border-color: var(--green);
+  background: var(--green);
   color: #000;
 }
 .pl-choices .is-wrong {
-  background: #777;
+  border-color: var(--red);
+  background: var(--red);
   color: #000;
 }
 .pl-feedback {
   display: grid;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line-faint);
 }
 .pl-feedback strong {
-  font-size: 24px;
+  font-size: var(--fs-title-3);
+}
+.pl-feedback.is-correct strong {
+  color: var(--green);
+}
+.pl-feedback.is-wrong strong {
+  color: var(--red);
 }
 .pl-feedback p {
   margin: 0;
   color: var(--text-2);
-  line-height: 1.7;
+  font-size: var(--fs-body-sm);
 }
 .pl-feedback .btn {
   justify-self: start;
 }
+/* ---- 결과 ---- */
 .pl-result {
   display: grid;
-  min-height: 560px;
+  min-height: 360px;
   place-content: center;
   justify-items: center;
+  gap: var(--space-2);
   text-align: center;
 }
 .pl-result h1 {
-  margin: 20px 0 0;
-  font-size: clamp(5rem, 16vw, 11rem);
-  line-height: .85;
-  letter-spacing: -.09em;
+  font-size: var(--fs-display);
+  line-height: 1;
+  letter-spacing: var(--ls-display);
+  font-variant-numeric: tabular-nums;
 }
 .pl-result p {
   color: var(--text-2);
 }
 .pl-result div {
   display: flex;
-  gap: 8px;
-  margin-top: 24px;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
-.pl-progress-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 24px;
-}
+/* ---- 반응형 ---- */
 @media (max-width: 860px) {
-  .pl-page {
-    grid-template-columns: 1fr;
-    padding-top: 20px;
-  }
-  .pl-sidebar {
-    position: static;
-    display: flex;
-    flex-wrap: wrap;
-  }
-  .pl-sidebar dl {
+  /* 모바일의 대단원 목록은 본문 disclosure 자체다 — 사이드바에 같은 목록을 반복하지 않는다. */
+  .pl-unit-nav {
     display: none;
-  }
-  .pl-nav {
-    flex: 1;
-    text-align: center;
-  }
-  .pl-unit {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .pl-concepts {
-    grid-template-columns: 1fr;
-  }
-  .pl-concepts article {
-    min-height: 170px;
-  }
-  .pl-concepts h2 {
-    margin-top: 28px;
   }
 }
 @media (max-width: 560px) {
   .topbar-nav {
     display: none;
   }
-  .pl-page {
-    width: min(100% - 24px, var(--container-wide));
-  }
-  .pl-head {
-    min-height: 230px;
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 28px 22px;
-  }
-  .pl-head .btn {
-    width: 100%;
-  }
-  .pl-unit {
-    margin-top: 8px;
-  }
-  .pl-sub small {
-    white-space: normal;
-  }
-  .pl-question {
-    padding: 20px 14px;
-  }
   .pl-result {
-    min-height: 440px;
+    min-height: 280px;
   }
 }
 </style>
@@ -2178,11 +2054,44 @@ html.auth-pending body {
   <div class="snap-note"><strong>무엇인가</strong> — 정치와 법 학습 화면의 반응형 셸을 얼린 스냅샷이다.
   실제 6단원 · 18중단원 · 90문항은 로그인 뒤 보호 API에서 로드한다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
-  <header class="topbar"><div class="topbar-inner container-wide"><a class="brand" href="/">HVSDCM1</a><span class="topbar-crumb">정치와 법</span><nav class="topbar-nav"><a class="topbar-link" href="/smstudy/">사회·문화</a><a class="topbar-link" href="/WordMaster/">WordMaster</a></nav></div></header>
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
+      <span class="topbar-crumb">정치와 법</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
+        <a class="topbar-link" href="/smstudy/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>사회·문화</a>
+      </nav>
+    </div>
+  </header>
   <div class="topbar-spacer"></div>
-  <div class="container-wide pl-page">
-    <aside class="pl-sidebar"><button class="pl-nav is-active" type="button" data-view="home">단원 목록</button><button class="pl-nav" type="button" data-view="progress">학습 기록</button><dl><div><dt>대단원</dt><dd>6</dd></div><div><dt>중단원</dt><dd>18</dd></div><div><dt>문항</dt><dd>90</dd></div></dl></aside>
-    <main id="app" class="pl-main" tabindex="-1"><p class="pl-loading">정치와 법 학습 데이터를 불러오는 중입니다.</p></main>
+
+  <div class="container-wide app-page">
+    <div class="app-shell">
+      <!-- 셸은 system.css의 .app-shell/.sidebar를 소비한다 — 모바일 줄바꿈 칩 격자도 거기서 온다.
+           사이드바 항목은 라벨 한 줄뿐이다(DESIGN.md §6.1). 대단원 목록은 데스크톱 전용이고
+           모바일에서는 본문의 disclosure가 그 자리를 대신한다. -->
+      <aside class="sidebar" aria-label="학습 메뉴">
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <span class="sidebar-label">화면</span>
+          <button class="sidebar-item pl-nav is-active" type="button" data-view="home"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>단원 목록</button>
+          <button class="sidebar-item pl-nav" type="button" data-view="progress"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>학습 기록</button>
+        </nav>
+        <nav class="sidebar-group pl-unit-nav" aria-label="대단원 바로 가기">
+          <span class="sidebar-label">대단원</span>
+          <a class="sidebar-item" href="#pl-unit-I"><span class="pl-unit-num" aria-hidden="true">I</span>민주주의와 헌법</a>
+          <a class="sidebar-item" href="#pl-unit-II"><span class="pl-unit-num" aria-hidden="true">II</span>민주 국가와 정부</a>
+          <a class="sidebar-item" href="#pl-unit-III"><span class="pl-unit-num" aria-hidden="true">III</span>정치 과정과 참여</a>
+          <a class="sidebar-item" href="#pl-unit-IV"><span class="pl-unit-num" aria-hidden="true">IV</span>개인 생활과 법</a>
+          <a class="sidebar-item" href="#pl-unit-V"><span class="pl-unit-num" aria-hidden="true">V</span>사회 생활과 법</a>
+          <a class="sidebar-item" href="#pl-unit-VI"><span class="pl-unit-num" aria-hidden="true">VI</span>국제 관계와 한반도</a>
+        </nav>
+      </aside>
+
+      <main id="app" class="app-main" tabindex="-1"><p class="pl-loading">학습 데이터를 불러오는 중입니다.</p></main>
+    </div>
   </div>
 </body>
 </html>

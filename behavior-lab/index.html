@@ -7,17 +7,19 @@
   <meta name="robots" content="noindex, nofollow, noarchive">
   <title>Behavior Lab — hvsdcm</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260901-dark-workspace-v3">
-  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260901-v12">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
+  <link rel="stylesheet" href="/behavior-lab/assets/css/app.css?v=20260904-ui-v1">
   <script src="/behavior-lab/assets/js/app.js?v=20260901-v16" defer></script>
 </head>
 <body class="behavior-page">
   <section id="ownerGate" class="owner-gate" aria-live="polite">
-    <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior<br>Lab</b></div>
+    <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior Lab</b></div>
     <div class="owner-gate-card">
       <p class="eyebrow">OWNER DASHBOARD</p>
-      <h1 id="ownerGateTitle">대시보드를<br>불러오고 있어요.</h1>
-      <p id="ownerGateMessage">저장된 소유자 세션을 확인하고 있습니다.</p>
+      <!-- 제목은 30자 이하의 구, 안내는 한 문장 하나(§2·§6.1). app.js가 같은 두 슬롯에
+           로그인 필요 / 권한 없음 / 실패 상태를 같은 문법으로 덮어쓴다. 억지 줄바꿈 없음. -->
+      <h1 id="ownerGateTitle">접근 권한 확인 중</h1>
+      <p id="ownerGateMessage">소유자 전용 보고 API로 세션을 확인하고 있습니다.</p>
       <div class="owner-gate-actions">
         <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
         <a id="ownerLoginLink" class="copy-action" href="/?login=1&amp;next=%2Fbehavior-lab%2F" hidden>홈에서 로그인</a>

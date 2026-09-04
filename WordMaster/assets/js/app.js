@@ -401,23 +401,22 @@
     state.session = null;
     setNav('home');
     const s = summaryStats();
-    const poolSize = getRangeWords(state.home.startDay, state.home.endDay).length;
+    // 첫 화면 = 제목 한 줄(대표 행동 "시험 시작" 하나) → "시험 설정" 그룹 → "학습 현황" 그룹.
+    // hero·설명문·배지를 두지 않는다 — 설정 행 자체가 무엇을 고르는지 말한다 (DESIGN.md §1·§6.1).
     app.innerHTML = `
-      <header class="view-head wm-view-head">
+      <header class="view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
-            <span class="workspace-kicker"><i aria-hidden="true"></i>WORDMASTER 2000</span>
             <h1>시험 설정</h1>
-            <p>DAY 범위를 정하면 한국어 뜻 주관식 시험이 시작됩니다.</p>
           </div>
         </div>
-        <span class="badge badge-accent">DAY ${pad2(state.home.startDay)}–${pad2(state.home.endDay)} · ${poolSize.toLocaleString()}단어</span>
+        <button id="startQuizBtn" class="btn btn-primary" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>시험 시작</button>
       </header>
 
       <div class="wm-layout">
         <section class="wm-col" aria-labelledby="rangeHead">
-          <h2 class="list-group-head" id="rangeHead">출제 범위</h2>
+          <h2 class="list-group-head" id="rangeHead">시험 설정</h2>
           <div class="list-group">
             <div class="list-row">
               ${emojiLead('range')}
@@ -457,11 +456,12 @@
               <span class="list-row-value"><select id="orderMode" class="field-input-inline">${renderSortOptions(state.home.order)}</select></span>
             </div>
           </div>
-          <button id="startQuizBtn" class="btn btn-primary btn-lg wm-start" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>시험 시작</button>
         </section>
 
+        <!-- 현황은 값만 낸다(.list-row-value). 오답 행동 두 개는 같은 그룹의 이동 행이다 —
+             현황·오답을 그룹 둘로 나눠 카드 3연속을 만들지 않는다 (DESIGN.md §6). -->
         <aside class="wm-panel">
-          <p class="list-group-head">학습 현황</p>
+          <h2 class="list-group-head">학습 현황</h2>
           <div class="list-group">
             <div class="list-row">
               ${emojiLead('attempts')}
@@ -478,17 +478,13 @@
               <span class="list-row-body"><span class="list-row-title">오답 노트</span></span>
               <span class="list-row-value">${s.wrongCount.toLocaleString()}</span>
             </div>
-          </div>
-
-          <p class="list-group-head">오답 다루기</p>
-          <div class="list-group">
             <button id="wrongStudyBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
               ${emojiLead('study')}
-              <span class="list-row-body"><span class="list-row-title">오답 보고 외우기</span><span class="list-row-sub">뜻을 보면서 훑습니다</span></span>
+              <span class="list-row-body"><span class="list-row-title">오답 보고 외우기</span></span>
             </button>
             <button id="reviewBtn" class="list-row list-row-nav" type="button" ${s.wrongCount ? '' : 'disabled'}>
               ${emojiLead('retest')}
-              <span class="list-row-body"><span class="list-row-title">오답 재시험</span><span class="list-row-sub">맞히면 노트에서 빠집니다</span></span>
+              <span class="list-row-body"><span class="list-row-title">오답 재시험</span></span>
             </button>
           </div>
         </aside>
@@ -520,11 +516,10 @@
     const progress = Math.round((current / total) * 100);
 
     app.innerHTML = `
-      <header class="view-head wm-view-head">
+      <header class="view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
-            <span class="workspace-kicker"><i aria-hidden="true"></i>FOCUS SESSION</span>
             <span class="kicker">${escapeHtml(sessionLabel(session))}</span>
             <h1>뜻 시험</h1>
           </div>
@@ -611,7 +606,7 @@
     const wrongRows = session.results.filter((row) => !row.correct);
 
     app.innerHTML = `
-      <header class="view-head wm-view-head">
+      <header class="view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
@@ -685,13 +680,11 @@
     const filteredWrongEntries = filterWrongEntries(wrongEntries, state.wrongSearch);
 
     app.innerHTML = `
-      <header class="view-head wm-view-head">
+      <header class="view-head">
         <div class="view-head-main">
           ${emojiLead('app', 'lg')}
           <div>
-            <span class="workspace-kicker"><i aria-hidden="true"></i>LEARNING LOG</span>
             <h1>학습 기록</h1>
-            <p>계정 DB에 저장된 풀이 기록입니다. 이 브라우저에는 사본만 남습니다.</p>
           </div>
         </div>
         <button id="statsBackBtn" class="btn btn-secondary btn-sm" type="button">시험 설정</button>
@@ -722,7 +715,7 @@
         </section>
 
         <aside class="wm-panel">
-          <p class="list-group-head">누적 지표</p>
+          <h2 class="list-group-head">누적 지표</h2>
           <div class="list-group">
             <div class="list-row">
               ${emojiLead('attempts')}
@@ -741,7 +734,7 @@
             </div>
           </div>
 
-          <p class="list-group-head">기록 데이터</p>
+          <h2 class="list-group-head">기록 데이터</h2>
           <div class="list-group">
             <button id="exportBtn" class="list-row list-row-nav" type="button">
               ${emojiLead('backup')}

@@ -360,31 +360,43 @@
           <span class="emoji emoji-lg" aria-hidden="true">${esc(emojiOf('app'))}</span>
           <div>
             <h1>단원 목록</h1>
-            <p>범위를 고르면 평가원 기출과 5단원 개념 연습이 출제됩니다. 17개 중단원 · 98문항.</p>
           </div>
         </div>
         <span class="badge badge-accent">출제 범위 ${state.selected.size}/${SUBUNITS.length}</span>
       </header>
 
       <div class="sm-layout">
-        <div class="sm-units">${UNITS.map(renderUnit).join('')}</div>
+        <div class="sm-units">
+          ${renderUnitJump()}
+          ${UNITS.map(renderUnit).join('')}
+        </div>
         <aside>${renderStartPanel(stats())}</aside>
       </div>`;
     bindHome();
     requestAnimationFrame(() => app.focus({ preventScroll: true }));
   }
 
-  // 행의 보조 정보는 한 줄로 합친다 — 값 칸이 좁은 화면에서 제목을 밀지 않게 한다.
+  // 행의 보조 정보는 값 슬롯(.list-row-value)에 짧게 낸다 — 문항 수와 내 정답률뿐이다.
+  // 단원 id·소요 시간은 지웠다: id는 그룹 헤더가, 시간은 개념 노트가 말한다 (DESIGN.md §6.1).
   function subMeta(sub) {
     const progress = subStats(sub.id);
     const count = QUESTIONS.filter((question) => question.sub === sub.id).length;
-    const parts = [sub.id, `${sub.time}분`, `${count}문항`];
-    if (progress.attempts) parts.push(`정답률 ${progress.accuracy}%`);
+    const parts = [`${count}문항`];
+    if (progress.attempts) parts.push(`정답 ${progress.accuracy}%`);
     return parts.join(' · ');
+  }
+
+  // 대단원 바로 가기 — 단원 목록 위 한 줄. 앵커 점프라 JS 상태가 없다.
+  function renderUnitJump() {
+    return `
+      <nav class="segmented sm-unit-jump" aria-label="대단원 바로 가기">
+        ${UNITS.map((unit) => `<a class="segmented-btn" href="#unit-${unit.id}">${esc(unit.id)}<span class="sr-only"> ${esc(unit.title)}</span></a>`).join('')}
+      </nav>`;
   }
 
   // 중단원 = 행. 행 자체가 개념 학습 진입점이고(늘린 히트 영역), 오른쪽 액세서리는
   // 출제 범위 체크박스 하나뿐이다. 행마다 버튼을 반복하지 않는다 (DESIGN.md §6·§7.1).
+  // 부제(.list-row-sub)를 두지 않는다 — 설명문이 아니라 값이므로 .list-row-value 하나에 모은다.
   function renderSubunit(sub) {
     const done = Boolean(db.completed[sub.id]);
     return `
@@ -394,9 +406,8 @@
           <button class="list-row-stretch" type="button" data-id="${sub.id}">
             <span class="list-row-title">${esc(sub.title)}</span>
           </button>
-          <span class="list-row-sub">${esc(subMeta(sub))}</span>
         </span>
-        ${done ? '<span class="list-row-value"><span class="badge badge-green">개념 완료</span></span>' : ''}
+        <span class="list-row-value">${done ? '<span class="badge badge-green">완료</span> ' : ''}${esc(subMeta(sub))}</span>
         <label class="list-row-accessory">
           <input class="sub-check" type="checkbox" data-id="${sub.id}"
             aria-label="${esc(sub.title)} 출제 범위 포함" ${state.selected.has(sub.id) ? 'checked' : ''}>
@@ -405,19 +416,18 @@
   }
 
   // 대단원 = 그룹. 범위 선택은 그룹 헤더의 토글 하나로 모은다.
+  // 그룹 아래 각주(.list-group-foot)는 지웠다 — 선택 수는 체크박스가, 완료는 행 배지가 낸다.
   function renderUnit(unit) {
     const total = unit.subs.length;
-    const completedCount = unit.subs.filter((sub) => db.completed[sub.id]).length;
     const selectedCount = unit.subs.filter((sub) => state.selected.has(sub.id)).length;
     const allSelected = selectedCount === total;
     return `
       <section class="sm-unit" aria-labelledby="unit-${unit.id}">
         <div class="list-group-head-row">
-          <h2 class="list-group-head" id="unit-${unit.id}">${unit.id} · ${esc(unit.title)}</h2>
+          <h2 class="list-group-head" id="unit-${unit.id}">${esc(unit.id)} · ${esc(unit.title)}</h2>
           <button class="btn btn-ghost btn-sm unit-toggle" type="button" data-unit="${unit.id}">${allSelected ? '범위 해제' : '전체 선택'}</button>
         </div>
         <div class="list-group">${unit.subs.map(renderSubunit).join('')}</div>
-        <p class="list-group-foot">${esc(unit.desc)} · 선택 ${selectedCount}/${total} · 개념 완료 ${completedCount}/${total}</p>
       </section>`;
   }
   function bindHome() {

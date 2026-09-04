@@ -571,9 +571,8 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(11,11,13,.86);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(16px) saturate(130%);
+  background: var(--bg);
 }
 .topbar-inner {
   height: 100%;
@@ -955,6 +954,10 @@ label.list-row {
   font-size: var(--fs-body-sm);
   line-height: var(--lh-snug);
   color: var(--text-2);
+}
+/* 부제가 비면 줄 자체를 접는다 — 렌더러가 빈 슬롯을 남겨도 행 높이가 늘지 않는다(§6.1). */
+.list-row-sub:empty {
+  display: none;
 }
 .list-row-value {
   flex: none;
@@ -1345,13 +1348,74 @@ label.list-row {
   background: var(--surface-3);
   color: var(--text);
 }
+/* 모바일 사이드바 — 가로 스크롤 스트립이 아니라 줄바꿈 칩 격자다(DESIGN.md §6.1 · v13).
+   첫 줄은 엠블럼(+제품 이름) 한 줄, 그 아래 그룹이 인라인으로 이어지며 그룹 사이는
+   헤어라인 하나다. 모든 항목이 잘리지 않고 보이고, 항목 높이는 44px 터치 하한을 지킨다.
+   설명 슬롯(.side-facts / .side-note / 제품 부제)은 모바일에서 렌더하지 않는다 —
+   사이드바 항목은 라벨 한 줄만이다. 6개 화면이 이 규칙 하나를 소비한다. */
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
     max-height: none;
+    overflow: visible;
+    padding: var(--space-3);
+  }
+  .sidebar > .sidebar-emblem, .sidebar > .sidebar-product {
+    flex: 1 0 100%;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .sidebar > .sidebar-emblem {
+    justify-content: flex-start;
+    height: auto;
+    padding: 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .sidebar-group + .sidebar-group {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--line-faint);
+  }
+  /* 컨트롤(체크박스 행 등)을 담은 그룹은 한 줄을 통째로 쓴다 — 칩 사이에 끼면 접힌다. */
+  .sidebar-group:has(> .list-group) {
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sidebar-group > .list-group {
+    flex: 1 0 100%;
+  }
+  .sidebar-label {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1) 0 0;
+  }
+  .sidebar-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
+    display: none;
   }
 }
 /* ==========================================================================
@@ -1510,10 +1574,10 @@ label.list-row {
 html.auth-pending body {
   visibility: hidden;
 }
+/* 캔버스는 순검정 한 면이다 — 글로우·격자 그라디언트 없음(DESIGN.md §1.1·§3). */
 .workspace-app {
   min-height: 100dvh;
-  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
-  background-size: auto, 64px 64px, 64px 64px, auto;
+  background: var(--bg);
 }
 .workspace-app .topbar {
   border-bottom-color: rgba(255,255,255,.08);
@@ -1543,10 +1607,10 @@ html.auth-pending body {
   gap: 22px;
   max-height: calc(100dvh - var(--topbar-h) - 56px);
   padding: 16px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
-  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+  /* 깊이는 명도 단차 한 단 + 헤어라인뿐 — 그라디언트·그림자 없음(§4). */
+  background: var(--surface);
 }
 .sidebar-product {
   display: flex;
@@ -1559,9 +1623,9 @@ html.auth-pending body {
   width: 48px;
   height: 48px;
   flex: none;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 15px;
-  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+  background: var(--surface-2);
 }
 .workspace-app .sidebar-emblem .brand-mark {
   width: 30px;
@@ -1613,21 +1677,23 @@ html.auth-pending body {
   background: rgba(41,151,255,.12);
   color: #f7fbff;
 }
+/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
 .workspace-app .sidebar-item-featured {
-  border-color: rgba(41,151,255,.2);
-  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
-  color: #d9efff;
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 .workspace-app .sidebar-item-featured .ui-icon {
-  color: #55b5ff;
+  color: var(--accent);
 }
+/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
 .sidebar-item-meta {
   margin-left: auto;
   padding: 3px 6px;
-  border: 1px solid rgba(48,209,88,.24);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(48,209,88,.08);
-  color: #65e787;
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: .52rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1647,7 +1713,6 @@ html.auth-pending body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
 }
 .workspace-app .view-head {
   align-items: flex-end;
@@ -1668,44 +1733,34 @@ html.auth-pending body {
 .workspace-app .btn {
   border-radius: 13px;
 }
+/* 모바일 — 줄바꿈 칩 격자는 위의 공통 .sidebar 규칙이 담당한다. 여기서는 워크스페이스
+   셸의 여백·곡률만 맞춘다. 가로 스크롤 스트립(overflow-x · nowrap · flex: none)은 폐지했다. */
 @media (max-width: 860px) {
   .workspace-app .app-shell {
     display: block;
   }
   .workspace-app .sidebar {
     position: static;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    contain: inline-size;
-    min-width: 0;
-    max-width: 100%;
+    gap: var(--space-2);
     max-height: none;
     margin-bottom: 30px;
-    padding: 10px;
-    overflow-x: auto;
+    padding: 12px;
     border-radius: 18px;
-    scrollbar-width: none;
-  }
-  .workspace-app .sidebar::-webkit-scrollbar {
-    display: none;
   }
   .workspace-app .sidebar-product {
-    flex: none;
-    padding-right: 12px;
-    border-right: 1px solid var(--line-faint);
+    gap: 10px;
+    padding: 0 0 8px;
   }
-  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
-    display: none;
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 40px;
+    height: 40px;
   }
-  .workspace-app .sidebar-group {
-    display: flex;
-    flex: none;
-    gap: 4px;
+  .workspace-app .sidebar-label {
+    padding-inline: 0 4px;
   }
   .workspace-app .sidebar-item {
-    flex: none;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 }
 @media (max-width: 620px) {
@@ -1719,12 +1774,9 @@ html.auth-pending body {
     margin-inline: -4px;
     margin-bottom: 24px;
   }
-  .workspace-app .sidebar-product {
-    padding: 0 10px 0 2px;
-  }
   .workspace-app .sidebar-product .sidebar-emblem {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
   }
   .workspace-app .view-head {
     align-items: flex-start;
@@ -1766,20 +1818,7 @@ html {
 .behavior-page [hidden] {
   display: none !important;
 }
-.skip-link {
-  position: fixed;
-  top: 8px;
-  left: 8px;
-  z-index: 100;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: var(--accent-strong);
-  color: #fff;
-  transform: translateY(-150%);
-}
-.skip-link:focus {
-  transform: translateY(0);
-}
+/* .skip-link · :focus-visible은 system.css가 제공한다 — 여기서 다시 만들지 않는다(§7). */
 .eyebrow, .section-index, .control-label {
   margin: 0;
   color: var(--text-3);
@@ -1816,7 +1855,8 @@ html {
   place-items: center;
   border-radius: 12px;
   background: var(--accent-strong);
-  color: #fff;
+  /* 채움 면 위 글자는 검정만 — #fff on --accent-strong은 1.09:1이다(system.css 대비표). */
+  color: #000;
   font-weight: 800;
 }
 .gate-brand b {
@@ -1827,15 +1867,15 @@ html {
   width: min(440px, 100%);
   padding: 36px;
   border: 1px solid var(--line-faint);
-  border-radius: 24px;
+  border-radius: var(--radius-l);
   background: var(--surface);
-  box-shadow: var(--shadow-2);
 }
+/* 게이트 제목은 상태 문구("로그인이 필요합니다" 등)라 디스플레이급이 아니라 타이틀 2단(§2). */
 .owner-gate-card h1 {
   margin: 14px 0 0;
-  font-size: clamp(30px, 6vw, 42px);
-  line-height: 1.15;
-  letter-spacing: -.04em;
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
 }
 .owner-gate-card > p:not(.eyebrow) {
   margin: 14px 0 0;
@@ -1852,8 +1892,8 @@ html {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--line-faint);
-  background: rgba(8, 9, 13, .88);
-  backdrop-filter: blur(20px);
+  /* 유리 효과 없음(§3) — 불투명 캔버스 + 헤어라인. */
+  background: var(--bg);
 }
 .lab-topbar-inner, .lab-main, .lab-footer {
   width: min(1440px, calc(100% - 56px));
@@ -1924,7 +1964,6 @@ html {
 .lab-tab.is-active {
   background: var(--surface-3);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--line-faint);
 }
 .read-only-mark, .live-status {
   display: inline-flex;
@@ -1943,26 +1982,24 @@ html {
   height: 7px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 0 4px rgba(32, 201, 151, .12);
 }
+/* 상태 칩 — 상태색은 상태 표시에만, 글로우 없이 -soft 면 + 토큰 전경(§3). */
 .live-status {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(32, 201, 151, .1);
-  color: #7ce8c4;
+  background: var(--green-soft);
+  color: var(--green);
 }
 .live-status.is-loading i, .adaptive-stream.is-connecting::before {
   background: var(--orange);
-  box-shadow: 0 0 0 4px rgba(255, 184, 77, .12);
 }
 .live-status.is-error {
-  background: rgba(240, 68, 82, .1);
-  color: #ff8a94;
+  background: var(--red-soft);
+  color: var(--red-bright);
 }
 .live-status.is-error i {
   background: var(--red);
-  box-shadow: 0 0 0 4px rgba(240, 68, 82, .12);
 }
 .lab-main {
   padding: 38px 0 96px;
@@ -2031,7 +2068,7 @@ html {
 }
 .choice.is-active {
   background: var(--accent-strong);
-  color: #fff;
+  color: #000;
 }
 .control-divider {
   width: 1px;
@@ -2044,12 +2081,11 @@ html {
   color: var(--text-3);
   font-size: 12px;
 }
-/* Shared surfaces */
+/* Shared surfaces — 깊이는 명도 단차 + 헤어라인뿐, 카드 그림자 없음(§4). */
 .panel, .ticker-section, .abc-overview, .paper-ranking-section {
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-xl);
   background: var(--surface);
-  box-shadow: var(--shadow-2);
 }
 .panel, .ticker-section {
   padding: 24px;
@@ -2074,13 +2110,14 @@ html {
   font-size: 14px;
   font-weight: 700;
 }
+/* .btn-primary와 같은 값을 쓴다(#000 on --accent-strong 21.00:1). */
 .primary-action {
   border: 0;
   background: var(--accent-strong);
-  color: #fff;
+  color: #000;
 }
 .primary-action:hover {
-  background: #4593ff;
+  background: var(--accent);
 }
 .primary-action:disabled {
   background: var(--surface-3);
@@ -2097,12 +2134,16 @@ html {
 }
 .text-button:hover, .copy-action:hover {
   color: var(--text);
-  border-color: rgba(255, 255, 255, .24);
+  background: var(--surface-4);
 }
+/* .btn-danger와 같은 값 — 불투명 위험 면 + --red-bright 전경(13.74:1). */
 .text-button.is-danger {
-  border-color: rgba(240, 68, 82, .24);
-  background: rgba(240, 68, 82, .1);
-  color: #ff8a94;
+  border-color: transparent;
+  background: var(--red-fill);
+  color: var(--red-bright);
+}
+.text-button.is-danger:hover {
+  background: var(--red-fill-hover);
 }
 .error-panel, .empty-state {
   padding: 20px;
@@ -2115,11 +2156,15 @@ html {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-color: rgba(240, 68, 82, .28);
+  border-color: var(--line-strong);
 }
 .error-panel p, .empty-state p {
   margin: 0;
   color: var(--text-2);
+}
+.error-panel p {
+  color: var(--red);
+  /* on --surface 14.38:1 */
 }
 .empty-state strong {
   display: block;
@@ -2153,7 +2198,7 @@ html {
   background: var(--surface-3);
 }
 .ticker-card.is-selected {
-  border-color: rgba(49, 130, 246, .5);
+  border-color: var(--line-strong);
   background: var(--accent-soft);
 }
 .ticker-name {
@@ -2202,7 +2247,7 @@ html {
   display: block;
 }
 .chart-wrap line, .abc-equity-chart line {
-  stroke: rgba(255, 255, 255, .07);
+  stroke: var(--line-faint);
   stroke-width: 1;
 }
 .chart-wrap polyline {
@@ -2224,7 +2269,7 @@ html {
   font-variant-numeric: tabular-nums;
 }
 .pulse-panel {
-  background: linear-gradient(150deg, #171b24, #101217);
+  background: var(--surface-2);
 }
 .pulse-stat {
   margin-top: 26px;
@@ -2266,7 +2311,7 @@ html {
   bottom: -2px;
   left: 50%;
   width: 1px;
-  background: rgba(255, 255, 255, .6);
+  background: var(--text-2);
 }
 .ratio-track.is-amber i {
   background: var(--orange);
@@ -2318,7 +2363,7 @@ html {
   place-items: center;
   border-radius: 18px;
   background: var(--accent-soft);
-  color: #66a6ff;
+  color: var(--accent);
   font-size: 28px;
   font-weight: 800;
 }
@@ -2373,7 +2418,7 @@ html {
   gap: 3px;
 }
 .evidence-row em {
-  color: #66a6ff;
+  color: var(--accent);
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -2451,7 +2496,8 @@ html {
 }
 .risk-fields input:focus, #draftText:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(49, 130, 246, .16);
+  /* .field-input:focus와 같은 링 토큰. */
+  box-shadow: var(--focus-ring);
 }
 #draftText {
   min-height: 220px;
@@ -2468,8 +2514,8 @@ html {
   margin: 16px 0;
   padding: 14px;
   border-radius: 10px;
-  background: rgba(240, 68, 82, .1);
-  color: #ff8a94;
+  background: var(--red-soft);
+  color: var(--red-bright);
 }
 .draft-errors p {
   margin: 5px 0 0;
@@ -2520,7 +2566,8 @@ html {
 }
 .overview-ink {
   border-right: 1px solid var(--line-faint);
-  background: linear-gradient(145deg, #171b24, #101217);
+  /* 한 단 밝은 표면으로 구분한다 — 그라디언트 없음(§3·§4). */
+  background: var(--surface-2);
 }
 .paper-overview-heading {
   align-items: flex-start;
@@ -2533,7 +2580,7 @@ html {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #7ce8c4;
+  color: var(--green);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2662,7 +2709,7 @@ html {
   background: var(--accent-soft);
 }
 .paper-rank-number {
-  color: #66a6ff;
+  color: var(--accent);
   font-size: 13px;
   font-weight: 800;
   text-align: center;
@@ -2704,7 +2751,6 @@ html {
   min-width: 0;
   padding: 0;
   overflow: hidden;
-  box-shadow: none;
 }
 .abc-arm-heading {
   padding: 20px 20px 0;
@@ -2720,7 +2766,7 @@ html {
   place-items: center;
   border-radius: 11px;
   background: var(--accent-soft);
-  color: #66a6ff;
+  color: var(--accent);
   font-size: 15px;
   font-weight: 800;
 }
@@ -2737,7 +2783,8 @@ html {
 .abc-strategy-id {
   margin-top: 5px;
   display: block;
-  color: #596270;
+  color: var(--text-3);
+  /* on --surface 4.99:1 */
   font-family: var(--font-mono);
   font-size: 8px;
   overflow-wrap: anywhere;
@@ -2746,14 +2793,15 @@ html {
   padding: 5px 8px;
   border-radius: 999px;
   background: var(--surface-3);
-  color: var(--text-3);
+  /* --text-3은 --surface-3 위 3.85:1로 하한 미달 — --text-2(5.42:1). */
+  color: var(--text-2);
   font-size: 9px;
   font-weight: 700;
   white-space: nowrap;
 }
 .abc-position-state.is-open {
-  background: rgba(32, 201, 151, .12);
-  color: #7ce8c4;
+  background: var(--green-soft);
+  color: var(--green);
 }
 .abc-arm-result {
   margin: 18px 20px 0;
@@ -2900,12 +2948,14 @@ html {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  border: 1px solid rgba(240, 68, 82, .28);
+  /* 경고는 문장과 배지가 말한다 — 상태색 보더·그라디언트 면은 두지 않는다(§3·§4). */
+  border: 1px solid var(--line);
   border-radius: var(--radius-m);
-  background: linear-gradient(120deg, rgba(240, 68, 82, .12), rgba(255, 184, 77, .06));
+  background: var(--surface);
 }
 .live-risk-banner b {
-  color: #ff9aa3;
+  color: var(--red);
+  /* on --surface 14.38:1 */
 }
 .live-risk-banner p {
   margin: 3px 0 0;
@@ -2916,8 +2966,8 @@ html {
   flex: 0 0 auto;
   padding: 7px 11px;
   border-radius: 999px;
-  background: rgba(240, 68, 82, .13);
-  color: #ff9aa3;
+  background: var(--red-soft);
+  color: var(--red-bright);
   font-size: 12px;
   font-weight: 800;
 }
@@ -2960,17 +3010,11 @@ html {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
+/* 모델별 보더색(빨강/파랑)은 다색 보더라 폐지했다 — 카드는 이름과 상태 배지로 구분한다(§3). */
 .live-model-card {
   min-width: 0;
   padding: 0;
   overflow: hidden;
-  box-shadow: none;
-}
-.live-model-card.is-beast {
-  border-color: rgba(240, 68, 82, .26);
-}
-.live-model-card.is-ddokdogi {
-  border-color: rgba(49, 130, 246, .28);
 }
 .live-model-head {
   padding: 22px 22px 0;
@@ -2988,17 +3032,18 @@ html {
   padding: 6px 9px;
   border-radius: 999px;
   background: var(--surface-3);
-  color: var(--text-3);
+  color: var(--text-2);
+  /* on --surface-3 5.42:1 */
   font-size: 10px;
   font-weight: 800;
 }
 .live-model-state.is-open, .live-model-state.is-watching {
-  background: rgba(32, 201, 151, .12);
-  color: #7ce8c4;
+  background: var(--green-soft);
+  color: var(--green);
 }
 .live-model-state.is-blocked, .live-model-state.is-error {
-  background: rgba(240, 68, 82, .11);
-  color: #ff9aa3;
+  background: var(--red-soft);
+  color: var(--red-bright);
 }
 .live-model-allocation {
   margin: 20px 22px 0;
@@ -3071,10 +3116,6 @@ html {
 .lab-footer a {
   color: var(--text-2);
   font-size: 12px;
-}
-.behavior-page button:focus-visible, .behavior-page a:focus-visible, .behavior-page summary:focus-visible, .behavior-page input:focus-visible, .behavior-page textarea:focus-visible {
-  outline: 3px solid rgba(49, 130, 246, .4);
-  outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -3253,11 +3294,13 @@ html {
   <br><strong>주의</strong> — live dashboard와 버튼 상호작용은 API 응답이 필요하므로 이 사본에서는 비어 있다. 실제 desktop/mobile 상호작용은 별도 로컬 HTTP 브라우저 증거로 확인한다.
   <br><strong>기준</strong> — 이 파일은 <code>node scripts/snapshot.mjs</code>가 만든 생성물이다. 손으로 고치지 않는다. <code>npm run validate</code>가 같은 생성기를 다시 돌려 이 파일과 대조하므로, 데이터·렌더러·CSS를 바꾸면 반드시 다시 만들어야 한다. 이 디렉터리는 밑줄로 시작하므로 GitHub Pages(Jekyll)가 게시하지 않는다 — 학습 내용이 들어 있어도 공개면에 오르지 않는다.</div>
   <section id="ownerGate" class="owner-gate" aria-live="polite">
-    <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior<br>Lab</b></div>
+    <div class="gate-brand" aria-hidden="true"><span>B</span><b>Behavior Lab</b></div>
     <div class="owner-gate-card">
       <p class="eyebrow">OWNER DASHBOARD</p>
-      <h1 id="ownerGateTitle">대시보드를<br>불러오고 있어요.</h1>
-      <p id="ownerGateMessage">저장된 소유자 세션을 확인하고 있습니다.</p>
+      <!-- 제목은 30자 이하의 구, 안내는 한 문장 하나(§2·§6.1). app.js가 같은 두 슬롯에
+           로그인 필요 / 권한 없음 / 실패 상태를 같은 문법으로 덮어쓴다. 억지 줄바꿈 없음. -->
+      <h1 id="ownerGateTitle">접근 권한 확인 중</h1>
+      <p id="ownerGateMessage">소유자 전용 보고 API로 세션을 확인하고 있습니다.</p>
       <div class="owner-gate-actions">
         <button id="retryOwnerGate" class="primary-action" type="button" hidden>다시 확인</button>
         <a id="ownerLoginLink" class="copy-action" href="/?login=1&amp;next=%2Fbehavior-lab%2F" hidden>홈에서 로그인</a>

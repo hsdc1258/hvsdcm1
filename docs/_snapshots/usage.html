@@ -573,9 +573,8 @@ hr {
   inset: 0 0 auto 0;
   z-index: 100;
   height: var(--topbar-h);
-  background: rgba(11,11,13,.86);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(16px) saturate(130%);
+  background: var(--bg);
 }
 .topbar-inner {
   height: 100%;
@@ -957,6 +956,10 @@ label.list-row {
   font-size: var(--fs-body-sm);
   line-height: var(--lh-snug);
   color: var(--text-2);
+}
+/* 부제가 비면 줄 자체를 접는다 — 렌더러가 빈 슬롯을 남겨도 행 높이가 늘지 않는다(§6.1). */
+.list-row-sub:empty {
+  display: none;
 }
 .list-row-value {
   flex: none;
@@ -1347,13 +1350,74 @@ label.list-row {
   background: var(--surface-3);
   color: var(--text);
 }
+/* 모바일 사이드바 — 가로 스크롤 스트립이 아니라 줄바꿈 칩 격자다(DESIGN.md §6.1 · v13).
+   첫 줄은 엠블럼(+제품 이름) 한 줄, 그 아래 그룹이 인라인으로 이어지며 그룹 사이는
+   헤어라인 하나다. 모든 항목이 잘리지 않고 보이고, 항목 높이는 44px 터치 하한을 지킨다.
+   설명 슬롯(.side-facts / .side-note / 제품 부제)은 모바일에서 렌더하지 않는다 —
+   사이드바 항목은 라벨 한 줄만이다. 6개 화면이 이 규칙 하나를 소비한다. */
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
     max-height: none;
+    overflow: visible;
+    padding: var(--space-3);
+  }
+  .sidebar > .sidebar-emblem, .sidebar > .sidebar-product {
+    flex: 1 0 100%;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .sidebar > .sidebar-emblem {
+    justify-content: flex-start;
+    height: auto;
+    padding: 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .sidebar-group + .sidebar-group {
+    padding-left: var(--space-2);
+    border-left: 1px solid var(--line-faint);
+  }
+  /* 컨트롤(체크박스 행 등)을 담은 그룹은 한 줄을 통째로 쓴다 — 칩 사이에 끼면 접힌다. */
+  .sidebar-group:has(> .list-group) {
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sidebar-group > .list-group {
+    flex: 1 0 100%;
+  }
+  .sidebar-label {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1) 0 0;
+  }
+  .sidebar-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
+    display: none;
   }
 }
 /* ==========================================================================
@@ -1512,10 +1576,10 @@ label.list-row {
 html.auth-pending body {
   visibility: hidden;
 }
+/* 캔버스는 순검정 한 면이다 — 글로우·격자 그라디언트 없음(DESIGN.md §1.1·§3). */
 .workspace-app {
   min-height: 100dvh;
-  background: radial-gradient(circle at 12% 5%, rgba(41,151,255,.12), transparent 28rem), linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px), var(--bg);
-  background-size: auto, 64px 64px, 64px 64px, auto;
+  background: var(--bg);
 }
 .workspace-app .topbar {
   border-bottom-color: rgba(255,255,255,.08);
@@ -1545,10 +1609,10 @@ html.auth-pending body {
   gap: 22px;
   max-height: calc(100dvh - var(--topbar-h) - 56px);
   padding: 16px;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24,27,35,.96), rgba(10,11,15,.98));
-  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+  /* 깊이는 명도 단차 한 단 + 헤어라인뿐 — 그라디언트·그림자 없음(§4). */
+  background: var(--surface);
 }
 .sidebar-product {
   display: flex;
@@ -1561,9 +1625,9 @@ html.auth-pending body {
   width: 48px;
   height: 48px;
   flex: none;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 15px;
-  background: radial-gradient(circle at 32% 20%, rgba(41,151,255,.24), transparent 70%), #161922;
+  background: var(--surface-2);
 }
 .workspace-app .sidebar-emblem .brand-mark {
   width: 30px;
@@ -1615,21 +1679,23 @@ html.auth-pending body {
   background: rgba(41,151,255,.12);
   color: #f7fbff;
 }
+/* 강조 항목 — 강조색은 --accent 하나이고 면은 그라디언트가 아니라 한 단 밝은 소프트 면이다(§3). */
 .workspace-app .sidebar-item-featured {
-  border-color: rgba(41,151,255,.2);
-  background: linear-gradient(90deg, rgba(41,151,255,.14), rgba(41,151,255,.04));
-  color: #d9efff;
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 .workspace-app .sidebar-item-featured .ui-icon {
-  color: #55b5ff;
+  color: var(--accent);
 }
+/* 항목 우측 메타(LIVE 등). 상태색 보더를 두지 않는다 — 중립 면 + 헤어라인 하나(§3·§4). */
 .sidebar-item-meta {
   margin-left: auto;
   padding: 3px 6px;
-  border: 1px solid rgba(48,209,88,.24);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(48,209,88,.08);
-  color: #65e787;
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: .52rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1649,7 +1715,6 @@ html.auth-pending body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(41,151,255,.1);
 }
 .workspace-app .view-head {
   align-items: flex-end;
@@ -1670,44 +1735,34 @@ html.auth-pending body {
 .workspace-app .btn {
   border-radius: 13px;
 }
+/* 모바일 — 줄바꿈 칩 격자는 위의 공통 .sidebar 규칙이 담당한다. 여기서는 워크스페이스
+   셸의 여백·곡률만 맞춘다. 가로 스크롤 스트립(overflow-x · nowrap · flex: none)은 폐지했다. */
 @media (max-width: 860px) {
   .workspace-app .app-shell {
     display: block;
   }
   .workspace-app .sidebar {
     position: static;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    contain: inline-size;
-    min-width: 0;
-    max-width: 100%;
+    gap: var(--space-2);
     max-height: none;
     margin-bottom: 30px;
-    padding: 10px;
-    overflow-x: auto;
+    padding: 12px;
     border-radius: 18px;
-    scrollbar-width: none;
-  }
-  .workspace-app .sidebar::-webkit-scrollbar {
-    display: none;
   }
   .workspace-app .sidebar-product {
-    flex: none;
-    padding-right: 12px;
-    border-right: 1px solid var(--line-faint);
+    gap: 10px;
+    padding: 0 0 8px;
   }
-  .workspace-app .sidebar-product-copy, .workspace-app .sidebar-label, .workspace-app .side-note, .workspace-app .side-facts {
-    display: none;
+  .workspace-app .sidebar-product .sidebar-emblem {
+    width: 40px;
+    height: 40px;
   }
-  .workspace-app .sidebar-group {
-    display: flex;
-    flex: none;
-    gap: 4px;
+  .workspace-app .sidebar-label {
+    padding-inline: 0 4px;
   }
   .workspace-app .sidebar-item {
-    flex: none;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 }
 @media (max-width: 620px) {
@@ -1721,12 +1776,9 @@ html.auth-pending body {
     margin-inline: -4px;
     margin-bottom: 24px;
   }
-  .workspace-app .sidebar-product {
-    padding: 0 10px 0 2px;
-  }
   .workspace-app .sidebar-product .sidebar-emblem {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
   }
   .workspace-app .view-head {
     align-items: flex-start;
@@ -1750,6 +1802,7 @@ html.auth-pending body {
   font-size: 13px;
 }
 .usage-refresh-status:empty {
+  display: none;
   min-height: 0;
   margin: 0;
 }
@@ -1780,11 +1833,27 @@ html.auth-pending body {
 .cp-body {
   gap: var(--space-5);
 }
+/* 본문·헤더·상태 줄은 모두 축소 안전이다 — 그리드 자식의 기본 min-width: auto가 가용
+   폭을 무시하고 문서를 넓히지 않게 한다(1280에서 109px 넘침의 원인). */
+.cp-screen, .cp-head, .cp-head .view-head-main, .cp-status, .cp-approval-mount {
+  min-width: 0;
+}
+.cp-head .toolbar-group {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* 상태·오류 안내 자리 하나 — 두 슬롯 모두 비면(:empty) display: none이라 한 문장만 선다. */
+.cp-status {
+  display: grid;
+  gap: var(--space-2);
+}
+/* 필터 — 열 수는 가용 폭이 정한다. 고정 7열 최소폭은 본문 폭을 모른 채 문서를 넓혔다. */
 .cp-filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.6fr) repeat(6, minmax(118px, .8fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   align-items: end;
   gap: var(--space-3);
+  min-width: 0;
   margin-bottom: var(--space-5);
   padding: var(--space-4);
   background: var(--surface);
@@ -1793,6 +1862,9 @@ html.auth-pending body {
 }
 .cp-filters .field {
   min-width: 0;
+}
+.cp-search {
+  grid-column: 1 / -1;
 }
 .cp-section-head, .cp-approval-card > header, .cp-candidate > header, .cp-source, .cp-application > div {
   display: flex;
@@ -1814,7 +1886,7 @@ html.auth-pending body {
 }
 .cp-approvals {
   border-color: var(--line-strong);
-  background: linear-gradient(145deg, var(--surface), var(--surface-2));
+  background: var(--surface);
 }
 .cp-approval-intro {
   max-width: 78ch;
@@ -1834,7 +1906,7 @@ html.auth-pending body {
 }
 .cp-approval-card.is-pending {
   border-color: var(--orange);
-  box-shadow: inset 3px 0 0 var(--orange);
+  border-left-width: 3px;
 }
 .cp-approval-card h3, .cp-approval-card h4 {
   margin: 0;
@@ -1917,7 +1989,7 @@ html.auth-pending body {
   overflow-wrap: anywhere;
 }
 .cp-overview {
-  background: linear-gradient(135deg, var(--surface), var(--surface-2));
+  background: var(--surface);
 }
 .cp-metrics {
   display: grid;
@@ -2240,12 +2312,6 @@ html.auth-pending body {
   }
 }
 @media (max-width: 1100px) {
-  .cp-filters {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .cp-search {
-    grid-column: span 2;
-  }
   .cp-candidate-list {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2254,11 +2320,8 @@ html.auth-pending body {
   }
 }
 @media (max-width: 760px) {
-  .cp-filters, .cp-pair {
+  .cp-pair {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .cp-search {
-    grid-column: auto;
   }
   .cp-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2335,13 +2398,14 @@ html.auth-pending body {
 
   <div class="container-wide us-wide app-page">
     <div class="app-shell">
+      <!-- 사이드바 항목은 아이콘 + 라벨 한 줄이다(DESIGN.md §6.1). 부제·범위 설명을 두지 않는다. -->
       <aside class="sidebar" aria-label="공모전 화면">
         <div class="sidebar-product">
           <div class="sidebar-emblem" aria-hidden="true"><img class="brand-mark" src="/assets/logo.svg" alt=""></div>
-          <div class="sidebar-product-copy"><span>COMPETITION</span><strong>공모전 센터</strong></div>
+          <div class="sidebar-product-copy"><strong>공모전 센터</strong></div>
         </div>
-        <nav class="sidebar-group" aria-label="공모전">
-          <p class="sidebar-label">공모전</p>
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <p class="sidebar-label">화면</p>
           <a class="sidebar-item is-active" href="/usage/" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">후보와 승인</span></a>
         </nav>
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
@@ -2350,19 +2414,15 @@ html.auth-pending body {
           <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
           <a class="sidebar-item" href="/admin/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg><span class="sidebar-item-text">관리자</span></a>
         </nav>
-        <div class="sidebar-group">
-          <p class="sidebar-label">범위</p>
-          <p class="side-note">소유자 계정에서만 열립니다. 최종 제출은 정확한 승인 뒤에만 진행됩니다.</p>
-        </div>
       </aside>
 
       <main id="competitionMain" class="app-main" tabindex="-1">
-        <section>
+        <section class="cp-screen">
           <header class="view-head cp-head">
             <div class="view-head-main"><div>
-              <span class="workspace-kicker"><i aria-hidden="true"></i>COMPETITION</span>
               <h1 class="title-1">공모전</h1>
-              <p>승인 전에는 외부 제출을 실행하지 않습니다. 정확한 최종 제출 승인 뒤에는 승인된 내용만 1회 자동 제출합니다.</p>
+              <!-- 비가역 행동(자동 제출)의 조건만 한 문장으로 적는다(§3·§6.1). -->
+              <p>최종 승인 전에는 외부 제출을 하지 않고, 승인 뒤 승인된 내용만 1회 자동 제출합니다.</p>
             </div></div>
             <div id="competitionToolbar" class="toolbar-group" hidden>
               <span id="competitionFreshness" class="us-freshness"></span>
@@ -2370,8 +2430,12 @@ html.auth-pending body {
             </div>
           </header>
           <div id="competitionApprovalInbox" class="cp-approval-mount" aria-live="polite"></div>
-          <p id="competitionRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
-          <p id="competitionError" class="field-error" role="alert"></p>
+          <!-- 상태·오류 안내 자리 하나. 두 p는 비면 접히므로 화면에는 한 문장만 선다 —
+               어느 슬롯에 어떤 문구를 쓸지(권한 거절 vs 재시도 가능한 장애)는 JS가 정한다. -->
+          <div class="cp-status">
+            <p id="competitionRefreshStatus" class="usage-refresh-status" aria-live="polite"></p>
+            <p id="competitionError" class="field-error" role="alert"></p>
+          </div>
           <form id="competitionFilters" class="cp-filters" aria-label="공모전 후보 필터" hidden>
             <div class="field cp-search"><label class="field-label" for="competitionSearch">후보 검색</label><input id="competitionSearch" class="field-input field-input-sm" type="search" placeholder="이름 · 주최기관 · 자격" autocomplete="off"></div>
             <div class="field"><label class="field-label" for="competitionStatus">상태</label><select id="competitionStatus" class="field-input field-input-sm"><option value="all">전체</option><option value="watching">살펴보는 중</option><option value="verifying">검증 중</option><option value="preparing">지원 준비</option><option value="awaiting-approval">승인 대기</option><option value="approved">승인됨</option><option value="applied">지원 완료</option><option value="blocked">막힘</option><option value="closed">종료</option><option value="unknown">미확인</option></select></div>

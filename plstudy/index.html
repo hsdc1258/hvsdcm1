@@ -11,18 +11,52 @@
   <meta property="og:url" content="https://hvsdcm1.xyz/plstudy/">
   <title>정치와 법</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-auth-gate-v1">
-  <link rel="stylesheet" href="assets/css/style.css?v=20260904-search-v1">
+  <link rel="stylesheet" href="/assets/css/system.css?v=20260904-ui-v1">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260904-ui-v1">
 </head>
 <body>
-  <header class="topbar"><div class="topbar-inner container-wide"><a class="brand" href="/">HVSDCM1</a><span class="topbar-crumb">정치와 법</span><nav class="topbar-nav"><a class="topbar-link" href="/smstudy/">사회·문화</a><a class="topbar-link" href="/WordMaster/">WordMaster</a></nav></div></header>
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar-inner container-wide">
+      <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
+      <span class="topbar-crumb">정치와 법</span>
+      <nav class="topbar-nav" aria-label="사이트 이동">
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
+        <a class="topbar-link" href="/smstudy/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>사회·문화</a>
+      </nav>
+    </div>
+  </header>
   <div class="topbar-spacer"></div>
-  <div class="container-wide pl-page">
-    <aside class="pl-sidebar"><button class="pl-nav is-active" type="button" data-view="home">단원 목록</button><button class="pl-nav" type="button" data-view="progress">학습 기록</button><dl><div><dt>대단원</dt><dd>6</dd></div><div><dt>중단원</dt><dd>18</dd></div><div><dt>문항</dt><dd>90</dd></div></dl></aside>
-    <main id="app" class="pl-main" tabindex="-1"><p class="pl-loading">정치와 법 학습 데이터를 불러오는 중입니다.</p></main>
+
+  <div class="container-wide app-page">
+    <div class="app-shell">
+      <!-- 셸은 system.css의 .app-shell/.sidebar를 소비한다 — 모바일 줄바꿈 칩 격자도 거기서 온다.
+           사이드바 항목은 라벨 한 줄뿐이다(DESIGN.md §6.1). 대단원 목록은 데스크톱 전용이고
+           모바일에서는 본문의 disclosure가 그 자리를 대신한다. -->
+      <aside class="sidebar" aria-label="학습 메뉴">
+        <nav class="sidebar-group" aria-label="화면 이동">
+          <span class="sidebar-label">화면</span>
+          <button class="sidebar-item pl-nav is-active" type="button" data-view="home"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>단원 목록</button>
+          <button class="sidebar-item pl-nav" type="button" data-view="progress"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg>학습 기록</button>
+        </nav>
+        <nav class="sidebar-group pl-unit-nav" aria-label="대단원 바로 가기">
+          <span class="sidebar-label">대단원</span>
+          <a class="sidebar-item" href="#pl-unit-I"><span class="pl-unit-num" aria-hidden="true">I</span>민주주의와 헌법</a>
+          <a class="sidebar-item" href="#pl-unit-II"><span class="pl-unit-num" aria-hidden="true">II</span>민주 국가와 정부</a>
+          <a class="sidebar-item" href="#pl-unit-III"><span class="pl-unit-num" aria-hidden="true">III</span>정치 과정과 참여</a>
+          <a class="sidebar-item" href="#pl-unit-IV"><span class="pl-unit-num" aria-hidden="true">IV</span>개인 생활과 법</a>
+          <a class="sidebar-item" href="#pl-unit-V"><span class="pl-unit-num" aria-hidden="true">V</span>사회 생활과 법</a>
+          <a class="sidebar-item" href="#pl-unit-VI"><span class="pl-unit-num" aria-hidden="true">VI</span>국제 관계와 한반도</a>
+        </nav>
+      </aside>
+
+      <main id="app" class="app-main" tabindex="-1"><p class="pl-loading">학습 데이터를 불러오는 중입니다.</p></main>
+    </div>
   </div>
+
   <script src="/account.js?v=20260904-auth-gate-v1" data-app="plstudy" data-key="politicslaw2027.study.v1"></script>
   <script src="assets/js/data.js"></script>
-  <script src="assets/js/app.js?v=20260904-search-v1"></script>
+  <script src="assets/js/app.js?v=20260904-ui-v1"></script>
 </body>
 </html>

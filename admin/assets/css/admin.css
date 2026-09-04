@@ -39,15 +39,14 @@
   gap: var(--space-4);
   width: min(360px, 100%);
 }
-.ad-login-sub {
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  margin-top: 2px;
-}
 /* ---- 패널 ---- */
 .ad-panel {
   display: grid;
   gap: var(--space-5);
+}
+/* 뷰 부제 슬롯 — 사이드바에 부제가 없으므로 비어 있고, 비면 줄을 접는다(§6.1). */
+#viewSub:empty {
+  display: none;
 }
 /* 뷰 컨테이너 — 한 번에 하나만 보인다. hidden 속성으로 감추므로 여기서 display를 주면
    UA의 [hidden] 규칙을 이겨 버린다. 그래서 :not([hidden])에만 display를 건다. */
@@ -156,20 +155,10 @@
   min-width: 0;
   padding: clamp(36px, 6vw, 84px);
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.1);
+  border: 1px solid var(--line-faint);
   border-radius: 32px;
-  background: radial-gradient(circle at 78% 22%, rgba(41,151,255,.22), transparent 18rem), linear-gradient(145deg, #161a24, #090a0e 72%);
-}
-.ad-login-intro::after {
-  position: absolute;
-  right: -90px;
-  bottom: -120px;
-  width: 320px;
-  height: 320px;
-  border: 1px solid rgba(41,151,255,.15);
-  border-radius: 50%;
-  box-shadow: 0 0 0 60px rgba(41,151,255,.025), 0 0 0 120px rgba(41,151,255,.018);
-  content: "";
+  /* 그라디언트·글로우 링 없음 — 한 단 밝은 면 + 헤어라인(DESIGN.md §3·§4). */
+  background: var(--surface);
 }
 .ad-login-symbol {
   display: grid;
@@ -193,15 +182,6 @@
   font-size: clamp(3rem, 3.4vw, 4rem);
   line-height: .95;
   letter-spacing: -.07em;
-}
-.ad-login-intro > p {
-  position: relative;
-  z-index: 1;
-  max-width: 560px;
-  margin-top: 24px;
-  color: #9aa2b2;
-  font-size: 1.05rem;
-  line-height: 1.7;
 }
 .ad-login-facts {
   position: relative;
@@ -232,10 +212,9 @@
   align-self: center;
   width: 100%;
   padding: 34px;
-  border-color: rgba(255,255,255,.12);
+  border-color: var(--line);
   border-radius: 26px;
-  background: #14161c;
-  box-shadow: 0 30px 90px rgba(0,0,0,.38);
+  background: var(--surface);
 }
 .ad-login-card-head {
   display: flex;
@@ -270,9 +249,9 @@
 }
 .admin-page #stats {
   overflow: hidden;
-  border-color: rgba(255,255,255,.1);
+  border-color: var(--line-faint);
   border-radius: 20px;
-  background: linear-gradient(110deg, rgba(41,151,255,.1), rgba(255,255,255,.025) 42%, rgba(48,209,88,.05));
+  background: var(--surface);
 }
 .admin-page #stats > div {
   min-height: 116px;
@@ -325,9 +304,6 @@
   }
   .ad-login-intro h1 {
     font-size: clamp(2.45rem, 12vw, 3.1rem);
-  }
-  .ad-login-intro > p {
-    font-size: .92rem;
   }
   .ad-login-facts {
     margin-top: 28px;
