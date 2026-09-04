@@ -742,37 +742,6 @@ hr {
 .link-arrow:hover::after {
   transform: translateX(3px);
 }
-/* 아이콘 링크 — 소셜 프로필 등 아이콘만 보이는 링크의 공통 프리미티브.
-   라벨은 aria-label로 제공한다. 터치 타깃 44px 확보(WCAG 2.5.5). */
-.icon-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-m);
-  color: var(--text-2);
-  /* on --bg 8.16:1 — 그래픽 요소 3:1 요건 충족 */
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-.icon-link svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-.icon-link:hover {
-  color: var(--text);
-  background: var(--line-faint);
-}
-.icon-link-lg {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-l);
-}
-.icon-link-lg svg {
-  width: 26px;
-  height: 26px;
-}
 /* ==========================================================================
    입력 필드
    ========================================================================== */
@@ -1478,6 +1447,11 @@ a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.lis
   .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
     display: none;
   }
+  /* 설명 슬롯이 숨으면 그 그룹의 라벨도 함께 숨긴다 — 라벨만 남아 빈 제목이 뜨지 않게.
+     항목(.sidebar-item / .list-group)이 함께 있는 그룹은 라벨을 유지한다. */
+  .sidebar .sidebar-group:has(> .side-facts, > .side-note):not(:has(> .sidebar-item, > .list-group)) {
+    display: none;
+  }
 }
 /* ==========================================================================
    토스트
@@ -1644,10 +1618,11 @@ html.auth-pending body {
   border-bottom-color: rgba(255,255,255,.08);
   background: #07080b;
 }
+/* 현재 앱 이름 알약 — 강조색 틴트가 아니라 중립 표면 한 단(§3·§5 색 타일 금지).
+   --text-2 on --surface-3 5.42:1 (상단 대비표). 강조색은 뷰당 한 곳, 활성 컨트롤에만 남긴다. */
 .workspace-app .topbar-crumb {
-  border-color: rgba(41,151,255,.2);
-  background: rgba(41,151,255,.09);
-  color: #8cc8ff;
+  background: var(--surface-3);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -1908,7 +1883,7 @@ html.auth-pending body {
   /* on --bg 8.16:1 */
   font-size: var(--fs-body-sm);
 }
-/* 실패·주의 줄. 상태색은 상태 표시에만 쓴다(§3) — 여기가 그 용도다. */
+/* 실패·주의 줄. 상태는 제목 문장과 보더가 말한다 — 아이콘에 상태색을 칠하지 않는다(§5). */
 .gi-alert {
   display: flex;
   gap: var(--space-3);
@@ -1917,13 +1892,12 @@ html.auth-pending body {
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
 }
-.gi-icon {
-  flex: none;
-  width: 18px;
-  height: 18px;
+/* 배너 아이콘 — 공통 스프라이트(.ui-icon), 툴바·버튼 단 16px. 선 색은 .ui-icon 기본값 --text-3
+   (on --surface 4.99:1 — 그래픽 3:1 충족). 첫 줄 제목의 x-height에 맞춰 2px 내린다. */
+.gi-alert > .ui-icon {
+  width: 16px;
+  height: 16px;
   margin-top: 2px;
-  color: var(--orange);
-  /* on --surface 8.80:1 */
 }
 .gi-alert-body {
   min-width: 0;
@@ -2012,7 +1986,7 @@ html.auth-pending body {
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">기출</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
-        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-home"></use></svg>홈</a>
       </nav>
     </div>
   </header>
@@ -2028,6 +2002,7 @@ html.auth-pending body {
       <main id="app" class="app-main" tabindex="-1">
         <div class="view-head">
           <div class="view-head-main">
+            <svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-file"></use></svg>
             <div>
               <h1>기출</h1>
               <p>평가원 6월 · 9월 · 수능 문제지</p>

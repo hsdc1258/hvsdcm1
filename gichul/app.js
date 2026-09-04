@@ -57,11 +57,10 @@
       .replaceAll("'", '&#39;');
   }
 
-  function icon(name) {
-    const body = (window.SM_ICONS && window.SM_ICONS.ICONS && window.SM_ICONS.ICONS[name]) || '';
-    if (!body) return '';
-    return `<svg class="gi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"`
-      + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+  // 오류 배너 아이콘 — 사이트 공통 스프라이트(assets/ui-icons.svg) 하나뿐이다(DESIGN.md §5).
+  // 선 색은 .ui-icon 기본값(--text-3)이고 상태는 배너 제목과 보더가 말한다.
+  function alertIcon() {
+    return '<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-alert-triangle"></use></svg>';
   }
 
   // ---- 매니페스트에서 도출하는 것들 -----------------------------------------
@@ -516,7 +515,7 @@
   }
 
   function failureBanner(title, items) {
-    return `<div class="gi-alert" role="alert">${icon('alert-triangle')}`
+    return `<div class="gi-alert" role="alert">${alertIcon()}`
       + `<div class="gi-alert-body"><p class="gi-alert-title">${escapeHtml(title)}</p>`
       + `<ul class="gi-alert-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
       + `</div></div>`;

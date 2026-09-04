@@ -52,7 +52,7 @@
   });
 
   function uiIcon(id) {
-    return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#${id}"></use></svg>`;
+    return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#${id}"></use></svg>`;
   }
 
   // 'lg'는 뷰 헤더(.view-head-main 직계, 20px), 기본은 행 선두(.list-row-lead, 17px).

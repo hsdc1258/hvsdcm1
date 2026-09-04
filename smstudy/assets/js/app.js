@@ -22,13 +22,11 @@
     EBS_PAST_EXAMS,
     GUIDES: EXPLANATION_GUIDES
   } = window.SMSTUDY_EXPLANATIONS || {};
-  const {
-    renderDiagram,
-    renderIcon: icon
-  } = window.SMSTUDY_DIAGRAM || {};
+  // 아이콘은 사이트 공통 스프라이트(assets/ui-icons.svg)만 쓴다 — 두 번째 외부 세트는 소비하지 않는다(DESIGN.md §5).
+  const { renderDiagram } = window.SMSTUDY_DIAGRAM || {};
 
   // data.js가 먼저 로드되어야 한다. 불완전한 배포는 사용자에게 오류 화면으로 알린다.
-  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram || !icon) {
+  if (!studyUtils || !Array.isArray(CHOICE_MARKS) || !Array.isArray(QUESTIONS) || !Array.isArray(UNITS) || !LEARNING_DESIGN || !NOTEBOOKS || !EBS_PAST_EXAMS || !EXPLANATION_GUIDES || !renderDiagram) {
     app.innerHTML = '<div class="card"><h2>데이터 로드 오류</h2><p>사회·문화 학습 데이터를 불러오지 못했습니다.</p></div>';
     return;
   }
@@ -277,7 +275,7 @@
   // 앱 아이콘은 사이트 공통 매핑과 같은 icon-layers 하나다(DESIGN.md §5.1). 뷰 헤더와
   // 개념 노트 머리에서 20px(.view-head-main / .sm-concept-head 직계)로 한 번씩만 놓는다.
   function appIcon() {
-    return '<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>';
+    return '<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-layers"></use></svg>';
   }
 
   function renderStartPanel(summary) {
@@ -402,7 +400,7 @@
     const done = Boolean(db.completed[sub.id]);
     return `
       <div class="list-row">
-        <span class="sm-sub-id">${esc(sub.id)}</span>
+        <span class="list-row-lead"><span class="sm-sub-id">${esc(sub.id)}</span></span>
         <span class="list-row-body">
           <button class="list-row-stretch" type="button" data-id="${sub.id}">
             <span class="list-row-title">${esc(sub.title)}</span>
@@ -560,8 +558,8 @@
         ${sectionHead('decision-title', '시험장 판단 순서')}
         <ol class="sm-steps">${steps}</ol>
         <div class="sm-callouts">
-          <p class="sm-callout"><span class="kicker">${icon('trending-up')}출제 방식</span>${esc(note.exam.trend)}</p>
-          <p class="sm-callout is-trap"><span class="kicker">${icon('alert-triangle')}자주 걸리는 함정</span>${esc(note.exam.trap)}</p>
+          <p class="sm-callout"><span class="kicker"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-info"></use></svg>출제 방식</span>${esc(note.exam.trend)}</p>
+          <p class="sm-callout is-trap"><span class="kicker"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-alert-triangle"></use></svg>자주 걸리는 함정</span>${esc(note.exam.trap)}</p>
         </div>
       </section>`;
   }

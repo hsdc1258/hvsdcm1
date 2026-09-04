@@ -20,7 +20,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer,
-  ICON_SOURCE, NOTEBOOK_SOURCE, readSource, renderGichulScreen, renderWordMasterHome,
+  NOTEBOOK_SOURCE, readSource, renderGichulScreen, renderWordMasterHome,
 } from './render-sandbox.mjs';
 
 const ROOT = process.cwd();
@@ -173,7 +173,7 @@ function documentSnapshot(file, { note, mutate = (html) => html }) {
 }
 
 function uiIcon(id) {
-  return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#${id}"></use></svg>`;
+  return `<svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#${id}"></use></svg>`;
 }
 
 function drawerGroup(heading, links) {
@@ -183,7 +183,7 @@ function drawerGroup(heading, links) {
 
 export function buildSnapshots() {
   const notebooks = evaluateBrowserData(NOTEBOOK_SOURCE, 'SMSTUDY_NOTEBOOK').NOTEBOOKS;
-  const renderer = evaluateDiagramRenderer(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS').ICONS);
+  const renderer = evaluateDiagramRenderer();
 
   const diagramItems = [];
   let diagramCount = 0;

@@ -76,7 +76,7 @@
   /* on --bg 8.16:1 */
   font-size: var(--fs-body-sm);
 }
-/* 실패·주의 줄. 상태색은 상태 표시에만 쓴다(§3) — 여기가 그 용도다. */
+/* 실패·주의 줄. 상태는 제목 문장과 보더가 말한다 — 아이콘에 상태색을 칠하지 않는다(§5). */
 .gi-alert {
   display: flex;
   gap: var(--space-3);
@@ -85,13 +85,12 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
 }
-.gi-icon {
-  flex: none;
-  width: 18px;
-  height: 18px;
+/* 배너 아이콘 — 공통 스프라이트(.ui-icon), 툴바·버튼 단 16px. 선 색은 .ui-icon 기본값 --text-3
+   (on --surface 4.99:1 — 그래픽 3:1 충족). 첫 줄 제목의 x-height에 맞춰 2px 내린다. */
+.gi-alert > .ui-icon {
+  width: 16px;
+  height: 16px;
   margin-top: 2px;
-  color: var(--orange);
-  /* on --surface 8.80:1 */
 }
 .gi-alert-body {
   min-width: 0;

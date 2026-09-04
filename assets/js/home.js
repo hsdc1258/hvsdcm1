@@ -81,7 +81,7 @@
     svg.setAttribute('class', 'ui-icon');
     svg.setAttribute('aria-hidden', 'true');
     const use = document.createElementNS(SVG_NS, 'use');
-    use.setAttribute('href', `/assets/ui-icons.svg#${id}`);
+    use.setAttribute('href', `/assets/ui-icons.svg?v=20260904-icons-v2#${id}`);
     svg.append(use);
     return svg;
   }

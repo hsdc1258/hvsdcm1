@@ -748,37 +748,6 @@ hr {
 .link-arrow:hover::after {
   transform: translateX(3px);
 }
-/* 아이콘 링크 — 소셜 프로필 등 아이콘만 보이는 링크의 공통 프리미티브.
-   라벨은 aria-label로 제공한다. 터치 타깃 44px 확보(WCAG 2.5.5). */
-.icon-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-m);
-  color: var(--text-2);
-  /* on --bg 8.16:1 — 그래픽 요소 3:1 요건 충족 */
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-.icon-link svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-.icon-link:hover {
-  color: var(--text);
-  background: var(--line-faint);
-}
-.icon-link-lg {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-l);
-}
-.icon-link-lg svg {
-  width: 26px;
-  height: 26px;
-}
 /* ==========================================================================
    입력 필드
    ========================================================================== */
@@ -1484,6 +1453,11 @@ a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.lis
   .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
     display: none;
   }
+  /* 설명 슬롯이 숨으면 그 그룹의 라벨도 함께 숨긴다 — 라벨만 남아 빈 제목이 뜨지 않게.
+     항목(.sidebar-item / .list-group)이 함께 있는 그룹은 라벨을 유지한다. */
+  .sidebar .sidebar-group:has(> .side-facts, > .side-note):not(:has(> .sidebar-item, > .list-group)) {
+    display: none;
+  }
 }
 /* ==========================================================================
    토스트
@@ -1650,10 +1624,11 @@ html.auth-pending body {
   border-bottom-color: rgba(255,255,255,.08);
   background: #07080b;
 }
+/* 현재 앱 이름 알약 — 강조색 틴트가 아니라 중립 표면 한 단(§3·§5 색 타일 금지).
+   --text-2 on --surface-3 5.42:1 (상단 대비표). 강조색은 뷰당 한 곳, 활성 컨트롤에만 남긴다. */
 .workspace-app .topbar-crumb {
-  border-color: rgba(41,151,255,.2);
-  background: rgba(41,151,255,.09);
-  color: #8cc8ff;
+  background: var(--surface-3);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -2070,11 +2045,11 @@ html.auth-pending body {
 
   <div id="shade" class="shade" aria-hidden="true"></div>
   <aside id="drawer" class="drawer logged" aria-label="개인 메뉴" aria-hidden="true">
-    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-x"></use></svg></button></header>
+    <header class="drawer-head"><strong>HVSDCM1</strong><button id="closeDrawer" type="button" aria-label="메뉴 닫기"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-x"></use></svg></button></header>
     <!-- 두 마운트는 비어 있다. 로그인 뒤 home.js가 그룹 헤드 + 그룹 리스트를 만든다. -->
     <nav class="drawer-links" aria-label="바로가기">
-      <div id="studyLinks" class="drawer-group"><h2 class="list-group-head">학습</h2><div class="list-group"><a class="list-row list-row-nav" href="/WordMaster/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg></span><span class="list-row-body"><span class="list-row-title">WordMaster</span></span></a><a class="list-row list-row-nav" href="/smstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg></span><span class="list-row-body"><span class="list-row-title">사회·문화</span></span></a><a class="list-row list-row-nav" href="/plstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-scale"></use></svg></span><span class="list-row-body"><span class="list-row-title">정치와 법</span></span></a><a class="list-row list-row-nav" href="/gichul/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-file"></use></svg></span><span class="list-row-body"><span class="list-row-title">기출</span></span></a></div></div>
-      <div id="ownerLinks" class="drawer-group"><h2 class="list-group-head">운영</h2><div class="list-group"><a class="list-row list-row-nav" href="/behavior-lab/#paper"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg></span><span class="list-row-body"><span class="list-row-title">Behavior Lab</span></span></a><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg></span><span class="list-row-body"><span class="list-row-title">공모전</span></span></a><a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-shield"></use></svg></span><span class="list-row-body"><span class="list-row-title">관리자</span></span></a></div></div>
+      <div id="studyLinks" class="drawer-group"><h2 class="list-group-head">학습</h2><div class="list-group"><a class="list-row list-row-nav" href="/WordMaster/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-book-open"></use></svg></span><span class="list-row-body"><span class="list-row-title">WordMaster</span></span></a><a class="list-row list-row-nav" href="/smstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-layers"></use></svg></span><span class="list-row-body"><span class="list-row-title">사회·문화</span></span></a><a class="list-row list-row-nav" href="/plstudy/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-scale"></use></svg></span><span class="list-row-body"><span class="list-row-title">정치와 법</span></span></a><a class="list-row list-row-nav" href="/gichul/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-file"></use></svg></span><span class="list-row-body"><span class="list-row-title">기출</span></span></a></div></div>
+      <div id="ownerLinks" class="drawer-group"><h2 class="list-group-head">운영</h2><div class="list-group"><a class="list-row list-row-nav" href="/behavior-lab/#paper"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-bolt"></use></svg></span><span class="list-row-body"><span class="list-row-title">Behavior Lab</span></span></a><a class="list-row list-row-nav" href="/usage/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-trophy"></use></svg></span><span class="list-row-body"><span class="list-row-title">공모전</span></span></a><a class="list-row list-row-nav" href="/admin/"><span class="list-row-lead"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-shield"></use></svg></span><span class="list-row-body"><span class="list-row-title">관리자</span></span></a></div></div>
     </nav>
     <button id="drawerLogout" class="drawer-logout" type="button">로그아웃</button>
   </aside>

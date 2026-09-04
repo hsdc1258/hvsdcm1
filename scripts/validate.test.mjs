@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
 import {
-  findColoredIconParents, findIconBackgroundViolations, findMissingIconReferences, findRenderedEmoji, inspectSprite,
+  findIconBackgroundViolations, findInvalidIconMarkup, findMissingIconReferences,
+  findRenderedEmoji, findUnversionedIconSpriteReferences, ICON_SPRITE_URL, inspectSprite,
 } from './icon-gates.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,21 +44,45 @@ test('v14 sprite inspection exposes the complete stroke contract', () => {
   });
 });
 
-test('v14 icon background gate targets dedicated wrappers, not ordinary action buttons', () => {
-  const failures = findIconBackgroundViolations([{ file: 'fixture.css', source: `
-    .btn-primary { background: var(--accent-strong); }
-    .list-row-lead { background: var(--accent-soft); }
-  ` }]);
-  assert.equal(failures.length, 1);
-  assert.equal(failures[0].selector, '.list-row-lead');
+test('v14 icon markup gate pins the one sprite URL and rejects a second inline icon set', () => {
+  const valid = [{ file: 'valid.html', source: `<svg class="ui-icon"><use href="${ICON_SPRITE_URL}#icon-info"></use></svg>` }];
+  assert.deepEqual(findInvalidIconMarkup(valid), []);
+  assert.deepEqual(findUnversionedIconSpriteReferences(valid), []);
+
+  const invalid = [{ file: 'invalid.html', source: '<svg class="other-icon"><path d="M0 0"></path></svg><svg class="ui-icon"><use href="/assets/ui-icons.svg#icon-info"></use></svg>' }];
+  assert.equal(findInvalidIconMarkup(invalid).length, 2);
+  assert.equal(findUnversionedIconSpriteReferences(invalid).length, 1);
 });
 
-test('v14 icon background gate rejects a ui-icon inside an accent-filled control', () => {
-  const stylesheets = [{ file: 'fixture.css', source: '.btn-primary { background: var(--accent-strong); }' }];
-  const surfaces = [{ file: 'fixture.html', source: '<button class="btn btn-primary"><svg class="ui-icon"></svg>열기</button>' }];
-  const [failure] = findColoredIconParents(surfaces, stylesheets);
-  assert.equal(failure.file, 'fixture.html');
-  assert.equal(failure.className, 'btn-primary');
+test('v14 rendered-snapshot background gate catches every requested regression shape', () => {
+  const cases = [
+    {
+      name: 'deleted admin shield wrapper with the literal accent color',
+      html: '<div class="ad-login-symbol"><svg class="ui-icon"></svg></div>',
+      css: '.ad-login-symbol { background: rgba(41,151,255,.12); }',
+      selector: '.ad-login-symbol',
+    },
+    {
+      name: 'wrapper produced by DOM code and captured in the rendered snapshot',
+      html: '<span class="runtime-icon-wrap"><svg class="ui-icon"></svg></span>',
+      css: '.runtime-icon-wrap { background-image: linear-gradient(var(--accent), transparent); }',
+      selector: '.runtime-icon-wrap',
+    },
+    {
+      name: 'ui icon that is not the first child of its wrapper',
+      html: '<button class="late-icon"><span>먼저</span><svg class="ui-icon"></svg></button>',
+      css: '.late-icon { background-color: var(--orange-soft); }',
+      selector: '.late-icon',
+    },
+  ];
+  for (const fixture of cases) {
+    const failures = findIconBackgroundViolations(
+      [{ file: `${fixture.name}.html`, source: fixture.html }],
+      [{ file: `${fixture.name}.css`, source: fixture.css }],
+    );
+    assert.equal(failures.length, 1, fixture.name);
+    assert.equal(failures[0].selector, fixture.selector, fixture.name);
+  }
 });
 
 test('validate.mjs rejects a real DESIGN copy with a duplicate section number', () => {

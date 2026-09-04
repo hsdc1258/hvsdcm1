@@ -19,26 +19,19 @@
   // - **화면에 기획 메모를 내지 않는다.** 형식 이름표 칩과 '왜 이 형식인가'(why)는 제거했다.
   //   학습자에게 필요한 정보가 아니다. 형식 선택 근거는 docs/kice-analysis.md 부록 D에 있다.
   // - **아이콘을 쓰지 않는다.** 노드마다 하나씩 붙는 아이콘은 항목을 구별해 주지 못하고
-  //   번호와 겹쳐 장식만 늘린다 (DESIGN.md §4). renderIcon()은 app.js가 쓰는 공용 유틸로만 남는다.
+  //   번호와 겹쳐 장식만 늘린다 (DESIGN.md §4). UI 아이콘은 app.js가 공통 스프라이트에서 직접 쓴다.
   // - 글자 수 상한은 더 이상 좌표가 아니라 **가독성**이 정한다 (아래 게이트 주석 참고).
   //   scripts/validate.mjs의 DIAGRAM_TEXT_LIMITS와 같은 값이어야 한다:
   //     label 14자 / items 28자 / center 14자 / title 20자
   // - 좁은 화면 분기는 venn의 장식 SVG를 숨기는 컨테이너 쿼리 하나뿐이다.
   //   나머지 형식은 CSS 조판이 이미 반응형이라 폴백 목록이 필요 없다.
 
-  const ICON_SET = (window.SM_ICONS && window.SM_ICONS.ICONS) || {};
   const esc = (window.HvsStudyUtils && window.HvsStudyUtils.escapeHtml)
     || ((value) => String(value).replace(/[&<>"']/gu, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
   // 순서가 의미를 갖는 형식은 <ol>로 낸다. matrix2x2·venn의 번호는 순서가 아니라
   // 도형과 라벨을 짝짓는 열쇠지만, 번호를 화면에 내므로 같은 <ol>을 쓴다.
   const NUMBERED_KINDS = new Set(['flow', 'timeline', 'pyramid', 'matrix2x2', 'venn']);
-
-  function renderIcon(key, className = 'sm-icon') {
-    const body = ICON_SET[key];
-    if (!body) return '';
-    return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
-  }
 
   // 노드 하나의 제목 줄. 번호는 동그라미 뱃지가 아니라 그냥 숫자이고, 아이콘은 붙이지 않는다
   // (DESIGN.md §4 장식 상한 — 번호와 아이콘을 함께 다는 조판이 이번 피드백의 지적 대상이었다).
@@ -216,9 +209,7 @@
   }
 
   window.SMSTUDY_DIAGRAM = Object.freeze({
-    ICONS: ICON_SET,
     KINDS: Object.freeze(Object.keys(LAYOUTS)),
-    renderIcon,
     renderDiagram,
   });
 })();

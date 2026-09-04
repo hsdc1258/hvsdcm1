@@ -19,7 +19,6 @@ const ROOT = process.cwd();
 
 export const APP_SOURCE = 'smstudy/assets/js/app.js';
 export const DIAGRAM_SOURCE = 'smstudy/assets/js/diagram.js';
-export const ICON_SOURCE = 'assets/vendor/lucide/icons.js';
 export const DATA_SOURCE = '_learning/smstudy/data.js';
 export const NOTEBOOK_SOURCE = '_learning/smstudy/notebook-data.js';
 export const EXPLANATION_SOURCE = '_learning/smstudy/explanation-data.js';
@@ -40,13 +39,10 @@ export function evaluateBrowserData(file, exportedName) {
   return context[exportedName];
 }
 
-// 아이콘 집합이 렌더러에 **실제로 연결돼 있는지**는 소스에 전역명이 있는지로 알 수 없다.
-// ICON_SET = {} 로 바꾸고 `void window.SM_ICONS` 만 남긴 변형이 통과했다 (review B-3).
-// 그래서 렌더러를 격리 VM에서 평가해 주입한 아이콘 본문이 마크업으로 나오는지 본다.
-export function evaluateDiagramRenderer(iconSet) {
+// 다이어그램은 콘텐츠 시각화만 렌더한다. UI 아이콘은 app.js가 공통 스프라이트에서 직접 쓴다.
+export function evaluateDiagramRenderer() {
   const context = {};
   context.window = context;
-  context.SM_ICONS = { ICONS: iconSet };
   vm.createContext(context);
   vm.runInContext(readSource(DIAGRAM_SOURCE), context, { filename: DIAGRAM_SOURCE });
   return context.SMSTUDY_DIAGRAM;
@@ -210,7 +206,7 @@ export function createAppSandbox(options = {}) {
   context.console = { log() {}, warn() {}, error() {} };
   vm.createContext(context);
 
-  for (const file of [UTILS_SOURCE, ICON_SOURCE, DIAGRAM_SOURCE, DATA_SOURCE, NOTEBOOK_SOURCE, EXPLANATION_SOURCE]) {
+  for (const file of [UTILS_SOURCE, DIAGRAM_SOURCE, DATA_SOURCE, NOTEBOOK_SOURCE, EXPLANATION_SOURCE]) {
     vm.runInContext(readSource(file), context, { filename: file });
   }
 
@@ -313,7 +309,6 @@ export function createGichulRenderers(options = {}) {
   context.clearTimeout = () => {};
   context.console = { log() {}, warn() {}, error() {} };
   vm.createContext(context);
-  vm.runInContext(readSource(ICON_SOURCE), context, { filename: ICON_SOURCE });
   const originalSource = readSource(GICHUL_APP_SOURCE);
   const source = typeof options.sourceTransform === 'function'
     ? options.sourceTransform(originalSource)

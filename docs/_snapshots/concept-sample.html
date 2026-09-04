@@ -738,37 +738,6 @@ hr {
 .link-arrow:hover::after {
   transform: translateX(3px);
 }
-/* 아이콘 링크 — 소셜 프로필 등 아이콘만 보이는 링크의 공통 프리미티브.
-   라벨은 aria-label로 제공한다. 터치 타깃 44px 확보(WCAG 2.5.5). */
-.icon-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-m);
-  color: var(--text-2);
-  /* on --bg 8.16:1 — 그래픽 요소 3:1 요건 충족 */
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-.icon-link svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-.icon-link:hover {
-  color: var(--text);
-  background: var(--line-faint);
-}
-.icon-link-lg {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-l);
-}
-.icon-link-lg svg {
-  width: 26px;
-  height: 26px;
-}
 /* ==========================================================================
    입력 필드
    ========================================================================== */
@@ -1474,6 +1443,11 @@ a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.lis
   .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
     display: none;
   }
+  /* 설명 슬롯이 숨으면 그 그룹의 라벨도 함께 숨긴다 — 라벨만 남아 빈 제목이 뜨지 않게.
+     항목(.sidebar-item / .list-group)이 함께 있는 그룹은 라벨을 유지한다. */
+  .sidebar .sidebar-group:has(> .side-facts, > .side-note):not(:has(> .sidebar-item, > .list-group)) {
+    display: none;
+  }
 }
 /* ==========================================================================
    토스트
@@ -1640,10 +1614,11 @@ html.auth-pending body {
   border-bottom-color: rgba(255,255,255,.08);
   background: #07080b;
 }
+/* 현재 앱 이름 알약 — 강조색 틴트가 아니라 중립 표면 한 단(§3·§5 색 타일 금지).
+   --text-2 on --surface-3 5.42:1 (상단 대비표). 강조색은 뷰당 한 곳, 활성 컨트롤에만 남긴다. */
 .workspace-app .topbar-crumb {
-  border-color: rgba(41,151,255,.2);
-  background: rgba(41,151,255,.09);
-  color: #8cc8ff;
+  background: var(--surface-3);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -1982,14 +1957,14 @@ ul.sm-bullets {
   height: 20px;
   color: var(--text-3);
 }
-/* 중단원 행 선두의 단원 번호(I-01 …). 이모지 타일을 대체한다 — 텍스트라 배경 면이 없다.
-   --text-3 on --surface 4.99:1 (캡션 하한 충족). 폭을 고정해 제목 시작선을 맞춘다. */
-.sm-sub-id {
-  flex: none;
+/* 중단원 행 선두의 단원 번호(I-01 …). system.css의 .list-row-lead 슬롯 안에 두는 텍스트
+   글리프다(DESIGN.md §7.1) — 그래서 행 구분선의 45px 인셋(.list-row + .list-row:has(.list-row-lead))이
+   WordMaster 행과 같게 걸린다. 배경 면 없음. --text-3 on --surface 4.99:1 (캡션 하한 충족).
+   폭을 고정해 제목 시작선을 맞춘다. */
+.list-row-lead > .sm-sub-id {
   min-width: 3.4em;
   font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
-  color: var(--text-3);
 }
 .sm-concept-meta {
   font-size: var(--fs-caption);
@@ -2087,16 +2062,11 @@ ul.sm-summary li::marker {
   color: var(--text);
   line-height: var(--lh-body);
 }
-/* 아이콘은 벤더링된 Lucide 24x24 스트로크 아이콘이다 (assets/vendor/lucide). */
-.sm-icon {
+/* 콜아웃 머리의 아이콘 — 사이트 공통 스프라이트(.ui-icon)뿐이다(DESIGN.md §5). 툴바·버튼 단(16px),
+   선 굵기·선 색(--text-3)은 .ui-icon 기본값을 그대로 쓴다. */
+.sm-callout .kicker .ui-icon {
   width: 16px;
   height: 16px;
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 /* 정적 집계(단원 평균 정답률)를 막대로 그리던 .sm-gauge는 제거했다 — 프로그레스 바는
    사용자의 진행 데이터에만 쓴다 (DESIGN.md §4). 같은 정보는 아래 .sm-hint 문장이 낸다. */
@@ -3158,7 +3128,7 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         <button id="subQuiz" class="btn btn-primary btn-sm" type="button">퀴즈 6문제</button>
       </nav>
       <header class="sm-concept-head">
-        <svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-layers"></use></svg>
+        <svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-layers"></use></svg>
         <div>
           <h1 class="title-1">문화의 이해</h1>
           <p class="sm-concept-meta">문화와 사회 · 약 22분 · 수록 기출 6문항</p>
@@ -3221,8 +3191,8 @@ body { background: var(--bg); color: var(--text); margin: 0; padding: 32px 24px 
         <div class="sm-sec-head"><h2 class="sm-sec-label" id="decision-title">시험장 판단 순서</h2></div>
         <ol class="sm-steps"><li><span>1</span><p>속성 문제는 제시문이 강조한 장면을 먼저 찾는다.</p></li><li><span>2</span><p>두 속성이 겹치면 나머지 사례로 소거해 확정한다.</p></li><li><span>3</span><p>태도 문제는 무엇을 절대 기준으로 삼는지 본다.</p></li><li><span>4</span><p>보편 윤리로 비판하는 발언은 상대주의가 아니다.</p></li></ol>
         <div class="sm-callouts">
-          <p class="sm-callout"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
-          <p class="sm-callout is-trap"><span class="kicker"><svg class="sm-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
+          <p class="sm-callout"><span class="kicker"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-info"></use></svg>출제 방식</span>사례 표나 대화에서 속성을 소거법으로 확정하게 만든다.</p>
+          <p class="sm-callout is-trap"><span class="kicker"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-alert-triangle"></use></svg>자주 걸리는 함정</span>전체성과 변동성, 공유성과 축적성을 서로 바꿔 쓴다.</p>
         </div>
       </section>
 

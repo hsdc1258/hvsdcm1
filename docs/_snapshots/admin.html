@@ -741,37 +741,6 @@ hr {
 .link-arrow:hover::after {
   transform: translateX(3px);
 }
-/* 아이콘 링크 — 소셜 프로필 등 아이콘만 보이는 링크의 공통 프리미티브.
-   라벨은 aria-label로 제공한다. 터치 타깃 44px 확보(WCAG 2.5.5). */
-.icon-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-m);
-  color: var(--text-2);
-  /* on --bg 8.16:1 — 그래픽 요소 3:1 요건 충족 */
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-.icon-link svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-.icon-link:hover {
-  color: var(--text);
-  background: var(--line-faint);
-}
-.icon-link-lg {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-l);
-}
-.icon-link-lg svg {
-  width: 26px;
-  height: 26px;
-}
 /* ==========================================================================
    입력 필드
    ========================================================================== */
@@ -1477,6 +1446,11 @@ a.list-row:hover .list-row-lead, button.list-row:hover .list-row-lead, label.lis
   .sidebar .side-facts, .sidebar .side-note, .sidebar .sidebar-product-copy span {
     display: none;
   }
+  /* 설명 슬롯이 숨으면 그 그룹의 라벨도 함께 숨긴다 — 라벨만 남아 빈 제목이 뜨지 않게.
+     항목(.sidebar-item / .list-group)이 함께 있는 그룹은 라벨을 유지한다. */
+  .sidebar .sidebar-group:has(> .side-facts, > .side-note):not(:has(> .sidebar-item, > .list-group)) {
+    display: none;
+  }
 }
 /* ==========================================================================
    토스트
@@ -1643,10 +1617,11 @@ html.auth-pending body {
   border-bottom-color: rgba(255,255,255,.08);
   background: #07080b;
 }
+/* 현재 앱 이름 알약 — 강조색 틴트가 아니라 중립 표면 한 단(§3·§5 색 타일 금지).
+   --text-2 on --surface-3 5.42:1 (상단 대비표). 강조색은 뷰당 한 곳, 활성 컨트롤에만 남긴다. */
 .workspace-app .topbar-crumb {
-  border-color: rgba(41,151,255,.2);
-  background: rgba(41,151,255,.09);
-  color: #8cc8ff;
+  background: var(--surface-3);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -2051,9 +2026,9 @@ html.auth-pending body {
       <a class="brand" href="/" aria-label="hvsdcm 홈"><img class="brand-mark" src="/assets/logo.svg" alt="">hvsdcm</a>
       <span class="topbar-crumb">admin</span>
       <nav class="topbar-nav" aria-label="사이트 이동">
-        <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg>공모전</a>
-        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg>Behavior Lab</a>
-        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-home"></use></svg>홈</a>
+        <a class="topbar-link" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-trophy"></use></svg>공모전</a>
+        <a class="topbar-link" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-bolt"></use></svg>Behavior Lab</a>
+        <a class="topbar-link" href="/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-home"></use></svg>홈</a>
       </nav>
     </div>
   </header>
@@ -2088,25 +2063,25 @@ html.auth-pending body {
 
         <nav class="sidebar-group" aria-label="대시보드">
           <p class="sidebar-label">대시보드</p>
-          <button class="sidebar-item" type="button" data-view="overview" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
+          <button class="sidebar-item" type="button" data-view="overview" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-chart"></use></svg><span class="sidebar-item-text">개요</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="워크스페이스 도구">
           <p class="sidebar-label">워크스페이스</p>
-          <a class="sidebar-item" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-bolt"></use></svg><span class="sidebar-item-text">Behavior Lab</span></a>
-          <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></a>
-          <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
+          <a class="sidebar-item" href="/behavior-lab/#live"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-bolt"></use></svg><span class="sidebar-item-text">Behavior Lab</span></a>
+          <a class="sidebar-item" href="/usage/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-trophy"></use></svg><span class="sidebar-item-text">공모전</span></a>
+          <a class="sidebar-item" href="/WordMaster/"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-book-open"></use></svg><span class="sidebar-item-text">WordMaster</span></a>
         </nav>
 
         <nav class="sidebar-group" aria-label="사용자 관리">
           <p class="sidebar-label">사용자 관리</p>
-          <button class="sidebar-item" type="button" data-view="users"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-users"></use></svg><span class="sidebar-item-text">사용자</span></button>
-          <button class="sidebar-item" type="button" data-view="sessions"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-monitor"></use></svg><span class="sidebar-item-text">접속 기기</span></button>
+          <button class="sidebar-item" type="button" data-view="users"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-users"></use></svg><span class="sidebar-item-text">사용자</span></button>
+          <button class="sidebar-item" type="button" data-view="sessions"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-monitor"></use></svg><span class="sidebar-item-text">접속 기기</span></button>
         </nav>
 
         <nav class="sidebar-group" aria-label="학습 데이터">
           <p class="sidebar-label">학습 데이터</p>
-          <button class="sidebar-item" type="button" data-view="answers"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-message"></use></svg><span class="sidebar-item-text">공용 답안</span></button>
+          <button class="sidebar-item" type="button" data-view="answers"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-message"></use></svg><span class="sidebar-item-text">공용 답안</span></button>
         </nav>
       </aside>
 
@@ -2122,8 +2097,8 @@ html.auth-pending body {
               </div>
             </div>
             <div class="toolbar-group">
-              <button id="refresh" class="btn btn-secondary btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-refresh"></use></svg>새로고침</button>
-              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg#icon-log-out"></use></svg>로그아웃</button>
+              <button id="refresh" class="btn btn-secondary btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-refresh"></use></svg>새로고침</button>
+              <button id="adminLogout" class="btn btn-ghost btn-sm" type="button"><svg class="ui-icon" aria-hidden="true"><use href="/assets/ui-icons.svg?v=20260904-icons-v2#icon-log-out"></use></svg>로그아웃</button>
             </div>
           </header>
 

@@ -3,14 +3,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync as readFileRaw, statSync } from 'node:fs';
 import path from 'node:path';
 import {
-  APP_SOURCE, DIAGRAM_SOURCE, ICON_SOURCE,
+  APP_SOURCE, DIAGRAM_SOURCE,
   createAppSandbox, evaluateBrowserData, evaluateDiagramRenderer, functionBody, readSource, trackReads,
 } from './render-sandbox.mjs';
 import { findDesignHeadingSequenceErrors } from './design-heading-sequence.mjs';
 import { DEFAULT_AVAILABILITY } from './gichul/availability.mjs';
 import { buildSnapshots, SNAPSHOT_BY_SCREEN, SNAPSHOT_FILES } from './snapshot.mjs';
 import {
-  findColoredIconParents, findIconBackgroundViolations, findMissingIconReferences, findRenderedEmoji, inspectSprite,
+  findIconBackgroundViolations, findInvalidIconMarkup, findMissingIconReferences, findRenderedEmoji,
+  findUnversionedIconSpriteReferences, ICON_SPRITE_URL, inspectSprite, referencedIconIds,
 } from './icon-gates.mjs';
 
 const ROOT = process.cwd();
@@ -816,12 +817,11 @@ const DIAGRAM_SHAPE_BOUNDS = {
 
 // 마크업 구조를 세는 선택자.
 // - 노드는 kind와 무관하게 data-node를 단 <li> 하나다 (조판이 SVG에서 CSS로 바뀌며 통일됐다).
-// - 아이콘은 **다이어그램에 하나도 없어야 한다.** 노드마다 하나씩 붙는 아이콘은 노드를
-//   구별해 주지 않아 전부 걷어냈다 (DESIGN.md §4). LIST_ICON_PATTERN은 이제 "0이어야 한다"를
-//   재는 잠금이다 — 아이콘이 되살아나면 실패한다.
+// - UI 아이콘은 **다이어그램에 하나도 없어야 한다.** 노드마다 붙는 장식을 전부 걷어냈다.
+//   콘텐츠 시각화용 .sm-d-svg는 별개이며 LIST_ICON_PATTERN은 .ui-icon만 잠근다.
 const NODE_PATTERN = /<li class="sm-d-node[^"]*" data-node>/gu;
 const ITEM_PATTERN = /<ul class="sm-d-items">/gu;
-const LIST_ICON_PATTERN = /<svg class="sm-icon"/gu;
+const LIST_ICON_PATTERN = /<svg\b[^>]*class="[^"]*\bui-icon\b/gu;
 const ART_PATTERN = /<div class="sm-d-art">/gu;
 // 조판을 CSS에 넘긴 뒤로 SVG 안에 남는 글자는 벤의 한 글자짜리 번호뿐이다.
 // 문장이 다시 SVG로 들어가면(= 좌표 조판이 부활하면) 여기서 잡힌다.
@@ -1074,17 +1074,14 @@ function resolveContractTargets(root, key, location) {
   return nodes;
 }
 
-function applyFieldRule(value, rule, where, iconKeys) {
+function applyFieldRule(value, rule, where) {
   if (value === undefined || value === null) {
     check(Boolean(rule.optional), `smstudy: ${where} is read by the renderer but missing (render contract)`);
     return;
   }
-  if (rule.type === 'string' || rule.type === 'icon') {
+  if (rule.type === 'string') {
     const ok = typeof value === 'string' && value.trim().length > 0;
     check(ok, `smstudy: ${where} must be a non-empty string (render contract)`);
-    if (ok && rule.type === 'icon') {
-      check(iconKeys.has(value), `smstudy: ${where} uses icon key "${value}" that is not vendored in ${ICON_SOURCE}`);
-    }
     return;
   }
   check(Array.isArray(value), `smstudy: ${where} must be an array (render contract)`);
@@ -1098,9 +1095,9 @@ function applyFieldRule(value, rule, where, iconKeys) {
   });
 }
 
-function enforceContract(contract, root, location, iconKeys) {
+function enforceContract(contract, root, location) {
   for (const [key, rule] of Object.entries(contract)) {
-    for (const [value, where] of resolveContractTargets(root, key, location)) applyFieldRule(value, rule, where, iconKeys);
+    for (const [value, where] of resolveContractTargets(root, key, location)) applyFieldRule(value, rule, where);
   }
 }
 
@@ -1157,32 +1154,9 @@ function validateSmStudyData() {
 
   // ---- 구조 계약 (plan.md §5) : 콘텐츠 문자열 하드코딩 검사를 대체한다 ----
   const { kinds: diagramKinds, registered: registeredKinds, source: diagramSource } = derivedDiagramKinds();
-  const iconKeys = new Set(Object.keys(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS')?.ICONS || {}));
 
   // 도출이 조용히 깨지면 아래 계약이 통째로 무력해지므로 도출 결과 자체를 먼저 검사한다.
   check(diagramKinds.size >= 4, `smstudy: diagram kind derivation looks broken (parsed ${diagramKinds.size} layout functions in ${DIAGRAM_SOURCE})`);
-  check(iconKeys.size >= 1, `smstudy: icon key derivation looks broken (parsed ${iconKeys.size} keys in ${ICON_SOURCE})`);
-  // 벤더 세트에 죽은 아이콘을 쌓아 두지 않는다. 화면이 실제로 부르는 키는 app.js의
-  // icon('…') 호출뿐이므로 그 집합과 벤더 집합이 **정확히 같아야** 한다.
-  // 아이콘을 새로 쓰려면 벤더링이 강제되고, 안 쓰게 되면 정리가 강제된다.
-  const calledIconKeys = new Set(
-    [...readSource(APP_SOURCE).matchAll(/\bicon\('([^']+)'\)/gu)].map(([, key]) => key),
-  );
-  check(calledIconKeys.size >= 1, `smstudy: icon call derivation looks broken (parsed ${calledIconKeys.size} icon() calls in ${APP_SOURCE})`);
-  for (const key of calledIconKeys) {
-    check(iconKeys.has(key), `smstudy: ${APP_SOURCE} calls icon('${key}') but that key is not vendored in ${ICON_SOURCE}`);
-  }
-  for (const key of iconKeys) {
-    check(calledIconKeys.has(key), `smstudy: ${ICON_SOURCE} vendors "${key}" but nothing renders it — drop it (dead icon)`);
-  }
-  // 다이어그램 렌더러는 아이콘을 내지 않는다 (DESIGN.md §4). 주석을 걷어낸 소스에서 직접 잠근다
-  // (renderIcon(key, …) 선언 한 줄만 허용한다 — 그 함수는 app.js가 쓰는 공용 유틸이다).
-  const diagramCode = diagramSource.replace(/^[ \t]*\/\/.*$/gmu, '');
-  check(!/renderIcon\((?!key\b)/u.test(diagramCode),
-    `smstudy: ${DIAGRAM_SOURCE} must not call renderIcon() inside a layout — diagram nodes carry no icons`);
-  // 게이트가 검사하는 아이콘 집합과 렌더러가 실제로 쓰는 집합이 같은 물건이어야 한다.
-  // includes()로 보면 window.SM_ICONS_RENAMED 같은 이름 변경이 부분 문자열로 통과한다 (음성 테스트로 확인).
-  check(/window\.SM_ICONS(?![\w$])/u.test(diagramSource), `smstudy: ${DIAGRAM_SOURCE} must read icons from window.SM_ICONS so the gate checks the set the renderer uses`);
   for (const kind of diagramKinds) {
     check(registeredKinds.has(kind), `smstudy: ${DIAGRAM_SOURCE} defines layout ${kind} but never registers it in LAYOUTS`);
     check(Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.nodes) && Array.isArray(DIAGRAM_SHAPE_BOUNDS[kind]?.items),
@@ -1194,18 +1168,10 @@ function validateSmStudyData() {
     check(diagramKinds.has(kind), `smstudy: LAYOUTS registers ${kind} but ${DIAGRAM_SOURCE} has no layout${kind[0].toUpperCase()}${kind.slice(1)} function`);
   }
 
-  // ---- B-3. 아이콘 집합 → 렌더러 → 마크업 연결을 실제 평가로 확인한다 ----
-  const PROBE_KEY = 'gate-probe-icon';
-  const PROBE_BODY = '<path d="M1 2 3 4" data-gate-probe="1"/>';
-  const probeRenderer = evaluateDiagramRenderer({ [PROBE_KEY]: PROBE_BODY });
-  check(typeof probeRenderer?.renderIcon === 'function' && typeof probeRenderer?.renderDiagram === 'function',
-    `smstudy: ${DIAGRAM_SOURCE} must publish renderIcon/renderDiagram on window.SMSTUDY_DIAGRAM`);
-  if (typeof probeRenderer?.renderIcon === 'function') {
-    check(probeRenderer.renderIcon(PROBE_KEY).includes(PROBE_BODY),
-      `smstudy: ${DIAGRAM_SOURCE} renderIcon() did not emit the body injected through window.SM_ICONS — the vendored icon set is not wired to the renderer`);
-    check(probeRenderer.renderIcon('gate-missing-icon') === '',
-      `smstudy: ${DIAGRAM_SOURCE} renderIcon() must emit nothing for an unknown key (no broken markup)`);
-  }
+  // 다이어그램은 콘텐츠 시각화만 낸다. UI 아이콘은 app.js가 공통 스프라이트에서 직접 소비한다.
+  const probeRenderer = evaluateDiagramRenderer();
+  check(typeof probeRenderer?.renderDiagram === 'function',
+    `smstudy: ${DIAGRAM_SOURCE} must publish renderDiagram on window.SMSTUDY_DIAGRAM`);
   // kind 하나(radial)만 보면 다른 레이아웃이 통째로 비어도 초록이다
   // (R2-B-2: layoutFlow()의 아이콘 한 줄을 지운 변형이 통과했다).
   // 그래서 **도출된 kind 전부**를 렌더해 데이터의 노드·항목·아이콘 개수와 출력 개수를 맞춰 본다.
@@ -1221,7 +1187,6 @@ function validateSmStudyData() {
         kind, title: '게이트 탐침', center: '탐침',
         nodes: Array.from({ length: nodeCount }, (item, index) => ({
           label: `갈래${index + 1}`,
-          icon: PROBE_KEY,
           items: Array.from({ length: itemCount }, (cell, cellIndex) => `항목${cellIndex + 1}`),
         })),
       };
@@ -1240,12 +1205,9 @@ function validateSmStudyData() {
         check(markup.split(`<li>항목${index}</li>`).length - 1 === nodeCount,
           `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} did not render item ${index} of every node`);
       }
-      // 아이콘은 하나도 나오면 안 된다 — 데이터가 icon 키를 들고 있어도 무시해야 한다.
-      // (탐침 노드에는 일부러 icon을 넣어 두었다. 렌더러가 다시 읽기 시작하면 여기서 잡힌다.)
+      // 다이어그램에는 UI 아이콘이 하나도 나오면 안 된다.
       check(listIcons === 0,
         `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${listIcons} icons — diagram layouts must render no icons (DESIGN.md §4)`);
-      check(!markup.includes(PROBE_BODY),
-        `smstudy: ${DIAGRAM_SOURCE} ${kind} put an icon body into the markup — diagram layouts must render no icons`);
       check(arts === (bounds.art ? 1 : 0),
         `smstudy: ${DIAGRAM_SOURCE} ${kindLabel} emitted ${arts} decorative SVG blocks but DIAGRAM_SHAPE_BOUNDS declares art: ${bounds.art}`);
       // 겹침의 근원이던 "SVG 안 문장"이 되살아나지 않는지 본다 — 한 글자짜리 표지만 허용한다.
@@ -1255,8 +1217,7 @@ function validateSmStudyData() {
       }
     }
   }
-  // 실제 벤더 집합으로 21개 다이어그램을 렌더해, 데이터의 icon 키가 마크업까지 도달하는지 본다.
-  const liveRenderer = evaluateDiagramRenderer(evaluateBrowserData(ICON_SOURCE, 'SM_ICONS')?.ICONS || {});
+  const liveRenderer = probeRenderer;
 
   // ---- B-2 / R2-B-1. 계약표가 렌더러보다 뒤처지지 않게 양방향으로 대조한다 (LESSONS 규칙 5) ----
   // 라운드 1은 필드 이름을 **소스 정규식**으로 긁었다. 그 방식은 표현에 취약해서
@@ -1392,7 +1353,7 @@ function validateSmStudyData() {
     // ---- B-2. 렌더 필수 필드의 존재·타입·개수를 계약표로 검사한다 ----
     // (배열 길이만 세던 이전 검사는 matrix.title / deepDive[].term·icon / recall[].answer를
     //  통째로 지워도 초록이었다.)
-    enforceContract(NOTEBOOK_FIELD_CONTRACT, notebook || {}, subunit.id, iconKeys);
+    enforceContract(NOTEBOOK_FIELD_CONTRACT, notebook || {}, subunit.id);
     check(notebook?.matrix?.rows?.every((row) => Array.isArray(row) && row.length === notebook.matrix.headers.length),
       `smstudy: ${subunit.id} comparison matrix row width mismatch`);
     // 수기 count가 자동 집계로 대체됐으므로 옛 필드가 되살아나면 실패시킨다 (plan.md §4.1).
@@ -1409,7 +1370,7 @@ function validateSmStudyData() {
     (notebook?.diagrams || []).forEach((diagram, index) => {
       const where = `${subunit.id}.diagrams[${index}]`;
       check(diagramKinds.has(diagram.kind), `smstudy: ${where} uses kind "${diagram.kind}" but ${DIAGRAM_SOURCE} has no layout for it`);
-      enforceContract(DIAGRAM_FIELD_CONTRACT, diagram, where, iconKeys);
+      enforceContract(DIAGRAM_FIELD_CONTRACT, diagram, where);
       const bounds = DIAGRAM_SHAPE_BOUNDS[diagram.kind];
       const nodeCount = Array.isArray(diagram.nodes) ? diagram.nodes.length : 0;
       check(Boolean(bounds) && nodeCount >= bounds.nodes[0] && nodeCount <= bounds.nodes[1],
@@ -1649,7 +1610,7 @@ function validateDesignTokens() {
   // C-3 / D5 — 디자인 토큰 단일 원본. 검사 대상 토큰 목록은 system.css의 :root에서 자동 도출한다.
   // 하드코딩하면 토큰이 늘어날 때마다 게이트가 조용히 뒤처진다 — 실제로 색 토큰 9종만 지키고
   // --text-3 등 나머지는 아무 셀렉터에서나 재정의 가능했다 (review-3b §4 major, review-3a M-7).
-  const legacyPalette = /#87f5b0|#86efac|#6dff9a|#5fe391|#4ade80|#ff7a7a|#fb7185|#7dd3fc|#a8f5bf|#8fffb0|#facc15|#fb923c|135, ?245, ?176|134, ?239, ?172|95, ?227, ?145|74, ?222, ?128|255, ?122, ?122|251, ?113, ?133|109, ?255, ?154|125, ?211, ?252|250, ?204, ?21/iu;
+  const legacyPalette = /#2997ff|41, ?151, ?255|#87f5b0|#86efac|#6dff9a|#5fe391|#4ade80|#ff7a7a|#fb7185|#7dd3fc|#a8f5bf|#8fffb0|#facc15|#fb923c|135, ?245, ?176|134, ?239, ?172|95, ?227, ?145|74, ?222, ?128|255, ?122, ?122|251, ?113, ?133|109, ?255, ?154|125, ?211, ?252|250, ?204, ?21/iu;
   const systemTokens = new Set(
     [...systemRoot.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/gu)].map(([, token]) => token),
   );
@@ -1667,8 +1628,9 @@ function validateDesignTokens() {
   // (벤더 경로만 규칙으로 제외), (2) 게시 HTML이 참조하는 스타일시트가 저장소 파일 집합의
   // 부분집합인지 아래에서 확인한다. 즉 외부 CSS를 끼워 넣으면 (2)에서 걸린다.
   const isVendorCss = (name) => name.includes('assets/vendor/');
+  const isHistoricalCss = (name) => name.startsWith('docs/archive/');
   const repoCss = walk(ROOT, (item) => item.endsWith('.css')).map(relative);
-  const firstPartyCss = new Set(repoCss.filter((name) => !isVendorCss(name)));
+  const firstPartyCss = new Set(repoCss.filter((name) => !isVendorCss(name) && !isHistoricalCss(name)));
   const vendorCss = new Set(repoCss.filter(isVendorCss));
   check(firstPartyCss.size >= 5,
     `design tokens: only ${firstPartyCss.size} first-party stylesheets were derived from the repository — this check is inert`);
@@ -1709,8 +1671,9 @@ function validateDesignTokens() {
     const name = relative(file);
     const source = readFileSync(file, 'utf8');
 
-    check(!legacyPalette.test(source), `${name}: legacy palette literal found`);
-    if (name === 'assets/css/system.css') continue;
+    if (name === 'assets/css/system.css' || isHistoricalCss(name)) continue;
+    const executableCss = source.replace(/\/\*[\s\S]*?\*\//gu, '');
+    check(!legacyPalette.test(executableCss), `${name}: legacy palette literal found`);
 
     if (firstPartyCss.has(name)) check(/var\(--/u.test(source), `${name}: stylesheet must consume system.css tokens`);
     check(!/:root\s*\{/u.test(source), `${name}: tokens must come from system.css only (no :root block)`);
@@ -1732,7 +1695,7 @@ function validateDesignTokens() {
 
   for (const file of publishedHtml()) {
     const source = readFileSync(file, 'utf8');
-    check(!legacyPalette.test(source), `${relative(file)}: legacy palette literal found`);
+    check(!legacyPalette.test(source.replace(/<!--[\s\S]*?-->/gu, '')), `${relative(file)}: legacy palette literal found`);
     // style="--token: …" 인라인 정의도 같은 우회로다.
     check(!/style="[^"]*--[\w-]+\s*:/u.test(source), `${relative(file)}: inline style must not define design tokens`);
   }
@@ -1760,25 +1723,45 @@ function iconSpriteState() {
   return { file, source, symbols, ids: new Set(symbols.map((symbol) => symbol.id).filter(Boolean)) };
 }
 
+function iconReferenceSurfaces() {
+  return [
+    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
+    ...publishedScripts().filter((file) => !file.startsWith('assets/vendor/'))
+      .map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
+  ];
+}
+
 // 정적 <use href>와 런타임 키→id 매핑의 icon-* 리터럴을 함께 검사한다. 후자를 빼면
 // WordMaster처럼 href를 보간하는 렌더러의 잘못된 id가 게이트 밖에 남는다.
 function validateIconReferences() {
   const sprite = iconSpriteState();
-  const surfaces = [
-    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
-    ...publishedScripts().map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
-  ];
+  const surfaces = iconReferenceSurfaces();
   let references = 0;
   for (const surface of surfaces) references += (surface.source.match(/\bicon-[a-z0-9-]+\b/gu) || []).length;
   check(references >= 35, `icon gate: only ${references} icon references were derived — the href/map check is inert`);
   for (const failure of findMissingIconReferences(surfaces, sprite.ids)) {
     check(false, `${failure.file}:${failure.line}: ${failure.id} does not exist in ${sprite.file} (DESIGN.md §5.2)`);
   }
+  const allowedNonUi = new Map([[DIAGRAM_SOURCE, new Set(['sm-d-svg'])]]);
+  for (const failure of findInvalidIconMarkup(surfaces, allowedNonUi)) {
+    check(false, `${failure.file}:${failure.line}: inline SVG must be class="ui-icon" with one <use href="${ICON_SPRITE_URL}#icon-…"> (content visualization allowlist excepted)`);
+  }
+  for (const failure of findUnversionedIconSpriteReferences(surfaces)) {
+    check(false, `${failure.file}:${failure.line}: ${failure.value} must use the pinned sprite URL ${ICON_SPRITE_URL}#…`);
+  }
+  check(!existsSync(path.join(ROOT, 'assets/vendor/lucide')), 'assets/vendor/lucide must be deleted after the single-sprite migration');
+  for (const surface of surfaces) {
+    check(!/assets\/vendor\/lucide|window\.SM_ICONS|\bsm-icon\b|\bgi-icon\b/u.test(surface.source),
+      `${surface.file}: second icon-set code/reference remains after the single-sprite migration`);
+  }
 }
 
 function validateIconSprite() {
   const { file, symbols } = iconSpriteState();
-  check(symbols.length >= 30, `${file}: only ${symbols.length} symbols were derived — the sprite check is inert`);
+  const referenced = referencedIconIds(iconReferenceSurfaces());
+  check(referenced.size >= 20, `${file}: only ${referenced.size} referenced symbol ids were derived — the reference scan is inert`);
+  check(symbols.length === referenced.size,
+    `${file}: referenced symbol count ${referenced.size} must equal sprite symbol count ${symbols.length} (dead symbols 0)`);
   const seen = new Set();
   for (const symbol of symbols) {
     check(Boolean(symbol.id), `${file}: every symbol needs an id`);
@@ -1788,24 +1771,22 @@ function validateIconSprite() {
       `${file}#${symbol.id}: symbols must set fill="none" and stroke="currentColor"`);
     check(symbol.strokeWidth === '1.75' && symbol.strokeLinecap === 'round' && symbol.strokeLinejoin === 'round',
       `${file}#${symbol.id}: symbols must use the Lucide 1.75 round stroke contract`);
+    check(referenced.has(symbol.id), `${file}#${symbol.id}: symbol is not referenced by published HTML/JS (dead symbol)`);
   }
 }
 
 function validateIconBackgrounds() {
   const stylesheets = walk(ROOT, (file) => file.endsWith('.css'))
+    .filter((file) => !relative(file).startsWith('docs/archive/') && !relative(file).includes('assets/vendor/'))
     .map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') }));
-  const surfaces = [
-    ...publishedHtml().map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') })),
-    ...publishedScripts().filter((file) => !file.startsWith('assets/vendor/'))
-      .map((file) => ({ file, source: readFileSync(path.join(ROOT, file), 'utf8') })),
-  ];
+  const snapshots = walk(path.join(ROOT, 'docs/_snapshots'), (file) => file.endsWith('.html'))
+    .map((file) => ({ file: relative(file), source: readFileSync(file, 'utf8') }));
   check(stylesheets.length >= 8,
     `icon gate: only ${stylesheets.length} stylesheets were derived — the background scan is inert`);
-  for (const failure of findIconBackgroundViolations(stylesheets)) {
-    check(false, `${failure.file}:${failure.line}: ${failure.selector} gives an icon wrapper an accent/status background (DESIGN.md §5.2)`);
-  }
-  for (const failure of findColoredIconParents(surfaces, stylesheets)) {
-    check(false, `${failure.file}:${failure.line}: .${failure.className} wraps a ui-icon but ${failure.rule.file} gives it an accent/status background (DESIGN.md §5.2)`);
+  check(snapshots.length >= 8,
+    `icon gate: only ${snapshots.length} rendered snapshots were derived — the ancestor scan is inert`);
+  for (const failure of findIconBackgroundViolations(snapshots, stylesheets)) {
+    check(false, `${failure.file}:${failure.line}: ${failure.selector} gives a rendered ui-icon ancestor (${failure.classes.join(', ')}) an accent/status background (DESIGN.md §5.2)`);
   }
 }
 
@@ -1853,15 +1834,15 @@ function validateGlobalsAndOrder() {
 
   // 표면별 스크립트 로드 순서 (§3.1)
   const expectedOrders = {
-    'index.html': ['/assets/js/site-icons.js?v=20260904-icons-v1', '/assets/js/home.js?v=20260904-icons-v1'],
-    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-mobile-v1'],
-    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js', 'assets/js/app.js?v=20260904-icons-v1'],
-    'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-ui-v1'],
+    'index.html': ['/assets/js/site-icons.js?v=20260904-icons-v1', '/assets/js/home.js?v=20260904-icons-v2'],
+    'WordMaster/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/words.js?v=20260904-icons-v2', '/assets/js/study-utils.js', 'assets/js/app.js?v=20260904-icons-v2'],
+    'smstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/notebook-data.js', 'assets/js/explanation-data.js', '/assets/js/study-utils.js', 'assets/js/diagram.js?v=20260904-icons-v2', 'assets/js/app.js?v=20260904-icons-v2'],
+    'plstudy/index.html': ['/account.js?v=20260904-auth-gate-v1', 'assets/js/data.js', 'assets/js/app.js?v=20260904-icons-v2'],
     'admin/index.html': ['/admin/assets/js/admin.js?v=20260904-icons-v1'],
-    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-mobile-v1', '/usage/assets/js/page.js?v=20260904-mobile-v1'],
-    // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → 아이콘 → pdf-lib → 컨트롤러.
+    'usage/index.html': ['/usage/assets/js/competition.js?v=20260904-icons-v2', '/usage/assets/js/page.js?v=20260904-icons-v2'],
+    // 기출은 전역 데이터 선행 계약을 따른다: 세션(account) → pdf-lib → 컨트롤러.
     // 목록 데이터는 이 순서 어디에도 없다 — 로그인 뒤 API에서만 온다 (plan.md §3).
-    'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/lucide/icons.js', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260904-ui-v1'],
+    'gichul/index.html': ['/account.js?v=20260904-auth-gate-v1', '/assets/vendor/pdf-lib/pdf-lib.min.js', '/gichul/app.js?v=20260904-icons-v2'],
     'behavior-lab/index.html': ['/behavior-lab/assets/js/app.js?v=20260901-v16'],
   };
   for (const [file, order] of Object.entries(expectedOrders)) {
@@ -1880,14 +1861,14 @@ function validateGlobalsAndOrder() {
   const stylesheetSources = (file) =>
     [...readFileSync(path.join(ROOT, file), 'utf8').matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/giu)].map(([, href]) => href);
   const expectedStylesheets = {
-    'index.html': ['/assets/css/system.css?v=20260904-mobile-v1', '/assets/css/home.css?v=20260904-icons-v1'],
-    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', 'assets/css/style.css?v=20260904-mobile-v1'],
-    'smstudy/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', 'assets/css/style.css?v=20260904-icons-v1'],
-    'plstudy/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', 'assets/css/style.css?v=20260904-ui-v1'],
-    'admin/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', '/admin/assets/css/admin.css?v=20260904-icons-v1'],
-    'usage/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', '/usage/assets/css/usage.css?v=20260904-mobile-v1'],
-    'gichul/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', '/gichul/gichul.css?v=20260904-ui-v1'],
-    'behavior-lab/index.html': ['/assets/css/system.css?v=20260904-mobile-v1', '/behavior-lab/assets/css/app.css?v=20260904-ui-v1'],
+    'index.html': ['/assets/css/system.css?v=20260904-icons-v2', '/assets/css/home.css?v=20260904-icons-v1'],
+    'WordMaster/index.html': ['/assets/css/system.css?v=20260904-icons-v2', 'assets/css/style.css?v=20260904-mobile-v1'],
+    'smstudy/index.html': ['/assets/css/system.css?v=20260904-icons-v2', 'assets/css/style.css?v=20260904-icons-v2'],
+    'plstudy/index.html': ['/assets/css/system.css?v=20260904-icons-v2', 'assets/css/style.css?v=20260904-ui-v1'],
+    'admin/index.html': ['/assets/css/system.css?v=20260904-icons-v2', '/admin/assets/css/admin.css?v=20260904-icons-v1'],
+    'usage/index.html': ['/assets/css/system.css?v=20260904-icons-v2', '/usage/assets/css/usage.css?v=20260904-icons-v2'],
+    'gichul/index.html': ['/assets/css/system.css?v=20260904-icons-v2', '/gichul/gichul.css?v=20260904-icons-v2'],
+    'behavior-lab/index.html': ['/assets/css/system.css?v=20260904-icons-v2', '/behavior-lab/assets/css/app.css?v=20260904-ui-v1'],
   };
   for (const [file, order] of Object.entries(expectedStylesheets)) {
     check(stylesheetSources(file).join(' → ') === order.join(' → '), `${file}: stylesheet hrefs (order + cache-buster) must be ${order.join(' → ')}`);
