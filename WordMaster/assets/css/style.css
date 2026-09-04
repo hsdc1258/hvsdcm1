@@ -67,13 +67,12 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-/* 세그먼티드가 들어가는 행은 좁은 폭에서 두 줄로 접힌다. */
-.wm-row-wrap {
-  flex-wrap: wrap;
-}
+/* 세그먼티드 행은 system.css의 .list-row.is-stacked 변형을 소비한다 — ≤480px에서 제목이 첫 줄
+   전폭·한 줄, 세그먼트가 둘째 줄 전폭 5등분(wrap 없음). 그 위 폭(481px~)에서는 한 줄에 들어가므로
+   세그먼트가 우측 값 자리에 선다(실측: 481px 행 내용폭 417px에 필요 폭 ≈363px).
+   행 자체의 wrap·칩 wrap은 여기서 다시 만들지 않는다(§7). */
 .wm-presets {
   margin-left: auto;
-  flex-wrap: wrap;
 }
 .wm-presets .segmented-btn {
   padding: 5px 11px;
@@ -262,9 +261,6 @@
   /* 좁은 폭에서는 뜻이 우측 열에 갇히지 않게 폭 제한을 푼다. */
   .wm-gloss {
     max-width: 100%;
-  }
-  .wm-presets {
-    margin-left: 0;
   }
   .wm-wrong-controls {
     grid-template-columns: minmax(0, 1fr);

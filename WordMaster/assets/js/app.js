@@ -449,7 +449,7 @@
                 <input id="endDay" class="wm-num field-input-inline" type="number" min="1" max="50" inputmode="numeric" aria-label="끝 DAY" value="${state.home.endDay}">
               </span>
             </div>
-            <div class="list-row wm-row-wrap">
+            <div class="list-row is-stacked">
               ${iconLead('preset')}
               <span class="list-row-body"><span class="list-row-title">빠른 선택</span></span>
               <span class="segmented wm-presets" role="group" aria-label="DAY 범위 빠른 선택">
