@@ -895,7 +895,7 @@ async function competitionDatabaseContext(t) {
   }
   const database = new DatabaseSync(':memory:');
   t.after(() => database.close());
-  for (let number = 1; number <= 18; number += 1) {
+  for (let number = 1; number <= 19; number += 1) {
     const prefix = String(number).padStart(4, '0');
     const migrationNames = {
       '0001': 'init',
@@ -916,6 +916,7 @@ async function competitionDatabaseContext(t) {
       '0016': 'competition_approval_requests',
       '0017': 'competition_approval_report_links',
       '0018': 'competition_preference_contract',
+      '0019': 'competition_closed_application_continuity',
     };
     const sql = readFileSync(
       new URL(`./migrations/${prefix}_${migrationNames[prefix]}.sql`, import.meta.url),
@@ -1611,6 +1612,168 @@ test('competition report guard rejects a same-time official fact rewrite atomica
   assert.equal(Number(database.prepare(
     'SELECT COUNT(*) AS count FROM competition_report_guards',
   ).get().count), 1);
+});
+
+test('competition report drops an application only after a newer official closure check', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const closed = structuredClone(first);
+  setCompetitionTimeline(closed, Date.parse(first.run.started_at) + 10_000);
+  closed.idempotency_key = 'competition-officially-closed';
+  closed.run.id = 'competition-officially-closed';
+  closed.candidates[0].acceptance = 'closed';
+  closed.candidates[0].deadline_at = closed.run.finished_at;
+  closed.candidates[0].status = 'rejected';
+  closed.applications = [];
+
+  const response = await competitionRequest(env, { body: closed });
+  assert.equal(response.status, 201);
+  assert.equal(Number(database.prepare(
+    "SELECT COUNT(*) AS count FROM competition_applications WHERE idempotency_key = 'competition-officially-closed'",
+  ).get().count), 0);
+});
+
+test('competition report drops an application after a newer official deadline expiry check', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const expired = structuredClone(first);
+  setCompetitionTimeline(expired, Date.parse(first.run.started_at) + 10_000);
+  expired.idempotency_key = 'competition-officially-expired';
+  expired.run.id = 'competition-officially-expired';
+  expired.candidates[0].acceptance = 'open';
+  expired.candidates[0].deadline_at = expired.run.finished_at;
+  expired.candidates[0].status = 'rejected';
+  expired.applications = [];
+
+  assert.equal((await competitionRequest(env, { body: expired })).status, 201);
+});
+
+test('competition report rejects application removal without an explicit rejected terminal state', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const nonterminal = structuredClone(first);
+  setCompetitionTimeline(nonterminal, Date.parse(first.run.started_at) + 10_000);
+  nonterminal.idempotency_key = 'competition-closed-but-nonterminal';
+  nonterminal.run.id = 'competition-closed-but-nonterminal';
+  nonterminal.candidates[0].acceptance = 'closed';
+  nonterminal.candidates[0].status = 'verifying';
+  nonterminal.applications = [];
+
+  const response = await competitionRequest(env, { body: nonterminal });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_state_regression' });
+});
+
+test('competition report rejects application removal one second before deadline', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const early = structuredClone(first);
+  setCompetitionTimeline(early, Date.parse(first.run.started_at) + 10_000);
+  early.idempotency_key = 'competition-deadline-not-yet-reached';
+  early.run.id = 'competition-deadline-not-yet-reached';
+  early.candidates[0].acceptance = 'open';
+  early.candidates[0].deadline_at = new Date(Date.parse(early.run.finished_at) + 1_000).toISOString();
+  early.candidates[0].status = 'rejected';
+  early.applications = [];
+
+  const response = await competitionRequest(env, { body: early });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_state_regression' });
+});
+
+test('competition report cannot use another closed contest to drop an open application', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { env } = context;
+  const first = competitionFixture();
+  first.sources[0].candidate_count = 2;
+  first.candidates.push({
+    ...structuredClone(first.candidates[0]),
+    contest_id: 'organizer-2026-writing',
+    category: 'writing',
+    title: 'Example Writing Contest',
+    official_url: 'https://organizer.example/writing-rules',
+  });
+  first.applications.push({
+    ...structuredClone(first.applications[0]),
+    contest_id: 'organizer-2026-writing',
+    category: 'writing',
+  });
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const mixed = structuredClone(first);
+  setCompetitionTimeline(mixed, Date.parse(first.run.started_at) + 10_000);
+  mixed.idempotency_key = 'competition-cross-contest-closure';
+  mixed.run.id = 'competition-cross-contest-closure';
+  mixed.candidates[0].acceptance = 'closed';
+  mixed.candidates[0].status = 'rejected';
+  mixed.applications = [];
+
+  const response = await competitionRequest(env, { body: mixed });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_state_regression' });
+});
+
+test('competition report retires an obsolete approval link after official closure', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionWithPreparationApproval();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const closed = structuredClone(first);
+  setCompetitionTimeline(closed, Date.parse(first.run.started_at) + 10_000);
+  closed.idempotency_key = 'competition-closed-with-obsolete-approval';
+  closed.run.id = 'competition-closed-with-obsolete-approval';
+  closed.candidates[0].acceptance = 'closed';
+  closed.candidates[0].status = 'rejected';
+  closed.applications = [];
+  closed.approvals = [];
+
+  assert.equal((await competitionRequest(env, { body: closed })).status, 201);
+  assert.equal(Number(database.prepare(
+    'SELECT COUNT(*) AS count FROM competition_approval_requests',
+  ).get().count), 1, 'the immutable origin request remains auditable');
+  assert.equal(Number(database.prepare(
+    "SELECT COUNT(*) AS count FROM competition_report_approval_requests WHERE idempotency_key = 'competition-closed-with-obsolete-approval'",
+  ).get().count), 0, 'the obsolete request is absent from the latest snapshot');
+});
+
+test('competition report still rejects silently dropping an open application', async (t) => {
+  const context = await competitionTestContext(t);
+  if (!context) return;
+  const { database, env } = context;
+  const first = competitionFixture();
+  assert.equal((await competitionRequest(env, { body: first })).status, 201);
+
+  const omitted = structuredClone(first);
+  setCompetitionTimeline(omitted, Date.parse(first.run.started_at) + 10_000);
+  omitted.idempotency_key = 'competition-open-application-omitted';
+  omitted.run.id = 'competition-open-application-omitted';
+  omitted.applications = [];
+
+  const response = await competitionRequest(env, { body: omitted });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'report_state_regression' });
+  assert.equal(Number(database.prepare(
+    "SELECT COUNT(*) AS count FROM competition_reports WHERE idempotency_key = 'competition-open-application-omitted'",
+  ).get().count), 0);
 });
 
 test('competition report guard rolls back a writer whose expected prior changed', async (t) => {

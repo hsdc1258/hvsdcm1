@@ -167,8 +167,11 @@ state is rejected with `report_state_regression`; a competing writer that change
 snapshot is rejected with `report_concurrent_conflict` and should be rebuilt from the new latest state.
 An unchanged approval action carries its existing decision. Changed wording or action must use a new
 request ID and returns to pending; an approval may disappear only after that exact action was approved
-and the application advances with later evidence to a kind-specific downstream state. Older historical
-snapshots remain ingestible without replacing the owner-visible latest state.
+and the application advances with later evidence to a kind-specific downstream state. The one terminal
+exception is a newer official verification that marks the candidate rejected and either closed or past
+its deadline: the now-invalid application and latest-snapshot approval link may then disappear while
+the immutable origin request and any recorded decision remain auditable. Older historical snapshots
+remain ingestible without replacing the owner-visible latest state.
 
 The report schema rejects raw identity, contact details, application prose, signatures, cookies,
 consents, payments, receipts, final-submission payloads, and private data or tokens embedded in
@@ -186,6 +189,9 @@ Migration `0018_competition_preference_contract.sql` must be applied before the 
 fail-closed preference facts and dual-write count columns so old three-item snapshots remain readable
 while new reports can carry ten applications and ten approval links. Legacy active rows default to
 unknown and cannot be approved until a newer official verification supplies the two preference facts.
+Migration `0019_competition_closed_application_continuity.sql` replaces only the continuity trigger so
+an officially reverified closure can retire its obsolete application and approval link without
+weakening open-application, candidate, decision, or action-hash continuity.
 
 ## Results-only Discord delivery
 
